@@ -2,9 +2,9 @@
 
 `txbase`は、dBASE互換のDBFを中心に据えたRust製データベースの初期実装です。
 
-現在の実装は、DBFの読み取り、JSON出力、HTTPの`GET`、RFC 10008に基づく`QUERY`の実行に範囲を限定しています。
+現在の実装は、DBFの読み取り、JSON出力、HTTPの`GET`、RFC 10008に基づく`QUERY`、DBF mutationの実行に範囲を限定しています。
 
-WAL、MVCC、更新処理、xBase互換フロントエンドは、後続工程の境界だけを定義しています。
+WAL、MVCC、xBase互換フロントエンドは、後続工程の境界だけを定義しています。
 
 ## 現在できること
 
@@ -15,6 +15,8 @@ WAL、MVCC、更新処理、xBase互換フロントエンドは、後続工程�
 - コマンドラインから有効なrecordをJSONとして出力する。
 - `GET /records`と`GET /records/{id}`を提供する。
 - `QUERY /records`でfilter、sort、projection、skip、limitを実行する。
+- `POST /records`、`PUT /records/{id}`、`PATCH /records/{id}`、`DELETE /records/{id}`を提供する。
+- 対応するJSON mutationをDBFへ保存する。
 
 DBFのlanguage-driver byteは保持しますが、OEM code pageとWindows code pageの完全な変換はまだ実装していません。
 
@@ -44,6 +46,26 @@ curl -s http://127.0.0.1:8080/records/1 | jq
 curl -s http://127.0.0.1:8080/records | jq
 ```
 
+recordを作成します。
+
+```bash
+curl -i -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}' \
+  http://127.0.0.1:8080/records
+```
+
+recordを部分更新してから論理削除します。
+
+```bash
+curl -i -X PATCH \
+  -H 'Content-Type: application/json' \
+  -d '{"NAME":"Caroline"}' \
+  http://127.0.0.1:8080/records/3
+
+curl -i -X DELETE http://127.0.0.1:8080/records/3
+```
+
 `QUERY`は`Content-Type: application/json`を要求します。
 
 `QUERY`はactive recordに対してfilter、sort、projection、skip、limitを適用します。
@@ -62,7 +84,7 @@ listener addressは`--bind ADDRESS`で変更できます。
 ```text
 src/dbf.rs          DBF parserとJSON変換
 src/query.rs        JSON query documentとexecutor
-src/server.rs       HTTP routingとQUERY境界
+src/server.rs       HTTP routing、QUERY境界、DBF mutation
 src/storage.rs      range-based storage境界
 src/transaction.rs  WAL、MVCC、transaction境界
 src/xbase.rs        共通operation IR境界
@@ -94,6 +116,17 @@ query documentはMongoDBのpredicateから必要な表現だけを借りてい�
 missing fieldでは`$ne`と`$nin`が一致し、array valueでは要素のいずれかが条件を満たすと一致します。
 sortの同値recordはDBF record orderを保ちます。
 Dotted path、index、update operatorは未対応です。
+
+## Mutationの意味
+
+`POST`は新しい物理recordを作成し、`201 Created`と1-basedのrecord locationを返します。
+`PUT`は全fieldを置き換え、`PATCH`はJSON objectに含まれるfieldだけを変更します。
+`POST`と`PUT`で省略したfieldはDBF nullになり、未知のfieldは拒否します。
+
+`DELETE`はDBFの削除markerを設定して`204 No Content`を返します。
+削除済みrecord numberは再利用せず、以後の読み取りは`404 Not Found`になります。
+serverは一時ファイルへ全体を書き込み、syncしてからDBF pathへrenameします。
+WAL、MVCC、crash recoveryは未対応です。
 
 ## 検証
 

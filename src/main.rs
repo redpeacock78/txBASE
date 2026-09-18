@@ -32,7 +32,8 @@ fn run() -> Result<(), Box<dyn Error>> {
             }
             bind = args.next().ok_or("--bind requires an address")?;
         }
-        return server::serve(DbfTable::from_path(path)?, &bind).map_err(Into::into);
+        let table = DbfTable::from_path(&path)?;
+        return server::serve(table, &path, &bind).map_err(Into::into);
     }
 
     if first.starts_with('-') {
@@ -53,6 +54,6 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage:\n  txbase FILE\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. The server exposes GET /records, GET /records/{{id}}, and executes QUERY /records."
+        "Usage:\n  txbase FILE\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
     );
 }

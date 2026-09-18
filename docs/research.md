@@ -44,6 +44,12 @@ The sidecar rule is deliberate: WAL, MVCC metadata, indexes, and transaction
 state belong in separate files so a checkpointed DBF remains readable by older
 xBase tools.
 
+The mutation layer currently reuses the parsed header and field descriptors.
+It supports scalar JSON values for the field types already decoded by the
+reader, preserves physical record numbers, writes the deletion marker for
+logical deletes, and replaces the DBF through a synced temporary file.
+WAL, MVCC, and sidecar-aware memo updates are not part of this layer.
+
 ## MongoDB query ideas
 
 MongoDB documents are BSON documents with field-value pairs, nested documents,
@@ -153,7 +159,7 @@ for this first prototype.
 The txbase quality path is staged:
 
 1. Keep parser tests for valid headers, field layouts, deleted records, truncated input, and invalid markers.
-2. Add an in-memory reference model before implementing mutations and compare generated operation sequences with it.
+2. Add an in-memory reference model and compare generated mutation sequences with the DBF mutation layer.
 3. Add malformed DBF, memo, index, WAL, and JSON input corpora.
 4. Add crash-boundary and recovery tests around WAL sync and checkpoint publication.
 5. Add compatibility fixtures produced by independent xBase implementations.
@@ -171,10 +177,10 @@ arbitrary RPC verbs:
 | Method | txbase role | Boundary |
 | --- | --- | --- |
 | `GET` | Read a representation or record | Implemented for `/records` and `/records/{id}` |
-| `POST` | Future create operation | Not implemented |
-| `PUT` | Future full replacement | Not implemented |
-| `PATCH` | Future partial modification | Not implemented |
-| `DELETE` | Future logical deletion | Not implemented |
+| `POST` | Create a physical DBF record | Implemented for JSON scalar fields |
+| `PUT` | Full replacement of an active record | Implemented; omitted fields become null |
+| `PATCH` | Partial modification of an active record | Implemented for JSON object bodies |
+| `DELETE` | Logical deletion | Implemented by writing the DBF deletion marker |
 | `QUERY` | Safe query with request content | JSON execution for `/records` |
 
 `PATCH` has its own method specification in
@@ -182,6 +188,13 @@ arbitrary RPC verbs:
 default, and an API has to define the accepted patch media type and conflict
 behavior. txbase therefore does not equate a MongoDB update document with
 the HTTP method itself.
+
+The mutation methods require `Content-Type: application/json`. `POST` returns
+`201` and a `Location` header, `PUT` and `PATCH` return the resulting record,
+and `DELETE` returns `204`. A successful mutation is serialized to a temporary
+file, synced, and renamed over the configured DBF path. This replacement is
+not a WAL or MVCC implementation, so crash recovery and concurrent writers
+remain outside the current boundary.
 
 The [HTTP QUERY method is now RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html).
 It is safe and idempotent, carries query semantics in request content, and

@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 
 const CLASSIC_HEADER_SIZE: usize = 32;
@@ -10,6 +11,7 @@ const CLASSIC_DESCRIPTOR_SIZE: usize = 32;
 const LEVEL7_HEADER_SIZE: usize = 68;
 const LEVEL7_DESCRIPTOR_SIZE: usize = 48;
 const FIELD_TERMINATOR: u8 = 0x0d;
+const EOF_MARKER: u8 = 0x1a;
 const ACTIVE_RECORD: u8 = 0x20;
 const DELETED_RECORD: u8 = 0x2a;
 
@@ -67,6 +69,7 @@ pub struct DbfTable {
     pub header: DbfHeader,
     pub fields: Vec<FieldDescriptor>,
     records: Vec<DbfRecord>,
+    bytes: Vec<u8>,
 }
 
 impl DbfTable {
@@ -176,6 +179,7 @@ impl DbfTable {
             header,
             fields,
             records,
+            bytes: bytes.to_vec(),
         })
     }
 
@@ -197,6 +201,328 @@ impl DbfTable {
         number
             .checked_sub(1)
             .and_then(|index| self.records.get(index).filter(|record| !record.deleted))
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.bytes.clone()
+    }
+
+    pub fn save_to(&self, path: impl AsRef<Path>) -> Result<(), DbfError> {
+        let path = path.as_ref();
+        let temporary_path = path.with_extension("txbase.tmp");
+        let mut file = fs::File::create(&temporary_path)?;
+        file.write_all(&self.bytes)?;
+        file.sync_all()?;
+        fs::rename(temporary_path, path)?;
+        Ok(())
+    }
+
+    pub fn insert_record(&mut self, values: Map<String, Value>) -> Result<usize, DbfError> {
+        let values = self.normalize_values(&values)?;
+        let encoded = self.encode_record(&values)?;
+        let number = self
+            .records
+            .len()
+            .checked_add(1)
+            .ok_or_else(|| DbfError::Invalid("record count overflows usize".into()))?;
+        let new_count = u32::try_from(number)
+            .map_err(|_| DbfError::Invalid("record count exceeds DBF limit".into()))?;
+        let record_end = self.record_end()?;
+        if self.bytes.len() < record_end {
+            return Err(DbfError::Invalid(
+                "record area is shorter than parsed data".into(),
+            ));
+        }
+        let suffix = &self.bytes[record_end..];
+        if !suffix.is_empty() && suffix != [EOF_MARKER] {
+            return Err(DbfError::Invalid(
+                "cannot mutate a DBF with trailing sidecar data".into(),
+            ));
+        }
+
+        let mut bytes = self.bytes[..record_end].to_vec();
+        bytes.extend_from_slice(&encoded);
+        bytes.push(EOF_MARKER);
+        write_record_count(&mut bytes, new_count)?;
+
+        self.bytes = bytes;
+        self.header.record_count = new_count;
+        self.records.push(DbfRecord {
+            number,
+            deleted: false,
+            values,
+        });
+        Ok(number)
+    }
+
+    pub fn replace_record(
+        &mut self,
+        number: usize,
+        values: Map<String, Value>,
+    ) -> Result<(), DbfError> {
+        let index = self.active_index(number)?;
+        let values = self.normalize_values(&values)?;
+        self.write_existing_record(index, &values)
+    }
+
+    pub fn patch_record(
+        &mut self,
+        number: usize,
+        patch: Map<String, Value>,
+    ) -> Result<(), DbfError> {
+        let index = self.active_index(number)?;
+        let mut values = self.records[index].values.clone();
+        for (field, value) in patch {
+            values.insert(field, value);
+        }
+        self.write_existing_record(index, &self.normalize_values(&values)?)
+    }
+
+    pub fn delete_record(&mut self, number: usize) -> Result<(), DbfError> {
+        let index = self.active_index(number)?;
+        let offset = self.record_offset(index)?;
+        let mut bytes = self.bytes.clone();
+        let marker = bytes
+            .get_mut(offset)
+            .ok_or_else(|| DbfError::Invalid("record area is truncated".into()))?;
+        *marker = DELETED_RECORD;
+        self.bytes = bytes;
+        self.records[index].deleted = true;
+        Ok(())
+    }
+
+    fn normalize_values(
+        &self,
+        values: &Map<String, Value>,
+    ) -> Result<Map<String, Value>, DbfError> {
+        for field in values.keys() {
+            if !self
+                .fields
+                .iter()
+                .any(|descriptor| descriptor.name == *field)
+            {
+                return Err(DbfError::Invalid(format!("unknown field {field}")));
+            }
+        }
+        Ok(self
+            .fields
+            .iter()
+            .map(|field| {
+                (
+                    field.name.clone(),
+                    values.get(&field.name).cloned().unwrap_or(Value::Null),
+                )
+            })
+            .collect())
+    }
+
+    fn encode_record(&self, values: &Map<String, Value>) -> Result<Vec<u8>, DbfError> {
+        let mut record = Vec::with_capacity(usize::from(self.header.record_length));
+        record.push(ACTIVE_RECORD);
+        for field in &self.fields {
+            record.extend(encode_field(
+                field,
+                values.get(&field.name).unwrap_or(&Value::Null),
+            )?);
+        }
+        if record.len() != usize::from(self.header.record_length) {
+            return Err(DbfError::Invalid(
+                "encoded record length is incorrect".into(),
+            ));
+        }
+        Ok(record)
+    }
+
+    fn active_index(&self, number: usize) -> Result<usize, DbfError> {
+        let index = number
+            .checked_sub(1)
+            .ok_or_else(|| DbfError::Invalid("record id must be a positive integer".into()))?;
+        match self.records.get(index) {
+            Some(record) if !record.deleted => Ok(index),
+            _ => Err(DbfError::Invalid("record not found".into())),
+        }
+    }
+
+    fn record_end(&self) -> Result<usize, DbfError> {
+        let record_bytes = self
+            .records
+            .len()
+            .checked_mul(usize::from(self.header.record_length))
+            .ok_or_else(|| DbfError::Invalid("record area overflows usize".into()))?;
+        usize::from(self.header.header_length)
+            .checked_add(record_bytes)
+            .ok_or_else(|| DbfError::Invalid("record area overflows usize".into()))
+    }
+
+    fn record_offset(&self, index: usize) -> Result<usize, DbfError> {
+        let offset = index
+            .checked_mul(usize::from(self.header.record_length))
+            .and_then(|offset| offset.checked_add(usize::from(self.header.header_length)))
+            .ok_or_else(|| DbfError::Invalid("record offset overflows usize".into()))?;
+        let end = offset
+            .checked_add(usize::from(self.header.record_length))
+            .ok_or_else(|| DbfError::Invalid("record offset overflows usize".into()))?;
+        if end > self.bytes.len() {
+            return Err(DbfError::Invalid("record area is truncated".into()));
+        }
+        Ok(offset)
+    }
+
+    fn write_existing_record(
+        &mut self,
+        index: usize,
+        values: &Map<String, Value>,
+    ) -> Result<(), DbfError> {
+        let encoded = self.encode_record(values)?;
+        let offset = self.record_offset(index)?;
+        let end = offset + encoded.len();
+        let mut bytes = self.bytes.clone();
+        bytes[offset..end].copy_from_slice(&encoded);
+        self.bytes = bytes;
+        self.records[index].values = values.clone();
+        Ok(())
+    }
+}
+
+fn write_record_count(bytes: &mut [u8], count: u32) -> Result<(), DbfError> {
+    let header = bytes
+        .get_mut(4..8)
+        .ok_or_else(|| DbfError::Invalid("header is truncated".into()))?;
+    header.copy_from_slice(&count.to_le_bytes());
+    Ok(())
+}
+
+fn encode_field(field: &FieldDescriptor, value: &Value) -> Result<Vec<u8>, DbfError> {
+    let length = usize::from(field.length);
+    match field.field_type.to_ascii_uppercase() {
+        b'C' | b'D' | b'B' | b'G' | b'M' | b'@' | b'T' => {
+            let text = value_text(value, field)?;
+            if text.len() > length {
+                return Err(DbfError::Invalid(format!(
+                    "value for {} exceeds field width {}",
+                    field.name, field.length
+                )));
+            }
+            let mut bytes = vec![b' '; length];
+            bytes[..text.len()].copy_from_slice(text.as_bytes());
+            Ok(bytes)
+        }
+        b'N' | b'F' => {
+            let text = value_text(value, field)?;
+            if text.len() > length {
+                return Err(DbfError::Invalid(format!(
+                    "value for {} exceeds field width {}",
+                    field.name, field.length
+                )));
+            }
+            let mut bytes = vec![b' '; length];
+            let start = length - text.len();
+            bytes[start..].copy_from_slice(text.as_bytes());
+            Ok(bytes)
+        }
+        b'L' => {
+            let marker = match value {
+                Value::Null => b' ',
+                Value::Bool(true) => b'T',
+                Value::Bool(false) => b'F',
+                Value::String(text) if text.len() == 1 => text.as_bytes()[0].to_ascii_uppercase(),
+                _ => {
+                    return Err(DbfError::Invalid(format!(
+                        "logical field {} requires boolean, one-byte text, or null",
+                        field.name
+                    )));
+                }
+            };
+            if !matches!(marker, b' ' | b'T' | b'F' | b'Y' | b'N') {
+                return Err(DbfError::Invalid(format!(
+                    "invalid logical marker for {}",
+                    field.name
+                )));
+            }
+            Ok(vec![marker; length])
+        }
+        b'I' | b'+' => {
+            if length != 4 {
+                return Err(DbfError::Invalid(format!(
+                    "integer field {} must be four bytes",
+                    field.name
+                )));
+            }
+            let integer = value_i64(value, field)?;
+            let integer = i32::try_from(integer).map_err(|_| {
+                DbfError::Invalid(format!("integer value for {} is out of range", field.name))
+            })?;
+            Ok(integer.to_le_bytes().to_vec())
+        }
+        b'O' => {
+            if length != 8 {
+                return Err(DbfError::Invalid(format!(
+                    "double field {} must be eight bytes",
+                    field.name
+                )));
+            }
+            let number = value_f64(value, field)?;
+            Ok(number.to_le_bytes().to_vec())
+        }
+        field_type => Err(DbfError::Invalid(format!(
+            "writing field type 0x{field_type:02x} is unsupported"
+        ))),
+    }
+}
+
+fn value_text(value: &Value, field: &FieldDescriptor) -> Result<String, DbfError> {
+    match value {
+        Value::Null => Ok(String::new()),
+        Value::String(text) => Ok(text.clone()),
+        Value::Number(number) => Ok(number.to_string()),
+        Value::Bool(boolean) => Ok(boolean.to_string()),
+        _ => Err(DbfError::Invalid(format!(
+            "field {} requires a scalar value",
+            field.name
+        ))),
+    }
+}
+
+fn value_i64(value: &Value, field: &FieldDescriptor) -> Result<i64, DbfError> {
+    match value {
+        Value::Null => Ok(0),
+        Value::Number(number) => number
+            .as_i64()
+            .ok_or_else(|| DbfError::Invalid(format!("field {} requires an integer", field.name))),
+        Value::String(text) => text
+            .trim()
+            .parse::<i64>()
+            .map_err(|_| DbfError::Invalid(format!("field {} requires an integer", field.name))),
+        _ => Err(DbfError::Invalid(format!(
+            "field {} requires an integer",
+            field.name
+        ))),
+    }
+}
+
+fn value_f64(value: &Value, field: &FieldDescriptor) -> Result<f64, DbfError> {
+    let number = match value {
+        Value::Null => 0.0,
+        Value::Number(number) => number.as_f64().ok_or_else(|| {
+            DbfError::Invalid(format!("field {} requires a finite number", field.name))
+        })?,
+        Value::String(text) => text.trim().parse::<f64>().map_err(|_| {
+            DbfError::Invalid(format!("field {} requires a finite number", field.name))
+        })?,
+        _ => {
+            return Err(DbfError::Invalid(format!(
+                "field {} requires a number",
+                field.name
+            )));
+        }
+    };
+    if number.is_finite() {
+        Ok(number)
+    } else {
+        Err(DbfError::Invalid(format!(
+            "field {} requires a finite number",
+            field.name
+        )))
     }
 }
 
@@ -392,5 +718,73 @@ mod tests {
     #[test]
     fn decodes_float_fields_as_numbers() {
         assert_eq!(decode_field(b'F', b" 1.5"), serde_json::json!(1.5));
+    }
+
+    #[test]
+    fn mutates_records_and_round_trips_to_dbf() {
+        let mut table = DbfTable::from_bytes(&fixture()).unwrap();
+        let inserted = table
+            .insert_record(
+                serde_json::json!({
+                    "ID": 3,
+                    "NAME": "Carol",
+                    "AGE": 42,
+                    "ACTIVE": false
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            )
+            .unwrap();
+        assert_eq!(inserted, 3);
+
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "Alicia"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        table
+            .replace_record(
+                3,
+                serde_json::json!({
+                    "ID": 3,
+                    "NAME": "Carol",
+                    "AGE": 43,
+                    "ACTIVE": true
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            )
+            .unwrap();
+        table.delete_record(1).unwrap();
+
+        let round_trip = DbfTable::from_bytes(&table.to_bytes()).unwrap();
+        assert_eq!(round_trip.header.record_count, 3);
+        assert!(round_trip.records()[0].deleted);
+        assert_eq!(round_trip.active_record(3).unwrap().values["NAME"], "Carol");
+        assert_eq!(round_trip.active_record(3).unwrap().values["AGE"], 43);
+    }
+
+    #[test]
+    fn rejects_unknown_mutation_fields_without_changing_table() {
+        let mut table = DbfTable::from_bytes(&fixture()).unwrap();
+        let before = table.to_bytes();
+        let error = table
+            .patch_record(
+                1,
+                serde_json::json!({"UNKNOWN": true})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap_err();
+
+        assert!(error.to_string().contains("unknown field UNKNOWN"));
+        assert_eq!(table.to_bytes(), before);
     }
 }

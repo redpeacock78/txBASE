@@ -3,9 +3,9 @@
 A small Rust workspace for a transactional dBASE-compatible database.
 
 The first slice keeps the DBF file format at the center and exposes a JSON
-read path. It also provides an HTTP server with `GET` and standards-based
-`QUERY` routing. WAL, MVCC, mutation operations, and xBase compatibility are
-interfaces for later phases, not pretend implementations.
+read path. It also provides an HTTP server with `GET`, standards-based
+`QUERY`, and DBF-backed mutation routing. WAL, MVCC, and xBase compatibility
+remain interfaces for later phases.
 
 ## What works now
 
@@ -15,6 +15,8 @@ interfaces for later phases, not pretend implementations.
 - Converts common character, date, numeric, logical, integer, and double fields to JSON.
 - Prints active records as JSON from the command line.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.
+- Serves `POST /records`, `PUT /records/{id}`, `PATCH /records/{id}`, and `DELETE /records/{id}`.
+- Persists supported JSON mutations by atomically replacing the DBF file.
 - Provides storage, operation-IR, WAL, MVCC, and transaction traits without claiming that they are complete.
 
 The DBF decoder currently treats text as UTF-8 with replacement for invalid
@@ -47,6 +49,26 @@ List active records:
 curl -s http://127.0.0.1:8080/records | jq
 ```
 
+Create a record:
+
+```bash
+curl -i -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}' \
+  http://127.0.0.1:8080/records
+```
+
+Patch or replace a record, then logically delete it:
+
+```bash
+curl -i -X PATCH \
+  -H 'Content-Type: application/json' \
+  -d '{"NAME":"Caroline"}' \
+  http://127.0.0.1:8080/records/3
+
+curl -i -X DELETE http://127.0.0.1:8080/records/3
+```
+
 The `QUERY` route follows RFC 10008 at its boundary. It requires an
 `application/json` content type and executes filter, sort, projection, skip,
 and limit against active DBF records.
@@ -66,7 +88,7 @@ Use `--bind ADDRESS` to select another listener address.
 src/
 ├── dbf.rs          DBF headers, descriptors, records, and JSON conversion
 ├── query.rs        JSON query document and executor
-├── server.rs       minimal HTTP routing and RFC 10008 boundary checks
+├── server.rs       HTTP routing, RFC 10008 checks, and DBF mutations
 ├── storage.rs      range-based storage boundary
 ├── transaction.rs  WAL, MVCC, and transaction traits
 ├── xbase.rs        shared operation IR boundary
@@ -102,6 +124,18 @@ The initial operator vocabulary is `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`,
 `$in`, `$nin`, `$and`, `$or`, and `$not`. Missing fields match `$ne` and `$nin`,
 array values match when any element satisfies a predicate, and sort ties retain
 DBF record order. Dotted paths, indexes, and update operators are not supported.
+
+## Mutation semantics
+
+`POST` creates a new physical DBF record and returns `201 Created` with its
+one-based record location. `PUT` replaces all fields, while `PATCH` changes
+only the fields in its JSON object. Missing fields in `POST` and `PUT` become
+DBF null values, and unknown fields are rejected.
+
+`DELETE` sets the DBF deletion marker and returns `204 No Content`. Deleted
+record numbers are not reused, and subsequent reads return `404 Not Found`.
+The server writes a complete temporary sibling file, syncs it, and renames it
+over the DBF path. WAL, MVCC, and crash recovery remain outside this slice.
 
 ## Quality gates
 
