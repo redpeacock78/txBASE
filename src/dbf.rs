@@ -16,6 +16,7 @@ const EOF_MARKER: u8 = 0x1a;
 const SNAPSHOT_MAGIC: &[u8; 4] = b"TXDB";
 const ACTIVE_RECORD: u8 = 0x20;
 const DELETED_RECORD: u8 = 0x2a;
+const DBT_BLOCK_SIZE: usize = 512;
 
 #[derive(Debug)]
 pub enum DbfError {
@@ -66,19 +67,79 @@ pub struct DbfRecord {
     pub values: Map<String, Value>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MemoFormat {
+    Dbase3,
+    Dbase4,
+    FoxPro,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MemoFile {
+    bytes: Vec<u8>,
+    block_size: usize,
+    format: MemoFormat,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct DbfTable {
     pub header: DbfHeader,
     pub fields: Vec<FieldDescriptor>,
     records: Vec<DbfRecord>,
+    stored_values: Vec<Map<String, Value>>,
     bytes: Vec<u8>,
+    memo: Option<MemoFile>,
 }
 
 impl DbfTable {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, DbfError> {
         let path = path.as_ref();
         Self::recover_wal(path)?;
-        Self::from_bytes(&fs::read(path)?)
+        let mut table = Self::from_bytes(&fs::read(path)?)?;
+        if table.has_memo_fields() {
+            if let Some(memo_path) = find_memo_path(path) {
+                let memo = MemoFile::open(&memo_path, table.header.version)?;
+                table.resolve_memos(&memo)?;
+                table.memo = Some(memo);
+            }
+        }
+        Ok(table)
+    }
+
+    fn has_memo_fields(&self) -> bool {
+        self.fields
+            .iter()
+            .any(|field| field.field_type.eq_ignore_ascii_case(&b'M'))
+    }
+
+    fn resolve_memos(&mut self, memo: &MemoFile) -> Result<(), DbfError> {
+        let fields = self
+            .fields
+            .iter()
+            .filter(|field| field.field_type.eq_ignore_ascii_case(&b'M'))
+            .cloned()
+            .collect::<Vec<_>>();
+        for index in 0..self.records.len() {
+            if self.records[index].deleted {
+                continue;
+            }
+            let record_offset = self.record_offset(index)?;
+            for field in &fields {
+                let start = record_offset + field.offset;
+                let end = start + usize::from(field.length);
+                let Some(block) = memo_index(&self.bytes[start..end])? else {
+                    continue;
+                };
+                let Some(data) = memo.read(block)? else {
+                    continue;
+                };
+                self.records[index].values.insert(
+                    field.name.clone(),
+                    Value::String(text(&data, self.header.language_driver)),
+                );
+            }
+        }
+        Ok(())
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, DbfError> {
@@ -150,6 +211,7 @@ impl DbfTable {
         let record_count = usize::try_from(header.record_count)
             .map_err(|_| DbfError::Invalid("record count overflows usize".into()))?;
         let mut records = Vec::with_capacity(record_count);
+        let mut stored_values = Vec::with_capacity(record_count);
         for number in 1..=record_count {
             let start = record_start + (number - 1) * record_length;
             let record = &bytes[start..start + record_length];
@@ -176,6 +238,7 @@ impl DbfTable {
                     ),
                 );
             }
+            stored_values.push(values.clone());
             records.push(DbfRecord {
                 number,
                 deleted,
@@ -187,7 +250,9 @@ impl DbfTable {
             header,
             fields,
             records,
+            stored_values,
             bytes: bytes.to_vec(),
+            memo: None,
         })
     }
 
@@ -266,6 +331,18 @@ impl DbfTable {
 
     pub fn insert_record(&mut self, values: Map<String, Value>) -> Result<usize, DbfError> {
         let values = self.normalize_values(&values)?;
+        if self.memo.is_some()
+            && self.fields.iter().any(|field| {
+                is_memo_field(field.field_type)
+                    && values
+                        .get(&field.name)
+                        .is_some_and(|value| !value.is_null() && value != "")
+            })
+        {
+            return Err(DbfError::Invalid(
+                "memo field writes require a memo sidecar writer".into(),
+            ));
+        }
         let encoded = self.encode_record(&values)?;
         let number = self
             .records
@@ -297,8 +374,9 @@ impl DbfTable {
         self.records.push(DbfRecord {
             number,
             deleted: false,
-            values,
+            values: values.clone(),
         });
+        self.stored_values.push(values);
         Ok(number)
     }
 
@@ -309,7 +387,24 @@ impl DbfTable {
     ) -> Result<(), DbfError> {
         let index = self.active_index(number)?;
         let values = self.normalize_values(&values)?;
-        self.write_existing_record(index, &values)
+        let mut storage_values = values.clone();
+        if self.memo.is_some() {
+            for field in &self.fields {
+                if is_memo_field(field.field_type) {
+                    if values.get(&field.name) != self.records[index].values.get(&field.name) {
+                        return Err(DbfError::Invalid(format!(
+                            "memo field {} cannot be changed without a memo sidecar writer",
+                            field.name
+                        )));
+                    }
+                    storage_values.insert(
+                        field.name.clone(),
+                        self.stored_values[index][&field.name].clone(),
+                    );
+                }
+            }
+        }
+        self.write_existing_record(index, &values, &storage_values)
     }
 
     pub fn patch_record(
@@ -319,10 +414,32 @@ impl DbfTable {
     ) -> Result<(), DbfError> {
         let index = self.active_index(number)?;
         let mut values = self.records[index].values.clone();
+        let changed_fields = patch.keys().cloned().collect::<BTreeSet<_>>();
         for (field, value) in patch {
             values.insert(field, value);
         }
-        self.write_existing_record(index, &self.normalize_values(&values)?)
+        let values = self.normalize_values(&values)?;
+        let mut storage_values = values.clone();
+        for field in &self.fields {
+            if is_memo_field(field.field_type)
+                && (!changed_fields.contains(&field.name)
+                    || values.get(&field.name) == self.records[index].values.get(&field.name))
+            {
+                storage_values.insert(
+                    field.name.clone(),
+                    self.stored_values[index][&field.name].clone(),
+                );
+            } else if is_memo_field(field.field_type)
+                && self.memo.is_some()
+                && values.get(&field.name) != self.records[index].values.get(&field.name)
+            {
+                return Err(DbfError::Invalid(format!(
+                    "memo field {} cannot be changed without a memo sidecar writer",
+                    field.name
+                )));
+            }
+        }
+        self.write_existing_record(index, &values, &storage_values)
     }
 
     pub fn delete_record(&mut self, number: usize) -> Result<(), DbfError> {
@@ -363,13 +480,13 @@ impl DbfTable {
             .collect())
     }
 
-    fn encode_record(&self, values: &Map<String, Value>) -> Result<Vec<u8>, DbfError> {
+    fn encode_record(&self, storage_values: &Map<String, Value>) -> Result<Vec<u8>, DbfError> {
         let mut record = Vec::with_capacity(usize::from(self.header.record_length));
         record.push(ACTIVE_RECORD);
         for field in &self.fields {
             record.extend(encode_field(
                 field,
-                values.get(&field.name).unwrap_or(&Value::Null),
+                storage_values.get(&field.name).unwrap_or(&Value::Null),
                 self.header.language_driver,
             )?);
         }
@@ -420,16 +537,155 @@ impl DbfTable {
         &mut self,
         index: usize,
         values: &Map<String, Value>,
+        storage_values: &Map<String, Value>,
     ) -> Result<(), DbfError> {
-        let encoded = self.encode_record(values)?;
+        let encoded = self.encode_record(storage_values)?;
         let offset = self.record_offset(index)?;
         let end = offset + encoded.len();
         let mut bytes = self.bytes.clone();
         bytes[offset..end].copy_from_slice(&encoded);
         self.bytes = bytes;
         self.records[index].values = values.clone();
+        self.stored_values[index] = storage_values.clone();
         Ok(())
     }
+}
+
+impl MemoFile {
+    fn open(path: &Path, dbf_version: u8) -> Result<Self, DbfError> {
+        let bytes = fs::read(path)?;
+        if path
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("fpt"))
+        {
+            let block_size = bytes
+                .get(6..8)
+                .map(|header| usize::from(u16::from_be_bytes([header[0], header[1]])))
+                .ok_or_else(|| DbfError::Invalid("FPT header is truncated".into()))?;
+            if block_size < 8 || bytes.len() < block_size {
+                return Err(DbfError::Invalid(
+                    "FPT block size or header is invalid".into(),
+                ));
+            }
+            Ok(Self {
+                bytes,
+                block_size,
+                format: MemoFormat::FoxPro,
+            })
+        } else {
+            if bytes.len() < DBT_BLOCK_SIZE {
+                return Err(DbfError::Invalid("DBT header is truncated".into()));
+            }
+            Ok(Self {
+                bytes,
+                block_size: DBT_BLOCK_SIZE,
+                format: if dbf_version == 0x83 {
+                    MemoFormat::Dbase3
+                } else {
+                    MemoFormat::Dbase4
+                },
+            })
+        }
+    }
+
+    fn read(&self, block: u32) -> Result<Option<Vec<u8>>, DbfError> {
+        if block == 0 {
+            return Ok(None);
+        }
+        let start = usize::try_from(block)
+            .ok()
+            .and_then(|block| block.checked_mul(self.block_size))
+            .ok_or_else(|| DbfError::Invalid("memo block offset overflows usize".into()))?;
+        if start >= self.bytes.len() {
+            return Err(DbfError::Invalid(format!(
+                "memo block {block} is outside the sidecar"
+            )));
+        }
+        match self.format {
+            MemoFormat::Dbase3 => {
+                let data = &self.bytes[start..];
+                let end = data
+                    .iter()
+                    .position(|byte| *byte == EOF_MARKER)
+                    .unwrap_or(data.len());
+                Ok(Some(data[..end].to_vec()))
+            }
+            MemoFormat::Dbase4 => {
+                let header_end = start
+                    .checked_add(8)
+                    .ok_or_else(|| DbfError::Invalid("memo header overflows usize".into()))?;
+                let header = self
+                    .bytes
+                    .get(start..header_end)
+                    .ok_or_else(|| DbfError::Invalid("memo block header is truncated".into()))?;
+                let length = usize::try_from(u32::from_le_bytes([
+                    header[4], header[5], header[6], header[7],
+                ]))
+                .map_err(|_| DbfError::Invalid("memo length overflows usize".into()))?;
+                let end = header_end
+                    .checked_add(length)
+                    .ok_or_else(|| DbfError::Invalid("memo data length overflows usize".into()))?;
+                let data = self
+                    .bytes
+                    .get(header_end..end)
+                    .ok_or_else(|| DbfError::Invalid("memo data is truncated".into()))?;
+                Ok(Some(data.to_vec()))
+            }
+            MemoFormat::FoxPro => {
+                let header_end = start
+                    .checked_add(8)
+                    .ok_or_else(|| DbfError::Invalid("memo header overflows usize".into()))?;
+                let header = self
+                    .bytes
+                    .get(start..header_end)
+                    .ok_or_else(|| DbfError::Invalid("memo block header is truncated".into()))?;
+                let length = usize::try_from(u32::from_be_bytes([
+                    header[4], header[5], header[6], header[7],
+                ]))
+                .map_err(|_| DbfError::Invalid("memo length overflows usize".into()))?;
+                let end = header_end
+                    .checked_add(length)
+                    .ok_or_else(|| DbfError::Invalid("memo data length overflows usize".into()))?;
+                let data = self
+                    .bytes
+                    .get(header_end..end)
+                    .ok_or_else(|| DbfError::Invalid("memo data is truncated".into()))?;
+                Ok(Some(data.to_vec()))
+            }
+        }
+    }
+}
+
+fn find_memo_path(path: &Path) -> Option<std::path::PathBuf> {
+    ["fpt", "dbt"]
+        .into_iter()
+        .map(|extension| path.with_extension(extension))
+        .find(|candidate| candidate.is_file())
+}
+
+fn memo_index(bytes: &[u8]) -> Result<Option<u32>, DbfError> {
+    if bytes.len() == 4 {
+        return Ok(Some(u32::from_le_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3],
+        ])));
+    }
+    let end = bytes
+        .iter()
+        .rposition(|byte| !matches!(byte, b' ' | b'\0'))
+        .map_or(0, |index| index + 1);
+    if end == 0 {
+        return Ok(None);
+    }
+    let text = std::str::from_utf8(&bytes[..end])
+        .map_err(|_| DbfError::Invalid("memo block number is not ASCII".into()))?
+        .trim_matches([' ', '\0']);
+    text.parse::<u32>()
+        .map(Some)
+        .map_err(|_| DbfError::Invalid("memo block number is not an integer".into()))
+}
+
+fn is_memo_field(field_type: u8) -> bool {
+    field_type.eq_ignore_ascii_case(&b'M')
 }
 
 fn transaction_error(error: TransactionError) -> DbfError {
@@ -973,6 +1229,114 @@ mod tests {
 
         assert!(error.to_string().contains("unknown field UNKNOWN"));
         assert_eq!(table.to_bytes(), before);
+    }
+
+    #[test]
+    fn reads_dbase3_memo_sidecar_and_preserves_pointer_on_mutation() {
+        let path =
+            std::env::temp_dir().join(format!("txbase-dbase3-memo-{}.dbf", std::process::id()));
+        let memo_path = path.with_extension("dbt");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&memo_path);
+
+        let mut bytes = fixture();
+        bytes[0] = 0x83;
+        bytes[64 + 11] = b'M';
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let memo_start = record_start + 4;
+        bytes[memo_start..memo_start + 10].copy_from_slice(b"         1");
+        fs::write(&path, bytes).unwrap();
+
+        let mut memo = vec![0; DBT_BLOCK_SIZE * 2];
+        let text = b"memo from dbt";
+        memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + text.len()].copy_from_slice(text);
+        memo[DBT_BLOCK_SIZE + text.len()] = EOF_MARKER;
+        fs::write(&memo_path, memo).unwrap();
+
+        let mut table = DbfTable::from_path(&path).unwrap();
+        assert_eq!(
+            table.active_record(1).unwrap().values["NAME"],
+            "memo from dbt"
+        );
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "memo from dbt"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        let error = table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "new memo"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("memo field NAME cannot be changed")
+        );
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"AGE": 30}).as_object().unwrap().clone(),
+            )
+            .unwrap();
+        table.save_with_wal(&path).unwrap();
+
+        let reread = DbfTable::from_path(&path).unwrap();
+        assert_eq!(
+            reread.active_record(1).unwrap().values["NAME"],
+            "memo from dbt"
+        );
+        assert_eq!(reread.active_record(1).unwrap().values["AGE"], 30);
+        assert_eq!(
+            &reread.to_bytes()[memo_start..memo_start + 10],
+            b"         1"
+        );
+
+        fs::remove_file(path).unwrap();
+        fs::remove_file(memo_path).unwrap();
+    }
+
+    #[test]
+    fn reads_foxpro_fpt_memo_sidecar() {
+        let path =
+            std::env::temp_dir().join(format!("txbase-foxpro-memo-{}.dbf", std::process::id()));
+        let memo_path = path.with_extension("fpt");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&memo_path);
+
+        let mut bytes = fixture();
+        bytes[0] = 0xf5;
+        bytes[64 + 11] = b'M';
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let memo_start = record_start + 4;
+        bytes[memo_start..memo_start + 10].copy_from_slice(b"         1");
+        fs::write(&path, bytes).unwrap();
+
+        let mut memo = vec![0; DBT_BLOCK_SIZE * 2];
+        memo[6..8].copy_from_slice(&(DBT_BLOCK_SIZE as u16).to_be_bytes());
+        memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + 4].copy_from_slice(&1u32.to_be_bytes());
+        let text = b"memo from fpt";
+        memo[DBT_BLOCK_SIZE + 4..DBT_BLOCK_SIZE + 8]
+            .copy_from_slice(&(text.len() as u32).to_be_bytes());
+        memo[DBT_BLOCK_SIZE + 8..DBT_BLOCK_SIZE + 8 + text.len()].copy_from_slice(text);
+        fs::write(&memo_path, memo).unwrap();
+
+        let table = DbfTable::from_path(&path).unwrap();
+        assert_eq!(
+            table.active_record(1).unwrap().values["NAME"],
+            "memo from fpt"
+        );
+
+        fs::remove_file(path).unwrap();
+        fs::remove_file(memo_path).unwrap();
     }
 
     #[test]

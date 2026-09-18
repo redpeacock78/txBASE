@@ -26,15 +26,18 @@ The common field encodings are also part of the compatibility contract:
 | `N` and `F` | Right-justified numeric text | JSON number when finite and parseable |
 | `L` | Logical marker such as `T` or `F` | Boolean or JSON null for an unknown marker |
 | `I` and `+` | Four-byte integer representation | Little-endian signed integer |
-| `M`, `B`, and `G` | Text pointer to a memo or binary block | Pointer text, without sidecar dereference |
+| `M` | Text pointer to a memo block | Text from a sibling `.dbt` or `.fpt` sidecar when present; pointer text otherwise |
+| `B` and `G` | Text pointer to a binary block | Pointer text, without sidecar dereference |
 
 The parser therefore reads the declared header and record boundaries, checks
 field names and widths, uses the language-driver byte for the supported
 Windows-1252 mappings, and excludes records marked deleted from the JSON read
 path. Character writes reject values that the declared Windows-1252 mapping
-cannot represent. Other code-page conversion and memo dereferencing remain
-explicit future work because guessing an encoding changes data at the format
-boundary.
+cannot represent. When a sibling `.dbt` or `.fpt` exists, `M` fields are
+resolved from their block pointers. Existing pointers are retained separately
+so non-memo DBF mutations do not rewrite them as text. Memo sidecar writes,
+other code-page conversion, and binary/OLE dereferencing remain explicit
+future work.
 
 The reader uses the declared record count as its boundary and does not require
 the trailing `0x1a` when the declared records are complete. It still preserves

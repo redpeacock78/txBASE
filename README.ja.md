@@ -20,6 +20,7 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - `QUERY /records`でfilter、sort、projection、skip、limitを実行する。
 - `POST /records`、`PUT /records/{id}`、`PATCH /records/{id}`、`DELETE /records/{id}`を提供する。
 - 対応するJSON mutationを`TXDB` snapshot WALへsyncしてからDBFへ保存し、未完了の保存を起動時に復旧する。
+- siblingの`.dbt`と`.fpt` sidecarからtext memoを読み、memo以外のmutationでは既存pointerを保持する。
 
 language-driver IDが`0x03`または`0x57`のcharacter fieldはWindows-1252として読み書きします。
 それ以外のdriverは既存のUTF-8とlossy fallbackを使うため、OEMと他のWindows code pageの完全な変換は未実装です。
@@ -133,6 +134,8 @@ Dotted path、index、update operatorは未対応です。
 serverはDBF全体の`TXDB` snapshotをWALへ書き込み、syncしてから一時ファイルをDBF pathへrenameします。
 `DbfTable::from_path`は中断されたmutationの最新snapshotを復旧します。
 WALは細粒度のmutation recordではなく全体snapshotを保存し、複数writerの調停は未対応です。
+既存のtext memoは`.dbt`または`.fpt`から読み取ります。
+新しいmemo内容の書き込みは未対応で、sidecarがある場合のmemo field変更は拒否します。
 
 ## 検証
 

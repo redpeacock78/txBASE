@@ -21,6 +21,8 @@ concurrent-writer coordination remain later phases.
 - Serves `POST /records`, `PUT /records/{id}`, `PATCH /records/{id}`, and `DELETE /records/{id}`.
 - Persists supported JSON mutations through a synced `TXDB` snapshot WAL and
   atomic DBF replacement, with startup recovery for an unfinished write.
+- Reads text memo fields from sibling `.dbt` and `.fpt` sidecars, while
+  preserving their existing pointers during non-memo mutations.
 - Provides range storage, operation IR, file or memory WAL, and snapshot transaction types.
 
 Character fields with language-driver ID `0x03` or `0x57` are decoded and
@@ -145,6 +147,10 @@ path. `DbfTable::from_path` replays the latest complete `TXDB` snapshot left by
 an interrupted mutation. The WAL stores full snapshots rather than
 fine-grained mutation records, and concurrent-writer coordination remains
 outside this slice.
+
+Existing text memo values are read from `.dbt` or `.fpt` sidecars. New memo
+content is not written yet; mutations that do not change a memo preserve its
+on-disk pointer, and explicit memo changes are rejected when a sidecar is loaded.
 
 ## Quality gates
 
