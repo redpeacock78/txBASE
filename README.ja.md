@@ -26,9 +26,9 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - `GET /records`と`GET /records/{id}`を提供する。
 - `QUERY /records`でfilter、sort、projection、skip、limitを実行する。
 - `POST /records`、`PUT /records/{id}`、`PATCH /records/{id}`、`DELETE /records/{id}`を提供する。
-- 対応するJSON mutationを`TXDB`または`TXDM` snapshot WALへsyncしてからDBF/sidecarへ保存し、未完了の保存を起動時に復旧する。
+- 対応するJSON mutationを`TXDB`または`TXDM` snapshot WALへsyncしてからDBF/sidecarへ保存し、未完了の保存を起動時に復旧する。読み込み後にDBFまたはmemo sidecarが外部変更された場合は、古い内容での保存を拒否する。
 - siblingの`.dbt`と`.fpt` sidecarからtext memoを読み、変更時は新しいblockへappendする。
-- `B`/`G`/`P`のbinary sidecar blockはhex textとして読み、dBASE IV DBTとFPTではhex textの書き込みも新しいbinary blockへのappendとして実行します。dBASE III DBT binary writeは未対応です。
+- `B`/`G`/`P`のbinary sidecar blockはhex textとして読み、dBASE III DBT、dBASE IV DBT、FPTではhex textの書き込みも新しいbinary blockへのappendとして実行します。
 - `PATCH`では通常のfield objectと、型付きの`$set`、`$unset`、`$inc`を使えます。
 
 language-driver IDが`0x01`または`0x02`のcharacter fieldはCP437またはCP850、CP852の代表的なID（`0x1f`、`0x64`）とCP866の代表的なID（`0x26`、`0x65`）、`0x03`または`0x57`はWindows-1252として読み書きします。
@@ -144,7 +144,7 @@ operatorと通常fieldの混在、および同一fieldへの複数operator適用
 削除済みrecord numberは再利用せず、以後の読み取りは`404 Not Found`になります。
 serverはDBF-only変更では`TXDB`、memo field変更ではDBFとsidecarを含む`TXDM` snapshotをWALへ書き込み、syncしてから対象ファイルを置き換えます。
 `DbfTable::from_path`は中断されたmutationの最新snapshotを復旧します。
-WALは細粒度のmutation recordではなく全体snapshotを保存し、複数writerの調停は未対応です。
+WALは細粒度のmutation recordではなく全体snapshotを保存します。読み込み後のDBF/sidecar変更は検出して拒否しますが、完全な複数writerの調停は未対応です。
 text memoは`.dbt`または`.fpt`から読み取り、変更時は新しいblockをappendしてDBF pointerも更新します。
 sidecarとDBFは`TXDM` WAL snapshotで復旧可能な単位として保存します。
 `B`/`G`/`P`のbinary block書き込みはhex textとしてdBASE III DBT、dBASE IV DBT、FPTに対応し、dBASE IV DBTのsidecar headerにあるblock sizeも尊重します。dBASE III DBTの`0x1a1a` terminatorと衝突するbinary値は拒否します。`P`はVisual FoxProのPicture blockとして扱います。OLE semanticsとこの範囲外のmemo形式は未対応です。

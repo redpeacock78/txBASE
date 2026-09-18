@@ -5,7 +5,7 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const CLASSIC_HEADER_SIZE: usize = 32;
 const CLASSIC_DESCRIPTOR_SIZE: usize = 32;
@@ -191,6 +191,13 @@ struct RecoverySnapshot {
     memo: Option<MemoSnapshot>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PersistedState {
+    path: PathBuf,
+    dbf: Vec<u8>,
+    memo: Option<Vec<u8>>,
+}
+
 type MemoUpdates = BTreeMap<(usize, String), MemoUpdate>;
 type PreparedStorage = (Map<String, Value>, MemoUpdates);
 
@@ -203,6 +210,7 @@ pub struct DbfTable {
     bytes: Vec<u8>,
     memo: Option<MemoFile>,
     memo_updates: MemoUpdates,
+    source: Option<PersistedState>,
 }
 
 fn memo_format_for_version(version: u8) -> Option<MemoFormat> {
@@ -218,7 +226,8 @@ impl DbfTable {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, DbfError> {
         let path = path.as_ref();
         Self::recover_wal(path)?;
-        let mut table = Self::from_bytes(&fs::read(path)?)?;
+        let dbf = fs::read(path)?;
+        let mut table = Self::from_bytes(&dbf)?;
         if table.has_sidecar_fields() {
             if let Some(memo_path) = find_memo_path(path) {
                 let memo = MemoFile::open(&memo_path, table.header.version)?;
@@ -226,6 +235,11 @@ impl DbfTable {
                 table.memo = Some(memo);
             }
         }
+        table.source = Some(PersistedState {
+            path: path.to_path_buf(),
+            dbf,
+            memo: table.memo.as_ref().map(|memo| memo.bytes.clone()),
+        });
         Ok(table)
     }
 
@@ -413,6 +427,7 @@ impl DbfTable {
             bytes: bytes.to_vec(),
             memo: None,
             memo_updates: BTreeMap::new(),
+            source: None,
         })
     }
 
@@ -450,8 +465,39 @@ impl DbfTable {
         save_bytes_to(path, &self.bytes, "txbase.tmp")
     }
 
+    fn ensure_source_current(&self, path: &Path) -> Result<(), DbfError> {
+        let Some(source) = &self.source else {
+            return Ok(());
+        };
+        if source.path != path {
+            return Ok(());
+        }
+        let current_dbf = fs::read(path)?;
+        if current_dbf.as_slice() != source.dbf.as_slice() {
+            return Err(DbfError::Invalid(
+                "DBF changed since the table was loaded".into(),
+            ));
+        }
+        if let Some(expected_memo) = &source.memo {
+            let Some(memo_path) = find_memo_path(path) else {
+                return Err(DbfError::Invalid(
+                    "memo sidecar changed since the table was loaded".into(),
+                ));
+            };
+            let current_memo = fs::read(memo_path)?;
+            if current_memo.as_slice() != expected_memo.as_slice() {
+                return Err(DbfError::Invalid(
+                    "memo sidecar changed since the table was loaded".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub fn save_with_wal(&mut self, path: impl AsRef<Path>) -> Result<(), DbfError> {
         let path = path.as_ref();
+        Self::recover_wal(path)?;
+        self.ensure_source_current(path)?;
         let mut prepared = self.clone();
         let memo_snapshot = prepared.apply_memo_updates(path)?;
         let wal_path = path.with_extension("txbase.wal");
@@ -472,6 +518,11 @@ impl DbfTable {
             drop(wal);
             let _ = fs::remove_file(wal_path);
         }
+        prepared.source = Some(PersistedState {
+            path: path.to_path_buf(),
+            dbf: prepared.bytes.clone(),
+            memo: prepared.memo.as_ref().map(|memo| memo.bytes.clone()),
+        });
         *self = prepared;
         Ok(())
     }
@@ -3985,6 +4036,82 @@ mod tests {
         );
         let memo = MemoFile::open(&memo_path, 0x32).unwrap();
         assert_eq!(memo.read(2).unwrap().unwrap(), [0xde, 0xad, 0xbe, 0xef]);
+
+        fs::remove_file(path).unwrap();
+        fs::remove_file(memo_path).unwrap();
+    }
+
+    #[test]
+    fn rejects_stale_dbf_before_save() {
+        let path =
+            std::env::temp_dir().join(format!("txbase-stale-save-{}.dbf", std::process::id()));
+        let wal_path = path.with_extension("txbase.wal");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&wal_path);
+
+        let original = fixture();
+        fs::write(&path, &original).unwrap();
+        let mut table = DbfTable::from_path(&path).unwrap();
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"AGE": 31}).as_object().unwrap().clone(),
+            )
+            .unwrap();
+
+        let mut external = original;
+        let record_start = usize::from(u16::from_le_bytes([external[8], external[9]]));
+        external[record_start + 14..record_start + 17].copy_from_slice(b" 30");
+        fs::write(&path, &external).unwrap();
+
+        let error = table.save_with_wal(&path).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("DBF changed since the table was loaded")
+        );
+        assert_eq!(fs::read(&path).unwrap(), external);
+        assert!(!wal_path.exists());
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn rejects_stale_memo_sidecar_before_save() {
+        let path =
+            std::env::temp_dir().join(format!("txbase-stale-memo-{}.dbf", std::process::id()));
+        let memo_path = path.with_extension("dbt");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&memo_path);
+
+        let mut bytes = fixture();
+        bytes[0] = 0x83;
+        bytes[64 + 11] = b'M';
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        bytes[record_start + 4..record_start + 14].copy_from_slice(b"         1");
+        fs::write(&path, &bytes).unwrap();
+
+        let mut memo = vec![0; DBT_BLOCK_SIZE * 2];
+        memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + 4].copy_from_slice(b"memo");
+        memo[DBT_BLOCK_SIZE + 4] = EOF_MARKER;
+        fs::write(&memo_path, &memo).unwrap();
+
+        let mut table = DbfTable::from_path(&path).unwrap();
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"AGE": 31}).as_object().unwrap().clone(),
+            )
+            .unwrap();
+        memo[DBT_BLOCK_SIZE] = b'X';
+        fs::write(&memo_path, memo).unwrap();
+
+        let error = table.save_with_wal(&path).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("memo sidecar changed since the table was loaded")
+        );
 
         fs::remove_file(path).unwrap();
         fs::remove_file(memo_path).unwrap();

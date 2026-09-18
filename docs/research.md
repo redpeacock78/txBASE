@@ -105,7 +105,8 @@ a monotonically increasing LSN, and the payload. Opening a WAL validates
 complete records and truncates only an incomplete final record. It does not
 interpret arbitrary payloads. The DBF integration recognizes `TXDB` and `TXDM`
 snapshots, while fine-grained mutation records and multi-writer coordination
-remain future work.
+remain future work. A table loaded from a path records the DBF and memo bytes
+it read and refuses to save over an externally changed snapshot.
 
 ## MongoDB query ideas
 

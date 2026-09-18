@@ -32,6 +32,8 @@ remain later phases.
 - Persists supported JSON mutations through a synced `TXDB`/`TXDM` snapshot WAL
   and atomic DBF/sidecar replacement, with startup recovery for an unfinished
   write.
+- Rejects a save when the DBF or loaded memo sidecar changed externally since
+  the table was loaded.
 - Reads and writes text memo fields in sibling `.dbt` and `.fpt` sidecars.
   Memo writes append a new block and update the DBF pointer through a synced
   `TXDM` WAL snapshot.
@@ -169,8 +171,8 @@ changes, or a `TXDM` snapshot containing both DBF and memo bytes when an `M`
 field changes. It syncs the WAL before atomically replacing the affected files.
 `DbfTable::from_path` replays the latest complete snapshot left by an
 interrupted mutation. The WAL stores full snapshots rather than fine-grained
-mutation records, and concurrent-writer coordination remains outside this
-slice.
+mutation records. A loaded table rejects stale DBF or memo sidecar state before
+save; full concurrent-writer coordination remains outside this slice.
 
 Text memo values are read from and appended to `.dbt` or `.fpt` sidecars.
 Changing an `M` field writes the new block and DBF pointer as one recoverable
