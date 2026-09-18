@@ -22,7 +22,7 @@ fn handle_request(mut request: Request, table: &DbfTable) {
     let response = if is_get {
         get_response(&path, table)
     } else if is_query {
-        query_response(&mut request, &path)
+        query_response(&mut request, &path, table)
     } else {
         json_response(
             405,
@@ -56,7 +56,11 @@ fn get_response(path: &str, table: &DbfTable) -> Response<std::io::Cursor<Vec<u8
     }
 }
 
-fn query_response(request: &mut Request, path: &str) -> Response<std::io::Cursor<Vec<u8>>> {
+fn query_response(
+    request: &mut Request,
+    path: &str,
+    table: &DbfTable,
+) -> Response<std::io::Cursor<Vec<u8>>> {
     if path != "/records" {
         return json_response(404, error("not_found", "resource not found"), false);
     }
@@ -104,18 +108,18 @@ fn query_response(request: &mut Request, path: &str) -> Response<std::io::Cursor
             true,
         );
     }
-    if let Err(query_error) = query::parse(&body) {
-        return json_response(422, error("invalid_query", &query_error.to_string()), true);
+    let query = match query::parse(&body) {
+        Ok(query) => query,
+        Err(query_error) => {
+            return json_response(422, error("invalid_query", &query_error.to_string()), true);
+        }
+    };
+    match query::execute_query(table, &query) {
+        Ok(records) => json_response(200, Value::Array(records), true),
+        Err(query_error) => {
+            json_response(422, error("invalid_query", &query_error.to_string()), true)
+        }
     }
-
-    json_response(
-        501,
-        error(
-            "query_not_implemented",
-            "QUERY routing and validation are ready; execution is not implemented",
-        ),
-        true,
-    )
 }
 
 fn content_type(request: &Request) -> Option<&str> {

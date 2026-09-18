@@ -1,8 +1,8 @@
-# dbase-ng
+# txbase
 
-`dbase-ng`は、dBASE互換のDBFを中心に据えたRust製データベースの初期実装です。
+`txbase`は、dBASE互換のDBFを中心に据えたRust製データベースの初期実装です。
 
-現在の実装は、DBFの読み取り、JSON出力、HTTPの`GET`、RFC 10008に基づく`QUERY`の受付に範囲を限定しています。
+現在の実装は、DBFの読み取り、JSON出力、HTTPの`GET`、RFC 10008に基づく`QUERY`の実行に範囲を限定しています。
 
 WAL、MVCC、更新処理、xBase互換フロントエンドは、後続工程の境界だけを定義しています。
 
@@ -14,7 +14,7 @@ WAL、MVCC、更新処理、xBase互換フロントエンドは、後続工程�
 - 代表的な文字列、日付、数値、論理値、整数、倍精度値をJSONへ変換する。
 - コマンドラインから有効なrecordをJSONとして出力する。
 - `GET /records`と`GET /records/{id}`を提供する。
-- `QUERY /records`のContent-TypeとJSON形状を検証する。
+- `QUERY /records`でfilter、sort、projection、skip、limitを実行する。
 
 DBFのlanguage-driver byteは保持しますが、OEM code pageとWindows code pageの完全な変換はまだ実装していません。
 
@@ -46,7 +46,7 @@ curl -s http://127.0.0.1:8080/records | jq
 
 `QUERY`は`Content-Type: application/json`を要求します。
 
-現在はquery documentの形状を検証した後、`501 Not Implemented`を返します。
+`QUERY`はactive recordに対してfilter、sort、projection、skip、limitを適用します。
 
 ```bash
 curl -i -X QUERY \
@@ -61,7 +61,7 @@ listener addressは`--bind ADDRESS`で変更できます。
 
 ```text
 src/dbf.rs          DBF parserとJSON変換
-src/query.rs        JSON query documentとexecutor境界
+src/query.rs        JSON query documentとexecutor
 src/server.rs       HTTP routingとQUERY境界
 src/storage.rs      range-based storage境界
 src/transaction.rs  WAL、MVCC、transaction境界
@@ -72,7 +72,7 @@ docs/research.md    仕様調査と設計判断
 
 workspaceは、責務の所有者やbuild上の理由が生じるまで単一packageで保ちます。
 
-## Query document
+## Query実行
 
 query documentはMongoDBのpredicateから必要な表現だけを借りています。
 
@@ -91,7 +91,9 @@ query documentはMongoDBのpredicateから必要な表現だけを借りてい�
 
 初期operatorは`$eq`、`$ne`、`$gt`、`$gte`、`$lt`、`$lte`、`$in`、`$nin`、`$and`、`$or`、`$not`です。
 
-missing field、array traversal、index、update operatorの意味は、互換性を名乗る前に仕様化します。
+missing fieldでは`$ne`と`$nin`が一致し、array valueでは要素のいずれかが条件を満たすと一致します。
+sortの同値recordはDBF record orderを保ちます。
+Dotted path、index、update operatorは未対応です。
 
 ## 検証
 

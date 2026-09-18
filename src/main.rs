@@ -1,8 +1,8 @@
-use dbase_ng::{dbf::DbfTable, server};
 use std::env;
 use std::error::Error;
 use std::io::{self, Write};
 use std::path::PathBuf;
+use txbase::{dbf::DbfTable, server};
 
 fn main() {
     if let Err(error) = run() {
@@ -53,6 +53,6 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage:\n  dbase-ng FILE\n  dbase-ng --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. The server exposes GET /records, GET /records/{{id}}, and validates QUERY /records."
+        "Usage:\n  txbase FILE\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. The server exposes GET /records, GET /records/{{id}}, and executes QUERY /records."
     );
 }

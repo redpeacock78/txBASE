@@ -1,7 +1,7 @@
 # Specification research and design decisions
 
 This document records the external specifications used to choose the first
-implementation boundary. It is a compatibility map, not a claim that dbase-ng
+implementation boundary. It is a compatibility map, not a claim that txbase
 implements any of the referenced products in full.
 
 ## DBF and dBASE
@@ -19,7 +19,7 @@ defines the byte-level facts that the parser must preserve:
 
 The common field encodings are also part of the compatibility contract:
 
-| Type | On-disk representation | Initial dbase-ng behavior |
+| Type | On-disk representation | Initial txbase behavior |
 | --- | --- | --- |
 | `C` | Space-padded character bytes | UTF-8-lossy string |
 | `D` | Eight bytes in `YYYYMMDD` form | String |
@@ -52,50 +52,51 @@ and [query predicate reference](https://www.mongodb.com/docs/manual/reference/mq
 show why a JSON query shape is useful: field predicates and logical operators
 are composable without introducing SQL syntax.
 
-The first dbase-ng vocabulary is intentionally smaller than MongoDB's current
+The first txbase vocabulary is intentionally smaller than MongoDB's current
 operator set:
 
 | Area | Initial vocabulary | Status |
 | --- | --- | --- |
-| Field comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` | Parsed, not executed |
-| Membership | `$in`, `$nin` | Parsed, not executed |
-| Boolean composition | `$and`, `$or`, `$not` | Parsed, not executed |
-| Result shaping | `sort`, `projection`, `limit`, `skip` | Shape validated |
+| Field comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` | Executed for scalar and array values |
+| Membership | `$in`, `$nin` | Executed |
+| Boolean composition | `$and`, `$or`, `$not` | Executed |
+| Result shaping | `sort`, `projection`, `limit`, `skip` | Executed |
 
 The [comparison operator reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/)
-defines the comparison and membership family. dbase-ng must still decide its
-own missing-field, null, array, type-order, collation, and dotted-path rules
-before query execution becomes a public compatibility promise.
+defines the comparison and membership family. txbase uses exact field names,
+JSON scalar comparison, explicit type ordering for sort, and deterministic
+DBF record order for sort ties. Dotted paths and collation are not supported.
 
 The [logical operator reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)
 defines `$and` as requiring every clause, `$or` as requiring at least one
 clause, and `$not` as inverting a predicate. Those operators are not merely
-string names: the executor must validate their JSON shape and define how an
-empty clause list behaves.
+string names: the executor validates their JSON shape. An empty `$and` matches
+all records and an empty `$or` matches no records.
 
 MongoDB's sort contract uses `1` for ascending and `-1` for descending order.
 It permits multiple sort keys, does not promise a stable order for equal keys,
 and uses a BSON type ordering when values have different types. See the
 [sort reference](https://www.mongodb.com/docs/manual/reference/method/cursor.sort/).
-DBF record order is otherwise naturally reproducible, so dbase-ng should pick
-and document a deterministic tie breaker instead of inheriting MongoDB's
-unspecified tie order.
+DBF record order is otherwise naturally reproducible, so txbase retains it as
+the deterministic tie breaker instead of inheriting MongoDB's unspecified tie
+order.
 
 MongoDB projection and update documents have independent semantics. The
-prototype only validates projection values as `0` or `1`; it does not yet
-enforce the full inclusion and exclusion rules described by the
+prototype validates projection values as `0` or `1`, rejects mixed
+inclusion and exclusion, and applies the selected fields. It does not enforce
+the full rules described by the
 [projection reference](https://www.mongodb.com/docs/manual/reference/mql/projection/).
 Update operators use a document of the form `{ "$set": { "field": value } }`.
 The [update reference](https://www.mongodb.com/docs/manual/reference/mql/update/)
 lists field operators such as `$set`, `$unset`, `$inc`, `$mul`, `$min`, and
-`$max`, as well as array operators. The future dbase-ng update layer should
+`$max`, as well as array operators. The future txbase update layer should
 select a small, typed subset and reject the rest rather than silently treating
 an unsupported operator as a field name.
 
 MongoDB documents that a write is atomic at the single-document level and that
 multi-document writes can interleave unless a transaction is used. See
 [atomicity and transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/).
-That distinction is useful for dbase-ng: a future `$inc` implementation must
+That distinction is useful for txbase: a future `$inc` implementation must
 be an engine operation, while multi-record transaction guarantees belong to
 the transaction layer rather than to the JSON parser.
 
@@ -130,7 +131,7 @@ writes to the same document. These are client synchronization policies, not
 properties that a DBF file automatically provides.
 
 The [Realtime Database security model](https://firebase.google.com/docs/database/security)
-separates `.read`, `.write`, `.validate`, and `.indexOn` rules. dbase-ng does
+separates `.read`, `.write`, `.validate`, and `.indexOn` rules. txbase does
 not copy Firebase's rules language, authentication, listener protocol, or
 offline client cache. If an edge or client mode is added later, those four
 concerns need separate contracts instead of an implicit "Firebase mode".
@@ -149,7 +150,7 @@ branch coverage and 100% MC/DC for the covered core configuration. That is a
 quality target for a widely deployed database library, not a meaningful claim
 for this first prototype.
 
-The dbase-ng quality path is staged:
+The txbase quality path is staged:
 
 1. Keep parser tests for valid headers, field layouts, deleted records, truncated input, and invalid markers.
 2. Add an in-memory reference model before implementing mutations and compare generated operation sequences with it.
@@ -167,19 +168,19 @@ HTTP semantics and the method token as case-sensitive. The initial API uses
 the standard meaning of each method rather than treating method names as
 arbitrary RPC verbs:
 
-| Method | dbase-ng role | Boundary |
+| Method | txbase role | Boundary |
 | --- | --- | --- |
 | `GET` | Read a representation or record | Implemented for `/records` and `/records/{id}` |
 | `POST` | Future create operation | Not implemented |
 | `PUT` | Future full replacement | Not implemented |
 | `PATCH` | Future partial modification | Not implemented |
 | `DELETE` | Future logical deletion | Not implemented |
-| `QUERY` | Safe query with request content | Route and validation only |
+| `QUERY` | Safe query with request content | JSON execution for `/records` |
 
 `PATCH` has its own method specification in
 [RFC 5789](https://www.rfc-editor.org/rfc/rfc5789.html). It is not safe by
 default, and an API has to define the accepted patch media type and conflict
-behavior. dbase-ng therefore does not equate a MongoDB update document with
+behavior. txbase therefore does not equate a MongoDB update document with
 the HTTP method itself.
 
 The [HTTP QUERY method is now RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html).

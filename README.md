@@ -1,4 +1,4 @@
-# dbase-ng
+# txbase
 
 A small Rust workspace for a transactional dBASE-compatible database.
 
@@ -14,7 +14,7 @@ interfaces for later phases, not pretend implementations.
 - Reads header metadata, field descriptors, active records, and deleted-record flags.
 - Converts common character, date, numeric, logical, integer, and double fields to JSON.
 - Prints active records as JSON from the command line.
-- Serves `GET /records`, `GET /records/{id}`, and a validated `QUERY /records` route.
+- Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.
 - Provides storage, operation-IR, WAL, MVCC, and transaction traits without claiming that they are complete.
 
 The DBF decoder currently treats text as UTF-8 with replacement for invalid
@@ -48,8 +48,8 @@ curl -s http://127.0.0.1:8080/records | jq
 ```
 
 The `QUERY` route follows RFC 10008 at its boundary. It requires an
-`application/json` content type, validates the current query document shape,
-and returns `501 Not Implemented` until the query executor is added.
+`application/json` content type and executes filter, sort, projection, skip,
+and limit against active DBF records.
 
 ```bash
 curl -i -X QUERY \
@@ -65,7 +65,7 @@ Use `--bind ADDRESS` to select another listener address.
 ```text
 src/
 ├── dbf.rs          DBF headers, descriptors, records, and JSON conversion
-├── query.rs        JSON query document and executor boundary
+├── query.rs        JSON query document and executor
 ├── server.rs       minimal HTTP routing and RFC 10008 boundary checks
 ├── storage.rs      range-based storage boundary
 ├── transaction.rs  WAL, MVCC, and transaction traits
@@ -80,7 +80,7 @@ docs/research.md    specification and design decisions
 The workspace intentionally has one package while the boundaries are still
 small. A crate split should follow real ownership or build needs.
 
-## Query boundary
+## Query execution
 
 The query document is shaped after the useful part of MongoDB predicates, not
 after a promise of MongoDB compatibility:
@@ -99,9 +99,9 @@ after a promise of MongoDB compatibility:
 ```
 
 The initial operator vocabulary is `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`,
-`$in`, `$nin`, `$and`, `$or`, and `$not`. Execution semantics, missing-field
-behavior, array traversal, indexing, and update operators must be specified
-before they are advertised as compatible behavior.
+`$in`, `$nin`, `$and`, `$or`, and `$not`. Missing fields match `$ne` and `$nin`,
+array values match when any element satisfies a predicate, and sort ties retain
+DBF record order. Dotted paths, indexes, and update operators are not supported.
 
 ## Quality gates
 
