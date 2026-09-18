@@ -65,8 +65,9 @@ The sidecar rule is deliberate: WAL, MVCC metadata, indexes, and transaction
 state belong in separate files so a checkpointed DBF remains readable by older
 xBase tools.
 
-Four-byte memo pointers use big-endian order for FoxPro `0xF5` and Visual
-FoxPro `0x30`–`0x32` tables, matching their FPT sidecars.
+Four-byte memo pointers in FoxPro `0xF5` and Visual FoxPro `0x30`–`0x32`
+tables use little-endian order; FPT block headers and lengths remain
+big-endian.
 
 Visual FoxPro `Y` currency values are exposed as four-decimal fixed-point
 strings so the signed 64-bit scaled value is not rounded through `f64`.
@@ -240,7 +241,7 @@ The txbase quality path is staged:
 2. Compare generated mutation sequences with an in-memory reference model; the DBF suite now covers this boundary.
 3. Keep expanding malformed-input corpora; DBF, memo, WAL, and JSON boundary cases are now checked, and a deterministic no-panic DBF parser smoke test covers generated binary inputs. Index cases wait for an index parser.
 4. Cover crash boundaries around WAL sync and checkpoint publication; DBF snapshot recovery now also covers a torn WAL tail.
-5. Add compatibility fixtures produced by independent xBase implementations.
+5. A pinned FoxPro DBF/FPT fixture from an independent reader's test data now covers external memo-pointer compatibility; add more fixtures from independent xBase implementations.
 6. Keep expanding concurrency coverage with stress and fault-injection tests; stale-writer wave coverage is now present. Add fuzzing and differential checks once those components exist. CI already runs the core gate on Ubuntu, macOS, and Windows.
 
 The current CI gate is deliberately only `fmt`, `clippy`, and `cargo test`.
@@ -309,6 +310,7 @@ incorrect.
 - [Visual FoxPro Autoincrementing Field Values](https://www.vfphelp.com/vfp9/html/bd6eff0c-2ce5-43b7-ab29-f5360cd2f90e.htm)
 - [Visual FoxPro Code Pages](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)
 - [libxbase dBASE III/IV Memo Implementation](https://sources.debian.org/src/libxbase/2.0.0-8.5/xbase/memo.cpp)
+- [go-foxpro-dbf pinned FoxPro test data](https://github.com/SebastiaanKlippert/go-foxpro-dbf/tree/3583ae3707e17f815695333443a457b5c7c6c7dc/testdata)
 - [MongoDB Documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [MongoDB Logical Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)

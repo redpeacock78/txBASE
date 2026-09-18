@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 
 mod codec;
 mod codepages;
+#[cfg(test)]
+mod compatibility_tests;
 mod lock;
 #[cfg(test)]
 mod malformed_memo_tests;

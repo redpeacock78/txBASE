@@ -828,11 +828,7 @@ pub(super) fn decode_field(
             }
         }
         b'B' | b'G' | b'M' | b'P' | b'W' if bytes.len() == 4 => {
-            let block = if memo_format == Some(MemoFormat::FoxPro) {
-                u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
-            } else {
-                u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
-            };
+            let block = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
             Value::Number(block.into())
         }
         b'D' | b'B' | b'G' | b'M' | b'P' | b'W' => Value::String(text(bytes, 0)),

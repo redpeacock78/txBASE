@@ -282,16 +282,12 @@ pub(super) fn find_memo_path(path: &Path) -> Option<std::path::PathBuf> {
     None
 }
 
-pub(super) fn memo_index(bytes: &[u8], format: MemoFormat) -> Result<Option<u32>, DbfError> {
+pub(super) fn memo_index(bytes: &[u8], _format: MemoFormat) -> Result<Option<u32>, DbfError> {
     if bytes.iter().all(|byte| matches!(byte, b' ' | b'\0')) {
         return Ok(None);
     }
     if bytes.len() == 4 {
-        let block = if format == MemoFormat::FoxPro {
-            u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
-        } else {
-            u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
-        };
+        let block = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
         return Ok(Some(block));
     }
     let end = bytes
@@ -417,15 +413,10 @@ pub(super) fn empty_memo_value(field: &FieldDescriptor) -> Value {
 pub(super) fn encode_memo_pointer(
     field: &FieldDescriptor,
     block: u32,
-    format: MemoFormat,
+    _format: MemoFormat,
 ) -> Result<Vec<u8>, DbfError> {
     if field.length == 4 {
-        let bytes = if format == MemoFormat::FoxPro {
-            block.to_be_bytes()
-        } else {
-            block.to_le_bytes()
-        };
-        return Ok(bytes.to_vec());
+        return Ok(block.to_le_bytes().to_vec());
     }
     let text = block.to_string();
     let length = usize::from(field.length);

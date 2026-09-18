@@ -467,26 +467,26 @@ fn encodes_memo_pointers_in_format_byte_order() {
     );
     assert_eq!(
         encode_memo_pointer(&field, block, MemoFormat::FoxPro).unwrap(),
-        block.to_be_bytes()
+        block.to_le_bytes()
     );
     assert_eq!(
         memo_index(&block.to_le_bytes(), MemoFormat::Dbase4).unwrap(),
         Some(block)
     );
     assert_eq!(
-        memo_index(&block.to_be_bytes(), MemoFormat::FoxPro).unwrap(),
+        memo_index(&block.to_le_bytes(), MemoFormat::FoxPro).unwrap(),
         Some(block)
     );
     assert_eq!(memo_index(b"    ", MemoFormat::FoxPro).unwrap(), None);
     assert_eq!(
-        decode_field(b'M', &block.to_be_bytes(), 0, Some(MemoFormat::FoxPro)),
+        decode_field(b'M', &block.to_le_bytes(), 0, Some(MemoFormat::FoxPro)),
         serde_json::json!(block)
     );
     for version in [0x30, 0x31, 0x32] {
         assert_eq!(
             decode_field(
                 b'M',
-                &block.to_be_bytes(),
+                &block.to_le_bytes(),
                 0,
                 memo_format_for_version(version)
             ),

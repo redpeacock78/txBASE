@@ -340,7 +340,7 @@ fn reads_and_writes_foxpro_binary_memo_sidecar_as_hex() {
     bytes[64] = FIELD_TERMINATOR;
     bytes[65] = ACTIVE_RECORD;
     let pointer_start = 66;
-    bytes[pointer_start..pointer_start + 4].copy_from_slice(&1u32.to_be_bytes());
+    bytes[pointer_start..pointer_start + 4].copy_from_slice(&1u32.to_le_bytes());
     bytes[70] = EOF_MARKER;
     fs::write(&path, bytes).unwrap();
 
@@ -370,7 +370,7 @@ fn reads_and_writes_foxpro_binary_memo_sidecar_as_hex() {
     assert_eq!(reread.active_record(1).unwrap().values["BMEMO"], "deadbeef");
     assert_eq!(
         &reread.to_bytes()[pointer_start..pointer_start + 4],
-        &2u32.to_be_bytes()
+        &2u32.to_le_bytes()
     );
     let memo = MemoFile::open(&memo_path, 0xf5).unwrap();
     assert_eq!(memo.read(2).unwrap().unwrap(), [0xde, 0xad, 0xbe, 0xef]);
@@ -395,7 +395,7 @@ fn preserves_visual_foxpro_null_sidecar_values() {
     bytes[82] = 0x01;
     bytes[96] = FIELD_TERMINATOR;
     bytes[97] = ACTIVE_RECORD;
-    bytes[98..102].copy_from_slice(&1u32.to_be_bytes());
+    bytes[98..102].copy_from_slice(&1u32.to_le_bytes());
     bytes[102] = 0x01;
     bytes[103] = EOF_MARKER;
 
@@ -434,7 +434,7 @@ fn reads_and_writes_visual_foxpro_picture_fpt_sidecar_as_hex() {
     bytes[64] = FIELD_TERMINATOR;
     bytes[65] = ACTIVE_RECORD;
     let pointer_start = 66;
-    bytes[pointer_start..pointer_start + 4].copy_from_slice(&1u32.to_be_bytes());
+    bytes[pointer_start..pointer_start + 4].copy_from_slice(&1u32.to_le_bytes());
     bytes[70] = EOF_MARKER;
     fs::write(&path, bytes).unwrap();
 
@@ -464,7 +464,7 @@ fn reads_and_writes_visual_foxpro_picture_fpt_sidecar_as_hex() {
     assert_eq!(reread.active_record(1).unwrap().values["IMAGE"], "deadbeef");
     assert_eq!(
         &reread.to_bytes()[pointer_start..pointer_start + 4],
-        &2u32.to_be_bytes()
+        &2u32.to_le_bytes()
     );
     let memo = MemoFile::open(&memo_path, 0x30).unwrap();
     assert_eq!(memo.read(2).unwrap().unwrap(), [0xde, 0xad, 0xbe, 0xef]);
@@ -491,7 +491,7 @@ fn reads_and_writes_visual_foxpro_blob_fpt_sidecar_as_hex() {
     bytes[64] = FIELD_TERMINATOR;
     bytes[65] = ACTIVE_RECORD;
     let pointer_start = 66;
-    bytes[pointer_start..pointer_start + 4].copy_from_slice(&1u32.to_be_bytes());
+    bytes[pointer_start..pointer_start + 4].copy_from_slice(&1u32.to_le_bytes());
     bytes[70] = EOF_MARKER;
     fs::write(&path, bytes).unwrap();
 
@@ -521,7 +521,7 @@ fn reads_and_writes_visual_foxpro_blob_fpt_sidecar_as_hex() {
     assert_eq!(reread.active_record(1).unwrap().values["BLOB"], "deadbeef");
     assert_eq!(
         &reread.to_bytes()[pointer_start..pointer_start + 4],
-        &2u32.to_be_bytes()
+        &2u32.to_le_bytes()
     );
     let memo = MemoFile::open(&memo_path, 0x32).unwrap();
     assert_eq!(memo.read(2).unwrap().unwrap(), [0xde, 0xad, 0xbe, 0xef]);
