@@ -5,8 +5,10 @@ A small Rust workspace for a transactional dBASE-compatible database.
 The first slice keeps the DBF file format at the center and exposes a JSON
 read path. It also provides an HTTP server with `GET`, standards-based
 `QUERY`, and DBF-backed mutation routing. The repository now contains a
-file-backed WAL and snapshot transaction core. xBase compatibility and
-recovery of DBF mutations from that WAL remain later phases.
+file-backed WAL and snapshot transaction core. DBF mutations write a complete
+`TXDB` snapshot to the WAL before atomic replacement, and startup replays a
+pending snapshot. Full xBase compatibility, fine-grained WAL records, and
+concurrent-writer coordination remain later phases.
 
 ## What works now
 
@@ -17,7 +19,8 @@ recovery of DBF mutations from that WAL remain later phases.
 - Prints active records as JSON from the command line.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.
 - Serves `POST /records`, `PUT /records/{id}`, `PATCH /records/{id}`, and `DELETE /records/{id}`.
-- Persists supported JSON mutations by atomically replacing the DBF file.
+- Persists supported JSON mutations through a synced `TXDB` snapshot WAL and
+  atomic DBF replacement, with startup recovery for an unfinished write.
 - Provides range storage, operation IR, file or memory WAL, and snapshot transaction types.
 
 The DBF decoder currently treats text as UTF-8 with replacement for invalid
@@ -135,10 +138,12 @@ DBF null values, and unknown fields are rejected.
 
 `DELETE` sets the DBF deletion marker and returns `204 No Content`. Deleted
 record numbers are not reused, and subsequent reads return `404 Not Found`.
-The server writes a complete temporary sibling file, syncs it, and renames it
-over the DBF path. The WAL and snapshot transaction core are not yet coupled
-to DBF mutation records, so replay-based recovery and concurrent writer
-coordination remain outside this slice.
+The server writes a complete DBF snapshot to the `TXWL` WAL and syncs it before
+writing a temporary sibling file, syncing it, and renaming it over the DBF
+path. `DbfTable::from_path` replays the latest complete `TXDB` snapshot left by
+an interrupted mutation. The WAL stores full snapshots rather than
+fine-grained mutation records, and concurrent-writer coordination remains
+outside this slice.
 
 ## Quality gates
 

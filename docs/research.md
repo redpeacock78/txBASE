@@ -49,14 +49,17 @@ It supports scalar JSON values for the field types already decoded by the
 reader, preserves physical record numbers, writes the deletion marker for
 logical deletes, and replaces the DBF through a synced temporary file.
 The transaction module now supplies a length-prefixed `TXWL` file WAL and a
-snapshot transaction manager, but the DBF mutation layer does not yet append
-replayable data records to that WAL.
+snapshot transaction manager. Before an atomic DBF replacement, the mutation
+layer appends a `TXDB` record containing the complete new DBF snapshot and
+syncs the WAL. `DbfTable::from_path` replays the latest complete `TXDB` record
+left by an interrupted mutation.
 
 The transaction WAL stores a four-byte magic, a little-endian payload length,
 a monotonically increasing LSN, and the payload. Opening a WAL validates
 complete records and truncates only an incomplete final record. It does not
-interpret payloads or recover a DBF file; those responsibilities belong to the
-next integration layer.
+interpret arbitrary payloads. The DBF integration recognizes `TXDB` snapshots,
+while fine-grained mutation records and multi-writer coordination remain
+future work.
 
 ## MongoDB query ideas
 
@@ -200,9 +203,11 @@ the HTTP method itself.
 The mutation methods require `Content-Type: application/json`. `POST` returns
 `201` and a `Location` header, `PUT` and `PATCH` return the resulting record,
 and `DELETE` returns `204`. A successful mutation is serialized to a temporary
-file, synced, and renamed over the configured DBF path. This replacement is
-not yet coordinated with the transaction WAL, so crash recovery and concurrent
-writers remain outside the current boundary.
+file, synced, and renamed over the configured DBF path. Before replacement, a
+complete `TXDB` snapshot is appended to the transaction WAL and synced. A
+subsequent `DbfTable::from_path` replays that snapshot if the process stopped
+before replacement completed. The WAL is still snapshot-based and does not
+coordinate concurrent writers.
 
 The [HTTP QUERY method is now RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html).
 It is safe and idempotent, carries query semantics in request content, and

@@ -171,7 +171,7 @@ fn persist_mutation(
     original: DbfTable,
     dbf_path: &Path,
 ) -> Result<(), HttpResponse> {
-    match table.save_to(dbf_path) {
+    match table.save_with_wal(dbf_path) {
         Ok(()) => Ok(()),
         Err(dbf_error) => {
             *table = original;
@@ -371,6 +371,7 @@ mod tests {
         let persisted = DbfTable::from_path(&path).unwrap();
         assert!(persisted.active_record(3).is_none());
         assert!(persisted.records()[2].deleted);
+        assert!(!path.with_extension("txbase.wal").exists());
         fs::remove_file(path).unwrap();
     }
 }

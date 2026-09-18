@@ -5,7 +5,9 @@
 現在の実装は、DBFの読み取り、JSON出力、HTTPの`GET`、RFC 10008に基づく`QUERY`、DBF mutationの実行に範囲を限定しています。
 
 file-backed WALとsnapshot transactionのcoreを実装しています。
-xBase互換フロントエンドとWALからDBF mutationを復旧する処理は、後続工程です。
+DBF mutationは全体の`TXDB` snapshotをWALへ書き込み、syncしてからatomic replaceします。
+起動時には未完了のsnapshotを復旧します。
+xBase互換フロントエンド、細粒度のWAL record、複数writerの調停は後続工程です。
 
 ## 現在できること
 
@@ -17,7 +19,7 @@ xBase互換フロントエンドとWALからDBF mutationを復旧する処理は
 - `GET /records`と`GET /records/{id}`を提供する。
 - `QUERY /records`でfilter、sort、projection、skip、limitを実行する。
 - `POST /records`、`PUT /records/{id}`、`PATCH /records/{id}`、`DELETE /records/{id}`を提供する。
-- 対応するJSON mutationをDBFへ保存する。
+- 対応するJSON mutationを`TXDB` snapshot WALへsyncしてからDBFへ保存し、未完了の保存を起動時に復旧する。
 
 DBFのlanguage-driver byteは保持しますが、OEM code pageとWindows code pageの完全な変換はまだ実装していません。
 
@@ -126,8 +128,9 @@ Dotted path、index、update operatorは未対応です。
 
 `DELETE`はDBFの削除markerを設定して`204 No Content`を返します。
 削除済みrecord numberは再利用せず、以後の読み取りは`404 Not Found`になります。
-serverは一時ファイルへ全体を書き込み、syncしてからDBF pathへrenameします。
-WALとsnapshot transactionはDBF mutationへまだ接続していないため、WAL replayによる復旧と複数writerの調停は未対応です。
+serverはDBF全体の`TXDB` snapshotをWALへ書き込み、syncしてから一時ファイルをDBF pathへrenameします。
+`DbfTable::from_path`は中断されたmutationの最新snapshotを復旧します。
+WALは細粒度のmutation recordではなく全体snapshotを保存し、複数writerの調停は未対応です。
 
 ## 検証
 

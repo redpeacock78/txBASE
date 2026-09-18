@@ -187,6 +187,15 @@ impl FileWal {
     pub fn records(&self) -> &[(Lsn, Vec<u8>)] {
         &self.records
     }
+
+    pub fn clear(&mut self) -> Result<(), TransactionError> {
+        self.file.set_len(0)?;
+        self.file.seek(SeekFrom::Start(0))?;
+        self.file.sync_all()?;
+        self.records.clear();
+        self.last_lsn = None;
+        Ok(())
+    }
 }
 
 impl Wal for FileWal {

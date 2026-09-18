@@ -1,3 +1,4 @@
+use crate::transaction::{FileWal, TransactionError, Wal};
 use serde_json::{Map, Number, Value};
 use std::collections::BTreeSet;
 use std::error::Error;
@@ -12,6 +13,7 @@ const LEVEL7_HEADER_SIZE: usize = 68;
 const LEVEL7_DESCRIPTOR_SIZE: usize = 48;
 const FIELD_TERMINATOR: u8 = 0x0d;
 const EOF_MARKER: u8 = 0x1a;
+const SNAPSHOT_MAGIC: &[u8; 4] = b"TXDB";
 const ACTIVE_RECORD: u8 = 0x20;
 const DELETED_RECORD: u8 = 0x2a;
 
@@ -74,6 +76,8 @@ pub struct DbfTable {
 
 impl DbfTable {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, DbfError> {
+        let path = path.as_ref();
+        Self::recover_wal(path)?;
         Self::from_bytes(&fs::read(path)?)
     }
 
@@ -214,6 +218,45 @@ impl DbfTable {
         file.write_all(&self.bytes)?;
         file.sync_all()?;
         fs::rename(temporary_path, path)?;
+        Ok(())
+    }
+
+    pub fn save_with_wal(&self, path: impl AsRef<Path>) -> Result<(), DbfError> {
+        let path = path.as_ref();
+        let wal_path = path.with_extension("txbase.wal");
+        let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
+        let mut payload = Vec::with_capacity(SNAPSHOT_MAGIC.len() + self.bytes.len());
+        payload.extend_from_slice(SNAPSHOT_MAGIC);
+        payload.extend_from_slice(&self.bytes);
+        wal.append(&payload).map_err(transaction_error)?;
+        wal.sync().map_err(transaction_error)?;
+        self.save_to(path)?;
+        if wal.clear().is_ok() {
+            drop(wal);
+            let _ = fs::remove_file(wal_path);
+        }
+        Ok(())
+    }
+
+    fn recover_wal(path: &Path) -> Result<(), DbfError> {
+        let wal_path = path.with_extension("txbase.wal");
+        if !wal_path.exists() {
+            return Ok(());
+        }
+        let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
+        let snapshot =
+            wal.records().iter().rev().find_map(|(_, payload)| {
+                payload.strip_prefix(SNAPSHOT_MAGIC).map(ToOwned::to_owned)
+            });
+        let Some(snapshot) = snapshot else {
+            return Ok(());
+        };
+        let recovered = Self::from_bytes(&snapshot)?;
+        recovered.save_to(path)?;
+        if wal.clear().is_ok() {
+            drop(wal);
+            let _ = fs::remove_file(wal_path);
+        }
         Ok(())
     }
 
@@ -382,6 +425,10 @@ impl DbfTable {
         self.records[index].values = values.clone();
         Ok(())
     }
+}
+
+fn transaction_error(error: TransactionError) -> DbfError {
+    DbfError::Invalid(format!("WAL error: {error}"))
 }
 
 fn write_record_count(bytes: &mut [u8], count: u32) -> Result<(), DbfError> {
@@ -786,5 +833,46 @@ mod tests {
 
         assert!(error.to_string().contains("unknown field UNKNOWN"));
         assert_eq!(table.to_bytes(), before);
+    }
+
+    #[test]
+    fn recovers_latest_snapshot_from_wal_before_reading() {
+        let path = std::env::temp_dir().join(format!(
+            "txbase-dbf-recovery-{}-{}.dbf",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let wal_path = path.with_extension("txbase.wal");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&wal_path);
+
+        let mut pending = DbfTable::from_bytes(&fixture()).unwrap();
+        pending
+            .insert_record(
+                serde_json::json!({
+                    "ID": 3,
+                    "NAME": "Carol",
+                    "AGE": 42,
+                    "ACTIVE": true
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            )
+            .unwrap();
+        fs::write(&path, fixture()).unwrap();
+
+        let mut wal = FileWal::open(&wal_path).unwrap();
+        let mut payload = SNAPSHOT_MAGIC.to_vec();
+        payload.extend_from_slice(&pending.to_bytes());
+        wal.append(&payload).unwrap();
+        wal.sync().unwrap();
+        drop(wal);
+
+        let recovered = DbfTable::from_path(&path).unwrap();
+        assert_eq!(recovered.active_record(3).unwrap().values["NAME"], "Carol");
+        assert!(!wal_path.exists());
+
+        fs::remove_file(path).unwrap();
     }
 }
