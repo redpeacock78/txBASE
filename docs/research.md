@@ -25,7 +25,7 @@ The common field encodings are also part of the compatibility contract:
 | `D` | Eight bytes in `YYYYMMDD` form | String |
 | `N` and `F` | Right-justified numeric text | JSON number when finite and parseable |
 | `L` | Logical marker such as `T` or `F` | Boolean or JSON null for an unknown marker |
-| `I` and `+` | Four-byte integer representation | Little-endian signed integer |
+| `I` and `+` | Four-byte integer representation | Little-endian signed integer; Level 7 `+` inserts use the descriptor's next value when omitted |
 | `M` | Text pointer to a memo block | Text from a sibling `.dbt` or `.fpt` sidecar when present; pointer text otherwise |
 | `B` and `G` | Text pointer to a binary block | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; dBASE IV DBT and FPT writes append a binary block; dBASE III writes disabled |
 
@@ -57,7 +57,8 @@ xBase tools.
 The mutation layer currently reuses the parsed header and field descriptors.
 It supports scalar JSON values for the field types already decoded by the
 reader, preserves physical record numbers, writes the deletion marker for
-logical deletes, and replaces the DBF through a synced temporary file.
+logical deletes, assigns omitted Level 7 `+` values from the descriptor's
+next-value slot, and replaces the DBF through a synced temporary file.
 The transaction module now supplies a length-prefixed `TXWL` file WAL and a
 snapshot transaction manager. Before an atomic DBF replacement, the mutation
 layer appends a `TXDB` record for DBF-only changes, or a `TXDM` record

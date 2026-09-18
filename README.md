@@ -17,6 +17,7 @@ remain later phases.
 - Detects dBASE Level 7 tables with 48-byte field descriptors.
 - Reads header metadata, field descriptors, active records, and deleted-record flags.
 - Converts common character, date, numeric, logical, integer, and double fields to JSON.
+- Assigns and advances dBASE Level 7 `+` auto-increment fields when a new record omits them.
 - Prints active records as JSON from the command line.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.
 - Serves `POST /records`, `PUT /records/{id}`, `PATCH /records/{id}`, and `DELETE /records/{id}`.
@@ -148,7 +149,8 @@ one-based record location. `PUT` replaces all fields, while `PATCH` accepts
 either a plain field object or an update document using `$set`, `$unset`, and
 `$inc`. An update document cannot mix operators with plain fields or update
 one field more than once. Missing fields in `POST` and `PUT` become DBF null
-values, and unknown fields are rejected.
+values. A `POST` that omits a dBASE Level 7 `+` field receives and advances
+its descriptor next value. Unknown fields are rejected.
 
 `DELETE` sets the DBF deletion marker and returns `204 No Content`. Deleted
 record numbers are not reused, and subsequent reads return `404 Not Found`.

@@ -15,6 +15,7 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - dBASE Level 7の48バイトfield descriptorを判別する。
 - header、field descriptor、record、削除フラグを読み取る。
 - 代表的な文字列、日付、数値、論理値、整数、倍精度値をJSONへ変換する。
+- dBASE Level 7の`+` auto-increment fieldを省略した新規recordへnext valueを割り当て、descriptorを進める。
 - コマンドラインから有効なrecordをJSONとして出力する。
 - `GET /records`と`GET /records/{id}`を提供する。
 - `QUERY /records`でfilter、sort、projection、skip、limitを実行する。
@@ -130,7 +131,8 @@ Dotted pathとindexは未対応です。
 `POST`は新しい物理recordを作成し、`201 Created`と1-basedのrecord locationを返します。
 `PUT`は全fieldを置き換え、`PATCH`は通常のfield objectに加えて、`$set`、`$unset`、`$inc`を使うupdate documentも受け付けます。
 operatorと通常fieldの混在、および同一fieldへの複数operator適用は拒否します。
-`POST`と`PUT`で省略したfieldはDBF nullになり、未知のfieldは拒否します。
+`POST`と`PUT`で省略したfieldはDBF nullになりますが、dBASE Level 7の`+` fieldを`POST`で省略した場合はdescriptorのnext valueを割り当てて進めます。
+未知のfieldは拒否します。
 
 `DELETE`はDBFの削除markerを設定して`204 No Content`を返します。
 削除済みrecord numberは再利用せず、以後の読み取りは`404 Not Found`になります。

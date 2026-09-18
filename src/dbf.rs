@@ -438,7 +438,21 @@ impl DbfTable {
     }
 
     pub fn insert_record(&mut self, values: Map<String, Value>) -> Result<usize, DbfError> {
-        let values = self.normalize_values(&values)?;
+        let mut values = self.normalize_values(&values)?;
+        let mut auto_increment_updates = Vec::new();
+        for (field_index, field) in self.fields.iter().enumerate() {
+            if !field.field_type.eq_ignore_ascii_case(&b'+') || !values[&field.name].is_null() {
+                continue;
+            }
+            let Some((next, descriptor_offset)) = self.next_auto_increment(field_index)? else {
+                continue;
+            };
+            let following = next.checked_add(1).ok_or_else(|| {
+                DbfError::Invalid(format!("auto-increment field {} is exhausted", field.name))
+            })?;
+            values.insert(field.name.clone(), Value::Number(next.into()));
+            auto_increment_updates.push((descriptor_offset, following));
+        }
         let number = self
             .records
             .len()
@@ -491,6 +505,14 @@ impl DbfTable {
         bytes.extend_from_slice(&encoded);
         bytes.push(EOF_MARKER);
         write_record_count(&mut bytes, new_count)?;
+        for (descriptor_offset, next) in auto_increment_updates {
+            let target = bytes
+                .get_mut(descriptor_offset..descriptor_offset + 4)
+                .ok_or_else(|| {
+                    DbfError::Invalid("auto-increment descriptor is truncated".into())
+                })?;
+            target.copy_from_slice(&next.to_le_bytes());
+        }
 
         self.bytes = bytes;
         self.header.record_count = new_count;
@@ -621,6 +643,32 @@ impl DbfTable {
             return Err(DbfError::Invalid("record area is truncated".into()));
         }
         Ok(offset)
+    }
+
+    fn next_auto_increment(&self, field_index: usize) -> Result<Option<(u32, usize)>, DbfError> {
+        if self.header.version & 0x07 != 4 {
+            return Ok(None);
+        }
+        let descriptor_offset = LEVEL7_HEADER_SIZE
+            .checked_add(
+                field_index
+                    .checked_mul(LEVEL7_DESCRIPTOR_SIZE)
+                    .ok_or_else(|| DbfError::Invalid("field descriptor offset overflows".into()))?,
+            )
+            .ok_or_else(|| DbfError::Invalid("field descriptor offset overflows".into()))?;
+        let next_offset = descriptor_offset
+            .checked_add(40)
+            .ok_or_else(|| DbfError::Invalid("auto-increment offset overflows".into()))?;
+        let next_end = next_offset
+            .checked_add(4)
+            .ok_or_else(|| DbfError::Invalid("auto-increment offset overflows".into()))?;
+        if next_end > usize::from(self.header.header_length) {
+            return Err(DbfError::Invalid(
+                "auto-increment descriptor is outside the header".into(),
+            ));
+        }
+        let next = read_u32(&self.bytes, next_offset)?;
+        Ok(Some((next, next_offset)))
     }
 
     fn write_existing_record(
@@ -1914,6 +1962,30 @@ mod tests {
         let table = DbfTable::from_bytes(&bytes).unwrap();
         assert_eq!(table.fields[0].name, "V");
         assert_eq!(table.active_json()[0]["V"], "yes");
+    }
+
+    #[test]
+    fn assigns_level7_auto_increment_values_on_insert() {
+        let mut bytes = vec![0; 123];
+        bytes[0] = 0x04;
+        bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+        bytes[8..10].copy_from_slice(&117u16.to_le_bytes());
+        bytes[10..12].copy_from_slice(&5u16.to_le_bytes());
+        bytes[68..72].copy_from_slice(b"AUTO");
+        bytes[100] = b'+';
+        bytes[101] = 4;
+        bytes[108..112].copy_from_slice(&7u32.to_le_bytes());
+        bytes[116] = FIELD_TERMINATOR;
+        bytes[117] = ACTIVE_RECORD;
+        bytes[122] = EOF_MARKER;
+
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        assert_eq!(table.insert_record(Map::new()).unwrap(), 2);
+        assert_eq!(table.active_record(2).unwrap().values["AUTO"], 7);
+        assert_eq!(
+            u32::from_le_bytes(table.to_bytes()[108..112].try_into().unwrap()),
+            8
+        );
     }
 
     #[test]
