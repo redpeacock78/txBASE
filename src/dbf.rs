@@ -18,6 +18,7 @@ const MEMO_SNAPSHOT_MAGIC: &[u8; 4] = b"TXDM";
 const ACTIVE_RECORD: u8 = 0x20;
 const DELETED_RECORD: u8 = 0x2a;
 const DBT_BLOCK_SIZE: usize = 512;
+const CURRENCY_SCALE: u64 = 10_000;
 const CP437_UPPER: &str = concat!(
     "\u{c7}\u{fc}\u{e9}\u{e2}\u{e4}\u{e0}\u{e5}\u{e7}\u{ea}\u{eb}\u{e8}\u{ef}\u{ee}\u{ec}\u{c4}\u{c5}\u{c9}\u{e6}\u{c6}\u{f4}\u{f6}\u{f2}\u{fb}\u{f9}\u{ff}\u{d6}\u{dc}\u{a2}\u{a3}\u{a5}\u{20a7}\u{192}",
     "\u{e1}\u{ed}\u{f3}\u{fa}\u{f1}\u{d1}\u{aa}\u{ba}\u{bf}\u{2310}\u{ac}\u{bd}\u{bc}\u{a1}\u{ab}\u{bb}\u{2591}\u{2592}\u{2593}\u{2502}\u{2524}\u{2561}\u{2562}\u{2556}\u{2555}\u{2563}\u{2551}\u{2557}\u{255d}\u{255c}\u{255b}\u{2510}",
@@ -1507,6 +1508,15 @@ fn encode_field(
             Ok(output)
         }
         b'B' if length == 8 => Ok(value_f64(value, field)?.to_le_bytes().to_vec()),
+        b'Y' => {
+            if length != 8 {
+                return Err(DbfError::Invalid(format!(
+                    "currency field {} must be eight bytes",
+                    field.name
+                )));
+            }
+            Ok(currency_i64(value, field)?.to_le_bytes().to_vec())
+        }
         b'B' | b'G' | b'M' if length == 4 => Ok(value_u32(value, field)?.to_le_bytes().to_vec()),
         b'D' => {
             if length != 8 {
@@ -1740,6 +1750,93 @@ fn value_f64(value: &Value, field: &FieldDescriptor) -> Result<f64, DbfError> {
     }
 }
 
+fn currency_text(bytes: &[u8]) -> String {
+    let value = i64::from_le_bytes(bytes[..8].try_into().unwrap());
+    let negative = value < 0;
+    let magnitude = value.unsigned_abs();
+    let whole = magnitude / CURRENCY_SCALE;
+    let fraction = magnitude % CURRENCY_SCALE;
+    if negative {
+        format!("-{whole}.{fraction:04}")
+    } else {
+        format!("{whole}.{fraction:04}")
+    }
+}
+
+fn currency_i64(value: &Value, field: &FieldDescriptor) -> Result<i64, DbfError> {
+    let text = value_text(value, field)?;
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(0);
+    }
+
+    let (negative, text) = if let Some(rest) = text.strip_prefix('-') {
+        (true, rest)
+    } else if let Some(rest) = text.strip_prefix('+') {
+        (false, rest)
+    } else {
+        (false, text)
+    };
+    let mut parts = text.split('.');
+    let whole_text = parts.next().unwrap_or_default();
+    let fraction_text = parts.next().unwrap_or_default();
+    if parts.next().is_some()
+        || (whole_text.is_empty() && fraction_text.is_empty())
+        || !whole_text.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction_text.bytes().all(|byte| byte.is_ascii_digit())
+        || fraction_text.len() > 4
+    {
+        return Err(DbfError::Invalid(format!(
+            "currency field {} requires a fixed-point number with at most four decimals or null",
+            field.name
+        )));
+    }
+    let whole = if whole_text.is_empty() {
+        0
+    } else {
+        whole_text.parse::<u64>().map_err(|_| {
+            DbfError::Invalid(format!("currency field {} is out of range", field.name))
+        })?
+    };
+    let fraction = if fraction_text.is_empty() {
+        0
+    } else {
+        fraction_text.parse::<u64>().map_err(|_| {
+            DbfError::Invalid(format!("currency field {} is out of range", field.name))
+        })?
+    };
+    let scale = match fraction_text.len() {
+        0 => CURRENCY_SCALE,
+        1 => 1_000,
+        2 => 100,
+        3 => 10,
+        4 => 1,
+        _ => unreachable!(),
+    };
+    let magnitude = whole
+        .checked_mul(CURRENCY_SCALE)
+        .and_then(|whole| whole.checked_add(fraction * scale))
+        .ok_or_else(|| {
+            DbfError::Invalid(format!("currency field {} is out of range", field.name))
+        })?;
+    let limit = i64::MAX as u64 + u64::from(negative);
+    if magnitude > limit {
+        return Err(DbfError::Invalid(format!(
+            "currency field {} is out of range",
+            field.name
+        )));
+    }
+    if negative {
+        if magnitude == i64::MAX as u64 + 1 {
+            Ok(i64::MIN)
+        } else {
+            Ok(-(magnitude as i64))
+        }
+    } else {
+        Ok(magnitude as i64)
+    }
+}
+
 fn parse_fields(
     bytes: &[u8],
     start: usize,
@@ -1814,6 +1911,7 @@ fn decode_field(
 ) -> Value {
     match field_type.to_ascii_uppercase() {
         b'C' => Value::String(text(bytes, language_driver)),
+        b'Y' if bytes.len() >= 8 => Value::String(currency_text(bytes)),
         b'B' if bytes.len() >= 8 => {
             let value = f64::from_le_bytes(bytes[..8].try_into().unwrap());
             if value.is_finite() {
@@ -2132,6 +2230,32 @@ mod tests {
 
         assert_eq!(encoded, 12.5f64.to_le_bytes());
         assert_eq!(decode_field(b'B', &encoded, 0, None), value);
+    }
+
+    #[test]
+    fn round_trips_visual_foxpro_currency_fields() {
+        let field = FieldDescriptor {
+            name: "PRICE".into(),
+            field_type: b'Y',
+            length: 8,
+            decimal_count: 4,
+            offset: 1,
+        };
+        let raw = (-12_345_678i64).to_le_bytes();
+
+        assert_eq!(
+            decode_field(b'Y', &raw, 0, None),
+            serde_json::json!("-1234.5678")
+        );
+        assert_eq!(
+            encode_field(&field, &serde_json::json!("-1234.5678"), 0).unwrap(),
+            raw.to_vec()
+        );
+        assert_eq!(
+            encode_field(&field, &Value::Null, 0).unwrap(),
+            0i64.to_le_bytes().to_vec()
+        );
+        assert!(encode_field(&field, &serde_json::json!("1.23456"), 0).is_err());
     }
 
     #[test]

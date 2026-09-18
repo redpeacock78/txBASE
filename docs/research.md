@@ -26,6 +26,7 @@ The common field encodings are also part of the compatibility contract:
 | `N` and `F` | Right-justified numeric text | JSON number when finite and parseable |
 | `L` | Logical marker such as `T` or `F` | Boolean or JSON null for an unknown marker |
 | `I` and `+` | Four-byte integer representation | Little-endian signed integer; Level 7 `+` inserts use the descriptor's next value when omitted |
+| `Y` | Eight-byte little-endian fixed-point currency | Four-decimal fixed-point string; writes validate the signed 64-bit scaled representation |
 | `M` | Text pointer to a memo block | Text from a sibling `.dbt` or `.fpt` sidecar when present; pointer text otherwise |
 | `B` and `G` | Text pointer to a binary block; Visual FoxPro `B` width 8 is a double | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; dBASE IV DBT and FPT writes append a binary block; dBASE III writes disabled |
 
@@ -56,6 +57,9 @@ xBase tools.
 
 Four-byte memo pointers use big-endian order for FoxPro `0xF5` and Visual
 FoxPro `0x30` tables, matching their FPT sidecars.
+
+Visual FoxPro `Y` currency values are exposed as four-decimal fixed-point
+strings so the signed 64-bit scaled value is not rounded through `f64`.
 
 The mutation layer currently reuses the parsed header and field descriptors.
 It supports scalar JSON values for the field types already decoded by the

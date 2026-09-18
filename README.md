@@ -18,6 +18,7 @@ remain later phases.
 - Reads header metadata, field descriptors, active records, and deleted-record flags.
 - Converts common character, date, numeric, logical, integer, and double fields to JSON.
 - Reads and writes Visual FoxPro `B` double fields when their width is 8 bytes.
+- Reads and writes Visual FoxPro `Y` currency fields as four-decimal fixed-point strings.
 - Assigns and advances dBASE Level 7 `+` auto-increment fields when a new record omits them.
 - Prints active records as JSON from the command line.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.
