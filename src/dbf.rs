@@ -152,7 +152,7 @@ impl DbfTable {
         let path = path.as_ref();
         Self::recover_wal(path)?;
         let mut table = Self::from_bytes(&fs::read(path)?)?;
-        if table.has_memo_fields() {
+        if table.has_sidecar_fields() {
             if let Some(memo_path) = find_memo_path(path) {
                 let memo = MemoFile::open(&memo_path, table.header.version)?;
                 table.resolve_memos(&memo)?;
@@ -162,17 +162,17 @@ impl DbfTable {
         Ok(table)
     }
 
-    fn has_memo_fields(&self) -> bool {
+    fn has_sidecar_fields(&self) -> bool {
         self.fields
             .iter()
-            .any(|field| field.field_type.eq_ignore_ascii_case(&b'M'))
+            .any(|field| is_sidecar_field(field.field_type))
     }
 
     fn resolve_memos(&mut self, memo: &MemoFile) -> Result<(), DbfError> {
         let fields = self
             .fields
             .iter()
-            .filter(|field| field.field_type.eq_ignore_ascii_case(&b'M'))
+            .filter(|field| is_sidecar_field(field.field_type))
             .cloned()
             .collect::<Vec<_>>();
         for index in 0..self.records.len() {
@@ -189,10 +189,12 @@ impl DbfTable {
                 let Some(data) = memo.read(block)? else {
                     continue;
                 };
-                self.records[index].values.insert(
-                    field.name.clone(),
-                    Value::String(text(&data, self.header.language_driver)),
-                );
+                let value = if is_memo_field(field.field_type) {
+                    Value::String(text(&data, self.header.language_driver))
+                } else {
+                    Value::String(hex(&data))
+                };
+                self.records[index].values.insert(field.name.clone(), value);
             }
         }
         Ok(())
@@ -617,7 +619,7 @@ impl DbfTable {
         for field in self
             .fields
             .iter()
-            .filter(|field| is_memo_field(field.field_type))
+            .filter(|field| is_sidecar_field(field.field_type))
         {
             let changed = changed_fields.is_none_or(|fields| fields.contains(&field.name));
             let key = (index, field.name.clone());
@@ -632,12 +634,19 @@ impl DbfTable {
             }
 
             if self.memo.is_some() {
-                let text = value_text(&values[&field.name], field)?;
-                storage_values.insert(field.name.clone(), empty_memo_value(field));
-                if text.is_empty() {
-                    memo_updates.remove(&key);
+                if is_memo_field(field.field_type) {
+                    let text = value_text(&values[&field.name], field)?;
+                    storage_values.insert(field.name.clone(), empty_memo_value(field));
+                    if text.is_empty() {
+                        memo_updates.remove(&key);
+                    } else {
+                        memo_updates.insert(key, text);
+                    }
                 } else {
-                    memo_updates.insert(key, text);
+                    return Err(DbfError::Invalid(format!(
+                        "binary field {} cannot be changed with a memo sidecar",
+                        field.name
+                    )));
                 }
             }
         }
@@ -982,6 +991,14 @@ fn is_memo_field(field_type: u8) -> bool {
     field_type.eq_ignore_ascii_case(&b'M')
 }
 
+fn is_binary_field(field_type: u8) -> bool {
+    matches!(field_type.to_ascii_uppercase(), b'B' | b'G')
+}
+
+fn is_sidecar_field(field_type: u8) -> bool {
+    is_memo_field(field_type) || is_binary_field(field_type)
+}
+
 fn empty_memo_value(field: &FieldDescriptor) -> Value {
     if field.length == 4 {
         Value::Number(0.into())
@@ -1039,7 +1056,7 @@ fn encode_field(
             output[..bytes.len()].copy_from_slice(&bytes);
             Ok(output)
         }
-        b'M' if length == 4 => Ok(value_u32(value, field)?.to_le_bytes().to_vec()),
+        b'B' | b'G' | b'M' if length == 4 => Ok(value_u32(value, field)?.to_le_bytes().to_vec()),
         b'D' | b'B' | b'G' | b'M' | b'@' | b'T' => {
             let text = value_text(value, field)?;
             if text.len() > length {
@@ -1284,7 +1301,7 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, DbfError> {
 fn decode_field(field_type: u8, bytes: &[u8], language_driver: u8) -> Value {
     match field_type.to_ascii_uppercase() {
         b'C' => Value::String(text(bytes, language_driver)),
-        b'M' if bytes.len() == 4 => {
+        b'B' | b'G' | b'M' if bytes.len() == 4 => {
             Value::Number(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).into())
         }
         b'D' | b'B' | b'G' | b'M' => Value::String(text(bytes, 0)),
@@ -1785,6 +1802,63 @@ mod tests {
         );
         let memo = MemoFile::open(&memo_path, 0xf5).unwrap();
         assert_eq!(memo.read(2).unwrap().unwrap(), b"changed fpt");
+
+        fs::remove_file(path).unwrap();
+        fs::remove_file(memo_path).unwrap();
+    }
+
+    #[test]
+    fn reads_binary_fpt_sidecar_as_hex_and_rejects_binary_writes() {
+        let path =
+            std::env::temp_dir().join(format!("txbase-foxpro-binary-{}.dbf", std::process::id()));
+        let memo_path = path.with_extension("fpt");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&memo_path);
+
+        let mut bytes = fixture();
+        bytes[0] = 0xf5;
+        bytes[64 + 11] = b'B';
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let binary_start = record_start + 4;
+        bytes[binary_start..binary_start + 10].copy_from_slice(b"         1");
+        fs::write(&path, bytes).unwrap();
+
+        let mut memo = vec![0; DBT_BLOCK_SIZE * 2];
+        memo[6..8].copy_from_slice(&(DBT_BLOCK_SIZE as u16).to_be_bytes());
+        memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + 4].copy_from_slice(&2u32.to_be_bytes());
+        let binary = [0x00, 0x01, 0xff, 0x7f];
+        memo[DBT_BLOCK_SIZE + 4..DBT_BLOCK_SIZE + 8]
+            .copy_from_slice(&(binary.len() as u32).to_be_bytes());
+        memo[DBT_BLOCK_SIZE + 8..DBT_BLOCK_SIZE + 8 + binary.len()].copy_from_slice(&binary);
+        fs::write(&memo_path, memo).unwrap();
+
+        let mut table = DbfTable::from_path(&path).unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["NAME"], "0001ff7f");
+        let error = table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "deadbeef"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("binary field NAME"));
+
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"AGE": 30}).as_object().unwrap().clone(),
+            )
+            .unwrap();
+        table.save_with_wal(&path).unwrap();
+        let reread = DbfTable::from_path(&path).unwrap();
+        assert_eq!(reread.active_record(1).unwrap().values["NAME"], "0001ff7f");
+        assert_eq!(reread.active_record(1).unwrap().values["AGE"], 30);
+        assert_eq!(
+            &reread.to_bytes()[binary_start..binary_start + 10],
+            b"         1"
+        );
 
         fs::remove_file(path).unwrap();
         fs::remove_file(memo_path).unwrap();

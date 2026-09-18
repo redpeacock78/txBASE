@@ -20,11 +20,14 @@ remain later phases.
 - Prints active records as JSON from the command line.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.
 - Serves `POST /records`, `PUT /records/{id}`, `PATCH /records/{id}`, and `DELETE /records/{id}`.
-- Persists supported JSON mutations through a synced `TXDB` snapshot WAL and
-  atomic DBF replacement, with startup recovery for an unfinished write.
+- Persists supported JSON mutations through a synced `TXDB`/`TXDM` snapshot WAL
+  and atomic DBF/sidecar replacement, with startup recovery for an unfinished
+  write.
 - Reads and writes text memo fields in sibling `.dbt` and `.fpt` sidecars.
   Memo writes append a new block and update the DBF pointer through a synced
   `TXDM` WAL snapshot.
+- Reads `B`/`G` binary sidecar blocks as hex text and preserves their pointers;
+  binary block writes remain disabled.
 - Provides range storage, operation IR, file or memory WAL, and snapshot transaction types.
 
 Character fields with language-driver ID `0x01` or `0x02` are decoded and
@@ -154,8 +157,8 @@ slice.
 Text memo values are read from and appended to `.dbt` or `.fpt` sidecars.
 Changing an `M` field writes the new block and DBF pointer as one recoverable
 `TXDM` WAL operation; non-memo mutations preserve existing pointers. Binary
-`B`/`G` sidecar dereferencing and memo formats outside these text paths remain
-future work.
+`B`/`G` binary writes and memo formats outside these text paths remain future
+work.
 
 ## Quality gates
 

@@ -27,18 +27,20 @@ The common field encodings are also part of the compatibility contract:
 | `L` | Logical marker such as `T` or `F` | Boolean or JSON null for an unknown marker |
 | `I` and `+` | Four-byte integer representation | Little-endian signed integer |
 | `M` | Text pointer to a memo block | Text from a sibling `.dbt` or `.fpt` sidecar when present; pointer text otherwise |
-| `B` and `G` | Text pointer to a binary block | Pointer text, without sidecar dereference |
+| `B` and `G` | Text pointer to a binary block | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; pointer text otherwise; writes disabled |
 
 The parser therefore reads the declared header and record boundaries, checks
 field names and widths, uses the language-driver byte for the supported
 code-page mappings, and excludes records marked deleted from the JSON read
 path. Character writes reject values that the declared code-page mapping
 cannot represent. When a sibling `.dbt` or `.fpt` exists, `M` fields are
-resolved from their block pointers. Existing pointers are retained separately
+resolved from their block pointers, while `B`/`G` payloads are exposed as hex
+text. Existing pointers are retained separately
 so non-memo DBF mutations do not rewrite them as text. Text changes append to
 the existing `.dbt` or `.fpt` sidecar and update the DBF pointer in a `TXDM`
-WAL snapshot; startup recovery replaces both files from that snapshot. Other
-code-page conversion and binary/OLE dereferencing remain explicit future work.
+WAL snapshot; startup recovery replaces both files from that snapshot. Binary
+block writes, OLE semantics, and other code-page conversion remain explicit
+future work.
 
 The reader uses the declared record count as its boundary and does not require
 the trailing `0x1a` when the declared records are complete. It still preserves

@@ -5,7 +5,7 @@
 現在の実装は、DBFの読み取り、JSON出力、HTTPの`GET`、RFC 10008に基づく`QUERY`、DBF mutationの実行に範囲を限定しています。
 
 file-backed WALとsnapshot transactionのcoreを実装しています。
-DBF mutationは全体の`TXDB` snapshotをWALへ書き込み、syncしてからatomic replaceします。
+DBF-only mutationは`TXDB`、memoを含むmutationは`TXDM` snapshotをWALへ書き込み、syncしてからDBF/sidecarをatomic replaceします。
 起動時には未完了のsnapshotを復旧します。
 xBase互換フロントエンド、細粒度のWAL record、複数writerの調停は後続工程です。
 
@@ -21,6 +21,7 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - `POST /records`、`PUT /records/{id}`、`PATCH /records/{id}`、`DELETE /records/{id}`を提供する。
 - 対応するJSON mutationを`TXDB`または`TXDM` snapshot WALへsyncしてからDBF/sidecarへ保存し、未完了の保存を起動時に復旧する。
 - siblingの`.dbt`と`.fpt` sidecarからtext memoを読み、変更時は新しいblockへappendする。
+- `B`/`G`のbinary sidecar blockはhex textとして読み、pointerを保持する。binary blockの書き込みは未対応です。
 
 language-driver IDが`0x01`または`0x02`のcharacter fieldはCP437またはCP850、`0x03`または`0x57`はWindows-1252として読み書きします。
 それ以外のdriverは既存のUTF-8とlossy fallbackを使います。
@@ -136,7 +137,7 @@ serverはDBF-only変更では`TXDB`、memo field変更ではDBFとsidecarを含�
 WALは細粒度のmutation recordではなく全体snapshotを保存し、複数writerの調停は未対応です。
 text memoは`.dbt`または`.fpt`から読み取り、変更時は新しいblockをappendしてDBF pointerも更新します。
 sidecarとDBFは`TXDM` WAL snapshotで復旧可能な単位として保存します。
-`B`/`G`のbinary sidecar dereferenceと、この範囲外のmemo形式は未対応です。
+`B`/`G`のbinary block書き込みと、この範囲外のmemo形式は未対応です。
 
 ## 検証
 
