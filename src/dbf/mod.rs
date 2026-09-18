@@ -16,6 +16,8 @@ mod recovery;
 #[cfg(test)]
 mod tests;
 mod wal;
+#[cfg(test)]
+mod writer_tests;
 
 use codec::{
     decode_field, decode_record_field, encode_character, encode_field, encode_null_flags,

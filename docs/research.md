@@ -241,7 +241,7 @@ The txbase quality path is staged:
 3. Add malformed DBF, memo, index, WAL, and JSON input corpora.
 4. Add crash-boundary and recovery tests around WAL sync and checkpoint publication.
 5. Add compatibility fixtures produced by independent xBase implementations.
-6. Add fuzzing, concurrency tests, and differential checks once those components exist; CI already runs the core gate on Ubuntu, macOS, and Windows.
+6. Keep expanding concurrency coverage with stress and fault-injection tests; add fuzzing and differential checks once those components exist. CI already runs the core gate on Ubuntu, macOS, and Windows.
 
 The current CI gate is deliberately only `fmt`, `clippy`, and `cargo test`.
 
@@ -278,8 +278,9 @@ subsequent `DbfTable::from_path` replays the delta or snapshot if the process
 stopped before replacement completed. HTTP mutation intents are recorded as
 `TXOP` before the state payload; if the state payload is missing, startup
 replays the supported intent and materializes one. Save paths use an exclusive
-table lock, while broader concurrent-writer coordination remains outside the
-WAL.
+table lock; a stale separately loaded writer is rejected rather than allowed
+to overwrite a newer save. Automatic merge/retry and broader concurrent-writer
+coordination remain outside the WAL.
 
 The [HTTP QUERY method is now RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html).
 It is safe and idempotent, carries query semantics in request content, and

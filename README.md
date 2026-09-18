@@ -189,9 +189,11 @@ mutation and checks the delta base before applying it. HTTP mutation intent is
 recorded as `TXOP` before the state payload. If a crash leaves only that
 intent, `DbfTable::from_path` replays the supported mutation and materializes
 a state payload; when a state payload is present, recovery applies that
-committed state instead. Save paths take an exclusive table lock, while
-broader concurrent-writer coordination remains outside this slice. A loaded
-table rejects stale DBF or memo sidecar state before save.
+committed state instead. Save paths take an exclusive table lock, and a
+separately loaded stale table is rejected rather than overwriting the first
+writer's save. Automatic merge/retry and broader concurrent-writer
+coordination remain outside this slice. A loaded table rejects stale DBF or
+memo sidecar state before save.
 
 Text memo values are read from and appended to `.dbt` or `.fpt` sidecars.
 Changing an `M` field writes the new block and DBF pointer as one recoverable
