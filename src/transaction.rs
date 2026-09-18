@@ -391,6 +391,44 @@ mod tests {
     }
 
     #[test]
+    fn file_wal_rejects_corrupt_complete_records() {
+        let cases = [
+            ("magic", {
+                let mut bytes = b"BAD!".to_vec();
+                bytes.extend_from_slice(&0u32.to_le_bytes());
+                bytes.extend_from_slice(&0u64.to_le_bytes());
+                bytes
+            }),
+            ("size", {
+                let mut bytes = WAL_MAGIC.to_vec();
+                bytes.extend_from_slice(&((MAX_WAL_RECORD_SIZE as u32) + 1).to_le_bytes());
+                bytes.extend_from_slice(&0u64.to_le_bytes());
+                bytes
+            }),
+            ("lsn", {
+                let mut bytes = WAL_MAGIC.to_vec();
+                bytes.extend_from_slice(&0u32.to_le_bytes());
+                bytes.extend_from_slice(&1u64.to_le_bytes());
+                bytes
+            }),
+        ];
+
+        for (name, bytes) in cases {
+            let path = std::env::temp_dir().join(format!(
+                "txbase-wal-corrupt-{}-{name}.log",
+                std::process::id()
+            ));
+            let _ = fs::remove_file(&path);
+            fs::write(&path, bytes).unwrap();
+            assert!(matches!(
+                FileWal::open(&path),
+                Err(TransactionError::Invalid(_))
+            ));
+            fs::remove_file(path).unwrap();
+        }
+    }
+
+    #[test]
     fn snapshot_engine_commits_and_rejects_reuse() {
         let mut engine = InMemoryTransactionEngine::default();
         let transaction = engine.begin(IsolationLevel::Snapshot).unwrap();

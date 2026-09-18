@@ -1839,6 +1839,23 @@ mod tests {
     }
 
     #[test]
+    fn rejects_malformed_memo_snapshots() {
+        assert!(decode_snapshot(MEMO_SNAPSHOT_MAGIC).is_err());
+
+        let mut unknown_format = MEMO_SNAPSHOT_MAGIC.to_vec();
+        unknown_format.push(0xff);
+        unknown_format.extend_from_slice(&[0; 16]);
+        assert!(decode_snapshot(&unknown_format).is_err());
+
+        let mut mismatched_length = MEMO_SNAPSHOT_MAGIC.to_vec();
+        mismatched_length.push(MemoFormat::Dbase3.tag());
+        mismatched_length.extend_from_slice(&1u64.to_le_bytes());
+        mismatched_length.extend_from_slice(&1u64.to_le_bytes());
+        mismatched_length.push(0);
+        assert!(decode_snapshot(&mismatched_length).is_err());
+    }
+
+    #[test]
     fn rejects_unknown_deletion_markers() {
         let mut bytes = fixture();
         bytes[161] = b'!';
