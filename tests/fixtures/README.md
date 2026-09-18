@@ -17,3 +17,11 @@ The source is pinned to commit
 6b6547384439fd009815d20112b22c58eee83503:
 https://github.com/infused/dbf/tree/6b6547384439fd009815d20112b22c58eee83503/spec/fixtures
 and is distributed under the upstream MIT license.
+
+external-dbase3-test.dbf.hex is the upstream validFile.dbf fixture from the
+independent LindsayBradford/go-dbf reader and writer.
+
+The source is pinned to commit
+133325662f853ba7e7ad4676f7633adbd7a41b27:
+https://github.com/LindsayBradford/go-dbf/tree/133325662f853ba7e7ad4676f7633adbd7a41b27/testdata
+and is distributed under the upstream Apache-2.0 license.

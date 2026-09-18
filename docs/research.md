@@ -241,7 +241,7 @@ The txbase quality path is staged:
 2. Compare generated mutation sequences with an in-memory reference model; the DBF suite now covers this boundary.
 3. Keep expanding malformed-input corpora; DBF, memo, WAL, and JSON boundary cases are now checked, and a deterministic no-panic DBF parser smoke test covers generated binary inputs. Index cases wait for an index parser.
 4. Cover crash boundaries around WAL sync and checkpoint publication; DBF snapshot and byte-range delta recovery cover torn WAL tails, and a lone torn payload is discarded during startup.
-5. Pinned FoxPro DBF/FPT and dBASE IV DBF/DBT fixtures from independent readers now cover external memo-pointer compatibility; add more fixtures from independent xBase implementations.
+5. Pinned FoxPro DBF/FPT, dBASE III DBF, and dBASE IV DBF/DBT fixtures from independent readers now cover basic external records and memo-pointer compatibility; add more fixtures from independent xBase implementations.
 6. Keep expanding concurrency coverage with stress and fault-injection tests; stale-writer wave coverage is now present. Add fuzzing and differential checks once those components exist. CI already runs the core gate on Ubuntu, macOS, and Windows.
 
 The current CI gate is deliberately only `fmt`, `clippy`, and `cargo test`.
@@ -312,6 +312,7 @@ incorrect.
 - [libxbase dBASE III/IV Memo Implementation](https://sources.debian.org/src/libxbase/2.0.0-8.5/xbase/memo.cpp)
 - [go-foxpro-dbf pinned FoxPro test data](https://github.com/SebastiaanKlippert/go-foxpro-dbf/tree/3583ae3707e17f815695333443a457b5c7c6c7dc/testdata)
 - [Ruby dbf pinned dBASE IV test data](https://github.com/infused/dbf/tree/6b6547384439fd009815d20112b22c58eee83503/spec/fixtures)
+- [Go dbf pinned dBASE III test data](https://github.com/LindsayBradford/go-dbf/tree/133325662f853ba7e7ad4676f7633adbd7a41b27/testdata)
 - [MongoDB Documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [MongoDB Logical Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)

@@ -140,3 +140,55 @@ fn reads_and_writes_a_pinned_external_dbase4_fixture() {
     fs::remove_file(memo_path).unwrap();
     fs::remove_file(lock_path).unwrap();
 }
+
+#[test]
+fn reads_and_writes_a_pinned_external_dbase3_fixture() {
+    let path =
+        std::env::temp_dir().join(format!("txbase-external-dbase3-{}.dbf", std::process::id()));
+    let lock_path = path.with_extension("txbase.lock");
+    let wal_path = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&lock_path);
+    let _ = fs::remove_file(&wal_path);
+    fs::write(
+        &path,
+        decode_hex_fixture(include_str!(
+            "../../tests/fixtures/external-dbase3-test.dbf.hex"
+        )),
+    )
+    .unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    assert_eq!(table.header.version, 0x03);
+    assert_eq!(table.records().len(), 3);
+    assert_eq!(table.active_json().len(), 3);
+    assert_eq!(table.active_record(1).unwrap().values["TESTBOOL"], true);
+    assert_eq!(table.active_record(1).unwrap().values["TESTTEXT"], "test0");
+    assert_eq!(
+        table.active_record(1).unwrap().values["TESTDATE"],
+        "20180101"
+    );
+    assert_eq!(table.active_record(1).unwrap().values["TESTNUM"], 42);
+    assert_eq!(table.active_record(1).unwrap().values["TESTFLOAT"], 42.01);
+
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"TESTTEXT": "rewritten"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    table.save_with_wal(&path).unwrap();
+
+    let reread = DbfTable::from_path(&path).unwrap();
+    assert_eq!(
+        reread.active_record(1).unwrap().values["TESTTEXT"],
+        "rewritten"
+    );
+    assert!(!wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(lock_path).unwrap();
+}
