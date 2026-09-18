@@ -45,5 +45,7 @@ mod format;
 #[path = "format_codepages.rs"]
 mod format_codepages;
 mod memo;
+#[path = "memo_foxpro.rs"]
+mod memo_foxpro;
 mod mutation;
 mod persistence;
