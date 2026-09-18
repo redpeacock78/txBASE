@@ -19,6 +19,7 @@ remain later phases.
 - Converts common character, date, numeric, logical, integer, and double fields to JSON.
 - Reads and writes Visual FoxPro `B` double fields when their width is 8 bytes.
 - Reads and writes Visual FoxPro `Y` currency fields as four-decimal fixed-point strings.
+- Reads and writes Visual FoxPro `T` DateTime fields as second-precision ISO-8601 strings.
 - Assigns and advances dBASE Level 7 `+` auto-increment fields when a new record omits them.
 - Prints active records as JSON from the command line.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.

@@ -19,6 +19,8 @@ const ACTIVE_RECORD: u8 = 0x20;
 const DELETED_RECORD: u8 = 0x2a;
 const DBT_BLOCK_SIZE: usize = 512;
 const CURRENCY_SCALE: u64 = 10_000;
+const MILLISECONDS_PER_DAY: u32 = 86_400_000;
+const JULIAN_DAY_UNIX_EPOCH: i64 = 2_440_588;
 const CP437_UPPER: &str = concat!(
     "\u{c7}\u{fc}\u{e9}\u{e2}\u{e4}\u{e0}\u{e5}\u{e7}\u{ea}\u{eb}\u{e8}\u{ef}\u{ee}\u{ec}\u{c4}\u{c5}\u{c9}\u{e6}\u{c6}\u{f4}\u{f6}\u{f2}\u{fb}\u{f9}\u{ff}\u{d6}\u{dc}\u{a2}\u{a3}\u{a5}\u{20a7}\u{192}",
     "\u{e1}\u{ed}\u{f3}\u{fa}\u{f1}\u{d1}\u{aa}\u{ba}\u{bf}\u{2310}\u{ac}\u{bd}\u{bc}\u{a1}\u{ab}\u{bb}\u{2591}\u{2592}\u{2593}\u{2502}\u{2524}\u{2561}\u{2562}\u{2556}\u{2555}\u{2563}\u{2551}\u{2557}\u{255d}\u{255c}\u{255b}\u{2510}",
@@ -1553,7 +1555,18 @@ fn encode_field(
         }
         b'@' | b'T' => {
             if value.is_null() {
-                return Ok(vec![b' '; length]);
+                return Ok(if field.field_type.eq_ignore_ascii_case(&b'T') {
+                    vec![0; length]
+                } else {
+                    vec![b' '; length]
+                });
+            }
+            if field.field_type.eq_ignore_ascii_case(&b'T') && length == 8 {
+                if let Some(text) = value.as_str() {
+                    if let Some(bytes) = foxpro_datetime_bytes(text)? {
+                        return Ok(bytes.to_vec());
+                    }
+                }
             }
             let bytes = binary_value(value, field)?;
             if bytes.len() != length {
@@ -1752,6 +1765,132 @@ fn value_f64(value: &Value, field: &FieldDescriptor) -> Result<f64, DbfError> {
     }
 }
 
+fn foxpro_datetime_bytes(text: &str) -> Result<Option<[u8; 8]>, DbfError> {
+    let bytes = text.as_bytes();
+    if bytes.len() != 19
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || !matches!(bytes[10], b'T' | b' ')
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+    {
+        return Ok(None);
+    }
+    let parse = |part: &[u8]| {
+        if !part.iter().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        std::str::from_utf8(part).ok()?.parse::<i64>().ok()
+    };
+    let Some(year) = parse(&bytes[0..4]) else {
+        return Err(DbfError::Invalid(
+            "datetime field requires YYYY-MM-DDTHH:MM:SS".into(),
+        ));
+    };
+    let Some(month) = parse(&bytes[5..7]) else {
+        return Err(DbfError::Invalid(
+            "datetime field requires YYYY-MM-DDTHH:MM:SS".into(),
+        ));
+    };
+    let Some(day) = parse(&bytes[8..10]) else {
+        return Err(DbfError::Invalid(
+            "datetime field requires YYYY-MM-DDTHH:MM:SS".into(),
+        ));
+    };
+    let Some(hour) = parse(&bytes[11..13]) else {
+        return Err(DbfError::Invalid(
+            "datetime field requires YYYY-MM-DDTHH:MM:SS".into(),
+        ));
+    };
+    let Some(minute) = parse(&bytes[14..16]) else {
+        return Err(DbfError::Invalid(
+            "datetime field requires YYYY-MM-DDTHH:MM:SS".into(),
+        ));
+    };
+    let Some(second) = parse(&bytes[17..19]) else {
+        return Err(DbfError::Invalid(
+            "datetime field requires YYYY-MM-DDTHH:MM:SS".into(),
+        ));
+    };
+    if !(1..=9999).contains(&year)
+        || !(0..=23).contains(&hour)
+        || !(0..=59).contains(&minute)
+        || !(0..=59).contains(&second)
+    {
+        return Err(DbfError::Invalid(
+            "datetime field is outside the supported range".into(),
+        ));
+    }
+    let days = days_from_civil(year, month, day);
+    let (checked_year, checked_month, checked_day) = civil_from_days(days);
+    if (year, month, day) != (checked_year, checked_month, checked_day) {
+        return Err(DbfError::Invalid(
+            "datetime field contains an invalid date".into(),
+        ));
+    }
+    let milliseconds = u32::try_from(hour * 3_600_000 + minute * 60_000 + second * 1_000)
+        .expect("datetime components fit in milliseconds");
+    let julian_day = u32::try_from(days + JULIAN_DAY_UNIX_EPOCH)
+        .map_err(|_| DbfError::Invalid("datetime field date is out of range".into()))?;
+    let mut encoded = [0; 8];
+    encoded[..4].copy_from_slice(&julian_day.to_le_bytes());
+    encoded[4..].copy_from_slice(&milliseconds.to_le_bytes());
+    Ok(Some(encoded))
+}
+
+fn foxpro_datetime_text(bytes: &[u8]) -> Option<String> {
+    let julian_day = u32::from_le_bytes(bytes[..4].try_into().ok()?);
+    let milliseconds = u32::from_le_bytes(bytes[4..8].try_into().ok()?);
+    if julian_day == 0 {
+        return None;
+    }
+    if milliseconds >= MILLISECONDS_PER_DAY {
+        return None;
+    }
+    let (year, month, day) = civil_from_days(i64::from(julian_day) - JULIAN_DAY_UNIX_EPOCH);
+    if !(1..=9999).contains(&year) {
+        return None;
+    }
+    let hour = milliseconds / 3_600_000;
+    let minute = milliseconds / 60_000 % 60;
+    let second = milliseconds / 1_000 % 60;
+    Some(format!(
+        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}"
+    ))
+}
+
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let adjusted_year = year - i64::from(month <= 2);
+    let era = if adjusted_year >= 0 {
+        adjusted_year
+    } else {
+        adjusted_year - 399
+    } / 400;
+    let year_of_era = adjusted_year - era * 400;
+    let month_prime = month + if month > 2 { -3 } else { 9 };
+    let day_of_year = (153 * month_prime + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    let shifted = days + 719_468;
+    let era = if shifted >= 0 {
+        shifted
+    } else {
+        shifted - 146_096
+    } / 146_097;
+    let day_of_era = shifted - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    (year + i64::from(month <= 2), month, day)
+}
+
 fn currency_text(bytes: &[u8]) -> String {
     let value = i64::from_le_bytes(bytes[..8].try_into().unwrap());
     let negative = value < 0;
@@ -1913,6 +2052,16 @@ fn decode_field(
 ) -> Value {
     match field_type.to_ascii_uppercase() {
         b'C' => Value::String(text(bytes, language_driver)),
+        b'T' if memo_format == Some(MemoFormat::FoxPro) && bytes.len() >= 8 => {
+            let day = u32::from_le_bytes(bytes[..4].try_into().unwrap());
+            if day == 0 {
+                Value::Null
+            } else if let Some(value) = foxpro_datetime_text(bytes) {
+                Value::String(value)
+            } else {
+                Value::String(hex(bytes))
+            }
+        }
         b'Y' if bytes.len() >= 8 => Value::String(currency_text(bytes)),
         b'B' if bytes.len() >= 8 => {
             let value = f64::from_le_bytes(bytes[..8].try_into().unwrap());
@@ -2310,6 +2459,36 @@ mod tests {
 
         assert_eq!(value, serde_json::json!("00011a7f80feff42"));
         assert_eq!(encode_field(&field, &value, 0).unwrap(), raw);
+    }
+
+    #[test]
+    fn round_trips_visual_foxpro_datetime_fields() {
+        let field = FieldDescriptor {
+            name: "STAMP".into(),
+            field_type: b'T',
+            length: 8,
+            decimal_count: 0,
+            offset: 1,
+        };
+        let value = "2026-09-18T12:34:56";
+        let raw = foxpro_datetime_bytes(value).unwrap().unwrap();
+
+        assert_eq!(u32::from_le_bytes(raw[..4].try_into().unwrap()), 2_461_302);
+        assert_eq!(u32::from_le_bytes(raw[4..].try_into().unwrap()), 45_296_000);
+        assert_eq!(
+            decode_field(b'T', &raw, 0, Some(MemoFormat::FoxPro)),
+            serde_json::json!(value)
+        );
+        assert_eq!(
+            encode_field(&field, &serde_json::json!(value), 0).unwrap(),
+            raw.to_vec()
+        );
+        assert_eq!(
+            decode_field(b'T', &[0; 8], 0, Some(MemoFormat::FoxPro)),
+            Value::Null
+        );
+        assert_eq!(encode_field(&field, &Value::Null, 0).unwrap(), vec![0; 8]);
+        assert!(encode_field(&field, &serde_json::json!("2026-02-30T00:00:00"), 0).is_err());
     }
 
     #[test]

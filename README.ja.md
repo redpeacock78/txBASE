@@ -17,6 +17,7 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - 代表的な文字列、日付、数値、論理値、整数、倍精度値をJSONへ変換する。
 - Visual FoxProのwidth 8の`B` double fieldを読み書きする。
 - Visual FoxProの`Y` currency fieldを4桁固定小数の文字列として読み書きする。
+- Visual FoxProの`T` DateTime fieldを秒精度のISO-8601文字列として読み書きする。
 - dBASE Level 7の`+` auto-increment fieldを省略した新規recordへnext valueを割り当て、descriptorを進める。`+` fieldはread-onlyで、明示値のinsertと既存recordの変更を拒否する。
 - コマンドラインから有効なrecordをJSONとして出力する。
 - `GET /records`と`GET /records/{id}`を提供する。

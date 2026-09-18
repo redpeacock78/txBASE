@@ -23,6 +23,7 @@ The common field encodings are also part of the compatibility contract:
 | --- | --- | --- |
 | `C` | Space-padded character bytes | CP437/CP850 for `0x01`/`0x02`, CP852 for common IDs including `0x1f`/`0x64`, CP866 for `0x26`/`0x65`, Windows-1252 for `0x03`/`0x57`; UTF-8-lossy fallback otherwise |
 | `D` | Eight bytes in `YYYYMMDD` form | String |
+| `T` | Eight bytes: little-endian Julian day and milliseconds since midnight | Visual FoxPro `T` is a second-precision ISO-8601 string; non-FoxPro timestamp values remain hex |
 | `N` and `F` | Right-justified numeric text | JSON number when finite and parseable |
 | `L` | Logical marker such as `T` or `F` | Boolean or JSON null for an unknown marker |
 | `I` and `+` | Four-byte integer representation | Little-endian signed integer; Level 7 `+` inserts use the descriptor's next value when omitted |
@@ -60,6 +61,11 @@ FoxPro `0x30` tables, matching their FPT sidecars.
 
 Visual FoxPro `Y` currency values are exposed as four-decimal fixed-point
 strings so the signed 64-bit scaled value is not rounded through `f64`.
+
+Visual FoxPro `T` DateTime values use a little-endian Julian day and
+milliseconds-since-midnight pair. txbase exposes valid values as
+second-precision ISO-8601 strings and preserves non-FoxPro timestamp fields as
+hex.
 
 The mutation layer currently reuses the parsed header and field descriptors.
 It supports scalar JSON values for the field types already decoded by the
@@ -247,6 +253,9 @@ GET URI alone would be incorrect.
 ## Sources
 
 - [dBASE DBF File Structure](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)
+- [Visual FoxPro Table File Structure](https://techshelps.github.io/MSDN/FOXHELP/html/contable_file_structure_lp.dbfrp.htm)
+- [Visual FoxPro Data Dictionary](https://techshelps.github.io/MSDN/BACKGRND/html/msdn_datadict.htm)
+- [Visual FoxPro Memo File Structure](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm)
 - [MongoDB Documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [MongoDB Logical Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)
