@@ -1504,7 +1504,7 @@ fn encode_field(
             Ok(bytes)
         }
         b'N' | b'F' => {
-            let text = value_text(value, field)?;
+            let text = numeric_field_text(value, field)?;
             if text.len() > length {
                 return Err(DbfError::Invalid(format!(
                     "value for {} exceeds field width {}",
@@ -1607,6 +1607,27 @@ fn value_text(value: &Value, field: &FieldDescriptor) -> Result<String, DbfError
             field.name
         ))),
     }
+}
+
+fn numeric_field_text(value: &Value, field: &FieldDescriptor) -> Result<String, DbfError> {
+    let text = value_text(value, field)?;
+    if text.is_empty() {
+        return Ok(text);
+    }
+    let text = text.trim();
+    let number = text.parse::<f64>().map_err(|_| {
+        DbfError::Invalid(format!(
+            "numeric field {} requires a finite number or null",
+            field.name
+        ))
+    })?;
+    if !number.is_finite() {
+        return Err(DbfError::Invalid(format!(
+            "numeric field {} requires a finite number or null",
+            field.name
+        )));
+    }
+    Ok(text.to_owned())
 }
 
 fn value_i64(value: &Value, field: &FieldDescriptor) -> Result<i64, DbfError> {
@@ -2028,6 +2049,24 @@ mod tests {
         );
         assert_eq!(encode_field(&field, &Value::Null, 0).unwrap(), b"        ");
         assert!(encode_field(&field, &serde_json::json!("2026-09-18"), 0).is_err());
+    }
+
+    #[test]
+    fn validates_numeric_field_encoding() {
+        let field = FieldDescriptor {
+            name: "AMOUNT".into(),
+            field_type: b'N',
+            length: 8,
+            decimal_count: 2,
+            offset: 1,
+        };
+
+        assert_eq!(
+            encode_field(&field, &serde_json::json!("1.25"), 0).unwrap(),
+            b"    1.25"
+        );
+        assert!(encode_field(&field, &serde_json::json!("not-a-number"), 0).is_err());
+        assert!(encode_field(&field, &Value::Bool(true), 0).is_err());
     }
 
     #[test]
