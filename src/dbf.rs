@@ -381,11 +381,9 @@ impl DbfTable {
         wal.append(&payload).map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
         if let Some(memo) = &memo_snapshot {
-            save_bytes_to(
-                &path.with_extension(memo.format.extension()),
-                &memo.bytes,
-                "txbase.memo.tmp",
-            )?;
+            let memo_path = find_memo_path(path)
+                .unwrap_or_else(|| path.with_extension(memo.format.extension()));
+            save_bytes_to(&memo_path, &memo.bytes, "txbase.memo.tmp")?;
         }
         save_bytes_to(path, &prepared.bytes, "txbase.tmp")?;
         if wal.clear().is_ok() {
@@ -417,11 +415,9 @@ impl DbfTable {
         let snapshot = snapshot?;
         Self::from_bytes(&snapshot.dbf)?;
         if let Some(memo) = &snapshot.memo {
-            save_bytes_to(
-                &path.with_extension(memo.format.extension()),
-                &memo.bytes,
-                "txbase.memo.tmp",
-            )?;
+            let memo_path = find_memo_path(path)
+                .unwrap_or_else(|| path.with_extension(memo.format.extension()));
+            save_bytes_to(&memo_path, &memo.bytes, "txbase.memo.tmp")?;
         }
         save_bytes_to(path, &snapshot.dbf, "txbase.tmp")?;
         if wal.clear().is_ok() {
@@ -1144,10 +1140,32 @@ impl MemoFile {
 }
 
 fn find_memo_path(path: &Path) -> Option<std::path::PathBuf> {
-    ["fpt", "dbt"]
-        .into_iter()
-        .map(|extension| path.with_extension(extension))
-        .find(|candidate| candidate.is_file())
+    let stem = path.file_stem()?;
+    let directory = path.parent().unwrap_or_else(|| Path::new("."));
+    for extension in ["fpt", "dbt"] {
+        let candidate = path.with_extension(extension);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        let candidate = path.with_extension(extension.to_ascii_uppercase());
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        let entries = fs::read_dir(directory).ok()?;
+        if let Some(candidate) = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .find(|candidate| {
+                candidate.file_stem() == Some(stem)
+                    && candidate
+                        .extension()
+                        .is_some_and(|value| value.eq_ignore_ascii_case(extension))
+            })
+        {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 fn memo_index(bytes: &[u8]) -> Result<Option<u32>, DbfError> {
@@ -2148,9 +2166,11 @@ mod tests {
     fn reads_and_writes_dbase4_binary_sidecar() {
         let path =
             std::env::temp_dir().join(format!("txbase-dbase4-binary-{}.dbf", std::process::id()));
-        let memo_path = path.with_extension("dbt");
+        let memo_path = path.with_extension("DBT");
+        let lowercase_memo_path = path.with_extension("dbt");
         let _ = fs::remove_file(&path);
         let _ = fs::remove_file(&memo_path);
+        let _ = fs::remove_file(&lowercase_memo_path);
 
         let mut bytes = fixture();
         bytes[0] = 0x8b;
@@ -2193,6 +2213,18 @@ mod tests {
         assert_eq!(memo.block_size, dbt_block_size);
         assert_eq!(memo.read(2).unwrap().unwrap(), [0xde, 0xad, 0xbe, 0xef]);
         assert_eq!(u32::from_le_bytes(memo.bytes[..4].try_into().unwrap()), 3);
+        let sidecar_count = fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|candidate| {
+                candidate.file_stem() == path.file_stem()
+                    && candidate
+                        .extension()
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("dbt"))
+            })
+            .count();
+        assert_eq!(sidecar_count, 1);
 
         fs::remove_file(path).unwrap();
         fs::remove_file(memo_path).unwrap();
