@@ -42,6 +42,8 @@ fn foxpro_variable_fixture() -> Vec<u8> {
 }
 
 mod format;
+#[path = "format_codepages.rs"]
+mod format_codepages;
 mod memo;
 mod mutation;
 mod persistence;
