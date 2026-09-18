@@ -1459,7 +1459,26 @@ fn encode_field(
             Ok(output)
         }
         b'B' | b'G' | b'M' if length == 4 => Ok(value_u32(value, field)?.to_le_bytes().to_vec()),
-        b'D' | b'B' | b'G' | b'M' => {
+        b'D' => {
+            if length != 8 {
+                return Err(DbfError::Invalid(format!(
+                    "date field {} must be eight bytes",
+                    field.name
+                )));
+            }
+            let text = value_text(value, field)?;
+            if text.is_empty() {
+                return Ok(vec![b' '; length]);
+            }
+            if text.len() != length || !text.bytes().all(|byte| byte.is_ascii_digit()) {
+                return Err(DbfError::Invalid(format!(
+                    "date field {} requires YYYYMMDD or null",
+                    field.name
+                )));
+            }
+            Ok(text.into_bytes())
+        }
+        b'B' | b'G' | b'M' => {
             let text = value_text(value, field)?;
             if text.len() > length {
                 return Err(DbfError::Invalid(format!(
@@ -1991,6 +2010,24 @@ mod tests {
     #[test]
     fn decodes_float_fields_as_numbers() {
         assert_eq!(decode_field(b'F', b" 1.5", 0, None), serde_json::json!(1.5));
+    }
+
+    #[test]
+    fn validates_date_field_encoding() {
+        let field = FieldDescriptor {
+            name: "BORN".into(),
+            field_type: b'D',
+            length: 8,
+            decimal_count: 0,
+            offset: 1,
+        };
+
+        assert_eq!(
+            encode_field(&field, &serde_json::json!("20260918"), 0).unwrap(),
+            b"20260918"
+        );
+        assert_eq!(encode_field(&field, &Value::Null, 0).unwrap(), b"        ");
+        assert!(encode_field(&field, &serde_json::json!("2026-09-18"), 0).is_err());
     }
 
     #[test]
