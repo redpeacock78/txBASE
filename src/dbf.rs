@@ -1224,6 +1224,9 @@ fn find_memo_path(path: &Path) -> Option<std::path::PathBuf> {
 }
 
 fn memo_index(bytes: &[u8], format: MemoFormat) -> Result<Option<u32>, DbfError> {
+    if bytes.iter().all(|byte| matches!(byte, b' ' | b'\0')) {
+        return Ok(None);
+    }
     if bytes.len() == 4 {
         let block = if format == MemoFormat::FoxPro {
             u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
@@ -1961,6 +1964,7 @@ mod tests {
             memo_index(&block.to_be_bytes(), MemoFormat::FoxPro).unwrap(),
             Some(block)
         );
+        assert_eq!(memo_index(b"    ", MemoFormat::FoxPro).unwrap(), None);
         assert_eq!(
             decode_field(b'M', &block.to_be_bytes(), 0, Some(MemoFormat::FoxPro)),
             serde_json::json!(block)
