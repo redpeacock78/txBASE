@@ -59,7 +59,7 @@ state belong in separate files so a checkpointed DBF remains readable by older
 xBase tools.
 
 Four-byte memo pointers use big-endian order for FoxPro `0xF5` and Visual
-FoxPro `0x30` tables, matching their FPT sidecars.
+FoxPro `0x30`–`0x32` tables, matching their FPT sidecars.
 
 Visual FoxPro `Y` currency values are exposed as four-decimal fixed-point
 strings so the signed 64-bit scaled value is not rounded through `f64`.
@@ -69,11 +69,12 @@ milliseconds-since-midnight pair. txbase exposes valid values as
 second-precision ISO-8601 strings and preserves non-FoxPro timestamp fields as
 hex.
 
-Visual FoxPro `0x32` `V` and `Q` fields use fixed record slots whose final byte
-stores the actual length when the corresponding `_NullFlags` variable-length
-bit is set. The following nullable bit marks JSON null. `V` uses the declared
-code page, `Q` and binary-flagged `V` use hexadecimal text, and the hidden
-system field is regenerated only for affected inserts or updates.
+Visual FoxPro `0x30`–`0x32` nullable fields use `_NullFlags`. In `0x32`, `V`
+and `Q` fields additionally use fixed record slots whose final byte stores the
+actual length when the corresponding variable-length bit is set. The following
+nullable bit marks JSON null. `V` uses the declared code page, `Q` and
+binary-flagged `V` use hexadecimal text, and the hidden system field is
+regenerated only for affected inserts or updates.
 
 Visual FoxPro `W` Blob fields are four-byte pointers to binary `.fpt` blocks and
 do not undergo code-page conversion. txbase exposes those blocks as lowercase

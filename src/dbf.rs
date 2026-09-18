@@ -202,7 +202,7 @@ fn memo_format_for_version(version: u8) -> Option<MemoFormat> {
     match version {
         0x83 => Some(MemoFormat::Dbase3),
         0x8b => Some(MemoFormat::Dbase4),
-        0x30 | 0x32 | 0xf5 => Some(MemoFormat::FoxPro),
+        0x30 | 0x31 | 0x32 | 0xf5 => Some(MemoFormat::FoxPro),
         _ => None,
     }
 }
@@ -301,6 +301,7 @@ impl DbfTable {
         let fields = parse_fields(bytes, descriptor_start, terminator, descriptor_size)?;
         let flag_layout = null_flag_layout(&fields);
         let system_field = system_field_index(&fields);
+        let foxpro_table = matches!(header.version, 0x30..=0x32);
         let variable_fields = header.version == 0x32;
         let memo_format = memo_format_for_version(header.version);
         let expected_record_length = fields
@@ -356,7 +357,7 @@ impl DbfTable {
                 }
                 let start = field.offset;
                 let end = start + field.length as usize;
-                let is_null = variable_fields
+                let is_null = foxpro_table
                     && flag_layout[field_index]
                         .and_then(|bits| bits.nullable)
                         .is_some_and(|bit| null_flags.is_some_and(|flags| flag_is_set(flags, bit)));
@@ -2688,6 +2689,34 @@ mod tests {
     }
 
     #[test]
+    fn reads_visual_foxpro_nullable_fixed_fields() {
+        for version in [0x30, 0x31] {
+            let mut bytes = vec![0; 101];
+            bytes[0] = version;
+            bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+            bytes[8..10].copy_from_slice(&97u16.to_le_bytes());
+            bytes[10..12].copy_from_slice(&3u16.to_le_bytes());
+            bytes[32..36].copy_from_slice(b"NAME");
+            bytes[43] = b'C';
+            bytes[48] = 1;
+            bytes[50] = 0x02;
+            bytes[64..74].copy_from_slice(b"_NullFlags");
+            bytes[80] = 1;
+            bytes[82] = 0x01;
+            bytes[96] = FIELD_TERMINATOR;
+            bytes[97] = ACTIVE_RECORD;
+            bytes[98] = b'A';
+            bytes[99] = 0x01;
+            bytes[100] = EOF_MARKER;
+
+            assert_eq!(
+                DbfTable::from_bytes(&bytes).unwrap().active_json(),
+                vec![serde_json::json!({"NAME": null})]
+            );
+        }
+    }
+
+    #[test]
     fn round_trips_visual_foxpro_binary_character_fields() {
         let mut bytes = vec![0; 71];
         bytes[0] = 0x32;
@@ -2935,10 +2964,17 @@ mod tests {
             decode_field(b'M', &block.to_be_bytes(), 0, Some(MemoFormat::FoxPro)),
             serde_json::json!(block)
         );
-        assert_eq!(
-            decode_field(b'M', &block.to_be_bytes(), 0, memo_format_for_version(0x30)),
-            serde_json::json!(block)
-        );
+        for version in [0x30, 0x31, 0x32] {
+            assert_eq!(
+                decode_field(
+                    b'M',
+                    &block.to_be_bytes(),
+                    0,
+                    memo_format_for_version(version)
+                ),
+                serde_json::json!(block)
+            );
+        }
     }
 
     #[test]
