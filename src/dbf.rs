@@ -450,6 +450,18 @@ impl DbfTable {
                     memo_updates.insert((number - 1, field.name.clone()), update);
                 }
             }
+        } else {
+            for field in self
+                .fields
+                .iter()
+                .filter(|field| is_sidecar_field(field.field_type))
+            {
+                let value = values.get(&field.name).unwrap_or(&Value::Null);
+                storage_values.insert(
+                    field.name.clone(),
+                    storage_value_without_sidecar(value, field)?,
+                );
+            }
         }
         let encoded = self.encode_record(&storage_values)?;
         let record_end = self.record_end()?;
@@ -640,6 +652,14 @@ impl DbfTable {
                         self.stored_values[index][&field.name].clone(),
                     );
                 }
+                continue;
+            }
+
+            if self.memo.is_none() {
+                storage_values.insert(
+                    field.name.clone(),
+                    storage_value_without_sidecar(&values[&field.name], field)?,
+                );
                 continue;
             }
 
@@ -1202,6 +1222,24 @@ fn is_binary_field(field_type: u8) -> bool {
 
 fn is_sidecar_field(field_type: u8) -> bool {
     is_memo_field(field_type) || is_binary_field(field_type)
+}
+
+fn storage_value_without_sidecar(
+    value: &Value,
+    field: &FieldDescriptor,
+) -> Result<Value, DbfError> {
+    let empty = if is_memo_field(field.field_type) {
+        value_text(value, field)?.is_empty()
+    } else {
+        binary_value(value, field)?.is_empty()
+    };
+    if !empty {
+        return Err(DbfError::Invalid(format!(
+            "memo sidecar is missing for non-empty field {}",
+            field.name
+        )));
+    }
+    Ok(empty_memo_value(field))
 }
 
 fn sidecar_update(
@@ -1986,6 +2024,50 @@ mod tests {
             .unwrap_err();
 
         assert!(error.to_string().contains("unknown field UNKNOWN"));
+        assert_eq!(table.to_bytes(), before);
+    }
+
+    #[test]
+    fn rejects_nonempty_sidecar_mutations_without_sidecar() {
+        let mut bytes = fixture();
+        bytes[64 + 11] = b'M';
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        let before = table.to_bytes();
+
+        let error = table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "new memo"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("memo sidecar is missing for non-empty field NAME")
+        );
+        assert_eq!(table.to_bytes(), before);
+
+        let error = table
+            .insert_record(
+                serde_json::json!({
+                    "ID": 3,
+                    "NAME": "new memo",
+                    "AGE": 42,
+                    "ACTIVE": false
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            )
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("memo sidecar is missing for non-empty field NAME")
+        );
         assert_eq!(table.to_bytes(), before);
     }
 
