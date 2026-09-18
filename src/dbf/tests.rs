@@ -1,5 +1,7 @@
 use super::codec::foxpro_datetime_bytes;
 use super::*;
+use fs2::FileExt;
+use std::fs::OpenOptions;
 
 fn fixture() -> Vec<u8> {
     include_str!("../../tests/fixtures/users.dbf.hex")
@@ -1461,6 +1463,29 @@ fn rejects_stale_dbf_before_save() {
     assert!(!wal_path.exists());
 
     fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn table_lock_serializes_file_handles() {
+    let path = std::env::temp_dir().join(format!("txbase-table-lock-{}.dbf", std::process::id()));
+    let lock_path = path.with_extension("txbase.lock");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&lock_path);
+
+    let lock = super::lock::TableLock::acquire(&path).unwrap();
+    let probe = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .unwrap();
+    assert!(probe.try_lock_exclusive().is_err());
+
+    drop(lock);
+    probe.try_lock_exclusive().unwrap();
+    probe.unlock().unwrap();
+    fs::remove_file(lock_path).unwrap();
 }
 
 #[test]

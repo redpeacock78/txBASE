@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 mod codec;
 mod codepages;
+mod lock;
 mod memo;
 #[cfg(test)]
 mod tests;
@@ -19,6 +20,7 @@ use codec::{
     flag_is_set, hex, null_flag_layout, parse_fields, read_u16, read_u32, system_field_index, text,
     update_null_flags, value_text,
 };
+use lock::TableLock;
 use memo::{
     binary_value, empty_memo_value, encode_memo_pointer, find_memo_path, is_sidecar_field,
     memo_index, sidecar_update, storage_value_without_sidecar,
@@ -214,6 +216,7 @@ fn memo_format_for_version(version: u8) -> Option<MemoFormat> {
 impl DbfTable {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, DbfError> {
         let path = path.as_ref();
+        let _lock = TableLock::acquire(path)?;
         Self::recover_wal(path)?;
         let dbf = fs::read(path)?;
         let mut table = Self::from_bytes(&dbf)?;
@@ -451,6 +454,9 @@ impl DbfTable {
             ));
         }
         let path = path.as_ref();
+        let _lock = TableLock::acquire(path)?;
+        Self::recover_wal(path)?;
+        self.ensure_source_current(path)?;
         save_bytes_to(path, &self.bytes, "txbase.tmp")
     }
 
@@ -485,6 +491,7 @@ impl DbfTable {
 
     pub fn save_with_wal(&mut self, path: impl AsRef<Path>) -> Result<(), DbfError> {
         let path = path.as_ref();
+        let _lock = TableLock::acquire(path)?;
         Self::recover_wal(path)?;
         self.ensure_source_current(path)?;
         let mut prepared = self.clone();
