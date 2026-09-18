@@ -239,7 +239,7 @@ The txbase quality path is staged:
 1. Keep parser tests for valid headers, field layouts, deleted records, truncated input, and invalid markers.
 2. Compare generated mutation sequences with an in-memory reference model; the DBF suite now covers this boundary.
 3. Keep expanding malformed-input corpora; DBF header and record boundary cases are now checked, with memo, index, WAL, and JSON cases still to add.
-4. Add crash-boundary and recovery tests around WAL sync and checkpoint publication.
+4. Cover crash boundaries around WAL sync and checkpoint publication; DBF snapshot recovery now also covers a torn WAL tail.
 5. Add compatibility fixtures produced by independent xBase implementations.
 6. Keep expanding concurrency coverage with stress and fault-injection tests; add fuzzing and differential checks once those components exist. CI already runs the core gate on Ubuntu, macOS, and Windows.
 

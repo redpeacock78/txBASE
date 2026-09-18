@@ -18,6 +18,8 @@ mod memo;
 mod mutation_model_tests;
 mod recovery;
 #[cfg(test)]
+mod recovery_fault_tests;
+#[cfg(test)]
 mod tests;
 mod wal;
 #[cfg(test)]
