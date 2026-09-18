@@ -1059,16 +1059,27 @@ impl MemoFile {
     }
 
     fn append_binary(&mut self, data: &[u8]) -> Result<u32, DbfError> {
-        if self.format != MemoFormat::FoxPro {
-            return Err(DbfError::Invalid(
-                "binary sidecar writes require an FPT file".into(),
-            ));
-        }
         let length = u32::try_from(data.len())
             .map_err(|_| DbfError::Invalid("binary data is too long".into()))?;
         let mut payload = Vec::with_capacity(8usize.saturating_add(data.len()));
-        payload.extend_from_slice(&0u32.to_be_bytes());
-        payload.extend_from_slice(&length.to_be_bytes());
+        match self.format {
+            MemoFormat::Dbase4 => {
+                let total_length = length
+                    .checked_add(8)
+                    .ok_or_else(|| DbfError::Invalid("binary data is too long".into()))?;
+                payload.extend_from_slice(&[0xff, 0xff, 0x08, 0x00]);
+                payload.extend_from_slice(&total_length.to_le_bytes());
+            }
+            MemoFormat::FoxPro => {
+                payload.extend_from_slice(&0u32.to_be_bytes());
+                payload.extend_from_slice(&length.to_be_bytes());
+            }
+            MemoFormat::Dbase3 => {
+                return Err(DbfError::Invalid(
+                    "binary sidecar writes require dBASE IV DBT or FPT".into(),
+                ));
+            }
+        }
         payload.extend_from_slice(data);
         self.append_payload(payload)
     }
@@ -1162,9 +1173,9 @@ fn sidecar_update(
     if bytes.is_empty() {
         return Ok(None);
     }
-    if memo_format != MemoFormat::FoxPro {
+    if memo_format == MemoFormat::Dbase3 {
         return Err(DbfError::Invalid(
-            "binary sidecar writes require an FPT file".into(),
+            "binary sidecar writes require dBASE IV DBT or FPT".into(),
         ));
     }
     Ok(Some(MemoUpdate::Binary(bytes)))
@@ -2104,6 +2115,56 @@ mod tests {
             &memo.bytes[DBT_BLOCK_SIZE * 2..DBT_BLOCK_SIZE * 2 + 4],
             &[0xff, 0xff, 0x08, 0x00]
         );
+
+        fs::remove_file(path).unwrap();
+        fs::remove_file(memo_path).unwrap();
+    }
+
+    #[test]
+    fn reads_and_writes_dbase4_binary_sidecar() {
+        let path =
+            std::env::temp_dir().join(format!("txbase-dbase4-binary-{}.dbf", std::process::id()));
+        let memo_path = path.with_extension("dbt");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&memo_path);
+
+        let mut bytes = fixture();
+        bytes[0] = 0x8b;
+        bytes[64 + 11] = b'B';
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let binary_start = record_start + 4;
+        bytes[binary_start..binary_start + 10].copy_from_slice(b"         1");
+        fs::write(&path, bytes).unwrap();
+
+        let mut memo = vec![0; DBT_BLOCK_SIZE * 2];
+        let binary = [0x00, 0x1a, 0xff, 0x7f];
+        memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + 4].copy_from_slice(&[0xff, 0xff, 0x08, 0x00]);
+        memo[DBT_BLOCK_SIZE + 4..DBT_BLOCK_SIZE + 8]
+            .copy_from_slice(&((binary.len() as u32 + 8).to_le_bytes()));
+        memo[DBT_BLOCK_SIZE + 8..DBT_BLOCK_SIZE + 8 + binary.len()].copy_from_slice(&binary);
+        fs::write(&memo_path, memo).unwrap();
+
+        let mut table = DbfTable::from_path(&path).unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["NAME"], "001aff7f");
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "deadbeef"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        table.save_with_wal(&path).unwrap();
+
+        let reread = DbfTable::from_path(&path).unwrap();
+        assert_eq!(reread.active_record(1).unwrap().values["NAME"], "deadbeef");
+        assert_eq!(
+            &reread.to_bytes()[binary_start..binary_start + 10],
+            b"         2"
+        );
+        let memo = MemoFile::open(&memo_path, 0x8b).unwrap();
+        assert_eq!(memo.read(2).unwrap().unwrap(), [0xde, 0xad, 0xbe, 0xef]);
 
         fs::remove_file(path).unwrap();
         fs::remove_file(memo_path).unwrap();

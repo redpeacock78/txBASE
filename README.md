@@ -27,7 +27,8 @@ remain later phases.
   Memo writes append a new block and update the DBF pointer through a synced
   `TXDM` WAL snapshot.
 - Reads `B`/`G` binary sidecar blocks as hex text and preserves their pointers;
-  FPT binary block writes accept hex text and append a new binary block.
+  dBASE IV DBT and FPT binary block writes accept hex text and append a new
+  binary block.
 - Accepts plain `PATCH` fields and the typed `$set`, `$unset`, and `$inc`
   update operators.
 - Provides range storage, operation IR, file or memory WAL, and snapshot transaction types.
@@ -162,8 +163,9 @@ slice.
 Text memo values are read from and appended to `.dbt` or `.fpt` sidecars.
 Changing an `M` field writes the new block and DBF pointer as one recoverable
 `TXDM` WAL operation; non-memo mutations preserve existing pointers. Binary
-`B`/`G` writes use hex text and are supported for FPT sidecars; DBT binary
-writes, OLE semantics, and memo formats outside these paths remain future work.
+`B`/`G` writes use hex text and are supported for dBASE IV DBT and FPT
+sidecars; dBASE III DBT writes, OLE semantics, and memo formats outside these
+paths remain future work.
 
 ## Quality gates
 
