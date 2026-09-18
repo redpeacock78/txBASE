@@ -28,6 +28,8 @@ remain later phases.
   `TXDM` WAL snapshot.
 - Reads `B`/`G` binary sidecar blocks as hex text and preserves their pointers;
   binary block writes remain disabled.
+- Accepts plain `PATCH` fields and the typed `$set`, `$unset`, and `$inc`
+  update operators.
 - Provides range storage, operation IR, file or memory WAL, and snapshot transaction types.
 
 Character fields with language-driver ID `0x01` or `0x02` are decoded and
@@ -136,14 +138,16 @@ after a promise of MongoDB compatibility:
 The initial operator vocabulary is `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`,
 `$in`, `$nin`, `$and`, `$or`, and `$not`. Missing fields match `$ne` and `$nin`,
 array values match when any element satisfies a predicate, and sort ties retain
-DBF record order. Dotted paths, indexes, and update operators are not supported.
+DBF record order. Dotted paths and indexes are not supported.
 
 ## Mutation semantics
 
 `POST` creates a new physical DBF record and returns `201 Created` with its
-one-based record location. `PUT` replaces all fields, while `PATCH` changes
-only the fields in its JSON object. Missing fields in `POST` and `PUT` become
-DBF null values, and unknown fields are rejected.
+one-based record location. `PUT` replaces all fields, while `PATCH` accepts
+either a plain field object or an update document using `$set`, `$unset`, and
+`$inc`. An update document cannot mix operators with plain fields or update
+one field more than once. Missing fields in `POST` and `PUT` become DBF null
+values, and unknown fields are rejected.
 
 `DELETE` sets the DBF deletion marker and returns `204 No Content`. Deleted
 record numbers are not reused, and subsequent reads return `404 Not Found`.

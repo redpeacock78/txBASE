@@ -22,6 +22,7 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - 対応するJSON mutationを`TXDB`または`TXDM` snapshot WALへsyncしてからDBF/sidecarへ保存し、未完了の保存を起動時に復旧する。
 - siblingの`.dbt`と`.fpt` sidecarからtext memoを読み、変更時は新しいblockへappendする。
 - `B`/`G`のbinary sidecar blockはhex textとして読み、pointerを保持する。binary blockの書き込みは未対応です。
+- `PATCH`では通常のfield objectと、型付きの`$set`、`$unset`、`$inc`を使えます。
 
 language-driver IDが`0x01`または`0x02`のcharacter fieldはCP437またはCP850、CP852の代表的なID（`0x1f`、`0x64`）とCP866の代表的なID（`0x26`、`0x65`）、`0x03`または`0x57`はWindows-1252として読み書きします。
 それ以外のdriverは既存のUTF-8とlossy fallbackを使います。
@@ -122,12 +123,13 @@ query documentはMongoDBのpredicateから必要な表現だけを借りてい�
 
 missing fieldでは`$ne`と`$nin`が一致し、array valueでは要素のいずれかが条件を満たすと一致します。
 sortの同値recordはDBF record orderを保ちます。
-Dotted path、index、update operatorは未対応です。
+Dotted pathとindexは未対応です。
 
 ## Mutationの意味
 
 `POST`は新しい物理recordを作成し、`201 Created`と1-basedのrecord locationを返します。
-`PUT`は全fieldを置き換え、`PATCH`はJSON objectに含まれるfieldだけを変更します。
+`PUT`は全fieldを置き換え、`PATCH`は通常のfield objectに加えて、`$set`、`$unset`、`$inc`を使うupdate documentも受け付けます。
+operatorと通常fieldの混在、および同一fieldへの複数operator適用は拒否します。
 `POST`と`PUT`で省略したfieldはDBF nullになり、未知のfieldは拒否します。
 
 `DELETE`はDBFの削除markerを設定して`204 No Content`を返します。

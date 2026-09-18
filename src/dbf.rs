@@ -499,11 +499,7 @@ impl DbfTable {
         patch: Map<String, Value>,
     ) -> Result<(), DbfError> {
         let index = self.active_index(number)?;
-        let mut values = self.records[index].values.clone();
-        let changed_fields = patch.keys().cloned().collect::<BTreeSet<_>>();
-        for (field, value) in patch {
-            values.insert(field, value);
-        }
+        let (values, changed_fields) = expand_update(&self.records[index].values, patch)?;
         let values = self.normalize_values(&values)?;
         let (storage_values, memo_updates) =
             self.prepare_existing_storage(index, &values, Some(&changed_fields))?;
@@ -727,6 +723,92 @@ impl DbfTable {
             bytes: memo.bytes,
         }))
     }
+}
+
+fn expand_update(
+    current: &Map<String, Value>,
+    update: Map<String, Value>,
+) -> Result<(Map<String, Value>, BTreeSet<String>), DbfError> {
+    let has_operator = update.keys().any(|key| key.starts_with('$'));
+    if !has_operator {
+        let changed_fields = update.keys().cloned().collect();
+        let mut values = current.clone();
+        values.extend(update);
+        return Ok((values, changed_fields));
+    }
+    if update.keys().any(|key| !key.starts_with('$')) {
+        return Err(DbfError::Invalid(
+            "update cannot mix operators and fields".into(),
+        ));
+    }
+
+    let mut values = current.clone();
+    let mut changed_fields = BTreeSet::new();
+    for (operator, operand) in update {
+        match operator.as_str() {
+            "$set" | "$unset" | "$inc" => {}
+            _ => {
+                return Err(DbfError::Invalid(format!(
+                    "unsupported update operator {operator}"
+                )));
+            }
+        }
+        let fields = operand
+            .as_object()
+            .ok_or_else(|| DbfError::Invalid(format!("{operator} requires an object")))?;
+        for field in fields.keys() {
+            if !changed_fields.insert(field.clone()) {
+                return Err(DbfError::Invalid(format!(
+                    "field {field} appears in multiple update operators"
+                )));
+            }
+        }
+        match operator.as_str() {
+            "$set" => values.extend(fields.clone()),
+            "$unset" => {
+                for field in fields.keys() {
+                    values.insert(field.clone(), Value::Null);
+                }
+            }
+            "$inc" => {
+                for (field, increment) in fields {
+                    let value = increment_value(values.get(field), increment, field)?;
+                    values.insert(field.clone(), value);
+                }
+            }
+            _ => unreachable!("update operator was validated above"),
+        }
+    }
+    Ok((values, changed_fields))
+}
+
+fn increment_value(
+    current: Option<&Value>,
+    increment: &Value,
+    field: &str,
+) -> Result<Value, DbfError> {
+    let Some(Value::Number(current)) = current else {
+        return Err(DbfError::Invalid(format!(
+            "$inc requires a numeric value in field {field}"
+        )));
+    };
+    let Value::Number(increment) = increment else {
+        return Err(DbfError::Invalid(format!(
+            "$inc value for {field} must be a JSON number"
+        )));
+    };
+    if let (Some(current), Some(increment)) = (current.as_i64(), increment.as_i64()) {
+        let value = current
+            .checked_add(increment)
+            .ok_or_else(|| DbfError::Invalid(format!("$inc overflows integer field {field}")))?;
+        return Ok(Value::Number(value.into()));
+    }
+    let value = current
+        .as_f64()
+        .and_then(|current| increment.as_f64().map(|increment| current + increment))
+        .and_then(Number::from_f64)
+        .ok_or_else(|| DbfError::Invalid(format!("$inc result for {field} is not finite")))?;
+    Ok(Value::Number(value))
 }
 
 fn snapshot_payload(dbf: &[u8]) -> Vec<u8> {
@@ -1737,6 +1819,54 @@ mod tests {
 
         assert!(error.to_string().contains("unknown field UNKNOWN"));
         assert_eq!(table.to_bytes(), before);
+    }
+
+    #[test]
+    fn applies_update_operators_without_ambiguous_writes() {
+        let mut table = DbfTable::from_bytes(&fixture()).unwrap();
+        table
+            .patch_record(
+                1,
+                serde_json::json!({
+                    "$set": {"NAME": "Alicia"},
+                    "$inc": {"AGE": 1},
+                    "$unset": {"ACTIVE": true}
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            )
+            .unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["NAME"], "Alicia");
+        assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
+        assert_eq!(
+            table.active_record(1).unwrap().values["ACTIVE"],
+            Value::Null
+        );
+
+        let before = table.to_bytes();
+        let error = table
+            .patch_record(
+                1,
+                serde_json::json!({"$set": {"AGE": 31}, "$inc": {"AGE": 1}})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("multiple update operators"));
+        assert_eq!(table.to_bytes(), before);
+
+        let error = table
+            .patch_record(
+                1,
+                serde_json::json!({"$unknown": {"AGE": 31}})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("unsupported update operator"));
     }
 
     #[test]

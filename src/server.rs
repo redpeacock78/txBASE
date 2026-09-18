@@ -348,7 +348,7 @@ mod tests {
             StatusCode(201)
         );
 
-        let mut patch = json_request(Method::Patch, "/records/3", r#"{"AGE":43}"#);
+        let mut patch = json_request(Method::Patch, "/records/3", r#"{"$inc":{"AGE":1}}"#);
         assert_eq!(
             update_response(&mut patch, "/records/3", &mut table, &path, false).status_code(),
             StatusCode(200)

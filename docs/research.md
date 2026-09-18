@@ -116,16 +116,16 @@ the full rules described by the
 Update operators use a document of the form `{ "$set": { "field": value } }`.
 The [update reference](https://www.mongodb.com/docs/manual/reference/mql/update/)
 lists field operators such as `$set`, `$unset`, `$inc`, `$mul`, `$min`, and
-`$max`, as well as array operators. The future txbase update layer should
-select a small, typed subset and reject the rest rather than silently treating
-an unsupported operator as a field name.
+`$max`, as well as array operators. txbase currently selects the small typed
+subset `$set`, `$unset`, and `$inc`; it rejects the rest rather than silently
+treating an unsupported operator as a field name.
 
 MongoDB documents that a write is atomic at the single-document level and that
 multi-document writes can interleave unless a transaction is used. See
 [atomicity and transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/).
-That distinction is useful for txbase: a future `$inc` implementation must
-be an engine operation, while multi-record transaction guarantees belong to
-the transaction layer rather than to the JSON parser.
+That distinction is useful for txbase: `$inc` is an engine operation, while
+multi-record transaction guarantees belong to the transaction layer rather
+than to the JSON parser.
 
 The project does not target MongoDB wire compatibility, BSON, aggregation,
 JavaScript predicates, or the complete update-operator set.
