@@ -239,6 +239,13 @@ impl DbfTable {
             }
             let record_offset = self.record_offset(index)?;
             for field in &fields {
+                if self.records[index]
+                    .values
+                    .get(&field.name)
+                    .is_some_and(Value::is_null)
+                {
+                    continue;
+                }
                 let start = record_offset + field.offset;
                 let end = start + usize::from(field.length);
                 let Some(block) = memo_index(&self.bytes[start..end], memo.format)? else {
@@ -3623,6 +3630,42 @@ mod tests {
 
         fs::remove_file(path).unwrap();
         fs::remove_file(memo_path).unwrap();
+    }
+
+    #[test]
+    fn preserves_visual_foxpro_null_sidecar_values() {
+        let mut bytes = vec![0; 104];
+        bytes[0] = 0x30;
+        bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+        bytes[8..10].copy_from_slice(&97u16.to_le_bytes());
+        bytes[10..12].copy_from_slice(&6u16.to_le_bytes());
+        bytes[32..37].copy_from_slice(b"BMEMO");
+        bytes[43] = b'M';
+        bytes[48] = 4;
+        bytes[50] = 0x06;
+        bytes[64..74].copy_from_slice(b"_NullFlags");
+        bytes[80] = 1;
+        bytes[82] = 0x01;
+        bytes[96] = FIELD_TERMINATOR;
+        bytes[97] = ACTIVE_RECORD;
+        bytes[98..102].copy_from_slice(&1u32.to_be_bytes());
+        bytes[102] = 0x01;
+        bytes[103] = EOF_MARKER;
+
+        let mut memo = vec![0; DBT_BLOCK_SIZE * 2];
+        memo[512..516].copy_from_slice(&0u32.to_be_bytes());
+        memo[516..520].copy_from_slice(&3u32.to_be_bytes());
+        memo[520..523].copy_from_slice(&[0x10, 0x20, 0xf0]);
+
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        table
+            .resolve_memos(&MemoFile {
+                bytes: memo,
+                block_size: DBT_BLOCK_SIZE,
+                format: MemoFormat::FoxPro,
+            })
+            .unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["BMEMO"], Value::Null);
     }
 
     #[test]
