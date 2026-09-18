@@ -8,6 +8,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 mod codec;
+mod codepages;
 mod memo;
 #[cfg(test)]
 mod tests;

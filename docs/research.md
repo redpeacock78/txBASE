@@ -35,9 +35,10 @@ The common field encodings are also part of the compatibility contract:
 
 The parser therefore reads the declared header and record boundaries, checks
 field names and widths, uses the language-driver byte for the supported
-code-page mappings, including Visual FoxPro's Windows-1250 (`0xc8`) and
-Windows-1251 (`0xc9`) drivers, and excludes records marked deleted from the JSON read
-path. Character writes reject values that the declared code-page mapping
+code-page mappings, including Visual FoxPro's Windows-1250 (`0xc8`),
+Windows-1251 (`0xc9`), Windows-1254 (`0xca`), and Windows-1253 (`0xcb`)
+drivers, and excludes records marked deleted from the JSON read path.
+Character writes reject values that the declared code-page mapping
 cannot represent. When a sibling `.dbt` or `.fpt` exists, `M` fields are
 resolved from their block pointers, while `B`/`G`/`P` payloads are exposed as hex
 text. Existing pointers are retained separately
@@ -293,6 +294,7 @@ incorrect.
 - [Visual FoxPro Data Dictionary](https://techshelps.github.io/MSDN/BACKGRND/html/msdn_datadict.htm)
 - [Visual FoxPro Memo File Structure](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm)
 - [Visual FoxPro Autoincrementing Field Values](https://www.vfphelp.com/vfp9/html/bd6eff0c-2ce5-43b7-ab29-f5360cd2f90e.htm)
+- [Visual FoxPro Code Pages](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)
 - [libxbase dBASE III/IV Memo Implementation](https://sources.debian.org/src/libxbase/2.0.0-8.5/xbase/memo.cpp)
 - [MongoDB Documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)

@@ -562,12 +562,14 @@ fn decodes_and_encodes_windows_1252_character_fields() {
 }
 
 #[test]
-fn decodes_and_encodes_windows_1250_and_1251_character_fields() {
+fn decodes_and_encodes_windows_character_fields() {
     let record_start = usize::from(u16::from_le_bytes([fixture()[8], fixture()[9]]));
     let name_start = record_start + 4;
     for (language_driver, raw, value, code_page) in [
         (0xc8, 0x8a, "Š", "Windows-1250"),
         (0xc9, 0xdf, "Я", "Windows-1251"),
+        (0xca, 0xdd, "İ", "Windows-1254"),
+        (0xcb, 0xd9, "Ω", "Windows-1253"),
     ] {
         let mut bytes = fixture();
         bytes[29] = language_driver;
