@@ -18,6 +18,8 @@ mod malformed_tests;
 mod memo;
 #[cfg(test)]
 mod mutation_model_tests;
+#[cfg(test)]
+mod parser_fuzz_tests;
 mod recovery;
 #[cfg(test)]
 mod recovery_fault_tests;
