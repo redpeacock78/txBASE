@@ -169,7 +169,11 @@ impl DbfTable {
                 let end = start + field.length as usize;
                 values.insert(
                     field.name.clone(),
-                    decode_field(field.field_type, &record[start..end]),
+                    decode_field(
+                        field.field_type,
+                        &record[start..end],
+                        header.language_driver,
+                    ),
                 );
             }
             records.push(DbfRecord {
@@ -366,6 +370,7 @@ impl DbfTable {
             record.extend(encode_field(
                 field,
                 values.get(&field.name).unwrap_or(&Value::Null),
+                self.header.language_driver,
             )?);
         }
         if record.len() != usize::from(self.header.record_length) {
@@ -439,10 +444,26 @@ fn write_record_count(bytes: &mut [u8], count: u32) -> Result<(), DbfError> {
     Ok(())
 }
 
-fn encode_field(field: &FieldDescriptor, value: &Value) -> Result<Vec<u8>, DbfError> {
+fn encode_field(
+    field: &FieldDescriptor,
+    value: &Value,
+    language_driver: u8,
+) -> Result<Vec<u8>, DbfError> {
     let length = usize::from(field.length);
     match field.field_type.to_ascii_uppercase() {
-        b'C' | b'D' | b'B' | b'G' | b'M' | b'@' | b'T' => {
+        b'C' => {
+            let bytes = encode_character(value, field, language_driver)?;
+            if bytes.len() > length {
+                return Err(DbfError::Invalid(format!(
+                    "value for {} exceeds field width {}",
+                    field.name, field.length
+                )));
+            }
+            let mut output = vec![b' '; length];
+            output[..bytes.len()].copy_from_slice(&bytes);
+            Ok(output)
+        }
+        b'D' | b'B' | b'G' | b'M' | b'@' | b'T' => {
             let text = value_text(value, field)?;
             if text.len() > length {
                 return Err(DbfError::Invalid(format!(
@@ -514,6 +535,23 @@ fn encode_field(field: &FieldDescriptor, value: &Value) -> Result<Vec<u8>, DbfEr
         field_type => Err(DbfError::Invalid(format!(
             "writing field type 0x{field_type:02x} is unsupported"
         ))),
+    }
+}
+
+fn encode_character(
+    value: &Value,
+    field: &FieldDescriptor,
+    language_driver: u8,
+) -> Result<Vec<u8>, DbfError> {
+    let text = value_text(value, field)?;
+    match language_driver {
+        0x03 | 0x57 => encode_windows_1252(&text).ok_or_else(|| {
+            DbfError::Invalid(format!(
+                "value for {} contains a character outside Windows-1252",
+                field.name
+            ))
+        }),
+        _ => Ok(text.into_bytes()),
     }
 }
 
@@ -639,9 +677,10 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, DbfError> {
     Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
 }
 
-fn decode_field(field_type: u8, bytes: &[u8]) -> Value {
+fn decode_field(field_type: u8, bytes: &[u8], language_driver: u8) -> Value {
     match field_type.to_ascii_uppercase() {
-        b'C' | b'D' | b'B' | b'G' | b'M' => Value::String(text(bytes)),
+        b'C' => Value::String(text(bytes, language_driver)),
+        b'D' | b'B' | b'G' | b'M' => Value::String(text(bytes, 0)),
         b'F' | b'N' => numeric(bytes),
         b'L' => match bytes.first().map(|byte| byte.to_ascii_uppercase()) {
             Some(b'T') | Some(b'Y') => Value::Bool(true),
@@ -662,18 +701,76 @@ fn decode_field(field_type: u8, bytes: &[u8]) -> Value {
             }
         }
         b'@' | b'T' => Value::String(hex(bytes)),
-        _ => Value::String(text(bytes)),
+        _ => Value::String(text(bytes, language_driver)),
     }
 }
 
-fn text(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes)
-        .trim_end_matches([' ', '\0'])
-        .to_owned()
+fn text(bytes: &[u8], language_driver: u8) -> String {
+    let end = bytes
+        .iter()
+        .rposition(|byte| !matches!(byte, b' ' | b'\0'))
+        .map_or(0, |index| index + 1);
+    let bytes = &bytes[..end];
+    if matches!(language_driver, 0x03 | 0x57) {
+        return decode_windows_1252(bytes);
+    }
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+fn decode_windows_1252(bytes: &[u8]) -> String {
+    const EXTENDED: [char; 32] = [
+        '€', '\u{fffd}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{fffd}', 'Ž',
+        '\u{fffd}', '\u{fffd}', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ',
+        '\u{fffd}', 'ž', 'Ÿ',
+    ];
+    bytes
+        .iter()
+        .map(|byte| match byte {
+            0x00..=0x7f => char::from(*byte),
+            0x80..=0x9f => EXTENDED[usize::from(*byte - 0x80)],
+            byte => char::from_u32(u32::from(*byte)).expect("Windows-1252 byte is valid"),
+        })
+        .collect()
+}
+
+fn encode_windows_1252(text: &str) -> Option<Vec<u8>> {
+    text.chars()
+        .map(|character| match character {
+            '\u{0000}'..='\u{007f}' | '\u{00a0}'..='\u{00ff}' => Some(character as u32 as u8),
+            '€' => Some(0x80),
+            '‚' => Some(0x82),
+            'ƒ' => Some(0x83),
+            '„' => Some(0x84),
+            '…' => Some(0x85),
+            '†' => Some(0x86),
+            '‡' => Some(0x87),
+            'ˆ' => Some(0x88),
+            '‰' => Some(0x89),
+            'Š' => Some(0x8a),
+            '‹' => Some(0x8b),
+            'Œ' => Some(0x8c),
+            'Ž' => Some(0x8e),
+            '‘' => Some(0x91),
+            '’' => Some(0x92),
+            '“' => Some(0x93),
+            '”' => Some(0x94),
+            '•' => Some(0x95),
+            '–' => Some(0x96),
+            '—' => Some(0x97),
+            '˜' => Some(0x98),
+            '™' => Some(0x99),
+            'š' => Some(0x9a),
+            '›' => Some(0x9b),
+            'œ' => Some(0x9c),
+            'ž' => Some(0x9e),
+            'Ÿ' => Some(0x9f),
+            _ => None,
+        })
+        .collect()
 }
 
 fn numeric(bytes: &[u8]) -> Value {
-    let value = text(bytes).trim().to_owned();
+    let value = text(bytes, 0).trim().to_owned();
     if value.is_empty() {
         return Value::Null;
     }
@@ -764,7 +861,50 @@ mod tests {
 
     #[test]
     fn decodes_float_fields_as_numbers() {
-        assert_eq!(decode_field(b'F', b" 1.5"), serde_json::json!(1.5));
+        assert_eq!(decode_field(b'F', b" 1.5", 0), serde_json::json!(1.5));
+    }
+
+    #[test]
+    fn decodes_and_encodes_windows_1252_character_fields() {
+        let mut bytes = fixture();
+        bytes[29] = 0x03;
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let name_start = record_start + 4;
+        bytes[name_start..name_start + 10].fill(b' ');
+        bytes[name_start] = 0xe9;
+
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["NAME"], "é");
+
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "€"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        assert_eq!(table.to_bytes()[name_start], 0x80);
+        assert_eq!(
+            DbfTable::from_bytes(&table.to_bytes())
+                .unwrap()
+                .active_record(1)
+                .unwrap()
+                .values["NAME"],
+            "€"
+        );
+
+        let error = table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "漢"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("outside Windows-1252"));
     }
 
     #[test]

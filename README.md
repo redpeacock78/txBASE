@@ -23,9 +23,10 @@ concurrent-writer coordination remain later phases.
   atomic DBF replacement, with startup recovery for an unfinished write.
 - Provides range storage, operation IR, file or memory WAL, and snapshot transaction types.
 
-The DBF decoder currently treats text as UTF-8 with replacement for invalid
-bytes. The language-driver byte is retained in the parsed header, but full OEM
-and Windows code-page conversion is deliberately not implemented yet.
+Character fields with language-driver ID `0x03` or `0x57` are decoded and
+encoded as Windows-1252. Other drivers retain the existing UTF-8/lossy
+fallback, so full OEM and other Windows code-page conversion remains future
+work; writes reject characters that Windows-1252 cannot represent.
 
 ## Quick start
 

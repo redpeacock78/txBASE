@@ -21,7 +21,7 @@ The common field encodings are also part of the compatibility contract:
 
 | Type | On-disk representation | Initial txbase behavior |
 | --- | --- | --- |
-| `C` | Space-padded character bytes | UTF-8-lossy string |
+| `C` | Space-padded character bytes | Windows-1252 for language-driver IDs `0x03` and `0x57`; UTF-8-lossy fallback otherwise |
 | `D` | Eight bytes in `YYYYMMDD` form | String |
 | `N` and `F` | Right-justified numeric text | JSON number when finite and parseable |
 | `L` | Logical marker such as `T` or `F` | Boolean or JSON null for an unknown marker |
@@ -29,9 +29,10 @@ The common field encodings are also part of the compatibility contract:
 | `M`, `B`, and `G` | Text pointer to a memo or binary block | Pointer text, without sidecar dereference |
 
 The parser therefore reads the declared header and record boundaries, checks
-field names and widths, retains the language-driver byte, and excludes records
-marked deleted from the JSON read path. It does not silently turn a DBF field
-into a new on-disk type. Code-page conversion and memo dereferencing remain
+field names and widths, uses the language-driver byte for the supported
+Windows-1252 mappings, and excludes records marked deleted from the JSON read
+path. Character writes reject values that the declared Windows-1252 mapping
+cannot represent. Other code-page conversion and memo dereferencing remain
 explicit future work because guessing an encoding changes data at the format
 boundary.
 

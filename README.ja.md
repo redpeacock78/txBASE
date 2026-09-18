@@ -21,7 +21,9 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - `POST /records`、`PUT /records/{id}`、`PATCH /records/{id}`、`DELETE /records/{id}`を提供する。
 - 対応するJSON mutationを`TXDB` snapshot WALへsyncしてからDBFへ保存し、未完了の保存を起動時に復旧する。
 
-DBFのlanguage-driver byteは保持しますが、OEM code pageとWindows code pageの完全な変換はまだ実装していません。
+language-driver IDが`0x03`または`0x57`のcharacter fieldはWindows-1252として読み書きします。
+それ以外のdriverは既存のUTF-8とlossy fallbackを使うため、OEMと他のWindows code pageの完全な変換は未実装です。
+Windows-1252で表現できない文字の書き込みは拒否します。
 
 ## 最短の手順
 
