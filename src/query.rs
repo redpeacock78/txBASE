@@ -1,4 +1,5 @@
 use crate::dbf::{DbfRecord, DbfTable};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Number, Value};
 use std::cmp::Ordering;
@@ -17,7 +18,7 @@ pub struct QueryRequest {
     #[serde(default)]
     pub filter: Map<String, Value>,
     #[serde(default)]
-    pub sort: BTreeMap<String, i8>,
+    pub sort: IndexMap<String, i8>,
     #[serde(default)]
     pub projection: BTreeMap<String, i8>,
     pub limit: Option<u64>,
@@ -299,7 +300,7 @@ fn compare_any(
     }
 }
 
-fn compare_records(left: &DbfRecord, right: &DbfRecord, sort: &BTreeMap<String, i8>) -> Ordering {
+fn compare_records(left: &DbfRecord, right: &DbfRecord, sort: &IndexMap<String, i8>) -> Ordering {
     for (field, direction) in sort {
         let ordering = compare_for_sort(left.values.get(field), right.values.get(field));
         if ordering != Ordering::Equal {
@@ -465,6 +466,16 @@ mod tests {
                 "AGE": 7
             })]
         );
+    }
+
+    #[test]
+    fn preserves_multi_key_sort_order() {
+        let table = table_with_two_active_records();
+        let request = parse(br#"{"sort":{"NAME":1,"AGE":1}}"#).unwrap();
+        let records = execute_query(&table, &request).unwrap();
+
+        assert_eq!(records[0]["NAME"], "Alice");
+        assert_eq!(records[1]["NAME"], "Bob");
     }
 
     #[test]
