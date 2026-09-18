@@ -85,7 +85,32 @@ pub struct FieldDescriptor {
     pub field_type: u8,
     pub length: u8,
     pub decimal_count: u8,
+    pub flags: u8,
     pub offset: usize,
+}
+
+impl FieldDescriptor {
+    fn is_system(&self) -> bool {
+        self.flags & 0x01 != 0 || self.name.eq_ignore_ascii_case("_NULLFLAGS")
+    }
+
+    fn is_variable(&self) -> bool {
+        matches!(self.field_type.to_ascii_uppercase(), b'Q' | b'V')
+    }
+
+    fn is_nullable(&self) -> bool {
+        self.flags & 0x02 != 0
+    }
+
+    fn is_binary(&self) -> bool {
+        self.field_type.eq_ignore_ascii_case(&b'Q') || self.flags & 0x04 != 0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct NullFlagBits {
+    varlength: Option<usize>,
+    nullable: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -272,6 +297,10 @@ impl DbfTable {
             .ok_or_else(|| DbfError::Invalid("field descriptor terminator is missing".into()))?;
 
         let fields = parse_fields(bytes, descriptor_start, terminator, descriptor_size)?;
+        let flag_layout = null_flag_layout(&fields);
+        let system_field = system_field_index(&fields);
+        let variable_fields = header.version == 0x32;
+        let memo_format = memo_format_for_version(header.version);
         let expected_record_length = fields
             .iter()
             .map(|field| field.length as usize)
@@ -314,19 +343,34 @@ impl DbfTable {
                 }
             };
 
+            let null_flags = system_field.and_then(|index| {
+                let field = &fields[index];
+                record.get(field.offset..field.offset + usize::from(field.length))
+            });
             let mut values = Map::new();
-            for field in &fields {
+            for (field_index, field) in fields.iter().enumerate() {
+                if field.is_system() {
+                    continue;
+                }
                 let start = field.offset;
                 let end = start + field.length as usize;
-                values.insert(
-                    field.name.clone(),
+                let value = if variable_fields && field.is_variable() {
+                    decode_record_field(
+                        field,
+                        &record[start..end],
+                        header.language_driver,
+                        null_flags,
+                        flag_layout[field_index],
+                    )
+                } else {
                     decode_field(
                         field.field_type,
                         &record[start..end],
                         header.language_driver,
-                        memo_format_for_version(header.version),
-                    ),
-                );
+                        memo_format,
+                    )
+                };
+                values.insert(field.name.clone(), value);
             }
             stored_values.push(values.clone());
             records.push(DbfRecord {
@@ -587,7 +631,7 @@ impl DbfTable {
             if !self
                 .fields
                 .iter()
-                .any(|descriptor| descriptor.name == *field)
+                .any(|descriptor| !descriptor.is_system() && descriptor.name == *field)
             {
                 return Err(DbfError::Invalid(format!("unknown field {field}")));
             }
@@ -595,6 +639,7 @@ impl DbfTable {
         Ok(self
             .fields
             .iter()
+            .filter(|field| !field.is_system())
             .map(|field| {
                 (
                     field.name.clone(),
@@ -607,12 +652,25 @@ impl DbfTable {
     fn encode_record(&self, storage_values: &Map<String, Value>) -> Result<Vec<u8>, DbfError> {
         let mut record = Vec::with_capacity(usize::from(self.header.record_length));
         record.push(ACTIVE_RECORD);
+        let null_flags = encode_null_flags(&self.fields, storage_values)?;
         for field in &self.fields {
-            record.extend(encode_field(
-                field,
-                storage_values.get(&field.name).unwrap_or(&Value::Null),
-                self.header.language_driver,
-            )?);
+            if field.is_system() {
+                let flags = null_flags.as_deref().ok_or_else(|| {
+                    DbfError::Invalid("system field requires _NullFlags bytes".into())
+                })?;
+                if flags.len() != usize::from(field.length) {
+                    return Err(DbfError::Invalid(
+                        "_NullFlags field length is inconsistent".into(),
+                    ));
+                }
+                record.extend_from_slice(flags);
+            } else {
+                record.extend(encode_field(
+                    field,
+                    storage_values.get(&field.name).unwrap_or(&Value::Null),
+                    self.header.language_driver,
+                )?);
+            }
         }
         if record.len() != usize::from(self.header.record_length) {
             return Err(DbfError::Invalid(
@@ -714,10 +772,15 @@ impl DbfTable {
     ) -> Result<(), DbfError> {
         let offset = self.record_offset(index)?;
         let mut bytes = self.bytes.clone();
+        let mut changed_fields = BTreeSet::new();
         for field in &self.fields {
+            if field.is_system() {
+                continue;
+            }
             if values.get(&field.name) == self.records[index].values.get(&field.name) {
                 continue;
             }
+            changed_fields.insert(field.name.clone());
             let encoded = encode_field(
                 field,
                 storage_values.get(&field.name).unwrap_or(&Value::Null),
@@ -734,6 +797,7 @@ impl DbfTable {
                 .ok_or_else(|| DbfError::Invalid("stored field is truncated".into()))?
                 .copy_from_slice(&encoded);
         }
+        update_null_flags(&mut bytes, offset, &self.fields, values, &changed_fields)?;
         self.bytes = bytes;
         self.records[index].values = values.clone();
         self.stored_values[index] = storage_values.clone();
@@ -1497,6 +1561,7 @@ fn encode_field(
 ) -> Result<Vec<u8>, DbfError> {
     let length = usize::from(field.length);
     match field.field_type.to_ascii_uppercase() {
+        b'Q' | b'V' => encode_variable_field(value, field, language_driver),
         b'C' => {
             let bytes = encode_character(value, field, language_driver)?;
             if bytes.len() > length {
@@ -1638,6 +1703,45 @@ fn encode_field(
             "writing field type 0x{field_type:02x} is unsupported"
         ))),
     }
+}
+
+fn encode_variable_field(
+    value: &Value,
+    field: &FieldDescriptor,
+    language_driver: u8,
+) -> Result<Vec<u8>, DbfError> {
+    let length = usize::from(field.length);
+    if length == 0 {
+        return Err(DbfError::Invalid(format!(
+            "variable field {} must not be empty",
+            field.name
+        )));
+    }
+    if value.is_null() {
+        return Ok(vec![0; length]);
+    }
+
+    let data = if field.is_binary() {
+        binary_value(value, field)?
+    } else {
+        encode_character(value, field, language_driver)?
+    };
+    let max_length = length - 1;
+    if data.len() > max_length {
+        return Err(DbfError::Invalid(format!(
+            "value for {} exceeds variable field width {}",
+            field.name, field.length
+        )));
+    }
+    let mut output = vec![if field.is_binary() { 0 } else { b' ' }; length];
+    output[..data.len()].copy_from_slice(&data);
+    output[max_length] = u8::try_from(data.len()).map_err(|_| {
+        DbfError::Invalid(format!(
+            "value for {} exceeds variable field width {}",
+            field.name, field.length
+        ))
+    })?;
+    Ok(output)
 }
 
 fn encode_character(
@@ -2021,6 +2125,11 @@ fn parse_fields(
             field_type: descriptor[type_offset],
             length,
             decimal_count: descriptor[decimal_offset],
+            flags: if descriptor_size == CLASSIC_DESCRIPTOR_SIZE {
+                descriptor[18]
+            } else {
+                0
+            },
             offset,
         });
         offset = offset
@@ -2028,6 +2137,140 @@ fn parse_fields(
             .ok_or_else(|| DbfError::Invalid("field offsets overflow usize".into()))?;
     }
     Ok(fields)
+}
+
+fn null_flag_layout(fields: &[FieldDescriptor]) -> Vec<Option<NullFlagBits>> {
+    let mut next_bit = 0;
+    fields
+        .iter()
+        .map(|field| {
+            if field.is_system() {
+                return None;
+            }
+            let varlength = field.is_variable().then(|| {
+                let bit = next_bit;
+                next_bit += 1;
+                bit
+            });
+            let nullable = field.is_nullable().then(|| {
+                let bit = next_bit;
+                next_bit += 1;
+                bit
+            });
+            (varlength.is_some() || nullable.is_some()).then_some(NullFlagBits {
+                varlength,
+                nullable,
+            })
+        })
+        .collect()
+}
+
+fn system_field_index(fields: &[FieldDescriptor]) -> Option<usize> {
+    fields.iter().position(FieldDescriptor::is_system)
+}
+
+fn flag_is_set(flags: &[u8], bit: usize) -> bool {
+    flags
+        .get(bit / 8)
+        .is_some_and(|byte| byte & (1 << (bit % 8)) != 0)
+}
+
+fn set_flag(flags: &mut [u8], bit: usize, value: bool) -> Result<(), DbfError> {
+    let Some(byte) = flags.get_mut(bit / 8) else {
+        return Err(DbfError::Invalid(
+            "_NullFlags field is too short for its descriptors".into(),
+        ));
+    };
+    let mask = 1 << (bit % 8);
+    if value {
+        *byte |= mask;
+    } else {
+        *byte &= !mask;
+    }
+    Ok(())
+}
+
+fn encode_null_flags(
+    fields: &[FieldDescriptor],
+    values: &Map<String, Value>,
+) -> Result<Option<Vec<u8>>, DbfError> {
+    let layout = null_flag_layout(fields);
+    let Some(system_index) = system_field_index(fields) else {
+        if layout.iter().any(Option::is_some) {
+            return Err(DbfError::Invalid(
+                "VFP variable/null fields require a _NullFlags system field".into(),
+            ));
+        }
+        return Ok(None);
+    };
+
+    let system = &fields[system_index];
+    let mut flags = vec![0; usize::from(system.length)];
+    for (index, field) in fields.iter().enumerate() {
+        if field.is_system() {
+            continue;
+        }
+        let Some(bits) = layout[index] else {
+            continue;
+        };
+        if let Some(bit) = bits.varlength {
+            set_flag(&mut flags, bit, true)?;
+        }
+        if let Some(bit) = bits.nullable {
+            let is_null = values.get(&field.name).is_none_or(|value| value.is_null());
+            set_flag(&mut flags, bit, is_null)?;
+        }
+    }
+    Ok(Some(flags))
+}
+
+fn update_null_flags(
+    bytes: &mut [u8],
+    record_offset: usize,
+    fields: &[FieldDescriptor],
+    values: &Map<String, Value>,
+    changed_fields: &BTreeSet<String>,
+) -> Result<(), DbfError> {
+    let layout = null_flag_layout(fields);
+    let relevant_change = fields.iter().enumerate().any(|(index, field)| {
+        !field.is_system() && changed_fields.contains(&field.name) && layout[index].is_some()
+    });
+    if !relevant_change {
+        return Ok(());
+    }
+
+    let Some(system_index) = system_field_index(fields) else {
+        return Err(DbfError::Invalid(
+            "VFP variable/null fields require a _NullFlags system field".into(),
+        ));
+    };
+    let system = &fields[system_index];
+    let start = record_offset
+        .checked_add(system.offset)
+        .ok_or_else(|| DbfError::Invalid("_NullFlags offset overflows usize".into()))?;
+    let end = start
+        .checked_add(usize::from(system.length))
+        .ok_or_else(|| DbfError::Invalid("_NullFlags range overflows usize".into()))?;
+    let flags = bytes
+        .get_mut(start..end)
+        .ok_or_else(|| DbfError::Invalid("stored _NullFlags field is truncated".into()))?;
+
+    for (index, field) in fields.iter().enumerate() {
+        if field.is_system() || !changed_fields.contains(&field.name) {
+            continue;
+        }
+        let Some(bits) = layout[index] else {
+            continue;
+        };
+        if let Some(bit) = bits.varlength {
+            set_flag(flags, bit, true)?;
+        }
+        if let Some(bit) = bits.nullable {
+            let is_null = values.get(&field.name).is_none_or(|value| value.is_null());
+            set_flag(flags, bit, is_null)?;
+        }
+    }
+    Ok(())
 }
 
 fn read_u16(bytes: &[u8], offset: usize) -> Result<u16, DbfError> {
@@ -2042,6 +2285,36 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, DbfError> {
         .get(offset..offset + 4)
         .ok_or_else(|| DbfError::Invalid("header is truncated".into()))?;
     Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+}
+
+fn decode_record_field(
+    field: &FieldDescriptor,
+    bytes: &[u8],
+    language_driver: u8,
+    null_flags: Option<&[u8]>,
+    flag_bits: Option<NullFlagBits>,
+) -> Value {
+    let is_null = flag_bits
+        .and_then(|bits| bits.nullable)
+        .is_some_and(|bit| null_flags.is_some_and(|flags| flag_is_set(flags, bit)));
+    if is_null {
+        return Value::Null;
+    }
+
+    let data = match flag_bits.and_then(|bits| bits.varlength) {
+        Some(bit) if null_flags.is_some_and(|flags| flag_is_set(flags, bit)) => {
+            match bytes.last().map(|length| usize::from(*length)) {
+                Some(length) if length <= bytes.len().saturating_sub(1) => &bytes[..length],
+                _ => bytes,
+            }
+        }
+        _ => bytes,
+    };
+    if field.is_binary() {
+        Value::String(hex(data))
+    } else {
+        Value::String(text(data, language_driver))
+    }
 }
 
 fn decode_field(
@@ -2241,6 +2514,40 @@ mod tests {
             .collect()
     }
 
+    fn foxpro_variable_fixture() -> Vec<u8> {
+        let mut bytes = vec![0; 142];
+        bytes[0] = 0x32;
+        bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+        bytes[8..10].copy_from_slice(&129u16.to_le_bytes());
+        bytes[10..12].copy_from_slice(&12u16.to_le_bytes());
+
+        bytes[32..36].copy_from_slice(b"NAME");
+        bytes[43] = b'V';
+        bytes[48] = 5;
+        bytes[50] = 0x02;
+
+        bytes[64..72].copy_from_slice(b"_PAYLOAD");
+        bytes[75] = b'Q';
+        bytes[80] = 5;
+        bytes[82] = 0x02;
+
+        bytes[96..106].copy_from_slice(b"_NullFlags");
+        bytes[107] = 0;
+        bytes[112] = 1;
+        bytes[114] = 1;
+
+        bytes[128] = FIELD_TERMINATOR;
+        bytes[129] = ACTIVE_RECORD;
+        bytes[130..133].copy_from_slice(b"abc");
+        bytes[133] = b' ';
+        bytes[134] = 3;
+        bytes[135..137].copy_from_slice(&[0, 0xff]);
+        bytes[139] = 2;
+        bytes[140] = 0x05;
+        bytes[141] = EOF_MARKER;
+        bytes
+    }
+
     #[test]
     fn reads_header_fields_and_active_records() {
         let table = DbfTable::from_bytes(&fixture()).unwrap();
@@ -2313,6 +2620,69 @@ mod tests {
     }
 
     #[test]
+    fn round_trips_visual_foxpro_variable_fields() {
+        let mut table = DbfTable::from_bytes(&foxpro_variable_fixture()).unwrap();
+
+        assert_eq!(
+            table.active_json(),
+            vec![serde_json::json!({"NAME": "abc", "_PAYLOAD": "00ff"})]
+        );
+        assert!(
+            !table.active_json()[0]
+                .as_object()
+                .unwrap()
+                .contains_key("_NullFlags")
+        );
+
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "xy", "_PAYLOAD": "a1b2"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        let bytes = table.to_bytes();
+        assert_eq!(&bytes[130..135], b"xy  \x02");
+        assert_eq!(&bytes[135..140], &[0xa1, 0xb2, 0, 0, 2]);
+        assert_eq!(bytes[140], 0x05);
+
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": null, "_PAYLOAD": null})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        assert_eq!(
+            table.active_json(),
+            vec![serde_json::json!({"NAME": null, "_PAYLOAD": null})]
+        );
+        assert_eq!(&table.to_bytes()[130..140], &[0; 10]);
+        assert_eq!(table.to_bytes()[140], 0x0f);
+
+        assert_eq!(
+            table
+                .insert_record(
+                    serde_json::json!({"NAME": "new", "_PAYLOAD": "cafe"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )
+                .unwrap(),
+            2
+        );
+        let second = 129 + 12;
+        let bytes = table.to_bytes();
+        assert_eq!(&bytes[second + 1..second + 6], b"new \x03");
+        assert_eq!(&bytes[second + 6..second + 11], &[0xca, 0xfe, 0, 0, 2]);
+        assert_eq!(bytes[second + 11], 0x05);
+    }
+
+    #[test]
     fn assigns_level7_auto_increment_values_on_insert() {
         let mut bytes = vec![0; 123];
         bytes[0] = 0x04;
@@ -2374,6 +2744,7 @@ mod tests {
             field_type: b'B',
             length: 8,
             decimal_count: 0,
+            flags: 0,
             offset: 1,
         };
         let value = serde_json::json!(12.5);
@@ -2390,6 +2761,7 @@ mod tests {
             field_type: b'Y',
             length: 8,
             decimal_count: 4,
+            flags: 0,
             offset: 1,
         };
         let raw = (-12_345_678i64).to_le_bytes();
@@ -2416,6 +2788,7 @@ mod tests {
             field_type: b'D',
             length: 8,
             decimal_count: 0,
+            flags: 0,
             offset: 1,
         };
 
@@ -2434,6 +2807,7 @@ mod tests {
             field_type: b'N',
             length: 8,
             decimal_count: 2,
+            flags: 0,
             offset: 1,
         };
 
@@ -2452,6 +2826,7 @@ mod tests {
             field_type: b'T',
             length: 8,
             decimal_count: 0,
+            flags: 0,
             offset: 1,
         };
         let raw = [0x00, 0x01, 0x1a, 0x7f, 0x80, 0xfe, 0xff, 0x42];
@@ -2468,6 +2843,7 @@ mod tests {
             field_type: b'T',
             length: 8,
             decimal_count: 0,
+            flags: 0,
             offset: 1,
         };
         let value = "2026-09-18T12:34:56";
@@ -2498,6 +2874,7 @@ mod tests {
             field_type: b'M',
             length: 4,
             decimal_count: 0,
+            flags: 0,
             offset: 1,
         };
         let block = 0x0102_0304;

@@ -20,6 +20,7 @@ remain later phases.
 - Reads and writes Visual FoxPro `B` double fields when their width is 8 bytes.
 - Reads and writes Visual FoxPro `Y` currency fields as four-decimal fixed-point strings.
 - Reads and writes Visual FoxPro `T` DateTime fields as second-precision ISO-8601 strings.
+- Reads and writes Visual FoxPro `0x32` `V` varchar and `Q` varbinary fields; `V` is text, `Q` is lowercase hex, and `_NullFlags` stays hidden.
 - Assigns and advances dBASE Level 7 `+` auto-increment fields when a new record omits them.
 - Prints active records as JSON from the command line.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.
