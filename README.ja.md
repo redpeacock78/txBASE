@@ -21,7 +21,7 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - `POST /records`、`PUT /records/{id}`、`PATCH /records/{id}`、`DELETE /records/{id}`を提供する。
 - 対応するJSON mutationを`TXDB`または`TXDM` snapshot WALへsyncしてからDBF/sidecarへ保存し、未完了の保存を起動時に復旧する。
 - siblingの`.dbt`と`.fpt` sidecarからtext memoを読み、変更時は新しいblockへappendする。
-- `B`/`G`のbinary sidecar blockはhex textとして読み、pointerを保持する。binary blockの書き込みは未対応です。
+- `B`/`G`のbinary sidecar blockはhex textとして読み、FPTではhex textの書き込みも新しいbinary blockへのappendとして実行します。DBT binary writeは未対応です。
 - `PATCH`では通常のfield objectと、型付きの`$set`、`$unset`、`$inc`を使えます。
 
 language-driver IDが`0x01`または`0x02`のcharacter fieldはCP437またはCP850、CP852の代表的なID（`0x1f`、`0x64`）とCP866の代表的なID（`0x26`、`0x65`）、`0x03`または`0x57`はWindows-1252として読み書きします。
@@ -139,7 +139,7 @@ serverはDBF-only変更では`TXDB`、memo field変更ではDBFとsidecarを含�
 WALは細粒度のmutation recordではなく全体snapshotを保存し、複数writerの調停は未対応です。
 text memoは`.dbt`または`.fpt`から読み取り、変更時は新しいblockをappendしてDBF pointerも更新します。
 sidecarとDBFは`TXDM` WAL snapshotで復旧可能な単位として保存します。
-`B`/`G`のbinary block書き込みと、この範囲外のmemo形式は未対応です。
+`B`/`G`のFPT binary block書き込みはhex textとして対応します。DBT binary write、OLE semantics、この範囲外のmemo形式は未対応です。
 
 ## 検証
 

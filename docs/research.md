@@ -27,7 +27,7 @@ The common field encodings are also part of the compatibility contract:
 | `L` | Logical marker such as `T` or `F` | Boolean or JSON null for an unknown marker |
 | `I` and `+` | Four-byte integer representation | Little-endian signed integer |
 | `M` | Text pointer to a memo block | Text from a sibling `.dbt` or `.fpt` sidecar when present; pointer text otherwise |
-| `B` and `G` | Text pointer to a binary block | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; pointer text otherwise; writes disabled |
+| `B` and `G` | Text pointer to a binary block | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; FPT writes append a binary block; DBT writes disabled |
 
 The parser therefore reads the declared header and record boundaries, checks
 field names and widths, uses the language-driver byte for the supported
@@ -40,9 +40,9 @@ so non-memo DBF mutations do not rewrite them as text. Text changes append to
 the existing `.dbt` or `.fpt` sidecar, using the dBASE III terminator, the
 dBASE IV header-inclusive length, or the FPT length as appropriate, and update
 the DBF pointer in a `TXDM` WAL snapshot; startup recovery replaces both files
-from that snapshot. Binary
-block writes, OLE semantics, and other code-page conversion remain explicit
-future work.
+from that snapshot. FPT binary writes accept hex text and append a type-0
+binary block; DBT binary writes, OLE semantics, and other code-page conversion
+remain explicit future work.
 
 The reader uses the declared record count as its boundary and does not require
 the trailing `0x1a` when the declared records are complete. It still preserves

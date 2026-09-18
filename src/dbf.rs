@@ -141,12 +141,19 @@ struct MemoSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum MemoUpdate {
+    Text(String),
+    Binary(Vec<u8>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct RecoverySnapshot {
     dbf: Vec<u8>,
     memo: Option<MemoSnapshot>,
 }
 
-type PreparedStorage = (Map<String, Value>, BTreeMap<(usize, String), String>);
+type MemoUpdates = BTreeMap<(usize, String), MemoUpdate>;
+type PreparedStorage = (Map<String, Value>, MemoUpdates);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DbfTable {
@@ -156,7 +163,7 @@ pub struct DbfTable {
     stored_values: Vec<Map<String, Value>>,
     bytes: Vec<u8>,
     memo: Option<MemoFile>,
-    memo_updates: BTreeMap<(usize, String), String>,
+    memo_updates: MemoUpdates,
 }
 
 impl DbfTable {
@@ -435,17 +442,16 @@ impl DbfTable {
             .map_err(|_| DbfError::Invalid("record count exceeds DBF limit".into()))?;
         let mut storage_values = values.clone();
         let mut memo_updates = BTreeMap::new();
-        if self.memo.is_some() {
+        if let Some(memo_format) = self.memo.as_ref().map(|memo| memo.format) {
             for field in self
                 .fields
                 .iter()
-                .filter(|field| is_memo_field(field.field_type))
+                .filter(|field| is_sidecar_field(field.field_type))
             {
                 let value = values.get(&field.name).unwrap_or(&Value::Null);
-                let text = value_text(value, field)?;
                 storage_values.insert(field.name.clone(), empty_memo_value(field));
-                if !text.is_empty() {
-                    memo_updates.insert((number - 1, field.name.clone()), text);
+                if let Some(update) = sidecar_update(value, field, memo_format)? {
+                    memo_updates.insert((number - 1, field.name.clone()), update);
                 }
             }
         }
@@ -648,13 +654,21 @@ impl DbfTable {
                     if text.is_empty() {
                         memo_updates.remove(&key);
                     } else {
-                        memo_updates.insert(key, text);
+                        memo_updates.insert(key, MemoUpdate::Text(text));
                     }
                 } else {
-                    return Err(DbfError::Invalid(format!(
-                        "binary field {} cannot be changed with a memo sidecar",
-                        field.name
-                    )));
+                    let memo_format = self
+                        .memo
+                        .as_ref()
+                        .map(|memo| memo.format)
+                        .expect("memo presence checked above");
+                    let update = sidecar_update(&values[&field.name], field, memo_format)?;
+                    storage_values.insert(field.name.clone(), empty_memo_value(field));
+                    if let Some(update) = update {
+                        memo_updates.insert(key, update);
+                    } else {
+                        memo_updates.remove(&key);
+                    }
                 }
             }
         }
@@ -687,16 +701,33 @@ impl DbfTable {
             let field = self
                 .fields
                 .iter()
-                .find(|field| field.name == field_name && is_memo_field(field.field_type))
+                .find(|field| field.name == field_name && is_sidecar_field(field.field_type))
                 .cloned()
-                .ok_or_else(|| DbfError::Invalid(format!("memo field {field_name} not found")))?;
-            let pointer = if value.is_empty() {
-                encode_memo_pointer(&field, 0)?
-            } else {
-                let bytes =
-                    encode_character(&Value::String(value), &field, self.header.language_driver)?;
-                let block = memo.append_text(&bytes)?;
-                encode_memo_pointer(&field, block)?
+                .ok_or_else(|| {
+                    DbfError::Invalid(format!("sidecar field {field_name} not found"))
+                })?;
+            let pointer = match value {
+                MemoUpdate::Text(value) => {
+                    if value.is_empty() {
+                        encode_memo_pointer(&field, 0)?
+                    } else {
+                        let bytes = encode_character(
+                            &Value::String(value),
+                            &field,
+                            self.header.language_driver,
+                        )?;
+                        let block = memo.append_text(&bytes)?;
+                        encode_memo_pointer(&field, block)?
+                    }
+                }
+                MemoUpdate::Binary(bytes) => {
+                    if bytes.is_empty() {
+                        encode_memo_pointer(&field, 0)?
+                    } else {
+                        let block = memo.append_binary(&bytes)?;
+                        encode_memo_pointer(&field, block)?
+                    }
+                }
             };
             let record_offset = self.record_offset(index)?;
             let start = record_offset
@@ -712,7 +743,7 @@ impl DbfTable {
             target.copy_from_slice(&pointer);
             self.stored_values[index].insert(
                 field.name,
-                decode_field(b'M', target, self.header.language_driver),
+                decode_field(field.field_type, target, self.header.language_driver),
             );
         }
 
@@ -994,18 +1025,6 @@ impl MemoFile {
     }
 
     fn append_text(&mut self, data: &[u8]) -> Result<u32, DbfError> {
-        if self.bytes.len() < 4 {
-            return Err(DbfError::Invalid("memo header is truncated".into()));
-        }
-        let start_block = self.bytes.len() / self.block_size
-            + usize::from(self.bytes.len() % self.block_size != 0);
-        let aligned_length = start_block
-            .checked_mul(self.block_size)
-            .ok_or_else(|| DbfError::Invalid("memo block offset overflows usize".into()))?;
-        if self.bytes.len() < aligned_length {
-            self.bytes.resize(aligned_length, 0);
-        }
-
         let mut payload = Vec::new();
         match self.format {
             MemoFormat::Dbase3 => {
@@ -1036,7 +1055,36 @@ impl MemoFile {
                 payload.extend_from_slice(data);
             }
         }
+        self.append_payload(payload)
+    }
 
+    fn append_binary(&mut self, data: &[u8]) -> Result<u32, DbfError> {
+        if self.format != MemoFormat::FoxPro {
+            return Err(DbfError::Invalid(
+                "binary sidecar writes require an FPT file".into(),
+            ));
+        }
+        let length = u32::try_from(data.len())
+            .map_err(|_| DbfError::Invalid("binary data is too long".into()))?;
+        let mut payload = Vec::with_capacity(8usize.saturating_add(data.len()));
+        payload.extend_from_slice(&0u32.to_be_bytes());
+        payload.extend_from_slice(&length.to_be_bytes());
+        payload.extend_from_slice(data);
+        self.append_payload(payload)
+    }
+
+    fn append_payload(&mut self, mut payload: Vec<u8>) -> Result<u32, DbfError> {
+        if self.bytes.len() < 4 {
+            return Err(DbfError::Invalid("memo header is truncated".into()));
+        }
+        let start_block = self.bytes.len() / self.block_size
+            + usize::from(self.bytes.len() % self.block_size != 0);
+        let aligned_length = start_block
+            .checked_mul(self.block_size)
+            .ok_or_else(|| DbfError::Invalid("memo block offset overflows usize".into()))?;
+        if self.bytes.len() < aligned_length {
+            self.bytes.resize(aligned_length, 0);
+        }
         let block_count =
             payload.len() / self.block_size + usize::from(payload.len() % self.block_size != 0);
         let padded_length = block_count
@@ -1098,6 +1146,70 @@ fn is_binary_field(field_type: u8) -> bool {
 
 fn is_sidecar_field(field_type: u8) -> bool {
     is_memo_field(field_type) || is_binary_field(field_type)
+}
+
+fn sidecar_update(
+    value: &Value,
+    field: &FieldDescriptor,
+    memo_format: MemoFormat,
+) -> Result<Option<MemoUpdate>, DbfError> {
+    if is_memo_field(field.field_type) {
+        let text = value_text(value, field)?;
+        return Ok((!text.is_empty()).then_some(MemoUpdate::Text(text)));
+    }
+
+    let bytes = binary_value(value, field)?;
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+    if memo_format != MemoFormat::FoxPro {
+        return Err(DbfError::Invalid(
+            "binary sidecar writes require an FPT file".into(),
+        ));
+    }
+    Ok(Some(MemoUpdate::Binary(bytes)))
+}
+
+fn binary_value(value: &Value, field: &FieldDescriptor) -> Result<Vec<u8>, DbfError> {
+    let Some(text) = value.as_str() else {
+        if value.is_null() {
+            return Ok(Vec::new());
+        }
+        return Err(DbfError::Invalid(format!(
+            "binary field {} requires an even-length hexadecimal string or null",
+            field.name
+        )));
+    };
+    let bytes = text.as_bytes();
+    if bytes.len() % 2 != 0 {
+        return Err(DbfError::Invalid(format!(
+            "binary field {} requires an even-length hexadecimal string",
+            field.name
+        )));
+    }
+    bytes
+        .chunks_exact(2)
+        .map(|pair| {
+            let high = hex_digit(pair[0]);
+            let low = hex_digit(pair[1]);
+            match (high, low) {
+                (Some(high), Some(low)) => Ok(high << 4 | low),
+                _ => Err(DbfError::Invalid(format!(
+                    "binary field {} contains a non-hexadecimal character",
+                    field.name
+                ))),
+            }
+        })
+        .collect()
+}
+
+fn hex_digit(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 fn empty_memo_value(field: &FieldDescriptor) -> Value {
@@ -2055,7 +2167,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_binary_fpt_sidecar_as_hex_and_rejects_binary_writes() {
+    fn reads_and_writes_binary_fpt_sidecar_as_hex() {
         let path =
             std::env::temp_dir().join(format!("txbase-foxpro-binary-{}.dbf", std::process::id()));
         let memo_path = path.with_extension("fpt");
@@ -2081,7 +2193,7 @@ mod tests {
 
         let mut table = DbfTable::from_path(&path).unwrap();
         assert_eq!(table.active_record(1).unwrap().values["NAME"], "0001ff7f");
-        let error = table
+        table
             .patch_record(
                 1,
                 serde_json::json!({"NAME": "deadbeef"})
@@ -2089,8 +2201,21 @@ mod tests {
                     .unwrap()
                     .clone(),
             )
-            .unwrap_err();
-        assert!(error.to_string().contains("binary field NAME"));
+            .unwrap();
+        table.save_with_wal(&path).unwrap();
+
+        let mut reread = DbfTable::from_path(&path).unwrap();
+        assert_eq!(reread.active_record(1).unwrap().values["NAME"], "deadbeef");
+        assert_eq!(
+            &reread.to_bytes()[binary_start..binary_start + 10],
+            b"         2"
+        );
+        let memo = MemoFile::open(&memo_path, 0xf5).unwrap();
+        assert_eq!(memo.read(2).unwrap().unwrap(), [0xde, 0xad, 0xbe, 0xef]);
+        assert_eq!(
+            &memo.bytes[DBT_BLOCK_SIZE * 2..DBT_BLOCK_SIZE * 2 + 4],
+            &[0; 4]
+        );
 
         table
             .patch_record(
@@ -2099,12 +2224,13 @@ mod tests {
             )
             .unwrap();
         table.save_with_wal(&path).unwrap();
-        let reread = DbfTable::from_path(&path).unwrap();
-        assert_eq!(reread.active_record(1).unwrap().values["NAME"], "0001ff7f");
+
+        reread = DbfTable::from_path(&path).unwrap();
+        assert_eq!(reread.active_record(1).unwrap().values["NAME"], "deadbeef");
         assert_eq!(reread.active_record(1).unwrap().values["AGE"], 30);
         assert_eq!(
             &reread.to_bytes()[binary_start..binary_start + 10],
-            b"         1"
+            b"         2"
         );
 
         fs::remove_file(path).unwrap();
