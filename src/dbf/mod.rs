@@ -12,6 +12,8 @@ mod codec;
 mod codepages;
 mod lock;
 mod memo;
+#[cfg(test)]
+mod mutation_model_tests;
 mod recovery;
 #[cfg(test)]
 mod tests;

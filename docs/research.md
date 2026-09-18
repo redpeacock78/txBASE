@@ -237,7 +237,7 @@ for this first prototype.
 The txbase quality path is staged:
 
 1. Keep parser tests for valid headers, field layouts, deleted records, truncated input, and invalid markers.
-2. Add an in-memory reference model and compare generated mutation sequences with the DBF mutation layer.
+2. Compare generated mutation sequences with an in-memory reference model; the DBF suite now covers this boundary.
 3. Add malformed DBF, memo, index, WAL, and JSON input corpora.
 4. Add crash-boundary and recovery tests around WAL sync and checkpoint publication.
 5. Add compatibility fixtures produced by independent xBase implementations.
