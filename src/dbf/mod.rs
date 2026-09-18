@@ -19,6 +19,7 @@ mod malformed_memo_tests;
 mod malformed_tests;
 mod memo;
 mod mutation;
+mod mutation_auto;
 mod mutation_memo;
 #[cfg(test)]
 mod mutation_model_tests;
