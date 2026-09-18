@@ -174,7 +174,7 @@ fn persist_mutation(
     match table.save_with_wal(dbf_path) {
         Ok(()) => Ok(()),
         Err(dbf_error) => {
-            *table = original;
+            *table = DbfTable::from_path(dbf_path).unwrap_or(original);
             Err(json_response(
                 500,
                 error("storage_error", &dbf_error.to_string()),
@@ -415,5 +415,49 @@ mod tests {
         );
         let response = query_response(&mut valid, "/records", &table);
         assert_eq!(response.status_code(), StatusCode(200));
+    }
+
+    #[test]
+    fn reloads_disk_state_after_persistence_failure() {
+        let path =
+            std::env::temp_dir().join(format!("txbase-server-reload-{}.dbf", std::process::id()));
+        let memo_path = path.with_extension("dbt");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&memo_path);
+
+        let mut bytes = fixture();
+        bytes[0] = 0x83;
+        bytes[64 + 11] = b'M';
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let memo_start = record_start + 4;
+        bytes[memo_start..memo_start + 10].copy_from_slice(b"         1");
+        fs::write(&path, &bytes).unwrap();
+
+        let mut memo = vec![0; 512 * 2];
+        memo[512..524].copy_from_slice(b"memo before\x1a");
+        fs::write(&memo_path, memo).unwrap();
+
+        let mut table = DbfTable::from_path(&path).unwrap();
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "memo after"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        let original = DbfTable::from_path(&path).unwrap();
+
+        fs::remove_file(&memo_path).unwrap();
+        let age_start = record_start + 14;
+        bytes[age_start..age_start + 3].copy_from_slice(b" 30");
+        fs::write(&path, bytes).unwrap();
+
+        let response = persist_mutation(&mut table, original, &path).unwrap_err();
+        assert_eq!(response.status_code(), StatusCode(500));
+        assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
+
+        fs::remove_file(path).unwrap();
     }
 }
