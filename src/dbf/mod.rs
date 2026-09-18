@@ -12,6 +12,7 @@ mod codec;
 mod codepages;
 mod lock;
 mod memo;
+mod recovery;
 #[cfg(test)]
 mod tests;
 mod wal;
@@ -31,9 +32,7 @@ use wal::{
     ByteDelta, DELTA_MAGIC, MEMO_SNAPSHOT_MAGIC, OPERATION_MAGIC, SNAPSHOT_MAGIC, apply_byte_delta,
     decode_operation_payload, decode_snapshot,
 };
-use wal::{
-    decode_wal_payload, delta_payload, memo_snapshot_payload, operation_payload, snapshot_payload,
-};
+use wal::{delta_payload, memo_snapshot_payload, operation_payload, snapshot_payload};
 
 const CLASSIC_HEADER_SIZE: usize = 32;
 const CLASSIC_DESCRIPTOR_SIZE: usize = 32;
@@ -222,21 +221,7 @@ impl DbfTable {
         let path = path.as_ref();
         let _lock = TableLock::acquire(path)?;
         Self::recover_wal(path)?;
-        let dbf = fs::read(path)?;
-        let mut table = Self::from_bytes(&dbf)?;
-        if table.has_sidecar_fields() {
-            if let Some(memo_path) = find_memo_path(path) {
-                let memo = MemoFile::open(&memo_path, table.header.version)?;
-                table.resolve_memos(&memo)?;
-                table.memo = Some(memo);
-            }
-        }
-        table.source = Some(PersistedState {
-            path: path.to_path_buf(),
-            dbf,
-            memo: table.memo.as_ref().map(|memo| memo.bytes.clone()),
-        });
-        Ok(table)
+        Self::load_path(path)
     }
 
     fn has_sidecar_fields(&self) -> bool {
@@ -546,38 +531,6 @@ impl DbfTable {
             memo: prepared.memo.as_ref().map(|memo| memo.bytes.clone()),
         });
         *self = prepared;
-        Ok(())
-    }
-
-    fn recover_wal(path: &Path) -> Result<(), DbfError> {
-        let wal_path = path.with_extension("txbase.wal");
-        if !wal_path.exists() {
-            return Ok(());
-        }
-        let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
-        let snapshot =
-            wal.records().iter().rev().find_map(|(_, payload)| {
-                match decode_wal_payload(path, payload) {
-                    Ok(Some(snapshot)) => Some(Ok(snapshot)),
-                    Ok(None) => None,
-                    Err(error) => Some(Err(error)),
-                }
-            });
-        let Some(snapshot) = snapshot else {
-            return Ok(());
-        };
-        let snapshot = snapshot?;
-        Self::from_bytes(&snapshot.dbf)?;
-        if let Some(memo) = &snapshot.memo {
-            let memo_path = find_memo_path(path)
-                .unwrap_or_else(|| path.with_extension(memo.format.extension()));
-            save_bytes_to(&memo_path, &memo.bytes, "txbase.memo.tmp")?;
-        }
-        save_bytes_to(path, &snapshot.dbf, "txbase.tmp")?;
-        if wal.clear().is_ok() {
-            drop(wal);
-            let _ = fs::remove_file(wal_path);
-        }
         Ok(())
     }
 

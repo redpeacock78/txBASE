@@ -100,11 +100,14 @@ values on existing records, and
 replaces the DBF through a synced temporary file.
 The transaction module now supplies a length-prefixed `TXWL` file WAL and a
 snapshot transaction manager. Before an atomic DBF replacement, a path-loaded
-mutation appends a `TXDP` byte-range delta when it is smaller than the full
-payload. Source-less or larger changes use a `TXDB` record for DBF-only
-changes, or a `TXDM` record containing the complete new DBF and memo snapshots.
-The WAL is synced before replacement, and `DbfTable::from_path` replays the
-latest delta or snapshot left by an interrupted mutation.
+HTTP mutation first appends and syncs a versioned `TXOP` intent, then appends
+and syncs a `TXDP` byte-range delta when it is smaller than the full payload.
+Source-less or larger changes use a `TXDB` record for DBF-only changes, or a
+`TXDM` record containing the complete new DBF and memo snapshots. The WAL is
+synced before replacement, and `DbfTable::from_path` replays the latest delta
+or snapshot left by an interrupted mutation. If only the durable `TXOP` intent
+remains, it replays the supported mutation and writes a state payload before
+returning the loaded table.
 
 The transaction WAL stores a four-byte magic, a little-endian payload length,
 a monotonically increasing LSN, and the payload. Opening a WAL validates
@@ -113,11 +116,12 @@ interpret arbitrary payloads. The DBF integration recognizes `TXDP` deltas as
 well as `TXDB` and `TXDM` snapshots. A delta carries base/target lengths and
 hashes plus non-overlapping byte patches; recovery accepts an already-applied
 target so a retry is idempotent, and rejects a different base. This is still a
-byte-range optimization rather than an operation replay log. HTTP mutations
-prepend a versioned `TXOP` intent record before the state payload; recovery
-still applies only the committed `TXDB`/`TXDM`/`TXDP` state. Save paths now use
-an exclusive table lock, while full fine-grained semantics, operation replay,
-and broader multi-writer coordination remain future work. A
+byte-range optimization in the state record. HTTP mutations prepend a
+versioned `TXOP` intent record before the state payload; recovery replays the
+supported `POST`/`PUT`/`PATCH`/`DELETE` intent only when no state payload is
+present, and otherwise applies the committed `TXDB`/`TXDM`/`TXDP` state. Save
+paths now use an exclusive table lock, while broader multi-writer coordination
+and fine-grained operation semantics remain future work. A
 table loaded from a path records the DBF and memo bytes it read and refuses to
 save over an externally changed snapshot.
 
@@ -271,9 +275,10 @@ byte-range delta when it is smaller than a complete `TXDB` or `TXDM` snapshot;
 otherwise it appends that snapshot. The WAL is synced before replacement. A
 subsequent `DbfTable::from_path` replays the delta or snapshot if the process
 stopped before replacement completed. HTTP mutation intents are recorded as
-`TXOP` before the state payload, but the WAL does not yet replay operations;
-save paths use an exclusive table lock, while broader concurrent-writer
-coordination remains outside the WAL.
+`TXOP` before the state payload; if the state payload is missing, startup
+replays the supported intent and materializes one. Save paths use an exclusive
+table lock, while broader concurrent-writer coordination remains outside the
+WAL.
 
 The [HTTP QUERY method is now RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html).
 It is safe and idempotent, carries query semantics in request content, and

@@ -10,8 +10,9 @@ file-backed WAL and snapshot transaction core. Path-loaded mutations write a
 mutations fall back to `TXDB` or `TXDM` snapshots before atomic replacement
 and startup recovery. HTTP mutations also append a durable `TXOP` intent
 record before their state payload. An exclusive table lock serializes save
-paths; operation replay and broader concurrent-writer coordination remain
-later phases.
+paths, and startup recovery replays a durable mutation intent when its state
+payload is missing; broader concurrent-writer coordination remains a later
+phase.
 
 ## What works now
 
@@ -120,7 +121,7 @@ Use `--bind ADDRESS` to select another listener address.
 
 ```text
 src/
-├── dbf/            DBF table operations, memo sidecars, field codecs, and tests
+├── dbf/            DBF operations, recovery, memo sidecars, codecs, and tests
 ├── query.rs        JSON query document and executor
 ├── server.rs       HTTP routing, RFC 10008 checks, and DBF mutations
 ├── storage.rs      range-based storage boundary
@@ -182,11 +183,12 @@ writes a complete `TXDB` snapshot for DBF-only changes or a `TXDM` snapshot
 containing DBF and memo bytes. It syncs the WAL before atomically replacing the
 affected files. `DbfTable::from_path` replays either form after an interrupted
 mutation and checks the delta base before applying it. HTTP mutation intent is
-recorded as `TXOP` before the state payload; recovery applies only the
-committed `TXDB`/`TXDM`/`TXDP` state, so an orphaned intent cannot change data.
-Save paths take an exclusive table lock, while operation replay and broader
-concurrent-writer coordination remain outside this slice. A loaded table
-rejects stale DBF or memo sidecar state before save.
+recorded as `TXOP` before the state payload. If a crash leaves only that
+intent, `DbfTable::from_path` replays the supported mutation and materializes
+a state payload; when a state payload is present, recovery applies that
+committed state instead. Save paths take an exclusive table lock, while
+broader concurrent-writer coordination remains outside this slice. A loaded
+table rejects stale DBF or memo sidecar state before save.
 
 Text memo values are read from and appended to `.dbt` or `.fpt` sidecars.
 Changing an `M` field writes the new block and DBF pointer as one recoverable

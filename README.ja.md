@@ -9,7 +9,8 @@ pathから読み込んだmutationは、完全snapshotより小さい場合に`TX
 それ以外はDBF-onlyなら`TXDB`、memoを含むなら`TXDM` snapshotへfallbackし、syncしてからDBF/sidecarをatomic replaceします。
 起動時には未完了のdeltaまたはsnapshotを復旧します。
 HTTP mutationはstate payloadの前にdurableな`TXOP` intent recordもWALへ追加します。
-xBase互換フロントエンド、operationのreplay、lockを超える複数writerの調停は後続工程です。
+state payloadが残らないクラッシュでは、起動時に対応するmutationをreplayしてstate payloadを再生成します。
+lockを超える複数writerの調停は後続工程です。
 
 ## 現在できること
 
@@ -149,7 +150,7 @@ operatorと通常fieldの混在、および同一fieldへの複数operator適用
 削除済みrecord numberは再利用せず、以後の読み取りは`404 Not Found`になります。
 pathから読み込んだ変更では、完全snapshotより小さい場合にDBFとmemo sidecarの差分を`TXDP` byte-range deltaとしてWALへ書き込みます。それ以外はDBF-only変更では`TXDB`、memo field変更ではDBFとsidecarを含む`TXDM` snapshotを使います。
 syncしてから対象ファイルを置き換え、`DbfTable::from_path`は中断されたmutationのdeltaまたはsnapshotを復旧します。
-HTTP mutationのintentはstate payloadの前に`TXOP`として記録します。復旧時はcommit済みの`TXDB`、`TXDM`、`TXDP`だけを適用し、孤立したintentでdataは変更しません。保存経路はexclusive table lockで直列化しますが、operation replayとlockを超える完全な複数writerの調停は未対応です。読み込み後のDBF/sidecar変更は検出して拒否します。
+HTTP mutationのintentはstate payloadの前に`TXOP`として記録します。state payloadが残らない場合は対応するmutationをreplayしてstate payloadを再生成し、state payloadがある場合はcommit済みの`TXDB`、`TXDM`、`TXDP`を優先します。保存経路はexclusive table lockで直列化しますが、lockを超える完全な複数writerの調停は未対応です。読み込み後のDBF/sidecar変更は検出して拒否します。
 text memoは`.dbt`または`.fpt`から読み取り、変更時は新しいblockをappendしてDBF pointerも更新します。
 sidecarとDBFは、可能なら`TXDP` delta、必要なら`TXDM` WAL snapshotで復旧可能な単位として保存します。
 `B`/`G`/`P`のbinary block書き込みはhex textとしてdBASE III DBT、dBASE IV DBT、FPTに対応し、dBASE IV DBTのsidecar headerにあるblock sizeも尊重します。dBASE III DBTの`0x1a1a` terminatorと衝突するbinary値は拒否します。`P`はVisual FoxProのPicture blockとして扱います。OLE semanticsとこの範囲外のmemo形式は未対応です。

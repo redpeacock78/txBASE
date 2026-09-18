@@ -1628,6 +1628,38 @@ fn recovers_dbf_delta_from_wal_before_reading() {
 }
 
 #[test]
+fn replays_operation_intent_when_state_payload_is_missing() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-operation-recovery-{}-{}.dbf",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("test")
+    ));
+    let wal_path = path.with_extension("txbase.wal");
+    let lock_path = path.with_extension("txbase.lock");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&lock_path);
+    fs::write(&path, fixture()).unwrap();
+
+    let operation = OperationIr {
+        method: OperationMethod::Patch,
+        path: "/records/1".into(),
+        body: Some(serde_json::json!({"$inc": {"AGE": 1}})),
+    };
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(&operation_payload(&operation).unwrap()).unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    let recovered = DbfTable::from_path(&path).unwrap();
+    assert_eq!(recovered.active_record(1).unwrap().values["AGE"], 30);
+    assert!(!wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(lock_path).unwrap();
+}
+
+#[test]
 fn recovers_dbf_and_memo_from_txdm_snapshot() {
     let path = std::env::temp_dir().join(format!(
         "txbase-dbf-memo-recovery-{}-{}.dbf",
