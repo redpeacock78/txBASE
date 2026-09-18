@@ -170,7 +170,7 @@ fn memo_format_for_version(version: u8) -> Option<MemoFormat> {
     match version {
         0x83 => Some(MemoFormat::Dbase3),
         0x8b => Some(MemoFormat::Dbase4),
-        0xf5 => Some(MemoFormat::FoxPro),
+        0x30 | 0xf5 => Some(MemoFormat::FoxPro),
         _ => None,
     }
 }
@@ -2189,6 +2189,10 @@ mod tests {
         assert_eq!(memo_index(b"    ", MemoFormat::FoxPro).unwrap(), None);
         assert_eq!(
             decode_field(b'M', &block.to_be_bytes(), 0, Some(MemoFormat::FoxPro)),
+            serde_json::json!(block)
+        );
+        assert_eq!(
+            decode_field(b'M', &block.to_be_bytes(), 0, memo_format_for_version(0x30)),
             serde_json::json!(block)
         );
     }

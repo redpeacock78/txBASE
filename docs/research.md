@@ -54,6 +54,9 @@ The sidecar rule is deliberate: WAL, MVCC metadata, indexes, and transaction
 state belong in separate files so a checkpointed DBF remains readable by older
 xBase tools.
 
+Four-byte memo pointers use big-endian order for FoxPro `0xF5` and Visual
+FoxPro `0x30` tables, matching their FPT sidecars.
+
 The mutation layer currently reuses the parsed header and field descriptors.
 It supports scalar JSON values for the field types already decoded by the
 reader, preserves physical record numbers, writes the deletion marker for
