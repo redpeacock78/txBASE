@@ -1141,7 +1141,10 @@ impl MemoFile {
 
 fn find_memo_path(path: &Path) -> Option<std::path::PathBuf> {
     let stem = path.file_stem()?;
-    let directory = path.parent().unwrap_or_else(|| Path::new("."));
+    let directory = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     for extension in ["fpt", "dbt"] {
         let candidate = path.with_extension(extension);
         if candidate.is_file() {
