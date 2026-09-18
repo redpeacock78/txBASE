@@ -21,7 +21,7 @@ The common field encodings are also part of the compatibility contract:
 
 | Type | On-disk representation | Initial txbase behavior |
 | --- | --- | --- |
-| `C` | Space-padded character bytes | CP437/CP850 for language-driver IDs `0x01`/`0x02`, Windows-1252 for `0x03`/`0x57`; UTF-8-lossy fallback otherwise |
+| `C` | Space-padded character bytes | CP437/CP850 for `0x01`/`0x02`, CP852 for common IDs including `0x1f`/`0x64`, CP866 for `0x26`/`0x65`, Windows-1252 for `0x03`/`0x57`; UTF-8-lossy fallback otherwise |
 | `D` | Eight bytes in `YYYYMMDD` form | String |
 | `N` and `F` | Right-justified numeric text | JSON number when finite and parseable |
 | `L` | Logical marker such as `T` or `F` | Boolean or JSON null for an unknown marker |

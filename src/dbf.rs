@@ -30,6 +30,18 @@ const CP850_UPPER: &str = concat!(
     "\u{2510}\u{2514}\u{2534}\u{252c}\u{251c}\u{2500}\u{253c}\u{e3}\u{c3}\u{255a}\u{2554}\u{2569}\u{2566}\u{2560}\u{2550}\u{256c}\u{a4}\u{f0}\u{d0}\u{ca}\u{cb}\u{c8}\u{131}\u{cd}\u{ce}\u{cf}\u{2518}\u{250c}\u{2588}\u{2584}\u{a6}\u{cc}\u{2580}",
     "\u{d3}\u{df}\u{d4}\u{d2}\u{f5}\u{d5}\u{b5}\u{fe}\u{de}\u{da}\u{db}\u{d9}\u{fd}\u{dd}\u{af}\u{b4}\u{ad}\u{b1}\u{2017}\u{be}\u{b6}\u{a7}\u{f7}\u{b8}\u{b0}\u{a8}\u{b7}\u{b9}\u{b3}\u{b2}\u{25a0}\u{a0}"
 );
+const CP852_UPPER: &str = concat!(
+    "\u{c7}\u{fc}\u{e9}\u{e2}\u{e4}\u{16f}\u{107}\u{e7}\u{142}\u{eb}\u{150}\u{151}\u{ee}\u{179}\u{c4}\u{106}\u{c9}\u{139}\u{13a}\u{f4}\u{f6}\u{13d}\u{13e}\u{15a}\u{15b}\u{d6}\u{dc}\u{164}\u{165}\u{141}\u{d7}\u{10d}",
+    "\u{e1}\u{ed}\u{f3}\u{fa}\u{104}\u{105}\u{17d}\u{17e}\u{118}\u{119}\u{ac}\u{17a}\u{10c}\u{15f}\u{ab}\u{bb}\u{2591}\u{2592}\u{2593}\u{2502}\u{2524}\u{c1}\u{c2}\u{11a}\u{15e}\u{2563}\u{2551}\u{2557}\u{255d}\u{17b}\u{17c}\u{2510}",
+    "\u{2514}\u{2534}\u{252c}\u{251c}\u{2500}\u{253c}\u{102}\u{103}\u{255a}\u{2554}\u{2569}\u{2566}\u{2560}\u{2550}\u{256c}\u{a4}\u{111}\u{110}\u{10e}\u{cb}\u{10f}\u{147}\u{cd}\u{ce}\u{11b}\u{2518}\u{250c}\u{2588}\u{2584}\u{162}\u{16e}\u{2580}",
+    "\u{d3}\u{df}\u{d4}\u{143}\u{144}\u{148}\u{160}\u{161}\u{154}\u{da}\u{155}\u{170}\u{fd}\u{dd}\u{163}\u{b4}\u{ad}\u{2dd}\u{2db}\u{2c7}\u{2d8}\u{a7}\u{f7}\u{b8}\u{b0}\u{a8}\u{2d9}\u{171}\u{158}\u{159}\u{25a0}\u{a0}"
+);
+const CP866_UPPER: &str = concat!(
+    "\u{410}\u{411}\u{412}\u{413}\u{414}\u{415}\u{416}\u{417}\u{418}\u{419}\u{41a}\u{41b}\u{41c}\u{41d}\u{41e}\u{41f}\u{420}\u{421}\u{422}\u{423}\u{424}\u{425}\u{426}\u{427}\u{428}\u{429}\u{42a}\u{42b}\u{42c}\u{42d}\u{42e}\u{42f}",
+    "\u{430}\u{431}\u{432}\u{433}\u{434}\u{435}\u{436}\u{437}\u{438}\u{439}\u{43a}\u{43b}\u{43c}\u{43d}\u{43e}\u{43f}\u{2591}\u{2592}\u{2593}\u{2502}\u{2524}\u{2561}\u{2562}\u{2556}\u{2555}\u{2563}\u{2551}\u{2557}\u{255d}\u{255c}\u{255b}\u{2510}",
+    "\u{2514}\u{2534}\u{252c}\u{251c}\u{2500}\u{253c}\u{255e}\u{255f}\u{255a}\u{2554}\u{2569}\u{2566}\u{2560}\u{2550}\u{256c}\u{2567}\u{2568}\u{2564}\u{2565}\u{2559}\u{2558}\u{2552}\u{2553}\u{256b}\u{256a}\u{2518}\u{250c}\u{2588}\u{2584}\u{258c}\u{2590}\u{2580}",
+    "\u{440}\u{441}\u{442}\u{443}\u{444}\u{445}\u{446}\u{447}\u{448}\u{449}\u{44a}\u{44b}\u{44c}\u{44d}\u{44e}\u{44f}\u{401}\u{451}\u{404}\u{454}\u{407}\u{457}\u{40e}\u{45e}\u{b0}\u{2219}\u{b7}\u{221a}\u{2116}\u{a4}\u{25a0}\u{a0}"
+);
 
 #[derive(Debug)]
 pub enum DbfError {
@@ -1141,6 +1153,8 @@ fn encode_character(
     let encoded = match language_driver {
         0x01 => encode_codepage(&text, CP437_UPPER),
         0x02 => encode_codepage(&text, CP850_UPPER),
+        0x1f | 0x22 | 0x23 | 0x40 | 0x64 | 0x87 => encode_codepage(&text, CP852_UPPER),
+        0x26 | 0x65 => encode_codepage(&text, CP866_UPPER),
         0x03 | 0x57 => encode_windows_1252(&text),
         _ => Some(text.into_bytes()),
     };
@@ -1148,6 +1162,8 @@ fn encode_character(
         let code_page = match language_driver {
             0x01 => "CP437",
             0x02 => "CP850",
+            0x1f | 0x22 | 0x23 | 0x40 | 0x64 | 0x87 => "CP852",
+            0x26 | 0x65 => "CP866",
             0x03 | 0x57 => "Windows-1252",
             _ => "the declared code page",
         };
@@ -1338,6 +1354,8 @@ fn text(bytes: &[u8], language_driver: u8) -> String {
     match language_driver {
         0x01 => decode_codepage(bytes, CP437_UPPER),
         0x02 => decode_codepage(bytes, CP850_UPPER),
+        0x1f | 0x22 | 0x23 | 0x40 | 0x64 | 0x87 => decode_codepage(bytes, CP852_UPPER),
+        0x26 | 0x65 => decode_codepage(bytes, CP866_UPPER),
         0x03 | 0x57 => decode_windows_1252(bytes),
         _ => String::from_utf8_lossy(bytes).into_owned(),
     }
@@ -1602,6 +1620,38 @@ mod tests {
             .unwrap();
         assert_eq!(table.to_bytes()[name_start], 0x9b);
 
+        bytes[29] = 0x64;
+        bytes[name_start..name_start + 10].fill(b' ');
+        bytes[name_start] = 0x88;
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["NAME"], "ł");
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "ł"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        assert_eq!(table.to_bytes()[name_start], 0x88);
+
+        bytes[29] = 0x65;
+        bytes[name_start..name_start + 10].fill(b' ');
+        bytes[name_start] = 0x9f;
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["NAME"], "Я");
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "Я"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        assert_eq!(table.to_bytes()[name_start], 0x9f);
+
         let error = table
             .patch_record(
                 1,
@@ -1611,7 +1661,7 @@ mod tests {
                     .clone(),
             )
             .unwrap_err();
-        assert!(error.to_string().contains("outside CP850"));
+        assert!(error.to_string().contains("outside CP866"));
     }
 
     #[test]
