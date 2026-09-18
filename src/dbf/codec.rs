@@ -1,6 +1,7 @@
 use super::codepages::{
     CP437_UPPER, CP850_UPPER, CP852_UPPER, CP866_UPPER, CP1250_UPPER, CP1251_UPPER, CP1253_UPPER,
-    CP1254_UPPER, decode_codepage, decode_windows_1252, encode_codepage, encode_windows_1252,
+    CP1254_UPPER, CP1255_UPPER, CP1256_UPPER, decode_codepage, decode_windows_1252,
+    encode_codepage, encode_windows_1252,
 };
 use super::{
     CLASSIC_DESCRIPTOR_SIZE, CURRENCY_SCALE, DbfError, FieldDescriptor, JULIAN_DAY_UNIX_EPOCH,
@@ -218,6 +219,8 @@ pub(super) fn encode_character(
         0xc9 => encode_codepage(&text, CP1251_UPPER),
         0xca => encode_codepage(&text, CP1254_UPPER),
         0xcb => encode_codepage(&text, CP1253_UPPER),
+        0x7d => encode_codepage(&text, CP1255_UPPER),
+        0x7e => encode_codepage(&text, CP1256_UPPER),
         0x03 | 0x57 => encode_windows_1252(&text),
         _ => Some(text.into_bytes()),
     };
@@ -231,6 +234,8 @@ pub(super) fn encode_character(
             0xc9 => "Windows-1251",
             0xca => "Windows-1254",
             0xcb => "Windows-1253",
+            0x7d => "Windows-1255",
+            0x7e => "Windows-1256",
             0x03 | 0x57 => "Windows-1252",
             _ => "the declared code page",
         };
@@ -870,6 +875,8 @@ pub(super) fn text(bytes: &[u8], language_driver: u8) -> String {
         0xc9 => decode_codepage(bytes, CP1251_UPPER),
         0xca => decode_codepage(bytes, CP1254_UPPER),
         0xcb => decode_codepage(bytes, CP1253_UPPER),
+        0x7d => decode_codepage(bytes, CP1255_UPPER),
+        0x7e => decode_codepage(bytes, CP1256_UPPER),
         0x03 | 0x57 => decode_windows_1252(bytes),
         _ => String::from_utf8_lossy(bytes).into_owned(),
     }

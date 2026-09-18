@@ -51,9 +51,9 @@ Character fields with language-driver ID `0x01` or `0x02` are decoded and
 encoded as CP437 or CP850; the common CP852 IDs (`0x1f`, `0x64`) and CP866
 IDs (`0x26`, `0x65`) are also supported. IDs `0x03` and `0x57` use
 Windows-1252; `0xc8` through `0xcb` use Windows-1250, Windows-1251,
-Windows-1254, and Windows-1253. Other drivers retain the existing
-UTF-8/lossy fallback. Writes reject characters that the selected code page
-cannot represent.
+Windows-1254, and Windows-1253; `0x7d` and `0x7e` use Windows-1255 and
+Windows-1256. Other drivers retain the existing UTF-8/lossy fallback. Writes
+reject characters that the selected code page cannot represent.
 
 ## Quick start
 

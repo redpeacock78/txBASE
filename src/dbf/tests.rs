@@ -570,6 +570,8 @@ fn decodes_and_encodes_windows_character_fields() {
         (0xc9, 0xdf, "Я", "Windows-1251"),
         (0xca, 0xdd, "İ", "Windows-1254"),
         (0xcb, 0xd9, "Ω", "Windows-1253"),
+        (0x7d, 0xe9, "י", "Windows-1255"),
+        (0x7e, 0xc7, "ا", "Windows-1256"),
     ] {
         let mut bytes = fixture();
         bytes[29] = language_driver;

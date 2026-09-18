@@ -34,7 +34,7 @@ xBase互換フロントエンド、operation単位のWAL record、複数writer�
 - `PATCH`では通常のfield objectと、型付きの`$set`、`$unset`、`$inc`を使えます。
 
 language-driver IDが`0x01`または`0x02`のcharacter fieldはCP437またはCP850、CP852の代表的なID（`0x1f`、`0x64`）とCP866の代表的なID（`0x26`、`0x65`）、`0x03`または`0x57`はWindows-1252として読み書きします。
-`0xc8`から`0xcb`はWindows-1250、Windows-1251、Windows-1254、Windows-1253として読み書きします。
+`0xc8`から`0xcb`はWindows-1250、Windows-1251、Windows-1254、Windows-1253、`0x7d`と`0x7e`はWindows-1255、Windows-1256として読み書きします。
 それ以外のdriverは既存のUTF-8とlossy fallbackを使います。
 選択されたcode pageで表現できない文字の書き込みは拒否します。
 
