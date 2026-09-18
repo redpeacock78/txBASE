@@ -241,7 +241,7 @@ The txbase quality path is staged:
 3. Keep expanding malformed-input corpora; DBF, memo, WAL, and JSON boundary cases are now checked, with index cases waiting for an index parser.
 4. Cover crash boundaries around WAL sync and checkpoint publication; DBF snapshot recovery now also covers a torn WAL tail.
 5. Add compatibility fixtures produced by independent xBase implementations.
-6. Keep expanding concurrency coverage with stress and fault-injection tests; add fuzzing and differential checks once those components exist. CI already runs the core gate on Ubuntu, macOS, and Windows.
+6. Keep expanding concurrency coverage with stress and fault-injection tests; stale-writer wave coverage is now present. Add fuzzing and differential checks once those components exist. CI already runs the core gate on Ubuntu, macOS, and Windows.
 
 The current CI gate is deliberately only `fmt`, `clippy`, and `cargo test`.
 
