@@ -619,8 +619,46 @@ impl DbfTable {
         values: &Map<String, Value>,
         storage_values: &Map<String, Value>,
     ) -> Result<(), DbfError> {
-        let encoded = self.encode_record(storage_values)?;
         let offset = self.record_offset(index)?;
+        let mut encoded_values = storage_values.clone();
+        for field in self
+            .fields
+            .iter()
+            .filter(|field| is_sidecar_field(field.field_type))
+        {
+            if values.get(&field.name) != self.records[index].values.get(&field.name) {
+                continue;
+            }
+            encoded_values.insert(field.name.clone(), empty_memo_value(field));
+        }
+        let mut encoded = self.encode_record(&encoded_values)?;
+        for field in self
+            .fields
+            .iter()
+            .filter(|field| is_sidecar_field(field.field_type))
+        {
+            if values.get(&field.name) != self.records[index].values.get(&field.name) {
+                continue;
+            }
+            let end = field
+                .offset
+                .checked_add(usize::from(field.length))
+                .ok_or_else(|| DbfError::Invalid("sidecar field range overflows usize".into()))?;
+            let stored_start = offset
+                .checked_add(field.offset)
+                .ok_or_else(|| DbfError::Invalid("sidecar field offset overflows usize".into()))?;
+            let stored_end = stored_start
+                .checked_add(usize::from(field.length))
+                .ok_or_else(|| DbfError::Invalid("sidecar field range overflows usize".into()))?;
+            let stored = self
+                .bytes
+                .get(stored_start..stored_end)
+                .ok_or_else(|| DbfError::Invalid("stored record is truncated".into()))?;
+            encoded
+                .get_mut(field.offset..end)
+                .ok_or_else(|| DbfError::Invalid("encoded sidecar field is truncated".into()))?
+                .copy_from_slice(stored);
+        }
         let end = offset + encoded.len();
         let mut bytes = self.bytes.clone();
         bytes[offset..end].copy_from_slice(&encoded);
@@ -2069,6 +2107,29 @@ mod tests {
                 .contains("memo sidecar is missing for non-empty field NAME")
         );
         assert_eq!(table.to_bytes(), before);
+    }
+
+    #[test]
+    fn preserves_unresolved_sidecar_pointers_on_other_mutations() {
+        let mut bytes = fixture();
+        bytes[64 + 11] = b'M';
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let name_start = record_start + 4;
+        bytes[name_start..name_start + 10].fill(0xff);
+
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"AGE": 30}).as_object().unwrap().clone(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            &table.to_bytes()[name_start..name_start + 10],
+            &bytes[name_start..name_start + 10]
+        );
+        assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
     }
 
     #[test]
