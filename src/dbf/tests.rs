@@ -85,6 +85,18 @@ fn rejects_malformed_memo_snapshots() {
 }
 
 #[test]
+fn applies_byte_deltas_idempotently_and_rejects_wrong_base() {
+    let delta = ByteDelta::new(b"base", b"target").unwrap();
+
+    assert_eq!(apply_byte_delta(b"base", &delta, "DBF").unwrap(), b"target");
+    assert_eq!(
+        apply_byte_delta(b"target", &delta, "DBF").unwrap(),
+        b"target"
+    );
+    assert!(apply_byte_delta(b"other", &delta, "DBF").is_err());
+}
+
+#[test]
 fn rejects_unknown_deletion_markers() {
     let mut bytes = fixture();
     bytes[161] = b'!';
@@ -1529,6 +1541,47 @@ fn recovers_latest_snapshot_from_wal_before_reading() {
 }
 
 #[test]
+fn recovers_dbf_delta_from_wal_before_reading() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-dbf-delta-recovery-{}-{}.dbf",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("test")
+    ));
+    let wal_path = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+
+    fs::write(&path, fixture()).unwrap();
+    let mut table = DbfTable::from_path(&path).unwrap();
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "Delta"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    let full_payload = snapshot_payload(&table.to_bytes());
+    let payload = delta_payload(&table, &path, None, full_payload.len())
+        .unwrap()
+        .expect("path-loaded mutation should fit in a delta");
+    assert!(payload.starts_with(DELTA_MAGIC));
+    assert!(payload.len() < full_payload.len());
+
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(&payload).unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    let recovered = DbfTable::from_path(&path).unwrap();
+    assert_eq!(recovered.active_record(1).unwrap().values["NAME"], "Delta");
+    assert!(!wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn recovers_dbf_and_memo_from_txdm_snapshot() {
     let path = std::env::temp_dir().join(format!(
         "txbase-dbf-memo-recovery-{}-{}.dbf",
@@ -1577,6 +1630,72 @@ fn recovers_dbf_and_memo_from_txdm_snapshot() {
     assert_eq!(
         recovered.active_record(1).unwrap().values["NAME"],
         "memo after crash"
+    );
+    assert_eq!(
+        &recovered.to_bytes()[memo_start..memo_start + 10],
+        b"         2"
+    );
+    assert!(!wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(memo_path).unwrap();
+}
+
+#[test]
+fn recovers_dbf_and_memo_delta_from_wal_before_reading() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-dbf-memo-delta-recovery-{}-{}.dbf",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("test")
+    ));
+    let memo_path = path.with_extension("dbt");
+    let wal_path = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&memo_path);
+    let _ = fs::remove_file(&wal_path);
+
+    let mut bytes = fixture();
+    bytes[0] = 0x83;
+    bytes[64 + 11] = b'M';
+    let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+    let memo_start = record_start + 4;
+    bytes[memo_start..memo_start + 10].copy_from_slice(b"         1");
+    fs::write(&path, &bytes).unwrap();
+
+    let mut memo_bytes = vec![0; DBT_BLOCK_SIZE * 2];
+    let text = b"memo before delta";
+    memo_bytes[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + text.len()].copy_from_slice(text);
+    memo_bytes[DBT_BLOCK_SIZE + text.len()] = EOF_MARKER;
+    fs::write(&memo_path, memo_bytes).unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "memo after delta"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    let mut prepared = table.clone();
+    let memo = prepared.apply_memo_updates(&path).unwrap().unwrap();
+    let full_payload = memo_snapshot_payload(&prepared.to_bytes(), &memo).unwrap();
+    let payload = delta_payload(&prepared, &path, Some(&memo), full_payload.len())
+        .unwrap()
+        .expect("path-loaded memo mutation should fit in a delta");
+    assert!(payload.starts_with(DELTA_MAGIC));
+    assert!(payload.len() < full_payload.len());
+
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(&payload).unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    let recovered = DbfTable::from_path(&path).unwrap();
+    assert_eq!(
+        recovered.active_record(1).unwrap().values["NAME"],
+        "memo after delta"
     );
     assert_eq!(
         &recovered.to_bytes()[memo_start..memo_start + 10],

@@ -5,11 +5,11 @@ A small Rust workspace for a transactional dBASE-compatible database.
 The first slice keeps the DBF file format at the center and exposes a JSON
 read path. It also provides an HTTP server with `GET`, standards-based
 `QUERY`, and DBF-backed mutation routing. The repository now contains a
-file-backed WAL and snapshot transaction core. DBF-only mutations write a
-complete `TXDB` snapshot, while DBF plus memo mutations write a `TXDM`
-snapshot, before atomic replacement and startup recovery. Full xBase
-compatibility, fine-grained WAL records, and concurrent-writer coordination
-remain later phases.
+file-backed WAL and snapshot transaction core. Path-loaded mutations write a
+`TXDP` byte-range delta when it is smaller than a complete snapshot; other
+mutations fall back to `TXDB` or `TXDM` snapshots before atomic replacement
+and startup recovery. Full xBase compatibility, operation-level WAL records,
+and concurrent-writer coordination remain later phases.
 
 ## What works now
 
@@ -29,14 +29,14 @@ remain later phases.
 - Prints active records as JSON from the command line.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.
 - Serves `POST /records`, `PUT /records/{id}`, `PATCH /records/{id}`, and `DELETE /records/{id}`.
-- Persists supported JSON mutations through a synced `TXDB`/`TXDM` snapshot WAL
-  and atomic DBF/sidecar replacement, with startup recovery for an unfinished
-  write.
+- Persists supported JSON mutations through a synced `TXDP` byte-range delta
+  when possible, with `TXDB`/`TXDM` snapshot fallback and atomic DBF/sidecar
+  replacement, plus startup recovery for an unfinished write.
 - Rejects a save when the DBF or loaded memo sidecar changed externally since
   the table was loaded.
 - Reads and writes text memo fields in sibling `.dbt` and `.fpt` sidecars.
   Memo writes append a new block and update the DBF pointer through a synced
-  `TXDM` WAL snapshot.
+  `TXDP` delta when possible, with a `TXDM` WAL snapshot fallback.
 - Reads `B`/`G`/`P` binary sidecar blocks as hex text and preserves their pointers;
   dBASE III/IV DBT and FPT binary block writes accept hex text and append a new
   binary block.
@@ -168,13 +168,15 @@ insert. Unknown fields are rejected.
 
 `DELETE` sets the DBF deletion marker and returns `204 No Content`. Deleted
 record numbers are not reused, and subsequent reads return `404 Not Found`.
-The server writes a complete `TXDB` snapshot to the `TXWL` WAL for DBF-only
-changes, or a `TXDM` snapshot containing both DBF and memo bytes when an `M`
-field changes. It syncs the WAL before atomically replacing the affected files.
-`DbfTable::from_path` replays the latest complete snapshot left by an
-interrupted mutation. The WAL stores full snapshots rather than fine-grained
-mutation records. A loaded table rejects stale DBF or memo sidecar state before
-save; full concurrent-writer coordination remains outside this slice.
+For path-loaded changes, the server writes a `TXDP` byte-range delta to the
+`TXWL` WAL when it is smaller than the complete replacement. Otherwise it
+writes a complete `TXDB` snapshot for DBF-only changes or a `TXDM` snapshot
+containing DBF and memo bytes. It syncs the WAL before atomically replacing the
+affected files. `DbfTable::from_path` replays either form after an interrupted
+mutation and checks the delta base before applying it. The WAL is still not an
+operation-level record log, and full concurrent-writer coordination remains
+outside this slice. A loaded table rejects stale DBF or memo sidecar state
+before save.
 
 Text memo values are read from and appended to `.dbt` or `.fpt` sidecars.
 Changing an `M` field writes the new block and DBF pointer as one recoverable

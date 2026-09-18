@@ -11,6 +11,7 @@ mod codec;
 mod memo;
 #[cfg(test)]
 mod tests;
+mod wal;
 
 use codec::{
     decode_field, decode_record_field, encode_character, encode_field, encode_null_flags,
@@ -21,6 +22,11 @@ use memo::{
     binary_value, empty_memo_value, encode_memo_pointer, find_memo_path, is_sidecar_field,
     memo_index, sidecar_update, storage_value_without_sidecar,
 };
+#[cfg(test)]
+use wal::{
+    ByteDelta, DELTA_MAGIC, MEMO_SNAPSHOT_MAGIC, SNAPSHOT_MAGIC, apply_byte_delta, decode_snapshot,
+};
+use wal::{decode_wal_payload, delta_payload, memo_snapshot_payload, snapshot_payload};
 
 const CLASSIC_HEADER_SIZE: usize = 32;
 const CLASSIC_DESCRIPTOR_SIZE: usize = 32;
@@ -28,8 +34,6 @@ const LEVEL7_HEADER_SIZE: usize = 68;
 const LEVEL7_DESCRIPTOR_SIZE: usize = 48;
 const FIELD_TERMINATOR: u8 = 0x0d;
 const EOF_MARKER: u8 = 0x1a;
-const SNAPSHOT_MAGIC: &[u8; 4] = b"TXDB";
-const MEMO_SNAPSHOT_MAGIC: &[u8; 4] = b"TXDM";
 const ACTIVE_RECORD: u8 = 0x20;
 const DELETED_RECORD: u8 = 0x2a;
 const DBT_BLOCK_SIZE: usize = 512;
@@ -173,12 +177,6 @@ struct MemoSnapshot {
 enum MemoUpdate {
     Text(String),
     Binary(Vec<u8>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RecoverySnapshot {
-    dbf: Vec<u8>,
-    memo: Option<MemoSnapshot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -492,10 +490,12 @@ impl DbfTable {
         let memo_snapshot = prepared.apply_memo_updates(path)?;
         let wal_path = path.with_extension("txbase.wal");
         let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
-        let payload = match &memo_snapshot {
+        let full_payload = match &memo_snapshot {
             Some(memo) => memo_snapshot_payload(&prepared.bytes, memo)?,
             None => snapshot_payload(&prepared.bytes),
         };
+        let payload = delta_payload(&prepared, path, memo_snapshot.as_ref(), full_payload.len())?
+            .unwrap_or(full_payload);
         wal.append(&payload).map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
         if let Some(memo) = &memo_snapshot {
@@ -524,14 +524,13 @@ impl DbfTable {
         }
         let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
         let snapshot =
-            wal.records()
-                .iter()
-                .rev()
-                .find_map(|(_, payload)| match decode_snapshot(payload) {
+            wal.records().iter().rev().find_map(|(_, payload)| {
+                match decode_wal_payload(path, payload) {
                     Ok(Some(snapshot)) => Some(Ok(snapshot)),
                     Ok(None) => None,
                     Err(error) => Some(Err(error)),
-                });
+                }
+            });
         let Some(snapshot) = snapshot else {
             return Ok(());
         };
@@ -1159,72 +1158,6 @@ fn increment_value(
         .and_then(Number::from_f64)
         .ok_or_else(|| DbfError::Invalid(format!("$inc result for {field} is not finite")))?;
     Ok(Value::Number(value))
-}
-
-fn snapshot_payload(dbf: &[u8]) -> Vec<u8> {
-    let mut payload = SNAPSHOT_MAGIC.to_vec();
-    payload.extend_from_slice(dbf);
-    payload
-}
-
-fn memo_snapshot_payload(dbf: &[u8], memo: &MemoSnapshot) -> Result<Vec<u8>, DbfError> {
-    let dbf_length = u64::try_from(dbf.len())
-        .map_err(|_| DbfError::Invalid("DBF snapshot length overflows u64".into()))?;
-    let memo_length = u64::try_from(memo.bytes.len())
-        .map_err(|_| DbfError::Invalid("memo snapshot length overflows u64".into()))?;
-    let mut payload = MEMO_SNAPSHOT_MAGIC.to_vec();
-    payload.push(memo.format.tag());
-    payload.extend_from_slice(&dbf_length.to_le_bytes());
-    payload.extend_from_slice(&memo_length.to_le_bytes());
-    payload.extend_from_slice(dbf);
-    payload.extend_from_slice(&memo.bytes);
-    Ok(payload)
-}
-
-fn decode_snapshot(payload: &[u8]) -> Result<Option<RecoverySnapshot>, DbfError> {
-    if let Some(dbf) = payload.strip_prefix(SNAPSHOT_MAGIC) {
-        return Ok(Some(RecoverySnapshot {
-            dbf: dbf.to_vec(),
-            memo: None,
-        }));
-    }
-    let Some(body) = payload.strip_prefix(MEMO_SNAPSHOT_MAGIC) else {
-        return Ok(None);
-    };
-    let header = body
-        .get(..17)
-        .ok_or_else(|| DbfError::Invalid("memo snapshot header is truncated".into()))?;
-    let format = MemoFormat::from_tag(header[0])?;
-    let dbf_length = usize::try_from(u64::from_le_bytes(
-        header[1..9]
-            .try_into()
-            .expect("memo snapshot DBF length is fixed"),
-    ))
-    .map_err(|_| DbfError::Invalid("DBF snapshot length overflows usize".into()))?;
-    let memo_length = usize::try_from(u64::from_le_bytes(
-        header[9..17]
-            .try_into()
-            .expect("memo snapshot memo length is fixed"),
-    ))
-    .map_err(|_| DbfError::Invalid("memo snapshot length overflows usize".into()))?;
-    let memo_start = 17usize
-        .checked_add(dbf_length)
-        .ok_or_else(|| DbfError::Invalid("memo snapshot length overflows usize".into()))?;
-    let end = memo_start
-        .checked_add(memo_length)
-        .ok_or_else(|| DbfError::Invalid("memo snapshot length overflows usize".into()))?;
-    if end != body.len() {
-        return Err(DbfError::Invalid(
-            "memo snapshot length does not match payload".into(),
-        ));
-    }
-    Ok(Some(RecoverySnapshot {
-        dbf: body[17..memo_start].to_vec(),
-        memo: Some(MemoSnapshot {
-            format,
-            bytes: body[memo_start..end].to_vec(),
-        }),
-    }))
 }
 
 fn save_bytes_to(path: &Path, bytes: &[u8], temporary_extension: &str) -> Result<(), DbfError> {

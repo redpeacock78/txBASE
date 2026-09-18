@@ -5,9 +5,10 @@
 現在の実装は、DBFの読み取り、JSON出力、HTTPの`GET`、RFC 10008に基づく`QUERY`、DBF mutationの実行に範囲を限定しています。
 
 file-backed WALとsnapshot transactionのcoreを実装しています。
-DBF-only mutationは`TXDB`、memoを含むmutationは`TXDM` snapshotをWALへ書き込み、syncしてからDBF/sidecarをatomic replaceします。
-起動時には未完了のsnapshotを復旧します。
-xBase互換フロントエンド、細粒度のWAL record、複数writerの調停は後続工程です。
+pathから読み込んだmutationは、完全snapshotより小さい場合に`TXDP` byte-range deltaをWALへ書き込みます。
+それ以外はDBF-onlyなら`TXDB`、memoを含むなら`TXDM` snapshotへfallbackし、syncしてからDBF/sidecarをatomic replaceします。
+起動時には未完了のdeltaまたはsnapshotを復旧します。
+xBase互換フロントエンド、operation単位のWAL record、複数writerの調停は後続工程です。
 
 ## 現在できること
 
@@ -26,7 +27,7 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - `GET /records`と`GET /records/{id}`を提供する。
 - `QUERY /records`でfilter、sort、projection、skip、limitを実行する。
 - `POST /records`、`PUT /records/{id}`、`PATCH /records/{id}`、`DELETE /records/{id}`を提供する。
-- 対応するJSON mutationを`TXDB`または`TXDM` snapshot WALへsyncしてからDBF/sidecarへ保存し、未完了の保存を起動時に復旧する。読み込み後にDBFまたはmemo sidecarが外部変更された場合は、古い内容での保存を拒否する。
+- 対応するJSON mutationを、可能なら`TXDP` byte-range delta、必要なら`TXDB`または`TXDM` snapshotとしてWALへsyncしてからDBF/sidecarへ保存し、未完了の保存を起動時に復旧する。読み込み後にDBFまたはmemo sidecarが外部変更された場合は、古い内容での保存を拒否する。
 - siblingの`.dbt`と`.fpt` sidecarからtext memoを読み、変更時は新しいblockへappendする。
 - `B`/`G`/`P`のbinary sidecar blockはhex textとして読み、dBASE III DBT、dBASE IV DBT、FPTではhex textの書き込みも新しいbinary blockへのappendとして実行します。
 - `PATCH`では通常のfield objectと、型付きの`$set`、`$unset`、`$inc`を使えます。
@@ -143,11 +144,11 @@ operatorと通常fieldの混在、および同一fieldへの複数operator適用
 
 `DELETE`はDBFの削除markerを設定して`204 No Content`を返します。
 削除済みrecord numberは再利用せず、以後の読み取りは`404 Not Found`になります。
-serverはDBF-only変更では`TXDB`、memo field変更ではDBFとsidecarを含む`TXDM` snapshotをWALへ書き込み、syncしてから対象ファイルを置き換えます。
-`DbfTable::from_path`は中断されたmutationの最新snapshotを復旧します。
-WALは細粒度のmutation recordではなく全体snapshotを保存します。読み込み後のDBF/sidecar変更は検出して拒否しますが、完全な複数writerの調停は未対応です。
+pathから読み込んだ変更では、完全snapshotより小さい場合にDBFとmemo sidecarの差分を`TXDP` byte-range deltaとしてWALへ書き込みます。それ以外はDBF-only変更では`TXDB`、memo field変更ではDBFとsidecarを含む`TXDM` snapshotを使います。
+syncしてから対象ファイルを置き換え、`DbfTable::from_path`は中断されたmutationのdeltaまたはsnapshotを復旧します。
+WALはまだoperation単位のrecord logではありません。読み込み後のDBF/sidecar変更は検出して拒否しますが、完全な複数writerの調停は未対応です。
 text memoは`.dbt`または`.fpt`から読み取り、変更時は新しいblockをappendしてDBF pointerも更新します。
-sidecarとDBFは`TXDM` WAL snapshotで復旧可能な単位として保存します。
+sidecarとDBFは、可能なら`TXDP` delta、必要なら`TXDM` WAL snapshotで復旧可能な単位として保存します。
 `B`/`G`/`P`のbinary block書き込みはhex textとしてdBASE III DBT、dBASE IV DBT、FPTに対応し、dBASE IV DBTのsidecar headerにあるblock sizeも尊重します。dBASE III DBTの`0x1a1a` terminatorと衝突するbinary値は拒否します。`P`はVisual FoxProのPicture blockとして扱います。OLE semanticsとこの範囲外のmemo形式は未対応です。
 
 ## 検証

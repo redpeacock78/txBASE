@@ -44,8 +44,10 @@ text. Existing pointers are retained separately
 so non-memo DBF mutations do not rewrite them as text. Text changes append to
 the existing `.dbt` or `.fpt` sidecar, using the dBASE III terminator, the
 dBASE IV header-inclusive length, or the FPT length as appropriate, and update
-the DBF pointer in a `TXDM` WAL snapshot; startup recovery replaces both files
-from that snapshot. dBASE III binary writes accept hex text and append a block
+the DBF pointer in a WAL record; path-loaded changes use a `TXDP` byte-range
+delta when it is smaller, otherwise the complete `TXDM` snapshot remains the
+fallback. Startup recovery replaces both files from either form. dBASE III
+binary writes accept hex text and append a block
 terminated by the dBASE III `0x1a1a` marker; values that collide with that
 marker are rejected. dBASE IV binary writes accept hex text, honor the DBT
 header block size, and append a length-delimited binary block, while FPT writes
@@ -95,19 +97,24 @@ Integer AutoInc values from their descriptor slots, preserves those read-only
 values on existing records, and
 replaces the DBF through a synced temporary file.
 The transaction module now supplies a length-prefixed `TXWL` file WAL and a
-snapshot transaction manager. Before an atomic DBF replacement, the mutation
-layer appends a `TXDB` record for DBF-only changes, or a `TXDM` record
-containing the complete new DBF and memo snapshots, and syncs the WAL.
-`DbfTable::from_path` replays the latest complete snapshot left by an
-interrupted mutation.
+snapshot transaction manager. Before an atomic DBF replacement, a path-loaded
+mutation appends a `TXDP` byte-range delta when it is smaller than the full
+payload. Source-less or larger changes use a `TXDB` record for DBF-only
+changes, or a `TXDM` record containing the complete new DBF and memo snapshots.
+The WAL is synced before replacement, and `DbfTable::from_path` replays the
+latest delta or snapshot left by an interrupted mutation.
 
 The transaction WAL stores a four-byte magic, a little-endian payload length,
 a monotonically increasing LSN, and the payload. Opening a WAL validates
 complete records and truncates only an incomplete final record. It does not
-interpret arbitrary payloads. The DBF integration recognizes `TXDB` and `TXDM`
-snapshots, while fine-grained mutation records and multi-writer coordination
-remain future work. A table loaded from a path records the DBF and memo bytes
-it read and refuses to save over an externally changed snapshot.
+interpret arbitrary payloads. The DBF integration recognizes `TXDP` deltas as
+well as `TXDB` and `TXDM` snapshots. A delta carries base/target lengths and
+hashes plus non-overlapping byte patches; recovery accepts an already-applied
+target so a retry is idempotent, and rejects a different base. This is still a
+byte-range optimization rather than an operation-level mutation log; full
+fine-grained semantics and multi-writer coordination remain future work. A
+table loaded from a path records the DBF and memo bytes it read and refuses to
+save over an externally changed snapshot.
 
 ## MongoDB query ideas
 
@@ -254,11 +261,12 @@ The mutation methods require `Content-Type: application/json`. `POST` returns
 `201` and a `Location` header, `PUT` and `PATCH` return the resulting record,
 and `DELETE` returns `204`. A successful mutation is serialized to temporary
 file(s), synced, and renamed over the configured DBF path and, for memo writes,
-its sidecar. Before replacement, a complete `TXDB` or `TXDM` snapshot is
-appended to the transaction WAL and synced. A subsequent
-`DbfTable::from_path` replays that snapshot if the process stopped before
-replacement completed. The WAL is still snapshot-based and does not
-coordinate concurrent writers.
+its sidecar. Before replacement, a path-loaded mutation appends a `TXDP`
+byte-range delta when it is smaller than a complete `TXDB` or `TXDM` snapshot;
+otherwise it appends that snapshot. The WAL is synced before replacement. A
+subsequent `DbfTable::from_path` replays the delta or snapshot if the process
+stopped before replacement completed. The WAL is not yet an operation-level
+log and does not coordinate concurrent writers.
 
 The [HTTP QUERY method is now RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html).
 It is safe and idempotent, carries query semantics in request content, and
