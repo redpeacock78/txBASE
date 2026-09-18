@@ -109,6 +109,13 @@ impl FieldDescriptor {
         ) || (self.field_type.eq_ignore_ascii_case(&b'B') && self.length != 8)
             || self.flags & 0x04 != 0
     }
+
+    fn is_auto_increment(&self, version: u8) -> bool {
+        self.field_type.eq_ignore_ascii_case(&b'+')
+            || (version == 0x31
+                && self.field_type.eq_ignore_ascii_case(&b'I')
+                && self.flags & 0x0c == 0x0c)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -506,7 +513,7 @@ impl DbfTable {
         let mut values = self.normalize_values(&values)?;
         let mut auto_increment_updates = Vec::new();
         for (field_index, field) in self.fields.iter().enumerate() {
-            if !field.field_type.eq_ignore_ascii_case(&b'+') {
+            if !field.is_auto_increment(self.header.version) {
                 continue;
             }
             if !values[&field.name].is_null() {
@@ -515,13 +522,31 @@ impl DbfTable {
                     field.name
                 )));
             }
-            let Some((next, descriptor_offset)) = self.next_auto_increment(field_index)? else {
+            let Some((next, following, descriptor_offset, signed)) =
+                self.next_auto_increment(field_index, field)?
+            else {
                 continue;
             };
-            let following = next.checked_add(1).ok_or_else(|| {
-                DbfError::Invalid(format!("auto-increment field {} is exhausted", field.name))
-            })?;
             values.insert(field.name.clone(), Value::Number(next.into()));
+            let following = if signed {
+                i32::try_from(following)
+                    .map_err(|_| {
+                        DbfError::Invalid(format!(
+                            "auto-increment field {} is exhausted",
+                            field.name
+                        ))
+                    })?
+                    .to_le_bytes()
+            } else {
+                u32::try_from(following)
+                    .map_err(|_| {
+                        DbfError::Invalid(format!(
+                            "auto-increment field {} is exhausted",
+                            field.name
+                        ))
+                    })?
+                    .to_le_bytes()
+            };
             auto_increment_updates.push((descriptor_offset, following));
         }
         let number = self
@@ -574,7 +599,7 @@ impl DbfTable {
                 .ok_or_else(|| {
                     DbfError::Invalid("auto-increment descriptor is truncated".into())
                 })?;
-            target.copy_from_slice(&next.to_le_bytes());
+            target.copy_from_slice(&next);
         }
 
         self.bytes = bytes;
@@ -725,30 +750,82 @@ impl DbfTable {
         Ok(offset)
     }
 
-    fn next_auto_increment(&self, field_index: usize) -> Result<Option<(u32, usize)>, DbfError> {
-        if self.header.version & 0x07 != 4 {
+    fn next_auto_increment(
+        &self,
+        field_index: usize,
+        field: &FieldDescriptor,
+    ) -> Result<Option<(i64, i64, usize, bool)>, DbfError> {
+        if self.header.version & 0x07 == 4 {
+            let descriptor_offset =
+                LEVEL7_HEADER_SIZE
+                    .checked_add(field_index.checked_mul(LEVEL7_DESCRIPTOR_SIZE).ok_or_else(
+                        || DbfError::Invalid("field descriptor offset overflows".into()),
+                    )?)
+                    .ok_or_else(|| DbfError::Invalid("field descriptor offset overflows".into()))?;
+            let next_offset = descriptor_offset
+                .checked_add(40)
+                .ok_or_else(|| DbfError::Invalid("auto-increment offset overflows".into()))?;
+            let next_end = next_offset
+                .checked_add(4)
+                .ok_or_else(|| DbfError::Invalid("auto-increment offset overflows".into()))?;
+            if next_end > usize::from(self.header.header_length) {
+                return Err(DbfError::Invalid(
+                    "auto-increment descriptor is outside the header".into(),
+                ));
+            }
+            let next = read_u32(&self.bytes, next_offset)?;
+            return Ok(Some((
+                i64::from(next),
+                i64::from(next) + 1,
+                next_offset,
+                false,
+            )));
+        }
+
+        if self.header.version != 0x31 {
             return Ok(None);
         }
-        let descriptor_offset = LEVEL7_HEADER_SIZE
+        if field.length != 4 || !field.field_type.eq_ignore_ascii_case(&b'I') {
+            return Err(DbfError::Invalid(format!(
+                "auto-increment field {} must be a four-byte integer",
+                field.name
+            )));
+        }
+        let descriptor_offset = CLASSIC_HEADER_SIZE
             .checked_add(
                 field_index
-                    .checked_mul(LEVEL7_DESCRIPTOR_SIZE)
+                    .checked_mul(CLASSIC_DESCRIPTOR_SIZE)
                     .ok_or_else(|| DbfError::Invalid("field descriptor offset overflows".into()))?,
             )
             .ok_or_else(|| DbfError::Invalid("field descriptor offset overflows".into()))?;
         let next_offset = descriptor_offset
-            .checked_add(40)
+            .checked_add(19)
             .ok_or_else(|| DbfError::Invalid("auto-increment offset overflows".into()))?;
-        let next_end = next_offset
-            .checked_add(4)
+        let step_offset = descriptor_offset
+            .checked_add(23)
             .ok_or_else(|| DbfError::Invalid("auto-increment offset overflows".into()))?;
-        if next_end > usize::from(self.header.header_length) {
+        let end = step_offset
+            .checked_add(1)
+            .ok_or_else(|| DbfError::Invalid("auto-increment offset overflows".into()))?;
+        if end > usize::from(self.header.header_length) {
             return Err(DbfError::Invalid(
                 "auto-increment descriptor is outside the header".into(),
             ));
         }
-        let next = read_u32(&self.bytes, next_offset)?;
-        Ok(Some((next, next_offset)))
+        let next = i64::from(i32::from_le_bytes(
+            read_u32(&self.bytes, next_offset)?.to_le_bytes(),
+        ));
+        let step = self.bytes[step_offset];
+        if step == 0 {
+            return Err(DbfError::Invalid(format!(
+                "auto-increment field {} has a zero step",
+                field.name
+            )));
+        }
+        let following = next.checked_add(i64::from(step)).ok_or_else(|| {
+            DbfError::Invalid(format!("auto-increment field {} is exhausted", field.name))
+        })?;
+        Ok(Some((following, following, next_offset, true)))
     }
 
     fn preserve_auto_increment_fields(
@@ -760,7 +837,7 @@ impl DbfTable {
         for field in self
             .fields
             .iter()
-            .filter(|field| field.field_type.eq_ignore_ascii_case(&b'+'))
+            .filter(|field| field.is_auto_increment(self.header.version))
         {
             let current = &self.records[index].values[&field.name];
             if changed_fields.contains(&field.name) && values[&field.name] != *current {
@@ -2802,6 +2879,45 @@ mod tests {
                 .contains("auto-increment field AUTO is read-only")
         );
         assert_eq!(table.active_record(2).unwrap().values["AUTO"], 7);
+    }
+
+    #[test]
+    fn assigns_visual_foxpro_auto_increment_values_on_insert() {
+        let mut bytes = vec![0; 71];
+        bytes[0] = 0x31;
+        bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+        bytes[8..10].copy_from_slice(&65u16.to_le_bytes());
+        bytes[10..12].copy_from_slice(&5u16.to_le_bytes());
+        bytes[32..36].copy_from_slice(b"AUTO");
+        bytes[43] = b'I';
+        bytes[48] = 4;
+        bytes[50] = 0x0c;
+        bytes[51..55].copy_from_slice(&7i32.to_le_bytes());
+        bytes[55] = 3;
+        bytes[64] = FIELD_TERMINATOR;
+        bytes[65] = ACTIVE_RECORD;
+        bytes[66..70].copy_from_slice(&4i32.to_le_bytes());
+        bytes[70] = EOF_MARKER;
+
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["AUTO"], 4);
+        assert_eq!(table.insert_record(Map::new()).unwrap(), 2);
+        assert_eq!(table.active_record(2).unwrap().values["AUTO"], 10);
+        assert_eq!(
+            i32::from_le_bytes(table.to_bytes()[51..55].try_into().unwrap()),
+            10
+        );
+
+        let before = table.to_bytes();
+        let error = table
+            .insert_record(serde_json::json!({"AUTO": 99}).as_object().unwrap().clone())
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("auto-increment field AUTO is read-only")
+        );
+        assert_eq!(table.to_bytes(), before);
     }
 
     #[test]

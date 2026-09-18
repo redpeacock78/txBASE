@@ -21,7 +21,7 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - Visual FoxPro `0x32` の`V` varcharと`Q` varbinaryを読み書きし、`V`はtext、`Q`は小文字hexとして扱う。`_NullFlags`はJSONへ公開しない。
 - Visual FoxProの`W` Blob fieldを`.fpt` sidecar経由の小文字hexとして読み書きする。
 - Visual FoxProのbinary flag付き`C` fieldは固定幅hex、binary flag付き`M` fieldは`.fpt` sidecar経由のhexとして読み書きする。
-- dBASE Level 7の`+` auto-increment fieldを省略した新規recordへnext valueを割り当て、descriptorを進める。`+` fieldはread-onlyで、明示値のinsertと既存recordの変更を拒否する。
+- dBASE Level 7の`+`とVisual FoxPro `0x31` Integer AutoInc fieldを省略した新規recordへ値を割り当て、descriptorを進める。auto-increment fieldはread-onlyで、明示値のinsertと既存recordの変更を拒否する。
 - コマンドラインから有効なrecordをJSONとして出力する。
 - `GET /records`と`GET /records/{id}`を提供する。
 - `QUERY /records`でfilter、sort、projection、skip、limitを実行する。
@@ -137,7 +137,7 @@ Dotted pathとindexは未対応です。
 `POST`は新しい物理recordを作成し、`201 Created`と1-basedのrecord locationを返します。
 `PUT`は全fieldを置き換え、`PATCH`は通常のfield objectに加えて、`$set`、`$unset`、`$inc`を使うupdate documentも受け付けます。
 operatorと通常fieldの混在、および同一fieldへの複数operator適用は拒否します。
-`POST`と`PUT`で省略したfieldはDBF nullになりますが、dBASE Level 7の`+` fieldを`POST`で省略した場合はdescriptorのnext valueを割り当てて進めます。`+` fieldはread-onlyで、insert時の明示値と既存recordへの変更を拒否します。
+`POST`と`PUT`で省略したfieldはDBF nullになりますが、dBASE Level 7の`+`またはVisual FoxPro `0x31` Integer AutoInc fieldを`POST`で省略した場合はdescriptorの値を進めて割り当てます。auto-increment fieldはread-onlyで、insert時の明示値と既存recordへの変更を拒否します。
 未知のfieldは拒否します。
 
 `DELETE`はDBFの削除markerを設定して`204 No Content`を返します。

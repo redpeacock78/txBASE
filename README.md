@@ -23,7 +23,9 @@ remain later phases.
 - Reads and writes Visual FoxPro `0x32` `V` varchar and `Q` varbinary fields; `V` is text, `Q` is lowercase hex, and `_NullFlags` stays hidden.
 - Reads and writes Visual FoxPro `W` Blob fields through `.fpt` sidecars as lowercase hex.
 - Reads and writes Visual FoxPro binary-flagged `C` fields as fixed-width hex and binary-flagged `M` fields through `.fpt` sidecars.
-- Assigns and advances dBASE Level 7 `+` auto-increment fields when a new record omits them.
+- Assigns and advances dBASE Level 7 `+` and Visual FoxPro `0x31` Integer AutoInc fields
+  when a new record omits them. Auto-increment fields are read-only on existing records
+  and explicit values are rejected on insert.
 - Prints active records as JSON from the command line.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.
 - Serves `POST /records`, `PUT /records/{id}`, `PATCH /records/{id}`, and `DELETE /records/{id}`.
@@ -155,9 +157,10 @@ one-based record location. `PUT` replaces all fields, while `PATCH` accepts
 either a plain field object or an update document using `$set`, `$unset`, and
 `$inc`. An update document cannot mix operators with plain fields or update
 one field more than once. Missing fields in `POST` and `PUT` become DBF null
-values. A `POST` that omits a dBASE Level 7 `+` field receives and advances
-its descriptor next value. The `+` field is read-only on existing records and
-explicit values are rejected on insert. Unknown fields are rejected.
+values. A `POST` that omits a dBASE Level 7 `+` or Visual FoxPro `0x31`
+Integer AutoInc field receives and advances its descriptor value. Auto-increment
+fields are read-only on existing records and explicit values are rejected on
+insert. Unknown fields are rejected.
 
 `DELETE` sets the DBF deletion marker and returns `204 No Content`. Deleted
 record numbers are not reused, and subsequent reads return `404 Not Found`.

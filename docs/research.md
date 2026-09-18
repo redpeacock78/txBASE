@@ -26,7 +26,7 @@ The common field encodings are also part of the compatibility contract:
 | `T` | Eight bytes: little-endian Julian day and milliseconds since midnight | Visual FoxPro `T` is a second-precision ISO-8601 string; non-FoxPro timestamp values remain hex |
 | `N` and `F` | Right-justified numeric text | JSON number when finite and parseable |
 | `L` | Logical marker such as `T` or `F` | Boolean or JSON null for an unknown marker |
-| `I` and `+` | Four-byte integer representation | Little-endian signed integer; Level 7 `+` inserts use the descriptor's next value when omitted |
+| `I` and `+` | Four-byte integer representation | Little-endian signed integer; Level 7 `+` and Visual FoxPro `0x31` Integer AutoInc inserts use and advance their descriptor values when omitted |
 | `Y` | Eight-byte little-endian fixed-point currency | Four-decimal fixed-point string; writes validate the signed 64-bit scaled representation |
 | `V` and `Q` | Visual FoxPro `0x32` fixed slots with a trailing length byte selected by `_NullFlags` | `V` text and `Q` lowercase hex; nullable and variable-length bits are maintained on writes while `_NullFlags` remains hidden |
 | `W` | Four-byte pointer to a Visual FoxPro `.fpt` binary block | Lowercase hex payload; FPT writes append a type-0 binary block |
@@ -87,8 +87,9 @@ same FPT binary-block path as `P` and `W`.
 The mutation layer currently reuses the parsed header and field descriptors.
 It supports scalar JSON values for the field types already decoded by the
 reader, preserves physical record numbers, writes the deletion marker for
-logical deletes, assigns omitted Level 7 `+` values from the descriptor's
-next-value slot, preserves those read-only values on existing records, and
+logical deletes, assigns omitted Level 7 `+` and Visual FoxPro `0x31`
+Integer AutoInc values from their descriptor slots, preserves those read-only
+values on existing records, and
 replaces the DBF through a synced temporary file.
 The transaction module now supplies a length-prefixed `TXWL` file WAL and a
 snapshot transaction manager. Before an atomic DBF replacement, the mutation
@@ -275,6 +276,7 @@ GET URI alone would be incorrect.
 - [Visual FoxPro Blob Data Type](https://www.vfphelp.com/help/_5wn12pbhl.htm)
 - [Visual FoxPro Data Dictionary](https://techshelps.github.io/MSDN/BACKGRND/html/msdn_datadict.htm)
 - [Visual FoxPro Memo File Structure](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm)
+- [Visual FoxPro Autoincrementing Field Values](https://www.vfphelp.com/vfp9/html/bd6eff0c-2ce5-43b7-ab29-f5360cd2f90e.htm)
 - [MongoDB Documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [MongoDB Logical Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)
