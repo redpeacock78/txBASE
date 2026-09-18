@@ -2079,7 +2079,11 @@ mod tests {
         let error = table
             .insert_record(serde_json::json!({"AUTO": 99}).as_object().unwrap().clone())
             .unwrap_err();
-        assert!(error.to_string().contains("auto-increment field AUTO is read-only"));
+        assert!(
+            error
+                .to_string()
+                .contains("auto-increment field AUTO is read-only")
+        );
         assert_eq!(table.to_bytes(), before);
 
         table.replace_record(2, Map::new()).unwrap();
@@ -2087,13 +2091,14 @@ mod tests {
         let error = table
             .patch_record(
                 2,
-                serde_json::json!({"AUTO": 8})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
+                serde_json::json!({"AUTO": 8}).as_object().unwrap().clone(),
             )
             .unwrap_err();
-        assert!(error.to_string().contains("auto-increment field AUTO is read-only"));
+        assert!(
+            error
+                .to_string()
+                .contains("auto-increment field AUTO is read-only")
+        );
         assert_eq!(table.active_record(2).unwrap().values["AUTO"], 7);
     }
 
