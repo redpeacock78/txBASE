@@ -620,48 +620,27 @@ impl DbfTable {
         storage_values: &Map<String, Value>,
     ) -> Result<(), DbfError> {
         let offset = self.record_offset(index)?;
-        let mut encoded_values = storage_values.clone();
-        for field in self
-            .fields
-            .iter()
-            .filter(|field| is_sidecar_field(field.field_type))
-        {
-            if values.get(&field.name) != self.records[index].values.get(&field.name) {
-                continue;
-            }
-            encoded_values.insert(field.name.clone(), empty_memo_value(field));
-        }
-        let mut encoded = self.encode_record(&encoded_values)?;
-        for field in self
-            .fields
-            .iter()
-            .filter(|field| is_sidecar_field(field.field_type))
-        {
-            if values.get(&field.name) != self.records[index].values.get(&field.name) {
-                continue;
-            }
-            let end = field
-                .offset
-                .checked_add(usize::from(field.length))
-                .ok_or_else(|| DbfError::Invalid("sidecar field range overflows usize".into()))?;
-            let stored_start = offset
-                .checked_add(field.offset)
-                .ok_or_else(|| DbfError::Invalid("sidecar field offset overflows usize".into()))?;
-            let stored_end = stored_start
-                .checked_add(usize::from(field.length))
-                .ok_or_else(|| DbfError::Invalid("sidecar field range overflows usize".into()))?;
-            let stored = self
-                .bytes
-                .get(stored_start..stored_end)
-                .ok_or_else(|| DbfError::Invalid("stored record is truncated".into()))?;
-            encoded
-                .get_mut(field.offset..end)
-                .ok_or_else(|| DbfError::Invalid("encoded sidecar field is truncated".into()))?
-                .copy_from_slice(stored);
-        }
-        let end = offset + encoded.len();
         let mut bytes = self.bytes.clone();
-        bytes[offset..end].copy_from_slice(&encoded);
+        for field in &self.fields {
+            if values.get(&field.name) == self.records[index].values.get(&field.name) {
+                continue;
+            }
+            let encoded = encode_field(
+                field,
+                storage_values.get(&field.name).unwrap_or(&Value::Null),
+                self.header.language_driver,
+            )?;
+            let start = offset
+                .checked_add(field.offset)
+                .ok_or_else(|| DbfError::Invalid("field offset overflows usize".into()))?;
+            let end = start
+                .checked_add(usize::from(field.length))
+                .ok_or_else(|| DbfError::Invalid("field range overflows usize".into()))?;
+            bytes
+                .get_mut(start..end)
+                .ok_or_else(|| DbfError::Invalid("stored field is truncated".into()))?
+                .copy_from_slice(&encoded);
+        }
         self.bytes = bytes;
         self.records[index].values = values.clone();
         self.stored_values[index] = storage_values.clone();
@@ -2145,6 +2124,29 @@ mod tests {
         assert_eq!(
             &table.to_bytes()[name_start..name_start + 10],
             &bytes[name_start..name_start + 10]
+        );
+        assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
+    }
+
+    #[test]
+    fn preserves_opaque_fields_on_other_mutations() {
+        let mut bytes = fixture();
+        bytes[64 + 11] = b'Z';
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let field_start = record_start + 4;
+        let raw = bytes[field_start..field_start + 10].to_vec();
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"AGE": 30}).as_object().unwrap().clone(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            &table.to_bytes()[field_start..field_start + 10],
+            raw.as_slice()
         );
         assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
     }
