@@ -58,7 +58,8 @@ The mutation layer currently reuses the parsed header and field descriptors.
 It supports scalar JSON values for the field types already decoded by the
 reader, preserves physical record numbers, writes the deletion marker for
 logical deletes, assigns omitted Level 7 `+` values from the descriptor's
-next-value slot, and replaces the DBF through a synced temporary file.
+next-value slot, preserves those read-only values on existing records, and
+replaces the DBF through a synced temporary file.
 The transaction module now supplies a length-prefixed `TXWL` file WAL and a
 snapshot transaction manager. Before an atomic DBF replacement, the mutation
 layer appends a `TXDB` record for DBF-only changes, or a `TXDM` record

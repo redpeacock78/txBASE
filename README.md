@@ -150,7 +150,8 @@ either a plain field object or an update document using `$set`, `$unset`, and
 `$inc`. An update document cannot mix operators with plain fields or update
 one field more than once. Missing fields in `POST` and `PUT` become DBF null
 values. A `POST` that omits a dBASE Level 7 `+` field receives and advances
-its descriptor next value. Unknown fields are rejected.
+its descriptor next value. The `+` field is read-only on existing records and
+explicit values are rejected on insert. Unknown fields are rejected.
 
 `DELETE` sets the DBF deletion marker and returns `204 No Content`. Deleted
 record numbers are not reused, and subsequent reads return `404 Not Found`.

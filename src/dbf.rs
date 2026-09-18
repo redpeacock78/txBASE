@@ -441,8 +441,14 @@ impl DbfTable {
         let mut values = self.normalize_values(&values)?;
         let mut auto_increment_updates = Vec::new();
         for (field_index, field) in self.fields.iter().enumerate() {
-            if !field.field_type.eq_ignore_ascii_case(&b'+') || !values[&field.name].is_null() {
+            if !field.field_type.eq_ignore_ascii_case(&b'+') {
                 continue;
+            }
+            if !values[&field.name].is_null() {
+                return Err(DbfError::Invalid(format!(
+                    "auto-increment field {} is read-only",
+                    field.name
+                )));
             }
             let Some((next, descriptor_offset)) = self.next_auto_increment(field_index)? else {
                 continue;
@@ -532,7 +538,9 @@ impl DbfTable {
         values: Map<String, Value>,
     ) -> Result<(), DbfError> {
         let index = self.active_index(number)?;
-        let values = self.normalize_values(&values)?;
+        let changed_fields = values.keys().cloned().collect::<BTreeSet<_>>();
+        let mut values = self.normalize_values(&values)?;
+        self.preserve_auto_increment_fields(index, &mut values, &changed_fields)?;
         let (storage_values, memo_updates) = self.prepare_existing_storage(index, &values, None)?;
         self.write_existing_record(index, &values, &storage_values)?;
         self.memo_updates = memo_updates;
@@ -546,7 +554,8 @@ impl DbfTable {
     ) -> Result<(), DbfError> {
         let index = self.active_index(number)?;
         let (values, changed_fields) = expand_update(&self.records[index].values, patch)?;
-        let values = self.normalize_values(&values)?;
+        let mut values = self.normalize_values(&values)?;
+        self.preserve_auto_increment_fields(index, &mut values, &changed_fields)?;
         let (storage_values, memo_updates) =
             self.prepare_existing_storage(index, &values, Some(&changed_fields))?;
         self.write_existing_record(index, &values, &storage_values)?;
@@ -669,6 +678,29 @@ impl DbfTable {
         }
         let next = read_u32(&self.bytes, next_offset)?;
         Ok(Some((next, next_offset)))
+    }
+
+    fn preserve_auto_increment_fields(
+        &self,
+        index: usize,
+        values: &mut Map<String, Value>,
+        changed_fields: &BTreeSet<String>,
+    ) -> Result<(), DbfError> {
+        for field in self
+            .fields
+            .iter()
+            .filter(|field| field.field_type.eq_ignore_ascii_case(&b'+'))
+        {
+            let current = &self.records[index].values[&field.name];
+            if changed_fields.contains(&field.name) && values[&field.name] != *current {
+                return Err(DbfError::Invalid(format!(
+                    "auto-increment field {} is read-only",
+                    field.name
+                )));
+            }
+            values.insert(field.name.clone(), current.clone());
+        }
+        Ok(())
     }
 
     fn write_existing_record(
@@ -2042,6 +2074,27 @@ mod tests {
             u32::from_le_bytes(table.to_bytes()[108..112].try_into().unwrap()),
             8
         );
+
+        let before = table.to_bytes();
+        let error = table
+            .insert_record(serde_json::json!({"AUTO": 99}).as_object().unwrap().clone())
+            .unwrap_err();
+        assert!(error.to_string().contains("auto-increment field AUTO is read-only"));
+        assert_eq!(table.to_bytes(), before);
+
+        table.replace_record(2, Map::new()).unwrap();
+        assert_eq!(table.active_record(2).unwrap().values["AUTO"], 7);
+        let error = table
+            .patch_record(
+                2,
+                serde_json::json!({"AUTO": 8})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("auto-increment field AUTO is read-only"));
+        assert_eq!(table.active_record(2).unwrap().values["AUTO"], 7);
     }
 
     #[test]
