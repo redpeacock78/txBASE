@@ -12,6 +12,8 @@ mod codec;
 mod codepages;
 mod lock;
 #[cfg(test)]
+mod malformed_memo_tests;
+#[cfg(test)]
 mod malformed_tests;
 mod memo;
 #[cfg(test)]

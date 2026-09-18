@@ -109,7 +109,7 @@ src/storage.rs      range-based storage境界
 src/transaction.rs  fileまたはmemory WALとsnapshot transaction
 src/xbase.rs        共通operation IR境界
 tests/fixtures/     parser test用fixture
-tests/corpus/dbf/   malformed DBF parser corpus
+tests/corpus/{dbf,memo,wal,json}/ malformed-input corpus
 docs/research.md    仕様調査と設計判断
 ```
 

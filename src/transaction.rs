@@ -450,3 +450,6 @@ mod tests {
         assert_eq!(engine.wal().records()[0].1[0], b'R');
     }
 }
+
+#[cfg(test)]
+mod malformed_tests;

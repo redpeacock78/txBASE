@@ -389,6 +389,9 @@ pub trait QueryExecutor {
 }
 
 #[cfg(test)]
+mod malformed_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

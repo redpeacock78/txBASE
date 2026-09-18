@@ -131,7 +131,7 @@ src/
 ├── lib.rs
 └── main.rs
 tests/fixtures/     hex fixtures used by parser tests
-tests/corpus/dbf/   malformed DBF parser corpus
+tests/corpus/{dbf,memo,wal,json}/ malformed-input corpora
 docs/research.md    specification and design decisions
 .github/workflows/ci.yml
 ```
