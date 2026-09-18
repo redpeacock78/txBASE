@@ -4,8 +4,9 @@ A small Rust workspace for a transactional dBASE-compatible database.
 
 The first slice keeps the DBF file format at the center and exposes a JSON
 read path. It also provides an HTTP server with `GET`, standards-based
-`QUERY`, and DBF-backed mutation routing. WAL, MVCC, and xBase compatibility
-remain interfaces for later phases.
+`QUERY`, and DBF-backed mutation routing. The repository now contains a
+file-backed WAL and snapshot transaction core. xBase compatibility and
+recovery of DBF mutations from that WAL remain later phases.
 
 ## What works now
 
@@ -17,7 +18,7 @@ remain interfaces for later phases.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.
 - Serves `POST /records`, `PUT /records/{id}`, `PATCH /records/{id}`, and `DELETE /records/{id}`.
 - Persists supported JSON mutations by atomically replacing the DBF file.
-- Provides storage, operation-IR, WAL, MVCC, and transaction traits without claiming that they are complete.
+- Provides range storage, operation IR, file or memory WAL, and snapshot transaction types.
 
 The DBF decoder currently treats text as UTF-8 with replacement for invalid
 bytes. The language-driver byte is retained in the parsed header, but full OEM
@@ -90,7 +91,7 @@ src/
 ├── query.rs        JSON query document and executor
 ├── server.rs       HTTP routing, RFC 10008 checks, and DBF mutations
 ├── storage.rs      range-based storage boundary
-├── transaction.rs  WAL, MVCC, and transaction traits
+├── transaction.rs  file or memory WAL and snapshot transactions
 ├── xbase.rs        shared operation IR boundary
 ├── lib.rs
 └── main.rs
@@ -135,7 +136,9 @@ DBF null values, and unknown fields are rejected.
 `DELETE` sets the DBF deletion marker and returns `204 No Content`. Deleted
 record numbers are not reused, and subsequent reads return `404 Not Found`.
 The server writes a complete temporary sibling file, syncs it, and renames it
-over the DBF path. WAL, MVCC, and crash recovery remain outside this slice.
+over the DBF path. The WAL and snapshot transaction core are not yet coupled
+to DBF mutation records, so replay-based recovery and concurrent writer
+coordination remain outside this slice.
 
 ## Quality gates
 

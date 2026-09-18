@@ -4,7 +4,8 @@
 
 現在の実装は、DBFの読み取り、JSON出力、HTTPの`GET`、RFC 10008に基づく`QUERY`、DBF mutationの実行に範囲を限定しています。
 
-WAL、MVCC、xBase互換フロントエンドは、後続工程の境界だけを定義しています。
+file-backed WALとsnapshot transactionのcoreを実装しています。
+xBase互換フロントエンドとWALからDBF mutationを復旧する処理は、後続工程です。
 
 ## 現在できること
 
@@ -86,7 +87,7 @@ src/dbf.rs          DBF parserとJSON変換
 src/query.rs        JSON query documentとexecutor
 src/server.rs       HTTP routing、QUERY境界、DBF mutation
 src/storage.rs      range-based storage境界
-src/transaction.rs  WAL、MVCC、transaction境界
+src/transaction.rs  fileまたはmemory WALとsnapshot transaction
 src/xbase.rs        共通operation IR境界
 tests/fixtures/     parser test用fixture
 docs/research.md    仕様調査と設計判断
@@ -126,7 +127,7 @@ Dotted path、index、update operatorは未対応です。
 `DELETE`はDBFの削除markerを設定して`204 No Content`を返します。
 削除済みrecord numberは再利用せず、以後の読み取りは`404 Not Found`になります。
 serverは一時ファイルへ全体を書き込み、syncしてからDBF pathへrenameします。
-WAL、MVCC、crash recoveryは未対応です。
+WALとsnapshot transactionはDBF mutationへまだ接続していないため、WAL replayによる復旧と複数writerの調停は未対応です。
 
 ## 検証
 
