@@ -85,3 +85,54 @@ impl Storage for MemoryStorage {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn memory_storage_round_trips_and_expands_ranges() {
+        let mut storage = MemoryStorage::new(b"abc".to_vec());
+        assert_eq!(storage.read_range(1, 2).unwrap(), b"bc");
+
+        storage.write_range(3, b"de").unwrap();
+        storage.sync().unwrap();
+        assert_eq!(storage.into_inner(), b"abcde");
+    }
+
+    #[test]
+    fn memory_storage_rejects_invalid_ranges() {
+        let mut storage = MemoryStorage::new(b"abc".to_vec());
+        assert_eq!(
+            storage.read_range(2, 2).unwrap_err().kind(),
+            io::ErrorKind::UnexpectedEof
+        );
+        assert_eq!(
+            storage.read_range(u64::MAX, 1).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            storage.write_range(u64::MAX, b"x").unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(storage.into_inner(), b"abc");
+    }
+
+    #[test]
+    fn file_storage_syncs_range_changes() {
+        let path =
+            std::env::temp_dir().join(format!("txbase-storage-test-{}.bin", std::process::id()));
+        let _ = fs::remove_file(&path);
+        fs::write(&path, b"abc").unwrap();
+
+        let mut storage = FileStorage::open(&path).unwrap();
+        assert_eq!(storage.read_range(0, 3).unwrap(), b"abc");
+        storage.write_range(1, b"XY").unwrap();
+        storage.sync().unwrap();
+        drop(storage);
+
+        assert_eq!(fs::read(&path).unwrap(), b"aXY");
+        fs::remove_file(path).unwrap();
+    }
+}
