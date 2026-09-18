@@ -36,6 +36,10 @@ impl DbfTable {
             return Ok(());
         }
         let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
+        if wal.records().is_empty() {
+            finish_recovery(wal, &wal_path);
+            return Ok(());
+        }
         let snapshot =
             wal.records().iter().rev().find_map(|(_, payload)| {
                 match decode_wal_payload(path, payload) {

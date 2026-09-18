@@ -97,3 +97,35 @@ fn recovers_delta_before_a_torn_wal_tail() {
     fs::remove_file(path).unwrap();
     fs::remove_file(lock_path).unwrap();
 }
+
+#[test]
+fn discards_a_wal_with_a_torn_payload() {
+    let path = std::env::temp_dir().join(format!("txbase-torn-payload-{}.dbf", std::process::id()));
+    let wal_path = path.with_extension("txbase.wal");
+    let lock_path = path.with_extension("txbase.lock");
+    let original = fixture();
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&lock_path);
+    fs::write(&path, &original).unwrap();
+
+    let mut payload = SNAPSHOT_MAGIC.to_vec();
+    payload.extend_from_slice(&original);
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(&payload).unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    let length = fs::metadata(&wal_path).unwrap().len();
+    let file = OpenOptions::new().write(true).open(&wal_path).unwrap();
+    file.set_len(length - 1).unwrap();
+    file.sync_all().unwrap();
+    drop(file);
+
+    let recovered = DbfTable::from_path(&path).unwrap();
+    assert_eq!(recovered.to_bytes(), original);
+    assert!(!wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(lock_path).unwrap();
+}
