@@ -1,4 +1,5 @@
 use crate::dbf::{DbfRecord, DbfTable};
+use crate::query_path::{field_value, project};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Number, Value};
@@ -383,136 +384,6 @@ fn type_rank(value: &Value) -> u8 {
     }
 }
 
-fn project(record: &DbfRecord, projection: &BTreeMap<String, i8>) -> Value {
-    if projection.is_empty() {
-        return Value::Object(record.values.clone());
-    }
-    if projection.values().any(|value| *value == 1) {
-        let mut values = Map::new();
-        for (field, inclusion) in projection {
-            if *inclusion != 1 {
-                continue;
-            }
-            let Some(value) = field_value(&record.values, field) else {
-                continue;
-            };
-            insert_projected_value(&mut values, &record.values, field, value);
-        }
-        return Value::Object(values);
-    }
-    let mut values = record.values.clone();
-    for field in projection
-        .iter()
-        .filter_map(|(field, exclusion)| (*exclusion == 0).then_some(field))
-    {
-        remove_projected_value(&mut values, field);
-    }
-    Value::Object(values)
-}
-
-fn field_value(values: &Map<String, Value>, path: &str) -> Option<Value> {
-    if let Some(value) = values.get(path) {
-        return Some(value.clone());
-    }
-    let segments = path.split('.').collect::<Vec<_>>();
-    let first = segments.first().copied()?;
-    let value = values.get(first)?;
-    let mut matches = Vec::new();
-    collect_path_values(value, &segments[1..], &mut matches);
-    match matches.len() {
-        0 => None,
-        1 => matches.pop(),
-        _ => Some(Value::Array(matches)),
-    }
-}
-
-fn collect_path_values(value: &Value, segments: &[&str], matches: &mut Vec<Value>) {
-    if segments.is_empty() {
-        matches.push(value.clone());
-        return;
-    }
-    match value {
-        Value::Object(values) => {
-            if let Some(value) = values.get(segments[0]) {
-                collect_path_values(value, &segments[1..], matches);
-            }
-        }
-        Value::Array(values) => {
-            for value in values {
-                collect_path_values(value, segments, matches);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn insert_projected_value(
-    output: &mut Map<String, Value>,
-    source: &Map<String, Value>,
-    path: &str,
-    value: Value,
-) {
-    if source.contains_key(path) || !path.contains('.') {
-        output.insert(path.to_owned(), value);
-        return;
-    }
-    let segments = path.split('.').collect::<Vec<_>>();
-    insert_nested_value(output, &segments, value);
-}
-
-fn insert_nested_value(output: &mut Map<String, Value>, segments: &[&str], value: Value) {
-    let Some((first, rest)) = segments.split_first() else {
-        return;
-    };
-    if rest.is_empty() {
-        output.insert((*first).to_owned(), value);
-        return;
-    }
-    let entry = output
-        .entry((*first).to_owned())
-        .or_insert_with(|| Value::Object(Map::new()));
-    if !entry.is_object() {
-        *entry = Value::Object(Map::new());
-    }
-    insert_nested_value(
-        entry.as_object_mut().expect("object was initialized"),
-        rest,
-        value,
-    );
-}
-
-fn remove_projected_value(values: &mut Map<String, Value>, path: &str) {
-    if values.remove(path).is_some() || !path.contains('.') {
-        return;
-    }
-    let segments = path.split('.').collect::<Vec<_>>();
-    remove_nested_value(values, &segments);
-}
-
-fn remove_nested_value(values: &mut Map<String, Value>, segments: &[&str]) {
-    let Some((first, rest)) = segments.split_first() else {
-        return;
-    };
-    if rest.is_empty() {
-        values.remove(*first);
-        return;
-    }
-    let Some(value) = values.get_mut(*first) else {
-        return;
-    };
-    match value {
-        Value::Object(values) => remove_nested_value(values, rest),
-        Value::Array(values) => {
-            for value in values {
-                if let Value::Object(values) = value {
-                    remove_nested_value(values, rest);
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
 pub trait QueryExecutor {
     fn execute(&self, request: &QueryRequest) -> Result<Vec<Value>, QueryError>;
 }
@@ -654,6 +525,75 @@ mod tests {
         assert_eq!(
             field_value(&literal_values, "PROFILE.CITY"),
             Some(Value::String("literal".into()))
+        );
+    }
+
+    #[test]
+    fn supports_explicit_array_indices_in_paths() {
+        let values = serde_json::json!({
+            "PROFILE": {
+                "TAGS": [{"NAME": "jp"}, {"NAME": "db"}]
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let other_values = serde_json::json!({
+            "PROFILE": {
+                "TAGS": [{"NAME": "aa"}]
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let first = DbfRecord {
+            number: 1,
+            deleted: false,
+            values: values.clone(),
+        };
+        let second = DbfRecord {
+            number: 2,
+            deleted: false,
+            values: other_values,
+        };
+
+        assert_eq!(
+            field_value(&values, "PROFILE.TAGS.0.NAME"),
+            Some(Value::String("jp".into()))
+        );
+        assert_eq!(field_value(&values, "PROFILE.TAGS.2.NAME"), None);
+        assert!(
+            matches_filter(
+                &values,
+                serde_json::json!({"PROFILE.TAGS.1.NAME": "db"})
+                    .as_object()
+                    .unwrap()
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            compare_records(
+                &first,
+                &second,
+                &IndexMap::from([(String::from("PROFILE.TAGS.1.NAME"), 1)])
+            ),
+            Ordering::Greater
+        );
+
+        let inclusion = BTreeMap::from([(String::from("PROFILE.TAGS.1.NAME"), 1)]);
+        assert_eq!(
+            project(&first, &inclusion),
+            serde_json::json!({
+                "PROFILE": {"TAGS": [null, {"NAME": "db"}]}
+            })
+        );
+
+        let exclusion = BTreeMap::from([(String::from("PROFILE.TAGS.0.NAME"), 0)]);
+        assert_eq!(
+            project(&first, &exclusion),
+            serde_json::json!({
+                "PROFILE": {"TAGS": [{}, {"NAME": "db"}]}
+            })
         );
     }
 

@@ -135,7 +135,7 @@ query documentはMongoDBのpredicateから必要な表現だけを借りてい�
 
 missing fieldでは`$ne`と`$nin`が一致し、array valueでは要素のいずれかが条件を満たすと一致します。
 sortの同値recordはDBF record orderを保ちます。
-Dotted pathはnested JSON object/arrayをたどります。完全一致するfield nameを優先し、indexは未対応です。
+Dotted pathはnested JSON object/arrayをたどります。数値segmentは明示的なarray indexとして扱い、数値でないsegmentは全array elementをたどります。完全一致するfield nameを優先します。database indexは未対応です。
 成功した`QUERY` responseは`Accept-Ranges: bytes`を返し、単一byte rangeを処理します。複数rangeと未対応unitは完全responseへfallbackします。
 
 ## Mutationの意味

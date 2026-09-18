@@ -123,6 +123,7 @@ Use `--bind ADDRESS` to select another listener address.
 src/
 ├── dbf/            DBF operations, recovery, memo sidecars, codecs, and tests
 ├── query.rs        JSON query document and executor
+├── query_path.rs   dotted-path traversal and projection helpers
 ├── server.rs       HTTP routing, RFC 10008 checks, and DBF mutations
 ├── storage.rs      range-based storage boundary
 ├── transaction.rs  file or memory WAL and snapshot transactions
@@ -158,8 +159,10 @@ after a promise of MongoDB compatibility:
 The initial operator vocabulary is `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`,
 `$in`, `$nin`, `$and`, `$or`, and `$not`. Missing fields match `$ne` and `$nin`,
 array values match when any element satisfies a predicate, and sort ties retain
-DBF record order. Dotted paths traverse nested JSON objects and arrays; exact
-field-name matches take precedence. Indexes are not supported. Successful
+DBF record order. Dotted paths traverse nested JSON objects and arrays; numeric
+segments select explicit array indexes, nonnumeric segments traverse all array
+elements, and exact field-name matches take precedence. Database indexes are
+not supported. Successful
 `QUERY` responses advertise `Accept-Ranges: bytes` and support one byte range;
 multiple or unknown range units fall back to the complete response.
 
