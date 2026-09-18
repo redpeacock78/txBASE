@@ -31,7 +31,7 @@ The common field encodings are also part of the compatibility contract:
 | `V` and `Q` | Visual FoxPro `0x32` fixed slots with a trailing length byte selected by `_NullFlags` | `V` text and `Q` lowercase hex; nullable and variable-length bits are maintained on writes while `_NullFlags` remains hidden |
 | `W` | Four-byte pointer to a Visual FoxPro `.fpt` binary block | Lowercase hex payload; FPT writes append a type-0 binary block |
 | `M` | Text pointer to a memo block | Text from a sibling `.dbt` or `.fpt` sidecar; binary-flagged `M` is lowercase hex; pointer text otherwise |
-| `B`, `G`, and `P` | Text pointer to a binary block; Visual FoxPro `B` width 8 is a double and `P` is a picture | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; dBASE IV DBT and FPT writes append a binary block; dBASE III writes disabled |
+| `B`, `G`, and `P` | Text pointer to a binary block; Visual FoxPro `B` width 8 is a double and `P` is a picture | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; dBASE III/IV DBT and FPT writes append a binary block, with dBASE III's `0x1a1a` terminator reserved |
 
 The parser therefore reads the declared header and record boundaries, checks
 field names and widths, uses the language-driver byte for the supported
@@ -44,10 +44,12 @@ so non-memo DBF mutations do not rewrite them as text. Text changes append to
 the existing `.dbt` or `.fpt` sidecar, using the dBASE III terminator, the
 dBASE IV header-inclusive length, or the FPT length as appropriate, and update
 the DBF pointer in a `TXDM` WAL snapshot; startup recovery replaces both files
-from that snapshot. dBASE IV binary writes accept hex text, honor the DBT header
-block size, and append a length-delimited binary block, while FPT writes append a type-0 binary block, including the Visual FoxPro `P` picture type;
-dBASE III writes, OLE semantics, and other code-page conversion remain
-explicit future work.
+from that snapshot. dBASE III binary writes accept hex text and append a block
+terminated by the dBASE III `0x1a1a` marker; values that collide with that
+marker are rejected. dBASE IV binary writes accept hex text, honor the DBT
+header block size, and append a length-delimited binary block, while FPT writes
+append a type-0 binary block, including the Visual FoxPro `P` picture type.
+OLE semantics and other code-page conversion remain explicit future work.
 
 The reader uses the declared record count as its boundary and does not require
 the trailing `0x1a` when the declared records are complete. It still preserves
@@ -277,6 +279,7 @@ GET URI alone would be incorrect.
 - [Visual FoxPro Data Dictionary](https://techshelps.github.io/MSDN/BACKGRND/html/msdn_datadict.htm)
 - [Visual FoxPro Memo File Structure](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm)
 - [Visual FoxPro Autoincrementing Field Values](https://www.vfphelp.com/vfp9/html/bd6eff0c-2ce5-43b7-ab29-f5360cd2f90e.htm)
+- [libxbase dBASE III/IV Memo Implementation](https://sources.debian.org/src/libxbase/2.0.0-8.5/xbase/memo.cpp)
 - [MongoDB Documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [MongoDB Logical Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)

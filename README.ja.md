@@ -147,7 +147,7 @@ serverはDBF-only変更では`TXDB`、memo field変更ではDBFとsidecarを含�
 WALは細粒度のmutation recordではなく全体snapshotを保存し、複数writerの調停は未対応です。
 text memoは`.dbt`または`.fpt`から読み取り、変更時は新しいblockをappendしてDBF pointerも更新します。
 sidecarとDBFは`TXDM` WAL snapshotで復旧可能な単位として保存します。
-`B`/`G`/`P`のdBASE IV DBTとFPT binary block書き込みはhex textとして対応し、dBASE IV DBTのsidecar headerにあるblock sizeも尊重します。`P`はVisual FoxProのPicture blockとして扱います。dBASE III DBT binary write、OLE semantics、この範囲外のmemo形式は未対応です。
+`B`/`G`/`P`のbinary block書き込みはhex textとしてdBASE III DBT、dBASE IV DBT、FPTに対応し、dBASE IV DBTのsidecar headerにあるblock sizeも尊重します。dBASE III DBTの`0x1a1a` terminatorと衝突するbinary値は拒否します。`P`はVisual FoxProのPicture blockとして扱います。OLE semanticsとこの範囲外のmemo形式は未対応です。
 
 ## 検証
 

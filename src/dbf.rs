@@ -1284,8 +1284,17 @@ impl MemoFile {
             MemoFormat::Dbase3 => {
                 let data = &self.bytes[start..];
                 let end = data
-                    .iter()
-                    .position(|byte| *byte == EOF_MARKER)
+                    .windows(2)
+                    .position(|pair| pair == [EOF_MARKER, EOF_MARKER])
+                    .or_else(|| {
+                        data.iter()
+                            .position(|byte| *byte == EOF_MARKER)
+                            .filter(|&index| {
+                                data[index + 1..]
+                                    .iter()
+                                    .all(|byte| matches!(*byte, 0 | b' ' | EOF_MARKER))
+                            })
+                    })
                     .unwrap_or(data.len());
                 Ok(Some(data[..end].to_vec()))
             }
@@ -1347,7 +1356,7 @@ impl MemoFile {
                     ));
                 }
                 payload.extend_from_slice(data);
-                payload.push(EOF_MARKER);
+                payload.extend_from_slice(&[EOF_MARKER, EOF_MARKER]);
             }
             MemoFormat::Dbase4 => {
                 let length = u32::try_from(
@@ -1376,6 +1385,17 @@ impl MemoFile {
             .map_err(|_| DbfError::Invalid("binary data is too long".into()))?;
         let mut payload = Vec::with_capacity(8usize.saturating_add(data.len()));
         match self.format {
+            MemoFormat::Dbase3 => {
+                // ponytail: dBASE III has no binary length; reserve 0x1a1a as its
+                // terminator and reject payloads that cannot round-trip through it.
+                if data.last() == Some(&EOF_MARKER)
+                    || data.windows(2).any(|pair| pair == [EOF_MARKER, EOF_MARKER])
+                {
+                    return Err(DbfError::Invalid(
+                        "dBASE III binary data cannot contain its 0x1a1a terminator".into(),
+                    ));
+                }
+            }
             MemoFormat::Dbase4 => {
                 let total_length = length
                     .checked_add(8)
@@ -1387,13 +1407,11 @@ impl MemoFile {
                 payload.extend_from_slice(&0u32.to_be_bytes());
                 payload.extend_from_slice(&length.to_be_bytes());
             }
-            MemoFormat::Dbase3 => {
-                return Err(DbfError::Invalid(
-                    "binary sidecar writes require dBASE IV DBT or FPT".into(),
-                ));
-            }
         }
         payload.extend_from_slice(data);
+        if self.format == MemoFormat::Dbase3 {
+            payload.extend_from_slice(&[EOF_MARKER, EOF_MARKER]);
+        }
         self.append_payload(payload)
     }
 
@@ -1538,9 +1556,14 @@ fn sidecar_update(
     if bytes.is_empty() {
         return Ok(None);
     }
-    if memo_format == MemoFormat::Dbase3 {
+    if memo_format == MemoFormat::Dbase3
+        && (bytes.last() == Some(&EOF_MARKER)
+            || bytes
+                .windows(2)
+                .any(|pair| pair == [EOF_MARKER, EOF_MARKER]))
+    {
         return Err(DbfError::Invalid(
-            "binary sidecar writes require dBASE IV DBT or FPT".into(),
+            "dBASE III binary data cannot contain its 0x1a1a terminator".into(),
         ));
     }
     Ok(Some(MemoUpdate::Binary(bytes)))
@@ -3497,6 +3520,73 @@ mod tests {
         let memo = MemoFile::open(&memo_path, 0x83).unwrap();
         assert_eq!(memo.read(2).unwrap().unwrap(), b"new memo");
         assert_eq!(u32::from_be_bytes(memo.bytes[..4].try_into().unwrap()), 3);
+
+        fs::remove_file(path).unwrap();
+        fs::remove_file(memo_path).unwrap();
+    }
+
+    #[test]
+    fn reads_and_writes_dbase3_binary_sidecar() {
+        let path =
+            std::env::temp_dir().join(format!("txbase-dbase3-binary-{}.dbf", std::process::id()));
+        let memo_path = path.with_extension("dbt");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&memo_path);
+
+        let mut bytes = fixture();
+        bytes[0] = 0x83;
+        bytes[64 + 11] = b'B';
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let binary_start = record_start + 4;
+        bytes[binary_start..binary_start + 10].copy_from_slice(b"         1");
+        fs::write(&path, bytes).unwrap();
+
+        let mut memo = vec![0; DBT_BLOCK_SIZE * 2];
+        let binary = [0x00, 0x1a, 0xff, 0x7f];
+        memo[..4].copy_from_slice(&2u32.to_be_bytes());
+        memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + binary.len()].copy_from_slice(&binary);
+        memo[DBT_BLOCK_SIZE + binary.len()..DBT_BLOCK_SIZE + binary.len() + 2]
+            .copy_from_slice(&[EOF_MARKER, EOF_MARKER]);
+        fs::write(&memo_path, memo).unwrap();
+
+        let mut table = DbfTable::from_path(&path).unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["NAME"], "001aff7f");
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "deadbeef"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        table.save_with_wal(&path).unwrap();
+
+        let mut reread = DbfTable::from_path(&path).unwrap();
+        assert_eq!(reread.active_record(1).unwrap().values["NAME"], "deadbeef");
+        assert_eq!(
+            &reread.to_bytes()[binary_start..binary_start + 10],
+            b"         2"
+        );
+        let memo = MemoFile::open(&memo_path, 0x83).unwrap();
+        assert_eq!(memo.read(2).unwrap().unwrap(), [0xde, 0xad, 0xbe, 0xef]);
+        assert_eq!(u32::from_be_bytes(memo.bytes[..4].try_into().unwrap()), 3);
+
+        let error = reread
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "001a1aff"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("dBASE III binary data cannot contain its 0x1a1a terminator")
+        );
+        assert_eq!(reread.active_record(1).unwrap().values["NAME"], "deadbeef");
 
         fs::remove_file(path).unwrap();
         fs::remove_file(memo_path).unwrap();
