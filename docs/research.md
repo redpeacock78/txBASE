@@ -35,7 +35,8 @@ The common field encodings are also part of the compatibility contract:
 
 The parser therefore reads the declared header and record boundaries, checks
 field names and widths, uses the language-driver byte for the supported
-code-page mappings, and excludes records marked deleted from the JSON read
+code-page mappings, including Visual FoxPro's Windows-1250 (`0xc8`) and
+Windows-1251 (`0xc9`) drivers, and excludes records marked deleted from the JSON read
 path. Character writes reject values that the declared code-page mapping
 cannot represent. When a sibling `.dbt` or `.fpt` exists, `M` fields are
 resolved from their block pointers, while `B`/`G`/`P` payloads are exposed as hex

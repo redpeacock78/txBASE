@@ -29,6 +29,18 @@ const CP866_UPPER: &str = concat!(
     "\u{2514}\u{2534}\u{252c}\u{251c}\u{2500}\u{253c}\u{255e}\u{255f}\u{255a}\u{2554}\u{2569}\u{2566}\u{2560}\u{2550}\u{256c}\u{2567}\u{2568}\u{2564}\u{2565}\u{2559}\u{2558}\u{2552}\u{2553}\u{256b}\u{256a}\u{2518}\u{250c}\u{2588}\u{2584}\u{258c}\u{2590}\u{2580}",
     "\u{440}\u{441}\u{442}\u{443}\u{444}\u{445}\u{446}\u{447}\u{448}\u{449}\u{44a}\u{44b}\u{44c}\u{44d}\u{44e}\u{44f}\u{401}\u{451}\u{404}\u{454}\u{407}\u{457}\u{40e}\u{45e}\u{b0}\u{2219}\u{b7}\u{221a}\u{2116}\u{a4}\u{25a0}\u{a0}"
 );
+const CP1250_UPPER: &str = concat!(
+    "\u{20ac}\u{fffd}\u{201a}\u{fffd}\u{201e}\u{2026}\u{2020}\u{2021}\u{fffd}\u{2030}\u{160}\u{2039}\u{15a}\u{164}\u{17d}\u{179}\u{fffd}\u{2018}\u{2019}\u{201c}\u{201d}\u{2022}\u{2013}\u{2014}\u{fffd}\u{2122}\u{161}\u{203a}\u{15b}\u{165}\u{17e}\u{17a}",
+    "\u{a0}\u{2c7}\u{2d8}\u{141}\u{a4}\u{104}\u{a6}\u{a7}\u{a8}\u{a9}\u{15e}\u{ab}\u{ac}\u{ad}\u{ae}\u{17b}\u{b0}\u{b1}\u{2db}\u{142}\u{b4}\u{b5}\u{b6}\u{b7}\u{b8}\u{105}\u{15f}\u{bb}\u{13d}\u{2dd}\u{13e}\u{17c}",
+    "\u{154}\u{c1}\u{c2}\u{102}\u{c4}\u{139}\u{106}\u{c7}\u{10c}\u{c9}\u{118}\u{cb}\u{11a}\u{cd}\u{ce}\u{10e}\u{110}\u{143}\u{147}\u{d3}\u{d4}\u{150}\u{d6}\u{d7}\u{158}\u{16e}\u{da}\u{170}\u{dc}\u{dd}\u{162}\u{df}",
+    "\u{155}\u{e1}\u{e2}\u{103}\u{e4}\u{13a}\u{107}\u{e7}\u{10d}\u{e9}\u{119}\u{eb}\u{11b}\u{ed}\u{ee}\u{10f}\u{111}\u{144}\u{148}\u{f3}\u{f4}\u{151}\u{f6}\u{f7}\u{159}\u{16f}\u{fa}\u{171}\u{fc}\u{fd}\u{163}\u{2d9}"
+);
+const CP1251_UPPER: &str = concat!(
+    "\u{402}\u{403}\u{201a}\u{453}\u{201e}\u{2026}\u{2020}\u{2021}\u{20ac}\u{2030}\u{409}\u{2039}\u{40a}\u{40c}\u{40b}\u{40f}\u{452}\u{2018}\u{2019}\u{201c}\u{201d}\u{2022}\u{2013}\u{2014}\u{fffd}\u{2122}\u{459}\u{203a}\u{45a}\u{45c}\u{45b}\u{45f}",
+    "\u{a0}\u{40e}\u{45e}\u{408}\u{a4}\u{490}\u{a6}\u{a7}\u{401}\u{a9}\u{404}\u{ab}\u{ac}\u{ad}\u{ae}\u{407}\u{b0}\u{b1}\u{406}\u{456}\u{491}\u{b5}\u{b6}\u{b7}\u{451}\u{2116}\u{454}\u{bb}\u{458}\u{405}\u{455}\u{457}",
+    "\u{410}\u{411}\u{412}\u{413}\u{414}\u{415}\u{416}\u{417}\u{418}\u{419}\u{41a}\u{41b}\u{41c}\u{41d}\u{41e}\u{41f}\u{420}\u{421}\u{422}\u{423}\u{424}\u{425}\u{426}\u{427}\u{428}\u{429}\u{42a}\u{42b}\u{42c}\u{42d}\u{42e}\u{42f}",
+    "\u{430}\u{431}\u{432}\u{433}\u{434}\u{435}\u{436}\u{437}\u{438}\u{439}\u{43a}\u{43b}\u{43c}\u{43d}\u{43e}\u{43f}\u{440}\u{441}\u{442}\u{443}\u{444}\u{445}\u{446}\u{447}\u{448}\u{449}\u{44a}\u{44b}\u{44c}\u{44d}\u{44e}\u{44f}"
+);
 
 pub(super) fn encode_field(
     field: &FieldDescriptor,
@@ -235,6 +247,8 @@ pub(super) fn encode_character(
         0x02 => encode_codepage(&text, CP850_UPPER),
         0x1f | 0x22 | 0x23 | 0x40 | 0x64 | 0x87 => encode_codepage(&text, CP852_UPPER),
         0x26 | 0x65 => encode_codepage(&text, CP866_UPPER),
+        0xc8 => encode_codepage(&text, CP1250_UPPER),
+        0xc9 => encode_codepage(&text, CP1251_UPPER),
         0x03 | 0x57 => encode_windows_1252(&text),
         _ => Some(text.into_bytes()),
     };
@@ -244,6 +258,8 @@ pub(super) fn encode_character(
             0x02 => "CP850",
             0x1f | 0x22 | 0x23 | 0x40 | 0x64 | 0x87 => "CP852",
             0x26 | 0x65 => "CP866",
+            0xc8 => "Windows-1250",
+            0xc9 => "Windows-1251",
             0x03 | 0x57 => "Windows-1252",
             _ => "the declared code page",
         };
@@ -879,6 +895,8 @@ pub(super) fn text(bytes: &[u8], language_driver: u8) -> String {
         0x02 => decode_codepage(bytes, CP850_UPPER),
         0x1f | 0x22 | 0x23 | 0x40 | 0x64 | 0x87 => decode_codepage(bytes, CP852_UPPER),
         0x26 | 0x65 => decode_codepage(bytes, CP866_UPPER),
+        0xc8 => decode_codepage(bytes, CP1250_UPPER),
+        0xc9 => decode_codepage(bytes, CP1251_UPPER),
         0x03 | 0x57 => decode_windows_1252(bytes),
         _ => String::from_utf8_lossy(bytes).into_owned(),
     }
