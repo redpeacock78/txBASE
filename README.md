@@ -114,7 +114,7 @@ Use `--bind ADDRESS` to select another listener address.
 
 ```text
 src/
-├── dbf.rs          DBF headers, descriptors, records, and JSON conversion
+├── dbf/            DBF table operations, memo sidecars, field codecs, and tests
 ├── query.rs        JSON query document and executor
 ├── server.rs       HTTP routing, RFC 10008 checks, and DBF mutations
 ├── storage.rs      range-based storage boundary
@@ -151,7 +151,8 @@ after a promise of MongoDB compatibility:
 The initial operator vocabulary is `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`,
 `$in`, `$nin`, `$and`, `$or`, and `$not`. Missing fields match `$ne` and `$nin`,
 array values match when any element satisfies a predicate, and sort ties retain
-DBF record order. Dotted paths and indexes are not supported.
+DBF record order. Dotted paths traverse nested JSON objects and arrays; exact
+field-name matches take precedence. Indexes are not supported.
 
 ## Mutation semantics
 

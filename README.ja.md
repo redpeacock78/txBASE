@@ -98,7 +98,7 @@ listener addressは`--bind ADDRESS`で変更できます。
 ## 構成
 
 ```text
-src/dbf.rs          DBF parserとJSON変換
+src/dbf/            DBF table操作、memo sidecar、field codec、test
 src/query.rs        JSON query documentとexecutor
 src/server.rs       HTTP routing、QUERY境界、DBF mutation
 src/storage.rs      range-based storage境界
@@ -131,7 +131,7 @@ query documentはMongoDBのpredicateから必要な表現だけを借りてい�
 
 missing fieldでは`$ne`と`$nin`が一致し、array valueでは要素のいずれかが条件を満たすと一致します。
 sortの同値recordはDBF record orderを保ちます。
-Dotted pathとindexは未対応です。
+Dotted pathはnested JSON object/arrayをたどります。完全一致するfield nameを優先し、indexは未対応です。
 
 ## Mutationの意味
 

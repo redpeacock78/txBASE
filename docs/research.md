@@ -130,7 +130,9 @@ operator set:
 The [comparison operator reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/)
 defines the comparison and membership family. txbase uses exact field names,
 JSON scalar comparison, explicit type ordering for sort, and deterministic
-DBF record order for sort ties. Dotted paths and collation are not supported.
+DBF record order for sort ties. Dotted paths traverse nested JSON objects and
+arrays, with an exact field-name match taking precedence; collation is not
+supported.
 
 The [logical operator reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)
 defines `$and` as requiring every clause, `$or` as requiring at least one

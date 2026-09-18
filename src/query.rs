@@ -218,7 +218,10 @@ fn matches_filter(
                     .ok_or_else(|| QueryError::Invalid("$not must be an object".into()))?;
                 !matches_filter(values, clause)?
             }
-            _ => matches_condition(values.get(field), condition)?,
+            _ => {
+                let actual = field_value(values, field);
+                matches_condition(actual.as_ref(), condition)?
+            }
         };
         if !matches {
             return Ok(false);
@@ -302,7 +305,9 @@ fn compare_any(
 
 fn compare_records(left: &DbfRecord, right: &DbfRecord, sort: &IndexMap<String, i8>) -> Ordering {
     for (field, direction) in sort {
-        let ordering = compare_for_sort(left.values.get(field), right.values.get(field));
+        let left_value = field_value(&left.values, field);
+        let right_value = field_value(&right.values, field);
+        let ordering = compare_for_sort(left_value.as_ref(), right_value.as_ref());
         if ordering != Ordering::Equal {
             return if *direction == 1 {
                 ordering
@@ -383,27 +388,129 @@ fn project(record: &DbfRecord, projection: &BTreeMap<String, i8>) -> Value {
         return Value::Object(record.values.clone());
     }
     if projection.values().any(|value| *value == 1) {
-        return Value::Object(
-            projection
-                .iter()
-                .filter(|(_, inclusion)| **inclusion == 1)
-                .filter_map(|(field, _)| {
-                    record
-                        .values
-                        .get(field)
-                        .map(|value| (field.clone(), value.clone()))
-                })
-                .collect(),
-        );
+        let mut values = Map::new();
+        for (field, inclusion) in projection {
+            if *inclusion != 1 {
+                continue;
+            }
+            let Some(value) = field_value(&record.values, field) else {
+                continue;
+            };
+            insert_projected_value(&mut values, &record.values, field, value);
+        }
+        return Value::Object(values);
     }
     let mut values = record.values.clone();
     for field in projection
         .iter()
         .filter_map(|(field, exclusion)| (*exclusion == 0).then_some(field))
     {
-        values.remove(field);
+        remove_projected_value(&mut values, field);
     }
     Value::Object(values)
+}
+
+fn field_value(values: &Map<String, Value>, path: &str) -> Option<Value> {
+    if let Some(value) = values.get(path) {
+        return Some(value.clone());
+    }
+    let segments = path.split('.').collect::<Vec<_>>();
+    let first = segments.first().copied()?;
+    let value = values.get(first)?;
+    let mut matches = Vec::new();
+    collect_path_values(value, &segments[1..], &mut matches);
+    match matches.len() {
+        0 => None,
+        1 => matches.pop(),
+        _ => Some(Value::Array(matches)),
+    }
+}
+
+fn collect_path_values(value: &Value, segments: &[&str], matches: &mut Vec<Value>) {
+    if segments.is_empty() {
+        matches.push(value.clone());
+        return;
+    }
+    match value {
+        Value::Object(values) => {
+            if let Some(value) = values.get(segments[0]) {
+                collect_path_values(value, &segments[1..], matches);
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                collect_path_values(value, segments, matches);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn insert_projected_value(
+    output: &mut Map<String, Value>,
+    source: &Map<String, Value>,
+    path: &str,
+    value: Value,
+) {
+    if source.contains_key(path) || !path.contains('.') {
+        output.insert(path.to_owned(), value);
+        return;
+    }
+    let segments = path.split('.').collect::<Vec<_>>();
+    insert_nested_value(output, &segments, value);
+}
+
+fn insert_nested_value(output: &mut Map<String, Value>, segments: &[&str], value: Value) {
+    let Some((first, rest)) = segments.split_first() else {
+        return;
+    };
+    if rest.is_empty() {
+        output.insert((*first).to_owned(), value);
+        return;
+    }
+    let entry = output
+        .entry((*first).to_owned())
+        .or_insert_with(|| Value::Object(Map::new()));
+    if !entry.is_object() {
+        *entry = Value::Object(Map::new());
+    }
+    insert_nested_value(
+        entry.as_object_mut().expect("object was initialized"),
+        rest,
+        value,
+    );
+}
+
+fn remove_projected_value(values: &mut Map<String, Value>, path: &str) {
+    if values.remove(path).is_some() || !path.contains('.') {
+        return;
+    }
+    let segments = path.split('.').collect::<Vec<_>>();
+    remove_nested_value(values, &segments);
+}
+
+fn remove_nested_value(values: &mut Map<String, Value>, segments: &[&str]) {
+    let Some((first, rest)) = segments.split_first() else {
+        return;
+    };
+    if rest.is_empty() {
+        values.remove(*first);
+        return;
+    }
+    let Some(value) = values.get_mut(*first) else {
+        return;
+    };
+    match value {
+        Value::Object(values) => remove_nested_value(values, rest),
+        Value::Array(values) => {
+            for value in values {
+                if let Value::Object(values) = value {
+                    remove_nested_value(values, rest);
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 pub trait QueryExecutor {
@@ -465,6 +572,88 @@ mod tests {
                 "NAME": "Bob",
                 "AGE": 7
             })]
+        );
+    }
+
+    #[test]
+    fn supports_dotted_paths_for_nested_values() {
+        let first_values = serde_json::json!({
+            "PROFILE": {
+                "CITY": "Tokyo",
+                "TAGS": [{"NAME": "jp"}, {"NAME": "db"}]
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let second_values = serde_json::json!({
+            "PROFILE": {"CITY": "Osaka"}
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let first = DbfRecord {
+            number: 1,
+            deleted: false,
+            values: first_values.clone(),
+        };
+        let second = DbfRecord {
+            number: 2,
+            deleted: false,
+            values: second_values,
+        };
+
+        assert!(
+            matches_filter(
+                &first_values,
+                serde_json::json!({
+                    "PROFILE.CITY": "Tokyo",
+                    "PROFILE.TAGS.NAME": {"$in": ["db"]}
+                })
+                .as_object()
+                .unwrap()
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            compare_records(
+                &first,
+                &second,
+                &IndexMap::from([(String::from("PROFILE.CITY"), 1)])
+            ),
+            Ordering::Greater
+        );
+
+        let projection = BTreeMap::from([
+            (String::from("PROFILE.CITY"), 1),
+            (String::from("PROFILE.TAGS.NAME"), 1),
+        ]);
+        assert_eq!(
+            project(&first, &projection),
+            serde_json::json!({
+                "PROFILE": {
+                    "CITY": "Tokyo",
+                    "TAGS": {"NAME": ["jp", "db"]}
+                }
+            })
+        );
+
+        let exclusion = BTreeMap::from([(String::from("PROFILE.CITY"), 0)]);
+        assert_eq!(
+            project(&first, &exclusion),
+            serde_json::json!({
+                "PROFILE": {"TAGS": [{"NAME": "jp"}, {"NAME": "db"}]}
+            })
+        );
+
+        let mut literal_values = first_values;
+        literal_values.insert(
+            String::from("PROFILE.CITY"),
+            Value::String("literal".into()),
+        );
+        assert_eq!(
+            field_value(&literal_values, "PROFILE.CITY"),
+            Some(Value::String("literal".into()))
         );
     }
 
