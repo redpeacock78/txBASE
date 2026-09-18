@@ -27,10 +27,10 @@ remain later phases.
   `TXDM` WAL snapshot.
 - Provides range storage, operation IR, file or memory WAL, and snapshot transaction types.
 
-Character fields with language-driver ID `0x03` or `0x57` are decoded and
-encoded as Windows-1252. Other drivers retain the existing UTF-8/lossy
-fallback, so full OEM and other Windows code-page conversion remains future
-work; writes reject characters that Windows-1252 cannot represent.
+Character fields with language-driver ID `0x01` or `0x02` are decoded and
+encoded as CP437 or CP850; IDs `0x03` and `0x57` use Windows-1252. Other
+drivers retain the existing UTF-8/lossy fallback. Writes reject characters
+that the selected code page cannot represent.
 
 ## Quick start
 

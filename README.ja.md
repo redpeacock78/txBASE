@@ -19,12 +19,12 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - `GET /records`と`GET /records/{id}`を提供する。
 - `QUERY /records`でfilter、sort、projection、skip、limitを実行する。
 - `POST /records`、`PUT /records/{id}`、`PATCH /records/{id}`、`DELETE /records/{id}`を提供する。
-- 対応するJSON mutationを`TXDB` snapshot WALへsyncしてからDBFへ保存し、未完了の保存を起動時に復旧する。
-- siblingの`.dbt`と`.fpt` sidecarからtext memoを読み、memo以外のmutationでは既存pointerを保持する。
+- 対応するJSON mutationを`TXDB`または`TXDM` snapshot WALへsyncしてからDBF/sidecarへ保存し、未完了の保存を起動時に復旧する。
+- siblingの`.dbt`と`.fpt` sidecarからtext memoを読み、変更時は新しいblockへappendする。
 
-language-driver IDが`0x03`または`0x57`のcharacter fieldはWindows-1252として読み書きします。
-それ以外のdriverは既存のUTF-8とlossy fallbackを使うため、OEMと他のWindows code pageの完全な変換は未実装です。
-Windows-1252で表現できない文字の書き込みは拒否します。
+language-driver IDが`0x01`または`0x02`のcharacter fieldはCP437またはCP850、`0x03`または`0x57`はWindows-1252として読み書きします。
+それ以外のdriverは既存のUTF-8とlossy fallbackを使います。
+選択されたcode pageで表現できない文字の書き込みは拒否します。
 
 ## 最短の手順
 

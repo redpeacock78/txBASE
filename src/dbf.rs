@@ -18,6 +18,18 @@ const MEMO_SNAPSHOT_MAGIC: &[u8; 4] = b"TXDM";
 const ACTIVE_RECORD: u8 = 0x20;
 const DELETED_RECORD: u8 = 0x2a;
 const DBT_BLOCK_SIZE: usize = 512;
+const CP437_UPPER: &str = concat!(
+    "\u{c7}\u{fc}\u{e9}\u{e2}\u{e4}\u{e0}\u{e5}\u{e7}\u{ea}\u{eb}\u{e8}\u{ef}\u{ee}\u{ec}\u{c4}\u{c5}\u{c9}\u{e6}\u{c6}\u{f4}\u{f6}\u{f2}\u{fb}\u{f9}\u{ff}\u{d6}\u{dc}\u{a2}\u{a3}\u{a5}\u{20a7}\u{192}",
+    "\u{e1}\u{ed}\u{f3}\u{fa}\u{f1}\u{d1}\u{aa}\u{ba}\u{bf}\u{2310}\u{ac}\u{bd}\u{bc}\u{a1}\u{ab}\u{bb}\u{2591}\u{2592}\u{2593}\u{2502}\u{2524}\u{2561}\u{2562}\u{2556}\u{2555}\u{2563}\u{2551}\u{2557}\u{255d}\u{255c}\u{255b}\u{2510}",
+    "\u{2514}\u{2534}\u{252c}\u{251c}\u{2500}\u{253c}\u{255e}\u{255f}\u{255a}\u{2554}\u{2569}\u{2566}\u{2560}\u{2550}\u{256c}\u{2567}\u{2568}\u{2564}\u{2565}\u{2559}\u{2558}\u{2552}\u{2553}\u{256b}\u{256a}\u{2518}\u{250c}\u{2588}\u{2584}\u{258c}\u{2590}\u{2580}",
+    "\u{3b1}\u{df}\u{393}\u{3c0}\u{3a3}\u{3c3}\u{b5}\u{3c4}\u{3a6}\u{398}\u{3a9}\u{3b4}\u{221e}\u{3c6}\u{3b5}\u{2229}\u{2261}\u{b1}\u{2265}\u{2264}\u{2320}\u{2321}\u{f7}\u{2248}\u{b0}\u{2219}\u{b7}\u{221a}\u{207f}\u{b2}\u{25a0}\u{a0}"
+);
+const CP850_UPPER: &str = concat!(
+    "\u{c7}\u{fc}\u{e9}\u{e2}\u{e4}\u{e0}\u{e5}\u{e7}\u{ea}\u{eb}\u{e8}\u{ef}\u{ee}\u{ec}\u{c4}\u{c5}\u{c9}\u{e6}\u{c6}\u{f4}\u{f6}\u{f2}\u{fb}\u{f9}\u{ff}\u{d6}\u{dc}\u{f8}\u{a3}\u{d8}\u{d7}\u{192}",
+    "\u{e1}\u{ed}\u{f3}\u{fa}\u{f1}\u{d1}\u{aa}\u{ba}\u{bf}\u{ae}\u{ac}\u{bd}\u{bc}\u{a1}\u{ab}\u{bb}\u{2591}\u{2592}\u{2593}\u{2502}\u{2524}\u{c1}\u{c2}\u{c0}\u{a9}\u{2563}\u{2551}\u{2557}\u{255d}\u{a2}\u{a5}",
+    "\u{2510}\u{2514}\u{2534}\u{252c}\u{251c}\u{2500}\u{253c}\u{e3}\u{c3}\u{255a}\u{2554}\u{2569}\u{2566}\u{2560}\u{2550}\u{256c}\u{a4}\u{f0}\u{d0}\u{ca}\u{cb}\u{c8}\u{131}\u{cd}\u{ce}\u{cf}\u{2518}\u{250c}\u{2588}\u{2584}\u{a6}\u{cc}\u{2580}",
+    "\u{d3}\u{df}\u{d4}\u{d2}\u{f5}\u{d5}\u{b5}\u{fe}\u{de}\u{da}\u{db}\u{d9}\u{fd}\u{dd}\u{af}\u{b4}\u{ad}\u{b1}\u{2017}\u{be}\u{b6}\u{a7}\u{f7}\u{b8}\u{b0}\u{a8}\u{b7}\u{b9}\u{b3}\u{b2}\u{25a0}\u{a0}"
+);
 
 #[derive(Debug)]
 pub enum DbfError {
@@ -1109,15 +1121,24 @@ fn encode_character(
     language_driver: u8,
 ) -> Result<Vec<u8>, DbfError> {
     let text = value_text(value, field)?;
-    match language_driver {
-        0x03 | 0x57 => encode_windows_1252(&text).ok_or_else(|| {
-            DbfError::Invalid(format!(
-                "value for {} contains a character outside Windows-1252",
-                field.name
-            ))
-        }),
-        _ => Ok(text.into_bytes()),
-    }
+    let encoded = match language_driver {
+        0x01 => encode_codepage(&text, CP437_UPPER),
+        0x02 => encode_codepage(&text, CP850_UPPER),
+        0x03 | 0x57 => encode_windows_1252(&text),
+        _ => Some(text.into_bytes()),
+    };
+    encoded.ok_or_else(|| {
+        let code_page = match language_driver {
+            0x01 => "CP437",
+            0x02 => "CP850",
+            0x03 | 0x57 => "Windows-1252",
+            _ => "the declared code page",
+        };
+        DbfError::Invalid(format!(
+            "value for {} contains a character outside {code_page}",
+            field.name
+        ))
+    })
 }
 
 fn value_text(value: &Value, field: &FieldDescriptor) -> Result<String, DbfError> {
@@ -1297,10 +1318,43 @@ fn text(bytes: &[u8], language_driver: u8) -> String {
         .rposition(|byte| !matches!(byte, b' ' | b'\0'))
         .map_or(0, |index| index + 1);
     let bytes = &bytes[..end];
-    if matches!(language_driver, 0x03 | 0x57) {
-        return decode_windows_1252(bytes);
+    match language_driver {
+        0x01 => decode_codepage(bytes, CP437_UPPER),
+        0x02 => decode_codepage(bytes, CP850_UPPER),
+        0x03 | 0x57 => decode_windows_1252(bytes),
+        _ => String::from_utf8_lossy(bytes).into_owned(),
     }
-    String::from_utf8_lossy(bytes).into_owned()
+}
+
+fn decode_codepage(bytes: &[u8], upper: &str) -> String {
+    bytes
+        .iter()
+        .map(|byte| {
+            if *byte < 0x80 {
+                char::from(*byte)
+            } else {
+                upper
+                    .chars()
+                    .nth(usize::from(*byte - 0x80))
+                    .unwrap_or('\u{fffd}')
+            }
+        })
+        .collect()
+}
+
+fn encode_codepage(text: &str, upper: &str) -> Option<Vec<u8>> {
+    text.chars()
+        .map(|character| {
+            if character <= '\u{7f}' {
+                u8::try_from(u32::from(character)).ok()
+            } else {
+                upper
+                    .chars()
+                    .position(|candidate| candidate == character)
+                    .and_then(|index| u8::try_from(index + 0x80).ok())
+            }
+        })
+        .collect()
 }
 
 fn decode_windows_1252(bytes: &[u8]) -> String {
@@ -1491,6 +1545,56 @@ mod tests {
             )
             .unwrap_err();
         assert!(error.to_string().contains("outside Windows-1252"));
+    }
+
+    #[test]
+    fn decodes_and_encodes_oem_character_fields() {
+        let mut bytes = fixture();
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let name_start = record_start + 4;
+
+        bytes[29] = 0x01;
+        bytes[name_start..name_start + 10].fill(b' ');
+        bytes[name_start] = 0x82;
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["NAME"], "é");
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "é"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        assert_eq!(table.to_bytes()[name_start], 0x82);
+
+        bytes[29] = 0x02;
+        bytes[name_start..name_start + 10].fill(b' ');
+        bytes[name_start] = 0x9b;
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["NAME"], "ø");
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "ø"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        assert_eq!(table.to_bytes()[name_start], 0x9b);
+
+        let error = table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "漢"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("outside CP850"));
     }
 
     #[test]
