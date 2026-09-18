@@ -1547,11 +1547,7 @@ fn rejects_stale_memo_sidecar_before_save() {
 
 #[test]
 fn recovers_latest_snapshot_from_wal_before_reading() {
-    let path = std::env::temp_dir().join(format!(
-        "txbase-dbf-recovery-{}-{}.dbf",
-        std::process::id(),
-        std::thread::current().name().unwrap_or("test")
-    ));
+    let path = std::env::temp_dir().join(format!("txbase-dbf-recovery-{}.dbf", std::process::id()));
     let wal_path = path.with_extension("txbase.wal");
     let _ = fs::remove_file(&path);
     let _ = fs::remove_file(&wal_path);
@@ -1589,9 +1585,8 @@ fn recovers_latest_snapshot_from_wal_before_reading() {
 #[test]
 fn recovers_dbf_delta_from_wal_before_reading() {
     let path = std::env::temp_dir().join(format!(
-        "txbase-dbf-delta-recovery-{}-{}.dbf",
-        std::process::id(),
-        std::thread::current().name().unwrap_or("test")
+        "txbase-dbf-delta-recovery-{}.dbf",
+        std::process::id()
     ));
     let wal_path = path.with_extension("txbase.wal");
     let _ = fs::remove_file(&path);
@@ -1630,9 +1625,8 @@ fn recovers_dbf_delta_from_wal_before_reading() {
 #[test]
 fn replays_operation_intent_when_state_payload_is_missing() {
     let path = std::env::temp_dir().join(format!(
-        "txbase-operation-recovery-{}-{}.dbf",
-        std::process::id(),
-        std::thread::current().name().unwrap_or("test")
+        "txbase-operation-recovery-{}.dbf",
+        std::process::id()
     ));
     let wal_path = path.with_extension("txbase.wal");
     let lock_path = path.with_extension("txbase.lock");
@@ -1662,9 +1656,8 @@ fn replays_operation_intent_when_state_payload_is_missing() {
 #[test]
 fn recovers_dbf_and_memo_from_txdm_snapshot() {
     let path = std::env::temp_dir().join(format!(
-        "txbase-dbf-memo-recovery-{}-{}.dbf",
-        std::process::id(),
-        std::thread::current().name().unwrap_or("test")
+        "txbase-dbf-memo-recovery-{}.dbf",
+        std::process::id()
     ));
     let memo_path = path.with_extension("dbt");
     let wal_path = path.with_extension("txbase.wal");
@@ -1722,9 +1715,8 @@ fn recovers_dbf_and_memo_from_txdm_snapshot() {
 #[test]
 fn recovers_dbf_and_memo_delta_from_wal_before_reading() {
     let path = std::env::temp_dir().join(format!(
-        "txbase-dbf-memo-delta-recovery-{}-{}.dbf",
-        std::process::id(),
-        std::thread::current().name().unwrap_or("test")
+        "txbase-dbf-memo-delta-recovery-{}.dbf",
+        std::process::id()
     ));
     let memo_path = path.with_extension("dbt");
     let wal_path = path.with_extension("txbase.wal");
