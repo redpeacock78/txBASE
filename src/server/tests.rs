@@ -1,0 +1,204 @@
+use super::*;
+use std::fs;
+use tiny_http::{Method, StatusCode, TestRequest};
+
+fn fixture() -> Vec<u8> {
+    include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect()
+}
+
+fn json_request(method: Method, path: &str, body: &'static str) -> Request {
+    TestRequest::new()
+        .with_method(method)
+        .with_path(path)
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_body(body)
+        .into()
+}
+
+fn query_request(body: &'static str, content_type: Option<&'static str>) -> Request {
+    let request = TestRequest::new()
+        .with_method("QUERY".parse().unwrap())
+        .with_path("/records")
+        .with_body(body);
+    match content_type {
+        Some(content_type) => request
+            .with_header(header("Content-Type", content_type))
+            .into(),
+        None => request.into(),
+    }
+}
+
+fn ranged_query_request(body: &'static str, range: &'static str) -> Request {
+    TestRequest::new()
+        .with_method("QUERY".parse().unwrap())
+        .with_path("/records")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("Range", range))
+        .with_body(body)
+        .into()
+}
+
+#[test]
+fn mutation_endpoints_persist_and_delete_records() {
+    let path = std::env::temp_dir().join(format!("txbase-server-test-{}.dbf", std::process::id()));
+    let _ = fs::remove_file(&path);
+    fs::write(&path, fixture()).unwrap();
+    let mut table = DbfTable::from_bytes(&fixture()).unwrap();
+
+    let mut post = json_request(
+        Method::Post,
+        "/records",
+        r#"{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":false}"#,
+    );
+    assert_eq!(
+        post_response(&mut post, "/records", &mut table, &path).status_code(),
+        StatusCode(201)
+    );
+
+    let mut patch = json_request(Method::Patch, "/records/3", r#"{"$inc":{"AGE":1}}"#);
+    assert_eq!(
+        update_response(&mut patch, "/records/3", &mut table, &path, false).status_code(),
+        StatusCode(200)
+    );
+
+    let mut put = json_request(
+        Method::Put,
+        "/records/3",
+        r#"{"ID":3,"NAME":"Carol","AGE":44,"ACTIVE":true}"#,
+    );
+    assert_eq!(
+        update_response(&mut put, "/records/3", &mut table, &path, true).status_code(),
+        StatusCode(200)
+    );
+
+    assert_eq!(
+        delete_response("/records/3", &mut table, &path).status_code(),
+        StatusCode(204)
+    );
+    let persisted = DbfTable::from_path(&path).unwrap();
+    assert!(persisted.active_record(3).is_none());
+    assert!(persisted.records()[2].deleted);
+    assert!(!path.with_extension("txbase.wal").exists());
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn query_endpoint_enforces_json_boundary_and_executes() {
+    let table = DbfTable::from_bytes(&fixture()).unwrap();
+
+    let mut missing_content_type = query_request("{}", None);
+    let response = query_response(&mut missing_content_type, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(400));
+
+    let mut unsupported_content_type = query_request("{}", Some("text/plain"));
+    let response = query_response(&mut unsupported_content_type, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(415));
+
+    let mut invalid_json = query_request("{", Some(JSON_QUERY_MEDIA_TYPE));
+    let response = query_response(&mut invalid_json, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(422));
+
+    let mut unknown_field = query_request(r#"{"filtre":{"AGE":29}}"#, Some(JSON_QUERY_MEDIA_TYPE));
+    let response = query_response(&mut unknown_field, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(422));
+
+    let mut valid = query_request(
+        r#"{"filter":{"AGE":{"$gte":20}}}"#,
+        Some("application/json; charset=utf-8"),
+    );
+    let response = query_response(&mut valid, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(200));
+}
+
+#[test]
+fn query_endpoint_handles_single_byte_ranges() {
+    let table = DbfTable::from_bytes(&fixture()).unwrap();
+    let full = Value::Array(table.active_json()).to_string().into_bytes();
+
+    let mut first = ranged_query_request("{}", "bytes=0-9");
+    let response = query_response(&mut first, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(206));
+    assert_eq!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("Content-Range"))
+            .map(|header| header.value.as_str()),
+        Some(format!("bytes 0-9/{}", full.len()).as_str())
+    );
+    assert_eq!(response.into_reader().into_inner(), full[..10]);
+
+    let mut suffix = ranged_query_request("{}", "bytes=-5");
+    let response = query_response(&mut suffix, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(206));
+    assert_eq!(response.into_reader().into_inner(), full[full.len() - 5..]);
+
+    let mut unsatisfiable = ranged_query_request("{}", "bytes=999-");
+    let response = query_response(&mut unsatisfiable, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(416));
+    assert_eq!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("Content-Range"))
+            .map(|header| header.value.as_str()),
+        Some(format!("bytes */{}", full.len()).as_str())
+    );
+
+    let mut multiple = ranged_query_request("{}", "bytes=0-1,3-4");
+    let response = query_response(&mut multiple, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert_eq!(response.into_reader().into_inner(), full);
+}
+
+#[test]
+fn reloads_disk_state_after_persistence_failure() {
+    let path =
+        std::env::temp_dir().join(format!("txbase-server-reload-{}.dbf", std::process::id()));
+    let memo_path = path.with_extension("dbt");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&memo_path);
+
+    let mut bytes = fixture();
+    bytes[0] = 0x83;
+    bytes[64 + 11] = b'M';
+    let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+    let memo_start = record_start + 4;
+    bytes[memo_start..memo_start + 10].copy_from_slice(b"         1");
+    fs::write(&path, &bytes).unwrap();
+
+    let mut memo = vec![0; 512 * 2];
+    memo[512..524].copy_from_slice(b"memo before\x1a");
+    fs::write(&memo_path, memo).unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "memo after"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    let original = DbfTable::from_path(&path).unwrap();
+
+    fs::remove_file(&memo_path).unwrap();
+    let age_start = record_start + 14;
+    bytes[age_start..age_start + 3].copy_from_slice(b" 30");
+    fs::write(&path, bytes).unwrap();
+
+    let operation = OperationIr {
+        method: OperationMethod::Patch,
+        path: "/records/1".into(),
+        body: None,
+    };
+    let response = persist_mutation(&mut table, original, &path, &operation).unwrap_err();
+    assert_eq!(response.status_code(), StatusCode(500));
+    assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
+
+    fs::remove_file(path).unwrap();
+}
