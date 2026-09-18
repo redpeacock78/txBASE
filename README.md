@@ -130,7 +130,8 @@ src/
 ├── xbase.rs        shared operation IR boundary
 ├── lib.rs
 └── main.rs
-tests/fixtures/     hex fixture used by parser tests
+tests/fixtures/     hex fixtures used by parser tests
+tests/corpus/dbf/   malformed DBF parser corpus
 docs/research.md    specification and design decisions
 .github/workflows/ci.yml
 ```

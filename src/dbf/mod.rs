@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 mod codec;
 mod codepages;
 mod lock;
+#[cfg(test)]
+mod malformed_tests;
 mod memo;
 #[cfg(test)]
 mod mutation_model_tests;
