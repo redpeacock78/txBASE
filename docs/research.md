@@ -37,8 +37,10 @@ cannot represent. When a sibling `.dbt` or `.fpt` exists, `M` fields are
 resolved from their block pointers, while `B`/`G` payloads are exposed as hex
 text. Existing pointers are retained separately
 so non-memo DBF mutations do not rewrite them as text. Text changes append to
-the existing `.dbt` or `.fpt` sidecar and update the DBF pointer in a `TXDM`
-WAL snapshot; startup recovery replaces both files from that snapshot. Binary
+the existing `.dbt` or `.fpt` sidecar, using the dBASE III terminator, the
+dBASE IV header-inclusive length, or the FPT length as appropriate, and update
+the DBF pointer in a `TXDM` WAL snapshot; startup recovery replaces both files
+from that snapshot. Binary
 block writes, OLE semantics, and other code-page conversion remain explicit
 future work.
 

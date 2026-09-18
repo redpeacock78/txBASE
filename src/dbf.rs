@@ -871,10 +871,13 @@ impl MemoFile {
                     .bytes
                     .get(start..header_end)
                     .ok_or_else(|| DbfError::Invalid("memo block header is truncated".into()))?;
-                let length = usize::try_from(u32::from_le_bytes([
+                let total_length = usize::try_from(u32::from_le_bytes([
                     header[4], header[5], header[6], header[7],
                 ]))
                 .map_err(|_| DbfError::Invalid("memo length overflows usize".into()))?;
+                let length = total_length.checked_sub(8).ok_or_else(|| {
+                    DbfError::Invalid("dBASE IV memo length is smaller than its header".into())
+                })?;
                 let end = header_end
                     .checked_add(length)
                     .ok_or_else(|| DbfError::Invalid("memo data length overflows usize".into()))?;
@@ -933,9 +936,13 @@ impl MemoFile {
                 payload.push(EOF_MARKER);
             }
             MemoFormat::Dbase4 => {
-                let length = u32::try_from(data.len())
-                    .map_err(|_| DbfError::Invalid("memo text is too long".into()))?;
-                payload.extend_from_slice(&[0xff, 0xff, 0x08, 0x08]);
+                let length = u32::try_from(
+                    data.len()
+                        .checked_add(8)
+                        .ok_or_else(|| DbfError::Invalid("memo text is too long".into()))?,
+                )
+                .map_err(|_| DbfError::Invalid("memo text is too long".into()))?;
+                payload.extend_from_slice(&[0xff, 0xff, 0x08, 0x00]);
                 payload.extend_from_slice(&length.to_le_bytes());
                 payload.extend_from_slice(data);
             }
@@ -1795,6 +1802,66 @@ mod tests {
         let memo = MemoFile::open(&memo_path, 0x83).unwrap();
         assert_eq!(memo.read(2).unwrap().unwrap(), b"new memo");
         assert_eq!(u32::from_be_bytes(memo.bytes[..4].try_into().unwrap()), 3);
+
+        fs::remove_file(path).unwrap();
+        fs::remove_file(memo_path).unwrap();
+    }
+
+    #[test]
+    fn reads_and_writes_dbase4_memo_sidecar() {
+        let path =
+            std::env::temp_dir().join(format!("txbase-dbase4-memo-{}.dbf", std::process::id()));
+        let memo_path = path.with_extension("dbt");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&memo_path);
+
+        let mut bytes = fixture();
+        bytes[0] = 0x8b;
+        bytes[64 + 11] = b'M';
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let memo_start = record_start + 4;
+        bytes[memo_start..memo_start + 10].copy_from_slice(b"         1");
+        fs::write(&path, bytes).unwrap();
+
+        let mut memo = vec![0; DBT_BLOCK_SIZE * 2];
+        let text = b"memo from dbase4";
+        memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + 4].copy_from_slice(&[0xff, 0xff, 0x08, 0x00]);
+        memo[DBT_BLOCK_SIZE + 4..DBT_BLOCK_SIZE + 8]
+            .copy_from_slice(&((text.len() as u32 + 8).to_le_bytes()));
+        memo[DBT_BLOCK_SIZE + 8..DBT_BLOCK_SIZE + 8 + text.len()].copy_from_slice(text);
+        fs::write(&memo_path, memo).unwrap();
+
+        let mut table = DbfTable::from_path(&path).unwrap();
+        assert_eq!(
+            table.active_record(1).unwrap().values["NAME"],
+            "memo from dbase4"
+        );
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "changed dbase4"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        table.save_with_wal(&path).unwrap();
+
+        let reread = DbfTable::from_path(&path).unwrap();
+        assert_eq!(
+            reread.active_record(1).unwrap().values["NAME"],
+            "changed dbase4"
+        );
+        assert_eq!(
+            &reread.to_bytes()[memo_start..memo_start + 10],
+            b"         2"
+        );
+        let memo = MemoFile::open(&memo_path, 0x8b).unwrap();
+        assert_eq!(memo.read(2).unwrap().unwrap(), b"changed dbase4");
+        assert_eq!(
+            &memo.bytes[DBT_BLOCK_SIZE * 2..DBT_BLOCK_SIZE * 2 + 4],
+            &[0xff, 0xff, 0x08, 0x00]
+        );
 
         fs::remove_file(path).unwrap();
         fs::remove_file(memo_path).unwrap();
