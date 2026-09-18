@@ -164,8 +164,9 @@ Text memo values are read from and appended to `.dbt` or `.fpt` sidecars.
 Changing an `M` field writes the new block and DBF pointer as one recoverable
 `TXDM` WAL operation; non-memo mutations preserve existing pointers. Binary
 `B`/`G` writes use hex text and are supported for dBASE IV DBT and FPT
-sidecars; dBASE III DBT writes, OLE semantics, and memo formats outside these
-paths remain future work.
+sidecars, including dBASE IV DBT block sizes declared by the sidecar header;
+dBASE III DBT writes, OLE semantics, and memo formats outside these paths remain
+future work.
 
 ## Quality gates
 

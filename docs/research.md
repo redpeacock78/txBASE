@@ -40,8 +40,8 @@ so non-memo DBF mutations do not rewrite them as text. Text changes append to
 the existing `.dbt` or `.fpt` sidecar, using the dBASE III terminator, the
 dBASE IV header-inclusive length, or the FPT length as appropriate, and update
 the DBF pointer in a `TXDM` WAL snapshot; startup recovery replaces both files
-from that snapshot. dBASE IV binary writes accept hex text and append a
-length-delimited binary block, while FPT writes append a type-0 binary block;
+from that snapshot. dBASE IV binary writes accept hex text, honor the DBT header
+block size, and append a length-delimited binary block, while FPT writes append a type-0 binary block;
 dBASE III writes, OLE semantics, and other code-page conversion remain
 explicit future work.
 

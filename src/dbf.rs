@@ -942,14 +942,33 @@ impl MemoFile {
             if bytes.len() < DBT_BLOCK_SIZE {
                 return Err(DbfError::Invalid("DBT header is truncated".into()));
             }
+            let format = if dbf_version == 0x83 {
+                MemoFormat::Dbase3
+            } else {
+                MemoFormat::Dbase4
+            };
+            let block_size = if format == MemoFormat::Dbase4 {
+                let block_size = usize::from(u16::from_le_bytes([bytes[20], bytes[21]]));
+                if block_size == 0 {
+                    DBT_BLOCK_SIZE
+                } else {
+                    block_size
+                }
+            } else {
+                DBT_BLOCK_SIZE
+            };
+            if block_size < DBT_BLOCK_SIZE
+                || block_size % DBT_BLOCK_SIZE != 0
+                || bytes.len() < block_size
+            {
+                return Err(DbfError::Invalid(
+                    "dBASE DBT block size or header is invalid".into(),
+                ));
+            }
             Ok(Self {
                 bytes,
-                block_size: DBT_BLOCK_SIZE,
-                format: if dbf_version == 0x83 {
-                    MemoFormat::Dbase3
-                } else {
-                    MemoFormat::Dbase4
-                },
+                block_size,
+                format,
             })
         }
     }
@@ -1113,7 +1132,12 @@ impl MemoFile {
             .checked_add(block_count)
             .and_then(|block| u32::try_from(block).ok())
             .ok_or_else(|| DbfError::Invalid("memo block number overflows u32".into()))?;
-        self.bytes[0..4].copy_from_slice(&next_block.to_be_bytes());
+        let next_block_bytes = if self.format == MemoFormat::Dbase4 {
+            next_block.to_le_bytes()
+        } else {
+            next_block.to_be_bytes()
+        };
+        self.bytes[0..4].copy_from_slice(&next_block_bytes);
         u32::try_from(start_block)
             .map_err(|_| DbfError::Invalid("memo block number overflows u32".into()))
     }
@@ -2136,12 +2160,14 @@ mod tests {
         bytes[binary_start..binary_start + 10].copy_from_slice(b"         1");
         fs::write(&path, bytes).unwrap();
 
-        let mut memo = vec![0; DBT_BLOCK_SIZE * 2];
+        let dbt_block_size = 1024;
+        let mut memo = vec![0; dbt_block_size * 2];
+        memo[20..22].copy_from_slice(&(dbt_block_size as u16).to_le_bytes());
         let binary = [0x00, 0x1a, 0xff, 0x7f];
-        memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + 4].copy_from_slice(&[0xff, 0xff, 0x08, 0x00]);
-        memo[DBT_BLOCK_SIZE + 4..DBT_BLOCK_SIZE + 8]
+        memo[dbt_block_size..dbt_block_size + 4].copy_from_slice(&[0xff, 0xff, 0x08, 0x00]);
+        memo[dbt_block_size + 4..dbt_block_size + 8]
             .copy_from_slice(&((binary.len() as u32 + 8).to_le_bytes()));
-        memo[DBT_BLOCK_SIZE + 8..DBT_BLOCK_SIZE + 8 + binary.len()].copy_from_slice(&binary);
+        memo[dbt_block_size + 8..dbt_block_size + 8 + binary.len()].copy_from_slice(&binary);
         fs::write(&memo_path, memo).unwrap();
 
         let mut table = DbfTable::from_path(&path).unwrap();
@@ -2164,7 +2190,9 @@ mod tests {
             b"         2"
         );
         let memo = MemoFile::open(&memo_path, 0x8b).unwrap();
+        assert_eq!(memo.block_size, dbt_block_size);
         assert_eq!(memo.read(2).unwrap().unwrap(), [0xde, 0xad, 0xbe, 0xef]);
+        assert_eq!(u32::from_le_bytes(memo.bytes[..4].try_into().unwrap()), 3);
 
         fs::remove_file(path).unwrap();
         fs::remove_file(memo_path).unwrap();
