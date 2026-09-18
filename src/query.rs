@@ -12,6 +12,7 @@ pub const SUPPORTED_FILTER_OPERATORS: &[&str] = &[
 ];
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct QueryRequest {
     #[serde(default)]
     pub filter: Map<String, Value>,
@@ -479,6 +480,11 @@ mod tests {
     fn rejects_unknown_and_mixed_projection_operators() {
         assert!(parse(br#"{"filter":{"AGE":{"$regex":"2"}}}"#).is_err());
         assert!(parse(br#"{"projection":{"NAME":1,"AGE":0}}"#).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_query_fields() {
+        assert!(parse(br#"{"filtre":{"AGE":29}}"#).is_err());
     }
 
     #[test]
