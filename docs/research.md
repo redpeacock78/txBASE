@@ -277,10 +277,12 @@ type, `415` for an unsupported media type, and `422` for content that is
 syntactically understood but cannot be processed.
 
 The server implements those boundary decisions for JSON and advertises
-`Accept-Query: "application/json"`. It does not implement cache keys,
-`Location`, `Content-Location`, range handling, or CORS policy yet. In
-particular, a QUERY body belongs in any future cache key; treating it like a
-GET URI alone would be incorrect.
+`Accept-Query: "application/json"`. It supports one byte range on successful
+QUERY results with `Accept-Ranges`, `206`, and `Content-Range`; unknown or
+multiple range requests are ignored. It does not implement cache keys,
+`Location`, `Content-Location`, or CORS policy yet. In particular, a QUERY body
+belongs in any future cache key; treating it like a GET URI alone would be
+incorrect.
 
 ## Sources
 

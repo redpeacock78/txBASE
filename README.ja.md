@@ -26,6 +26,7 @@ xBase互換フロントエンド、operation単位のWAL record、複数writer�
 - コマンドラインから有効なrecordをJSONとして出力する。
 - `GET /records`と`GET /records/{id}`を提供する。
 - `QUERY /records`でfilter、sort、projection、skip、limitを実行する。
+- 成功した`QUERY` responseの単一byte `Range`に対応し、`206 Partial Content`または`416 Range Not Satisfiable`を返す。未対応unitと複数rangeは無視する。
 - `POST /records`、`PUT /records/{id}`、`PATCH /records/{id}`、`DELETE /records/{id}`を提供する。
 - 対応するJSON mutationを、可能なら`TXDP` byte-range delta、必要なら`TXDB`または`TXDM` snapshotとしてWALへsyncしてからDBF/sidecarへ保存し、未完了の保存を起動時に復旧する。読み込み後にDBFまたはmemo sidecarが外部変更された場合は、古い内容での保存を拒否する。
 - siblingの`.dbt`と`.fpt` sidecarからtext memoを読み、変更時は新しいblockへappendする。
@@ -133,6 +134,7 @@ query documentはMongoDBのpredicateから必要な表現だけを借りてい�
 missing fieldでは`$ne`と`$nin`が一致し、array valueでは要素のいずれかが条件を満たすと一致します。
 sortの同値recordはDBF record orderを保ちます。
 Dotted pathはnested JSON object/arrayをたどります。完全一致するfield nameを優先し、indexは未対応です。
+成功した`QUERY` responseは`Accept-Ranges: bytes`を返し、単一byte rangeを処理します。複数rangeと未対応unitは完全responseへfallbackします。
 
 ## Mutationの意味
 

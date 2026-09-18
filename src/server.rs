@@ -5,8 +5,12 @@ use std::io::{Cursor, Read};
 use std::path::Path;
 use tiny_http::{Header, Method, Request, Response, Server};
 
+mod range;
+
 const MAX_BODY: usize = 1024 * 1024;
 type HttpResponse = Response<Cursor<Vec<u8>>>;
+
+use range::query_result_response;
 
 pub fn serve(mut table: DbfTable, dbf_path: impl AsRef<Path>, bind: &str) -> Result<(), String> {
     let dbf_path = dbf_path.as_ref();
@@ -77,7 +81,7 @@ fn query_response(request: &mut Request, path: &str, table: &DbfTable) -> HttpRe
         }
     };
     match query::execute_query(table, &query) {
-        Ok(records) => json_response(200, Value::Array(records), true),
+        Ok(records) => query_result_response(request, Value::Array(records)),
         Err(query_error) => {
             json_response(422, error("invalid_query", &query_error.to_string()), true)
         }
@@ -278,12 +282,16 @@ fn dbf_error_response(dbf_error: DbfError) -> HttpResponse {
     }
 }
 
-fn content_type(request: &Request) -> Option<&str> {
+fn request_header<'a>(request: &'a Request, name: &'static str) -> Option<&'a str> {
     request
         .headers()
         .iter()
-        .find(|header| header.field.equiv("Content-Type"))
+        .find(|header| header.field.equiv(name))
         .map(|header| header.value.as_str())
+}
+
+fn content_type(request: &Request) -> Option<&str> {
+    request_header(request, "Content-Type")
 }
 
 fn record_json(record: &DbfRecord) -> Value {
@@ -295,7 +303,11 @@ fn error(code: &str, message: &str) -> Value {
 }
 
 fn json_response(status: u16, body: Value, accept_query: bool) -> HttpResponse {
-    let mut response = Response::from_string(body.to_string())
+    json_bytes_response(status, body.to_string().into_bytes(), accept_query)
+}
+
+fn json_bytes_response(status: u16, body: Vec<u8>, accept_query: bool) -> HttpResponse {
+    let mut response = Response::from_data(body)
         .with_status_code(status)
         .with_header(header("Content-Type", "application/json"));
     if accept_query {
@@ -341,6 +353,16 @@ mod tests {
                 .into(),
             None => request.into(),
         }
+    }
+
+    fn ranged_query_request(body: &'static str, range: &'static str) -> Request {
+        TestRequest::new()
+            .with_method("QUERY".parse().unwrap())
+            .with_path("/records")
+            .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+            .with_header(header("Range", range))
+            .with_body(body)
+            .into()
     }
 
     #[test]
@@ -415,6 +437,47 @@ mod tests {
         );
         let response = query_response(&mut valid, "/records", &table);
         assert_eq!(response.status_code(), StatusCode(200));
+    }
+
+    #[test]
+    fn query_endpoint_handles_single_byte_ranges() {
+        let table = DbfTable::from_bytes(&fixture()).unwrap();
+        let full = Value::Array(table.active_json()).to_string().into_bytes();
+
+        let mut first = ranged_query_request("{}", "bytes=0-9");
+        let response = query_response(&mut first, "/records", &table);
+        assert_eq!(response.status_code(), StatusCode(206));
+        assert_eq!(
+            response
+                .headers()
+                .iter()
+                .find(|header| header.field.equiv("Content-Range"))
+                .map(|header| header.value.as_str()),
+            Some(format!("bytes 0-9/{}", full.len()).as_str())
+        );
+        assert_eq!(response.into_reader().into_inner(), full[..10]);
+
+        let mut suffix = ranged_query_request("{}", "bytes=-5");
+        let response = query_response(&mut suffix, "/records", &table);
+        assert_eq!(response.status_code(), StatusCode(206));
+        assert_eq!(response.into_reader().into_inner(), full[full.len() - 5..]);
+
+        let mut unsatisfiable = ranged_query_request("{}", "bytes=999-");
+        let response = query_response(&mut unsatisfiable, "/records", &table);
+        assert_eq!(response.status_code(), StatusCode(416));
+        assert_eq!(
+            response
+                .headers()
+                .iter()
+                .find(|header| header.field.equiv("Content-Range"))
+                .map(|header| header.value.as_str()),
+            Some(format!("bytes */{}", full.len()).as_str())
+        );
+
+        let mut multiple = ranged_query_request("{}", "bytes=0-1,3-4");
+        let response = query_response(&mut multiple, "/records", &table);
+        assert_eq!(response.status_code(), StatusCode(200));
+        assert_eq!(response.into_reader().into_inner(), full);
     }
 
     #[test]

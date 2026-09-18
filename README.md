@@ -28,6 +28,9 @@ and concurrent-writer coordination remain later phases.
   and explicit values are rejected on insert.
 - Prints active records as JSON from the command line.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.
+- Handles single-byte `Range` requests on successful `QUERY` responses with
+  `206 Partial Content` or `416 Range Not Satisfiable`; unsupported or multiple
+  ranges are ignored.
 - Serves `POST /records`, `PUT /records/{id}`, `PATCH /records/{id}`, and `DELETE /records/{id}`.
 - Persists supported JSON mutations through a synced `TXDP` byte-range delta
   when possible, with `TXDB`/`TXDM` snapshot fallback and atomic DBF/sidecar
@@ -152,7 +155,9 @@ The initial operator vocabulary is `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`,
 `$in`, `$nin`, `$and`, `$or`, and `$not`. Missing fields match `$ne` and `$nin`,
 array values match when any element satisfies a predicate, and sort ties retain
 DBF record order. Dotted paths traverse nested JSON objects and arrays; exact
-field-name matches take precedence. Indexes are not supported.
+field-name matches take precedence. Indexes are not supported. Successful
+`QUERY` responses advertise `Accept-Ranges: bytes` and support one byte range;
+multiple or unknown range units fall back to the complete response.
 
 ## Mutation semantics
 
