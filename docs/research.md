@@ -27,7 +27,7 @@ The common field encodings are also part of the compatibility contract:
 | `L` | Logical marker such as `T` or `F` | Boolean or JSON null for an unknown marker |
 | `I` and `+` | Four-byte integer representation | Little-endian signed integer; Level 7 `+` inserts use the descriptor's next value when omitted |
 | `M` | Text pointer to a memo block | Text from a sibling `.dbt` or `.fpt` sidecar when present; pointer text otherwise |
-| `B` and `G` | Text pointer to a binary block | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; dBASE IV DBT and FPT writes append a binary block; dBASE III writes disabled |
+| `B` and `G` | Text pointer to a binary block; Visual FoxPro `B` width 8 is a double | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; dBASE IV DBT and FPT writes append a binary block; dBASE III writes disabled |
 
 The parser therefore reads the declared header and record boundaries, checks
 field names and widths, uses the language-driver byte for the supported

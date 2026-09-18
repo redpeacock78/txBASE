@@ -17,6 +17,7 @@ remain later phases.
 - Detects dBASE Level 7 tables with 48-byte field descriptors.
 - Reads header metadata, field descriptors, active records, and deleted-record flags.
 - Converts common character, date, numeric, logical, integer, and double fields to JSON.
+- Reads and writes Visual FoxPro `B` double fields when their width is 8 bytes.
 - Assigns and advances dBASE Level 7 `+` auto-increment fields when a new record omits them.
 - Prints active records as JSON from the command line.
 - Serves `GET /records`, `GET /records/{id}`, and executes `QUERY /records`.

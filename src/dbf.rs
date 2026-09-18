@@ -1506,6 +1506,7 @@ fn encode_field(
             output[..bytes.len()].copy_from_slice(&bytes);
             Ok(output)
         }
+        b'B' if length == 8 => Ok(value_f64(value, field)?.to_le_bytes().to_vec()),
         b'B' | b'G' | b'M' if length == 4 => Ok(value_u32(value, field)?.to_le_bytes().to_vec()),
         b'D' => {
             if length != 8 {
@@ -1813,6 +1814,16 @@ fn decode_field(
 ) -> Value {
     match field_type.to_ascii_uppercase() {
         b'C' => Value::String(text(bytes, language_driver)),
+        b'B' if bytes.len() >= 8 => {
+            let value = f64::from_le_bytes(bytes[..8].try_into().unwrap());
+            if value.is_finite() {
+                Number::from_f64(value)
+                    .map(Value::Number)
+                    .unwrap_or(Value::Null)
+            } else {
+                Value::Null
+            }
+        }
         b'B' | b'G' | b'M' if bytes.len() == 4 => {
             let block = if memo_format == Some(MemoFormat::FoxPro) {
                 u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
@@ -2105,6 +2116,22 @@ mod tests {
     #[test]
     fn decodes_float_fields_as_numbers() {
         assert_eq!(decode_field(b'F', b" 1.5", 0, None), serde_json::json!(1.5));
+    }
+
+    #[test]
+    fn round_trips_visual_foxpro_double_fields() {
+        let field = FieldDescriptor {
+            name: "AMOUNT".into(),
+            field_type: b'B',
+            length: 8,
+            decimal_count: 0,
+            offset: 1,
+        };
+        let value = serde_json::json!(12.5);
+        let encoded = encode_field(&field, &value, 0).unwrap();
+
+        assert_eq!(encoded, 12.5f64.to_le_bytes());
+        assert_eq!(decode_field(b'B', &encoded, 0, None), value);
     }
 
     #[test]
