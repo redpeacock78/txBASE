@@ -166,6 +166,15 @@ pub struct DbfTable {
     memo_updates: MemoUpdates,
 }
 
+fn memo_format_for_version(version: u8) -> Option<MemoFormat> {
+    match version {
+        0x83 => Some(MemoFormat::Dbase3),
+        0x8b => Some(MemoFormat::Dbase4),
+        0xf5 => Some(MemoFormat::FoxPro),
+        _ => None,
+    }
+}
+
 impl DbfTable {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, DbfError> {
         let path = path.as_ref();
@@ -202,7 +211,7 @@ impl DbfTable {
             for field in &fields {
                 let start = record_offset + field.offset;
                 let end = start + usize::from(field.length);
-                let Some(block) = memo_index(&self.bytes[start..end])? else {
+                let Some(block) = memo_index(&self.bytes[start..end], memo.format)? else {
                     continue;
                 };
                 let Some(data) = memo.read(block)? else {
@@ -312,6 +321,7 @@ impl DbfTable {
                         field.field_type,
                         &record[start..end],
                         header.language_driver,
+                        memo_format_for_version(header.version),
                     ),
                 );
             }
@@ -742,7 +752,7 @@ impl DbfTable {
             let pointer = match value {
                 MemoUpdate::Text(value) => {
                     if value.is_empty() {
-                        encode_memo_pointer(&field, 0)?
+                        encode_memo_pointer(&field, 0, memo.format)?
                     } else {
                         let bytes = encode_character(
                             &Value::String(value),
@@ -750,15 +760,15 @@ impl DbfTable {
                             self.header.language_driver,
                         )?;
                         let block = memo.append_text(&bytes)?;
-                        encode_memo_pointer(&field, block)?
+                        encode_memo_pointer(&field, block, memo.format)?
                     }
                 }
                 MemoUpdate::Binary(bytes) => {
                     if bytes.is_empty() {
-                        encode_memo_pointer(&field, 0)?
+                        encode_memo_pointer(&field, 0, memo.format)?
                     } else {
                         let block = memo.append_binary(&bytes)?;
-                        encode_memo_pointer(&field, block)?
+                        encode_memo_pointer(&field, block, memo.format)?
                     }
                 }
             };
@@ -776,7 +786,12 @@ impl DbfTable {
             target.copy_from_slice(&pointer);
             self.stored_values[index].insert(
                 field.name,
-                decode_field(field.field_type, target, self.header.language_driver),
+                decode_field(
+                    field.field_type,
+                    target,
+                    self.header.language_driver,
+                    Some(memo.format),
+                ),
             );
         }
 
@@ -1208,11 +1223,14 @@ fn find_memo_path(path: &Path) -> Option<std::path::PathBuf> {
     None
 }
 
-fn memo_index(bytes: &[u8]) -> Result<Option<u32>, DbfError> {
+fn memo_index(bytes: &[u8], format: MemoFormat) -> Result<Option<u32>, DbfError> {
     if bytes.len() == 4 {
-        return Ok(Some(u32::from_le_bytes([
-            bytes[0], bytes[1], bytes[2], bytes[3],
-        ])));
+        let block = if format == MemoFormat::FoxPro {
+            u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+        } else {
+            u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+        };
+        return Ok(Some(block));
     }
     let end = bytes
         .iter()
@@ -1331,9 +1349,18 @@ fn empty_memo_value(field: &FieldDescriptor) -> Value {
     }
 }
 
-fn encode_memo_pointer(field: &FieldDescriptor, block: u32) -> Result<Vec<u8>, DbfError> {
+fn encode_memo_pointer(
+    field: &FieldDescriptor,
+    block: u32,
+    format: MemoFormat,
+) -> Result<Vec<u8>, DbfError> {
     if field.length == 4 {
-        return Ok(block.to_le_bytes().to_vec());
+        let bytes = if format == MemoFormat::FoxPro {
+            block.to_be_bytes()
+        } else {
+            block.to_le_bytes()
+        };
+        return Ok(bytes.to_vec());
     }
     let text = block.to_string();
     let length = usize::from(field.length);
@@ -1639,11 +1666,21 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, DbfError> {
     Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
 }
 
-fn decode_field(field_type: u8, bytes: &[u8], language_driver: u8) -> Value {
+fn decode_field(
+    field_type: u8,
+    bytes: &[u8],
+    language_driver: u8,
+    memo_format: Option<MemoFormat>,
+) -> Value {
     match field_type.to_ascii_uppercase() {
         b'C' => Value::String(text(bytes, language_driver)),
         b'B' | b'G' | b'M' if bytes.len() == 4 => {
-            Value::Number(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).into())
+            let block = if memo_format == Some(MemoFormat::FoxPro) {
+                u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+            } else {
+                u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+            };
+            Value::Number(block.into())
         }
         b'D' | b'B' | b'G' | b'M' => Value::String(text(bytes, 0)),
         b'F' | b'N' => numeric(bytes),
@@ -1878,7 +1915,7 @@ mod tests {
 
     #[test]
     fn decodes_float_fields_as_numbers() {
-        assert_eq!(decode_field(b'F', b" 1.5", 0), serde_json::json!(1.5));
+        assert_eq!(decode_field(b'F', b" 1.5", 0, None), serde_json::json!(1.5));
     }
 
     #[test]
@@ -1891,10 +1928,43 @@ mod tests {
             offset: 1,
         };
         let raw = [0x00, 0x01, 0x1a, 0x7f, 0x80, 0xfe, 0xff, 0x42];
-        let value = decode_field(b'T', &raw, 0);
+        let value = decode_field(b'T', &raw, 0, None);
 
         assert_eq!(value, serde_json::json!("00011a7f80feff42"));
         assert_eq!(encode_field(&field, &value, 0).unwrap(), raw);
+    }
+
+    #[test]
+    fn encodes_memo_pointers_in_format_byte_order() {
+        let field = FieldDescriptor {
+            name: "MEMO".into(),
+            field_type: b'M',
+            length: 4,
+            decimal_count: 0,
+            offset: 1,
+        };
+        let block = 0x0102_0304;
+
+        assert_eq!(
+            encode_memo_pointer(&field, block, MemoFormat::Dbase4).unwrap(),
+            block.to_le_bytes()
+        );
+        assert_eq!(
+            encode_memo_pointer(&field, block, MemoFormat::FoxPro).unwrap(),
+            block.to_be_bytes()
+        );
+        assert_eq!(
+            memo_index(&block.to_le_bytes(), MemoFormat::Dbase4).unwrap(),
+            Some(block)
+        );
+        assert_eq!(
+            memo_index(&block.to_be_bytes(), MemoFormat::FoxPro).unwrap(),
+            Some(block)
+        );
+        assert_eq!(
+            decode_field(b'M', &block.to_be_bytes(), 0, Some(MemoFormat::FoxPro)),
+            serde_json::json!(block)
+        );
     }
 
     #[test]
