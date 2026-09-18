@@ -2326,6 +2326,7 @@ fn decode_field(
 ) -> Value {
     match field_type.to_ascii_uppercase() {
         b'C' => Value::String(text(bytes, language_driver)),
+        b'D' if bytes.iter().all(|byte| matches!(*byte, b' ' | 0)) => Value::Null,
         b'T' if memo_format == Some(MemoFormat::FoxPro) && bytes.len() >= 8 => {
             let day = u32::from_le_bytes(bytes[..4].try_into().unwrap());
             if day == 0 {
@@ -2861,6 +2862,8 @@ mod tests {
             b"20260918"
         );
         assert_eq!(encode_field(&field, &Value::Null, 0).unwrap(), b"        ");
+        assert_eq!(decode_field(b'D', b"        ", 0, None), Value::Null);
+        assert_eq!(decode_field(b'D', &[0; 8], 0, None), Value::Null);
         assert!(encode_field(&field, &serde_json::json!("2026-09-18"), 0).is_err());
     }
 
