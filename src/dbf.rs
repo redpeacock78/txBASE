@@ -1010,6 +1010,22 @@ fn save_bytes_to(path: &Path, bytes: &[u8], temporary_extension: &str) -> Result
     file.write_all(bytes)?;
     file.sync_all()?;
     fs::rename(temporary_path, path)?;
+    sync_parent_directory(path)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn sync_parent_directory(path: &Path) -> Result<(), DbfError> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::File::open(parent)?.sync_all()?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_path: &Path) -> Result<(), DbfError> {
     Ok(())
 }
 
