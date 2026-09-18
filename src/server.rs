@@ -330,6 +330,19 @@ mod tests {
             .into()
     }
 
+    fn query_request(body: &'static str, content_type: Option<&'static str>) -> Request {
+        let request = TestRequest::new()
+            .with_method("QUERY".parse().unwrap())
+            .with_path("/records")
+            .with_body(body);
+        match content_type {
+            Some(content_type) => request
+                .with_header(header("Content-Type", content_type))
+                .into(),
+            None => request.into(),
+        }
+    }
+
     #[test]
     fn mutation_endpoints_persist_and_delete_records() {
         let path =
@@ -373,5 +386,34 @@ mod tests {
         assert!(persisted.records()[2].deleted);
         assert!(!path.with_extension("txbase.wal").exists());
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn query_endpoint_enforces_json_boundary_and_executes() {
+        let table = DbfTable::from_bytes(&fixture()).unwrap();
+
+        let mut missing_content_type = query_request("{}", None);
+        let response = query_response(&mut missing_content_type, "/records", &table);
+        assert_eq!(response.status_code(), StatusCode(400));
+
+        let mut unsupported_content_type = query_request("{}", Some("text/plain"));
+        let response = query_response(&mut unsupported_content_type, "/records", &table);
+        assert_eq!(response.status_code(), StatusCode(415));
+
+        let mut invalid_json = query_request("{", Some(JSON_QUERY_MEDIA_TYPE));
+        let response = query_response(&mut invalid_json, "/records", &table);
+        assert_eq!(response.status_code(), StatusCode(422));
+
+        let mut unknown_field =
+            query_request(r#"{"filtre":{"AGE":29}}"#, Some(JSON_QUERY_MEDIA_TYPE));
+        let response = query_response(&mut unknown_field, "/records", &table);
+        assert_eq!(response.status_code(), StatusCode(422));
+
+        let mut valid = query_request(
+            r#"{"filter":{"AGE":{"$gte":20}}}"#,
+            Some("application/json; charset=utf-8"),
+        );
+        let response = query_response(&mut valid, "/records", &table);
+        assert_eq!(response.status_code(), StatusCode(200));
     }
 }
