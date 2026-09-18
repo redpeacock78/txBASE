@@ -19,6 +19,8 @@ xBase互換フロントエンド、細粒度のWAL record、複数writerの調�
 - Visual FoxProの`Y` currency fieldを4桁固定小数の文字列として読み書きする。
 - Visual FoxProの`T` DateTime fieldを秒精度のISO-8601文字列として読み書きする。
 - Visual FoxPro `0x32` の`V` varcharと`Q` varbinaryを読み書きし、`V`はtext、`Q`は小文字hexとして扱う。`_NullFlags`はJSONへ公開しない。
+- Visual FoxProの`W` Blob fieldを`.fpt` sidecar経由の小文字hexとして読み書きする。
+- Visual FoxProのbinary flag付き`C` fieldは固定幅hex、binary flag付き`M` fieldは`.fpt` sidecar経由のhexとして読み書きする。
 - dBASE Level 7の`+` auto-increment fieldを省略した新規recordへnext valueを割り当て、descriptorを進める。`+` fieldはread-onlyで、明示値のinsertと既存recordの変更を拒否する。
 - コマンドラインから有効なrecordをJSONとして出力する。
 - `GET /records`と`GET /records/{id}`を提供する。

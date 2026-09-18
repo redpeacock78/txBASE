@@ -21,7 +21,7 @@ The common field encodings are also part of the compatibility contract:
 
 | Type | On-disk representation | Initial txbase behavior |
 | --- | --- | --- |
-| `C` | Space-padded character bytes | CP437/CP850 for `0x01`/`0x02`, CP852 for common IDs including `0x1f`/`0x64`, CP866 for `0x26`/`0x65`, Windows-1252 for `0x03`/`0x57`; UTF-8-lossy fallback otherwise |
+| `C` | Space-padded character bytes | Code-page text normally; binary-flagged `C` is fixed-width lowercase hex without code-page conversion |
 | `D` | Eight bytes in `YYYYMMDD` form | String |
 | `T` | Eight bytes: little-endian Julian day and milliseconds since midnight | Visual FoxPro `T` is a second-precision ISO-8601 string; non-FoxPro timestamp values remain hex |
 | `N` and `F` | Right-justified numeric text | JSON number when finite and parseable |
@@ -29,7 +29,8 @@ The common field encodings are also part of the compatibility contract:
 | `I` and `+` | Four-byte integer representation | Little-endian signed integer; Level 7 `+` inserts use the descriptor's next value when omitted |
 | `Y` | Eight-byte little-endian fixed-point currency | Four-decimal fixed-point string; writes validate the signed 64-bit scaled representation |
 | `V` and `Q` | Visual FoxPro `0x32` fixed slots with a trailing length byte selected by `_NullFlags` | `V` text and `Q` lowercase hex; nullable and variable-length bits are maintained on writes while `_NullFlags` remains hidden |
-| `M` | Text pointer to a memo block | Text from a sibling `.dbt` or `.fpt` sidecar when present; pointer text otherwise |
+| `W` | Four-byte pointer to a Visual FoxPro `.fpt` binary block | Lowercase hex payload; FPT writes append a type-0 binary block |
+| `M` | Text pointer to a memo block | Text from a sibling `.dbt` or `.fpt` sidecar; binary-flagged `M` is lowercase hex; pointer text otherwise |
 | `B`, `G`, and `P` | Text pointer to a binary block; Visual FoxPro `B` width 8 is a double and `P` is a picture | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; dBASE IV DBT and FPT writes append a binary block; dBASE III writes disabled |
 
 The parser therefore reads the declared header and record boundaries, checks
@@ -73,6 +74,14 @@ stores the actual length when the corresponding `_NullFlags` variable-length
 bit is set. The following nullable bit marks JSON null. `V` uses the declared
 code page, `Q` and binary-flagged `V` use hexadecimal text, and the hidden
 system field is regenerated only for affected inserts or updates.
+
+Visual FoxPro `W` Blob fields are four-byte pointers to binary `.fpt` blocks and
+do not undergo code-page conversion. txbase exposes those blocks as lowercase
+hex and appends type-0 binary blocks on supported FPT writes.
+
+The binary flag on Visual FoxPro `C` and `M` fields also disables code-page
+translation. Binary `C` bytes remain in the DBF record; binary `M` bytes use the
+same FPT binary-block path as `P` and `W`.
 
 The mutation layer currently reuses the parsed header and field descriptors.
 It supports scalar JSON values for the field types already decoded by the
@@ -262,6 +271,7 @@ GET URI alone would be incorrect.
 - [dBASE DBF File Structure](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)
 - [Visual FoxPro Table File Structure](https://techshelps.github.io/MSDN/FOXHELP/html/contable_file_structure_lp.dbfrp.htm)
 - [Visual FoxPro Field Descriptor and Variable-Length Fields](https://vfphelp.com/help/html/465e7a94-51b7-4e0c-98f9-432864fe5bcc.htm)
+- [Visual FoxPro Blob Data Type](https://www.vfphelp.com/help/_5wn12pbhl.htm)
 - [Visual FoxPro Data Dictionary](https://techshelps.github.io/MSDN/BACKGRND/html/msdn_datadict.htm)
 - [Visual FoxPro Memo File Structure](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm)
 - [MongoDB Documents](https://www.mongodb.com/docs/manual/core/document/)
