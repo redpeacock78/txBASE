@@ -1,5 +1,6 @@
 use super::codec::foxpro_datetime_bytes;
 use super::*;
+use crate::xbase::{OperationIr, OperationMethod};
 use fs2::FileExt;
 use std::fs::OpenOptions;
 
@@ -96,6 +97,22 @@ fn applies_byte_deltas_idempotently_and_rejects_wrong_base() {
         b"target"
     );
     assert!(apply_byte_delta(b"other", &delta, "DBF").is_err());
+}
+
+#[test]
+fn operation_wal_payload_round_trips() {
+    let operation = OperationIr {
+        method: OperationMethod::Patch,
+        path: "/records/1".into(),
+        body: Some(serde_json::json!({"$inc": {"AGE": 1}})),
+    };
+    let payload = operation_payload(&operation).unwrap();
+    assert!(payload.starts_with(OPERATION_MAGIC));
+    assert_eq!(decode_operation_payload(&payload).unwrap(), Some(operation));
+    assert_eq!(
+        decode_operation_payload(SNAPSHOT_MAGIC.as_ref()).unwrap(),
+        None
+    );
 }
 
 #[test]

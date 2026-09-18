@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
 pub enum OperationMethod {
     Get,
     Query,
@@ -10,7 +12,7 @@ pub enum OperationMethod {
     Delete,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OperationIr {
     pub method: OperationMethod,
     pub path: String,

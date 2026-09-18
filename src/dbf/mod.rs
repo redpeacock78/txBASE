@@ -1,4 +1,5 @@
 use crate::transaction::{FileWal, TransactionError, Wal};
+use crate::xbase::OperationIr;
 use serde_json::{Map, Number, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -27,9 +28,12 @@ use memo::{
 };
 #[cfg(test)]
 use wal::{
-    ByteDelta, DELTA_MAGIC, MEMO_SNAPSHOT_MAGIC, SNAPSHOT_MAGIC, apply_byte_delta, decode_snapshot,
+    ByteDelta, DELTA_MAGIC, MEMO_SNAPSHOT_MAGIC, OPERATION_MAGIC, SNAPSHOT_MAGIC, apply_byte_delta,
+    decode_operation_payload, decode_snapshot,
 };
-use wal::{decode_wal_payload, delta_payload, memo_snapshot_payload, snapshot_payload};
+use wal::{
+    decode_wal_payload, delta_payload, memo_snapshot_payload, operation_payload, snapshot_payload,
+};
 
 const CLASSIC_HEADER_SIZE: usize = 32;
 const CLASSIC_DESCRIPTOR_SIZE: usize = 32;
@@ -490,7 +494,22 @@ impl DbfTable {
     }
 
     pub fn save_with_wal(&mut self, path: impl AsRef<Path>) -> Result<(), DbfError> {
-        let path = path.as_ref();
+        self.save_with_wal_inner(path.as_ref(), None)
+    }
+
+    pub fn save_with_operation(
+        &mut self,
+        path: impl AsRef<Path>,
+        operation: &OperationIr,
+    ) -> Result<(), DbfError> {
+        self.save_with_wal_inner(path.as_ref(), Some(operation))
+    }
+
+    fn save_with_wal_inner(
+        &mut self,
+        path: &Path,
+        operation: Option<&OperationIr>,
+    ) -> Result<(), DbfError> {
         let _lock = TableLock::acquire(path)?;
         Self::recover_wal(path)?;
         self.ensure_source_current(path)?;
@@ -504,6 +523,11 @@ impl DbfTable {
         };
         let payload = delta_payload(&prepared, path, memo_snapshot.as_ref(), full_payload.len())?
             .unwrap_or(full_payload);
+        if let Some(operation) = operation {
+            wal.append(&operation_payload(operation)?)
+                .map_err(transaction_error)?;
+            wal.sync().map_err(transaction_error)?;
+        }
         wal.append(&payload).map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
         if let Some(memo) = &memo_snapshot {

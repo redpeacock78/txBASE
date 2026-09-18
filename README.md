@@ -8,8 +8,9 @@ read path. It also provides an HTTP server with `GET`, standards-based
 file-backed WAL and snapshot transaction core. Path-loaded mutations write a
 `TXDP` byte-range delta when it is smaller than a complete snapshot; other
 mutations fall back to `TXDB` or `TXDM` snapshots before atomic replacement
-and startup recovery. An exclusive table lock serializes save paths;
-operation-level WAL records and broader concurrent-writer coordination remain
+and startup recovery. HTTP mutations also append a durable `TXOP` intent
+record before their state payload. An exclusive table lock serializes save
+paths; operation replay and broader concurrent-writer coordination remain
 later phases.
 
 ## What works now
@@ -180,10 +181,12 @@ For path-loaded changes, the server writes a `TXDP` byte-range delta to the
 writes a complete `TXDB` snapshot for DBF-only changes or a `TXDM` snapshot
 containing DBF and memo bytes. It syncs the WAL before atomically replacing the
 affected files. `DbfTable::from_path` replays either form after an interrupted
-mutation and checks the delta base before applying it. The WAL is still not an
-operation-level record log. Save paths take an exclusive table lock, while
-broader concurrent-writer coordination remains outside this slice. A loaded
-table rejects stale DBF or memo sidecar state before save.
+mutation and checks the delta base before applying it. HTTP mutation intent is
+recorded as `TXOP` before the state payload; recovery applies only the
+committed `TXDB`/`TXDM`/`TXDP` state, so an orphaned intent cannot change data.
+Save paths take an exclusive table lock, while operation replay and broader
+concurrent-writer coordination remain outside this slice. A loaded table
+rejects stale DBF or memo sidecar state before save.
 
 Text memo values are read from and appended to `.dbt` or `.fpt` sidecars.
 Changing an `M` field writes the new block and DBF pointer as one recoverable

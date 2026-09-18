@@ -1,5 +1,6 @@
 use crate::dbf::{DbfError, DbfRecord, DbfTable};
 use crate::query::{self, JSON_QUERY_MEDIA_TYPE};
+use crate::xbase::{OperationIr, OperationMethod};
 use serde_json::{Map, Value, json};
 use std::io::{Cursor, Read};
 use std::path::Path;
@@ -101,12 +102,17 @@ fn post_response(
         Ok(values) => values,
         Err(response) => return response,
     };
+    let operation = OperationIr {
+        method: OperationMethod::Post,
+        path: path.to_owned(),
+        body: Some(Value::Object(values.clone())),
+    };
     let original = table.clone();
     let id = match table.insert_record(values) {
         Ok(id) => id,
         Err(error) => return dbf_error_response(error),
     };
-    if let Err(response) = persist_mutation(table, original, dbf_path) {
+    if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
         return response;
     }
     let Some(record) = table.active_record(id) else {
@@ -134,6 +140,15 @@ fn update_response(
         Ok(values) => values,
         Err(response) => return response,
     };
+    let operation = OperationIr {
+        method: if replace {
+            OperationMethod::Put
+        } else {
+            OperationMethod::Patch
+        },
+        path: path.to_owned(),
+        body: Some(Value::Object(values.clone())),
+    };
     let original = table.clone();
     let result = if replace {
         table.replace_record(id, values)
@@ -143,7 +158,7 @@ fn update_response(
     if let Err(error) = result {
         return dbf_error_response(error);
     }
-    if let Err(response) = persist_mutation(table, original, dbf_path) {
+    if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
         return response;
     }
     match table.active_record(id) {
@@ -160,11 +175,16 @@ fn delete_response(path: &str, table: &mut DbfTable, dbf_path: &Path) -> HttpRes
     let Ok(id) = record_id(path) else {
         return json_response(404, error("not_found", "resource not found"), false);
     };
+    let operation = OperationIr {
+        method: OperationMethod::Delete,
+        path: path.to_owned(),
+        body: None,
+    };
     let original = table.clone();
     if let Err(error) = table.delete_record(id) {
         return dbf_error_response(error);
     }
-    if let Err(response) = persist_mutation(table, original, dbf_path) {
+    if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
         return response;
     }
     Response::from_string(String::new()).with_status_code(204)
@@ -174,8 +194,9 @@ fn persist_mutation(
     table: &mut DbfTable,
     original: DbfTable,
     dbf_path: &Path,
+    operation: &OperationIr,
 ) -> Result<(), HttpResponse> {
-    match table.save_with_wal(dbf_path) {
+    match table.save_with_operation(dbf_path, operation) {
         Ok(()) => Ok(()),
         Err(dbf_error) => {
             *table = DbfTable::from_path(dbf_path).unwrap_or(original);
@@ -517,7 +538,12 @@ mod tests {
         bytes[age_start..age_start + 3].copy_from_slice(b" 30");
         fs::write(&path, bytes).unwrap();
 
-        let response = persist_mutation(&mut table, original, &path).unwrap_err();
+        let operation = OperationIr {
+            method: OperationMethod::Patch,
+            path: "/records/1".into(),
+            body: None,
+        };
+        let response = persist_mutation(&mut table, original, &path, &operation).unwrap_err();
         assert_eq!(response.status_code(), StatusCode(500));
         assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
 

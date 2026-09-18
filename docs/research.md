@@ -113,9 +113,11 @@ interpret arbitrary payloads. The DBF integration recognizes `TXDP` deltas as
 well as `TXDB` and `TXDM` snapshots. A delta carries base/target lengths and
 hashes plus non-overlapping byte patches; recovery accepts an already-applied
 target so a retry is idempotent, and rejects a different base. This is still a
-byte-range optimization rather than an operation-level mutation log; save
-paths now use an exclusive table lock, while full fine-grained semantics and
-broader multi-writer coordination remain future work. A
+byte-range optimization rather than an operation replay log. HTTP mutations
+prepend a versioned `TXOP` intent record before the state payload; recovery
+still applies only the committed `TXDB`/`TXDM`/`TXDP` state. Save paths now use
+an exclusive table lock, while full fine-grained semantics, operation replay,
+and broader multi-writer coordination remain future work. A
 table loaded from a path records the DBF and memo bytes it read and refuses to
 save over an externally changed snapshot.
 
@@ -268,9 +270,10 @@ its sidecar. Before replacement, a path-loaded mutation appends a `TXDP`
 byte-range delta when it is smaller than a complete `TXDB` or `TXDM` snapshot;
 otherwise it appends that snapshot. The WAL is synced before replacement. A
 subsequent `DbfTable::from_path` replays the delta or snapshot if the process
-stopped before replacement completed. The WAL is not yet an operation-level
-log; save paths use an exclusive table lock, but the WAL does not provide
-broader concurrent-writer coordination.
+stopped before replacement completed. HTTP mutation intents are recorded as
+`TXOP` before the state payload, but the WAL does not yet replay operations;
+save paths use an exclusive table lock, while broader concurrent-writer
+coordination remains outside the WAL.
 
 The [HTTP QUERY method is now RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html).
 It is safe and idempotent, carries query semantics in request content, and
