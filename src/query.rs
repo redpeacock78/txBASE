@@ -1,6 +1,6 @@
 use crate::dbf::{DbfRecord, DbfTable};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{Map, Number, Value};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -329,12 +329,36 @@ fn compare_values(left: &Value, right: &Value) -> Option<Ordering> {
     match (left, right) {
         (Value::Null, Value::Null) => Some(Ordering::Equal),
         (Value::Bool(left), Value::Bool(right)) => Some(left.cmp(right)),
-        (Value::Number(left), Value::Number(right)) => left.as_f64()?.partial_cmp(&right.as_f64()?),
+        (Value::Number(left), Value::Number(right)) => compare_numbers(left, right),
         (Value::String(left), Value::String(right)) => Some(left.cmp(right)),
         (Value::Array(left), Value::Array(right)) => Some(json_text(left).cmp(&json_text(right))),
         (Value::Object(left), Value::Object(right)) => Some(json_text(left).cmp(&json_text(right))),
         _ => None,
     }
+}
+
+fn compare_numbers(left: &Number, right: &Number) -> Option<Ordering> {
+    if let (Some(left), Some(right)) = (left.as_i64(), right.as_i64()) {
+        return Some(left.cmp(&right));
+    }
+    if let (Some(left), Some(right)) = (left.as_u64(), right.as_u64()) {
+        return Some(left.cmp(&right));
+    }
+    if let (Some(left), Some(right)) = (left.as_i64(), right.as_u64()) {
+        return Some(if left < 0 {
+            Ordering::Less
+        } else {
+            (left as u64).cmp(&right)
+        });
+    }
+    if let (Some(left), Some(right)) = (left.as_u64(), right.as_i64()) {
+        return Some(if right < 0 {
+            Ordering::Greater
+        } else {
+            left.cmp(&(right as u64))
+        });
+    }
+    left.as_f64()?.partial_cmp(&right.as_f64()?)
 }
 
 fn json_text<T: Serialize>(value: &T) -> String {
@@ -455,5 +479,13 @@ mod tests {
     fn rejects_unknown_and_mixed_projection_operators() {
         assert!(parse(br#"{"filter":{"AGE":{"$regex":"2"}}}"#).is_err());
         assert!(parse(br#"{"projection":{"NAME":1,"AGE":0}}"#).is_err());
+    }
+
+    #[test]
+    fn compares_large_integer_values_exactly() {
+        let maximum = Value::Number(Number::from(u64::MAX));
+        let condition = serde_json::json!({"$gt": u64::MAX - 1});
+
+        assert!(matches_condition(Some(&maximum), &condition).unwrap());
     }
 }
