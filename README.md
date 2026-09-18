@@ -5,10 +5,11 @@ A small Rust workspace for a transactional dBASE-compatible database.
 The first slice keeps the DBF file format at the center and exposes a JSON
 read path. It also provides an HTTP server with `GET`, standards-based
 `QUERY`, and DBF-backed mutation routing. The repository now contains a
-file-backed WAL and snapshot transaction core. DBF mutations write a complete
-`TXDB` snapshot to the WAL before atomic replacement, and startup replays a
-pending snapshot. Full xBase compatibility, fine-grained WAL records, and
-concurrent-writer coordination remain later phases.
+file-backed WAL and snapshot transaction core. DBF-only mutations write a
+complete `TXDB` snapshot, while DBF plus memo mutations write a `TXDM`
+snapshot, before atomic replacement and startup recovery. Full xBase
+compatibility, fine-grained WAL records, and concurrent-writer coordination
+remain later phases.
 
 ## What works now
 
@@ -21,8 +22,9 @@ concurrent-writer coordination remain later phases.
 - Serves `POST /records`, `PUT /records/{id}`, `PATCH /records/{id}`, and `DELETE /records/{id}`.
 - Persists supported JSON mutations through a synced `TXDB` snapshot WAL and
   atomic DBF replacement, with startup recovery for an unfinished write.
-- Reads text memo fields from sibling `.dbt` and `.fpt` sidecars, while
-  preserving their existing pointers during non-memo mutations.
+- Reads and writes text memo fields in sibling `.dbt` and `.fpt` sidecars.
+  Memo writes append a new block and update the DBF pointer through a synced
+  `TXDM` WAL snapshot.
 - Provides range storage, operation IR, file or memory WAL, and snapshot transaction types.
 
 Character fields with language-driver ID `0x03` or `0x57` are decoded and
@@ -141,16 +143,19 @@ DBF null values, and unknown fields are rejected.
 
 `DELETE` sets the DBF deletion marker and returns `204 No Content`. Deleted
 record numbers are not reused, and subsequent reads return `404 Not Found`.
-The server writes a complete DBF snapshot to the `TXWL` WAL and syncs it before
-writing a temporary sibling file, syncing it, and renaming it over the DBF
-path. `DbfTable::from_path` replays the latest complete `TXDB` snapshot left by
-an interrupted mutation. The WAL stores full snapshots rather than
-fine-grained mutation records, and concurrent-writer coordination remains
-outside this slice.
+The server writes a complete `TXDB` snapshot to the `TXWL` WAL for DBF-only
+changes, or a `TXDM` snapshot containing both DBF and memo bytes when an `M`
+field changes. It syncs the WAL before atomically replacing the affected files.
+`DbfTable::from_path` replays the latest complete snapshot left by an
+interrupted mutation. The WAL stores full snapshots rather than fine-grained
+mutation records, and concurrent-writer coordination remains outside this
+slice.
 
-Existing text memo values are read from `.dbt` or `.fpt` sidecars. New memo
-content is not written yet; mutations that do not change a memo preserve its
-on-disk pointer, and explicit memo changes are rejected when a sidecar is loaded.
+Text memo values are read from and appended to `.dbt` or `.fpt` sidecars.
+Changing an `M` field writes the new block and DBF pointer as one recoverable
+`TXDM` WAL operation; non-memo mutations preserve existing pointers. Binary
+`B`/`G` sidecar dereferencing and memo formats outside these text paths remain
+future work.
 
 ## Quality gates
 

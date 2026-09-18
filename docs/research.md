@@ -35,9 +35,10 @@ Windows-1252 mappings, and excludes records marked deleted from the JSON read
 path. Character writes reject values that the declared Windows-1252 mapping
 cannot represent. When a sibling `.dbt` or `.fpt` exists, `M` fields are
 resolved from their block pointers. Existing pointers are retained separately
-so non-memo DBF mutations do not rewrite them as text. Memo sidecar writes,
-other code-page conversion, and binary/OLE dereferencing remain explicit
-future work.
+so non-memo DBF mutations do not rewrite them as text. Text changes append to
+the existing `.dbt` or `.fpt` sidecar and update the DBF pointer in a `TXDM`
+WAL snapshot; startup recovery replaces both files from that snapshot. Other
+code-page conversion and binary/OLE dereferencing remain explicit future work.
 
 The reader uses the declared record count as its boundary and does not require
 the trailing `0x1a` when the declared records are complete. It still preserves

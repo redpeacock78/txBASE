@@ -1,6 +1,6 @@
 use crate::transaction::{FileWal, TransactionError, Wal};
 use serde_json::{Map, Number, Value};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::fs;
@@ -14,6 +14,7 @@ const LEVEL7_DESCRIPTOR_SIZE: usize = 48;
 const FIELD_TERMINATOR: u8 = 0x0d;
 const EOF_MARKER: u8 = 0x1a;
 const SNAPSHOT_MAGIC: &[u8; 4] = b"TXDB";
+const MEMO_SNAPSHOT_MAGIC: &[u8; 4] = b"TXDM";
 const ACTIVE_RECORD: u8 = 0x20;
 const DELETED_RECORD: u8 = 0x2a;
 const DBT_BLOCK_SIZE: usize = 512;
@@ -74,12 +75,54 @@ enum MemoFormat {
     FoxPro,
 }
 
+impl MemoFormat {
+    fn tag(self) -> u8 {
+        match self {
+            Self::Dbase3 => 0,
+            Self::Dbase4 => 1,
+            Self::FoxPro => 2,
+        }
+    }
+
+    fn from_tag(tag: u8) -> Result<Self, DbfError> {
+        match tag {
+            0 => Ok(Self::Dbase3),
+            1 => Ok(Self::Dbase4),
+            2 => Ok(Self::FoxPro),
+            _ => Err(DbfError::Invalid(format!(
+                "unknown memo sidecar format tag {tag}"
+            ))),
+        }
+    }
+
+    fn extension(self) -> &'static str {
+        match self {
+            Self::Dbase3 | Self::Dbase4 => "dbt",
+            Self::FoxPro => "fpt",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MemoFile {
     bytes: Vec<u8>,
     block_size: usize,
     format: MemoFormat,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MemoSnapshot {
+    format: MemoFormat,
+    bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RecoverySnapshot {
+    dbf: Vec<u8>,
+    memo: Option<MemoSnapshot>,
+}
+
+type PreparedStorage = (Map<String, Value>, BTreeMap<(usize, String), String>);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DbfTable {
@@ -89,6 +132,7 @@ pub struct DbfTable {
     stored_values: Vec<Map<String, Value>>,
     bytes: Vec<u8>,
     memo: Option<MemoFile>,
+    memo_updates: BTreeMap<(usize, String), String>,
 }
 
 impl DbfTable {
@@ -253,6 +297,7 @@ impl DbfTable {
             stored_values,
             bytes: bytes.to_vec(),
             memo: None,
+            memo_updates: BTreeMap::new(),
         })
     }
 
@@ -281,29 +326,40 @@ impl DbfTable {
     }
 
     pub fn save_to(&self, path: impl AsRef<Path>) -> Result<(), DbfError> {
+        if !self.memo_updates.is_empty() {
+            return Err(DbfError::Invalid(
+                "memo updates require save_with_wal".into(),
+            ));
+        }
         let path = path.as_ref();
-        let temporary_path = path.with_extension("txbase.tmp");
-        let mut file = fs::File::create(&temporary_path)?;
-        file.write_all(&self.bytes)?;
-        file.sync_all()?;
-        fs::rename(temporary_path, path)?;
-        Ok(())
+        save_bytes_to(path, &self.bytes, "txbase.tmp")
     }
 
-    pub fn save_with_wal(&self, path: impl AsRef<Path>) -> Result<(), DbfError> {
+    pub fn save_with_wal(&mut self, path: impl AsRef<Path>) -> Result<(), DbfError> {
         let path = path.as_ref();
+        let mut prepared = self.clone();
+        let memo_snapshot = prepared.apply_memo_updates(path)?;
         let wal_path = path.with_extension("txbase.wal");
         let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
-        let mut payload = Vec::with_capacity(SNAPSHOT_MAGIC.len() + self.bytes.len());
-        payload.extend_from_slice(SNAPSHOT_MAGIC);
-        payload.extend_from_slice(&self.bytes);
+        let payload = match &memo_snapshot {
+            Some(memo) => memo_snapshot_payload(&prepared.bytes, memo)?,
+            None => snapshot_payload(&prepared.bytes),
+        };
         wal.append(&payload).map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
-        self.save_to(path)?;
+        if let Some(memo) = &memo_snapshot {
+            save_bytes_to(
+                &path.with_extension(memo.format.extension()),
+                &memo.bytes,
+                "txbase.memo.tmp",
+            )?;
+        }
+        save_bytes_to(path, &prepared.bytes, "txbase.tmp")?;
         if wal.clear().is_ok() {
             drop(wal);
             let _ = fs::remove_file(wal_path);
         }
+        *self = prepared;
         Ok(())
     }
 
@@ -314,14 +370,27 @@ impl DbfTable {
         }
         let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
         let snapshot =
-            wal.records().iter().rev().find_map(|(_, payload)| {
-                payload.strip_prefix(SNAPSHOT_MAGIC).map(ToOwned::to_owned)
-            });
+            wal.records()
+                .iter()
+                .rev()
+                .find_map(|(_, payload)| match decode_snapshot(payload) {
+                    Ok(Some(snapshot)) => Some(Ok(snapshot)),
+                    Ok(None) => None,
+                    Err(error) => Some(Err(error)),
+                });
         let Some(snapshot) = snapshot else {
             return Ok(());
         };
-        let recovered = Self::from_bytes(&snapshot)?;
-        recovered.save_to(path)?;
+        let snapshot = snapshot?;
+        Self::from_bytes(&snapshot.dbf)?;
+        if let Some(memo) = &snapshot.memo {
+            save_bytes_to(
+                &path.with_extension(memo.format.extension()),
+                &memo.bytes,
+                "txbase.memo.tmp",
+            )?;
+        }
+        save_bytes_to(path, &snapshot.dbf, "txbase.tmp")?;
         if wal.clear().is_ok() {
             drop(wal);
             let _ = fs::remove_file(wal_path);
@@ -331,19 +400,6 @@ impl DbfTable {
 
     pub fn insert_record(&mut self, values: Map<String, Value>) -> Result<usize, DbfError> {
         let values = self.normalize_values(&values)?;
-        if self.memo.is_some()
-            && self.fields.iter().any(|field| {
-                is_memo_field(field.field_type)
-                    && values
-                        .get(&field.name)
-                        .is_some_and(|value| !value.is_null() && value != "")
-            })
-        {
-            return Err(DbfError::Invalid(
-                "memo field writes require a memo sidecar writer".into(),
-            ));
-        }
-        let encoded = self.encode_record(&values)?;
         let number = self
             .records
             .len()
@@ -351,6 +407,23 @@ impl DbfTable {
             .ok_or_else(|| DbfError::Invalid("record count overflows usize".into()))?;
         let new_count = u32::try_from(number)
             .map_err(|_| DbfError::Invalid("record count exceeds DBF limit".into()))?;
+        let mut storage_values = values.clone();
+        let mut memo_updates = BTreeMap::new();
+        if self.memo.is_some() {
+            for field in self
+                .fields
+                .iter()
+                .filter(|field| is_memo_field(field.field_type))
+            {
+                let value = values.get(&field.name).unwrap_or(&Value::Null);
+                let text = value_text(value, field)?;
+                storage_values.insert(field.name.clone(), empty_memo_value(field));
+                if !text.is_empty() {
+                    memo_updates.insert((number - 1, field.name.clone()), text);
+                }
+            }
+        }
+        let encoded = self.encode_record(&storage_values)?;
         let record_end = self.record_end()?;
         if self.bytes.len() < record_end {
             return Err(DbfError::Invalid(
@@ -376,7 +449,8 @@ impl DbfTable {
             deleted: false,
             values: values.clone(),
         });
-        self.stored_values.push(values);
+        self.stored_values.push(storage_values);
+        self.memo_updates.extend(memo_updates);
         Ok(number)
     }
 
@@ -387,24 +461,10 @@ impl DbfTable {
     ) -> Result<(), DbfError> {
         let index = self.active_index(number)?;
         let values = self.normalize_values(&values)?;
-        let mut storage_values = values.clone();
-        if self.memo.is_some() {
-            for field in &self.fields {
-                if is_memo_field(field.field_type) {
-                    if values.get(&field.name) != self.records[index].values.get(&field.name) {
-                        return Err(DbfError::Invalid(format!(
-                            "memo field {} cannot be changed without a memo sidecar writer",
-                            field.name
-                        )));
-                    }
-                    storage_values.insert(
-                        field.name.clone(),
-                        self.stored_values[index][&field.name].clone(),
-                    );
-                }
-            }
-        }
-        self.write_existing_record(index, &values, &storage_values)
+        let (storage_values, memo_updates) = self.prepare_existing_storage(index, &values, None)?;
+        self.write_existing_record(index, &values, &storage_values)?;
+        self.memo_updates = memo_updates;
+        Ok(())
     }
 
     pub fn patch_record(
@@ -419,27 +479,11 @@ impl DbfTable {
             values.insert(field, value);
         }
         let values = self.normalize_values(&values)?;
-        let mut storage_values = values.clone();
-        for field in &self.fields {
-            if is_memo_field(field.field_type)
-                && (!changed_fields.contains(&field.name)
-                    || values.get(&field.name) == self.records[index].values.get(&field.name))
-            {
-                storage_values.insert(
-                    field.name.clone(),
-                    self.stored_values[index][&field.name].clone(),
-                );
-            } else if is_memo_field(field.field_type)
-                && self.memo.is_some()
-                && values.get(&field.name) != self.records[index].values.get(&field.name)
-            {
-                return Err(DbfError::Invalid(format!(
-                    "memo field {} cannot be changed without a memo sidecar writer",
-                    field.name
-                )));
-            }
-        }
-        self.write_existing_record(index, &values, &storage_values)
+        let (storage_values, memo_updates) =
+            self.prepare_existing_storage(index, &values, Some(&changed_fields))?;
+        self.write_existing_record(index, &values, &storage_values)?;
+        self.memo_updates = memo_updates;
+        Ok(())
     }
 
     pub fn delete_record(&mut self, number: usize) -> Result<(), DbfError> {
@@ -549,6 +593,182 @@ impl DbfTable {
         self.stored_values[index] = storage_values.clone();
         Ok(())
     }
+
+    fn prepare_existing_storage(
+        &self,
+        index: usize,
+        values: &Map<String, Value>,
+        changed_fields: Option<&BTreeSet<String>>,
+    ) -> Result<PreparedStorage, DbfError> {
+        let mut storage_values = values.clone();
+        let mut memo_updates = self.memo_updates.clone();
+        for field in self
+            .fields
+            .iter()
+            .filter(|field| is_memo_field(field.field_type))
+        {
+            let changed = changed_fields.is_none_or(|fields| fields.contains(&field.name));
+            let key = (index, field.name.clone());
+            if !changed || values.get(&field.name) == self.records[index].values.get(&field.name) {
+                if self.memo.is_some() {
+                    storage_values.insert(
+                        field.name.clone(),
+                        self.stored_values[index][&field.name].clone(),
+                    );
+                }
+                continue;
+            }
+
+            if self.memo.is_some() {
+                let text = value_text(&values[&field.name], field)?;
+                storage_values.insert(field.name.clone(), empty_memo_value(field));
+                if text.is_empty() {
+                    memo_updates.remove(&key);
+                } else {
+                    memo_updates.insert(key, text);
+                }
+            }
+        }
+        Ok((storage_values, memo_updates))
+    }
+
+    fn apply_memo_updates(&mut self, path: &Path) -> Result<Option<MemoSnapshot>, DbfError> {
+        if self.memo_updates.is_empty() {
+            return Ok(None);
+        }
+        if find_memo_path(path).is_none() {
+            return Err(DbfError::Invalid(
+                "memo sidecar is missing for pending memo updates".into(),
+            ));
+        }
+        let mut memo = self
+            .memo
+            .clone()
+            .ok_or_else(|| DbfError::Invalid("memo sidecar is not loaded".into()))?;
+
+        for ((index, field_name), value) in self.memo_updates.clone() {
+            let Some(record) = self.records.get(index) else {
+                return Err(DbfError::Invalid(
+                    "memo update record is out of range".into(),
+                ));
+            };
+            if record.deleted {
+                continue;
+            }
+            let field = self
+                .fields
+                .iter()
+                .find(|field| field.name == field_name && is_memo_field(field.field_type))
+                .cloned()
+                .ok_or_else(|| DbfError::Invalid(format!("memo field {field_name} not found")))?;
+            let pointer = if value.is_empty() {
+                encode_memo_pointer(&field, 0)?
+            } else {
+                let bytes =
+                    encode_character(&Value::String(value), &field, self.header.language_driver)?;
+                let block = memo.append_text(&bytes)?;
+                encode_memo_pointer(&field, block)?
+            };
+            let record_offset = self.record_offset(index)?;
+            let start = record_offset
+                .checked_add(field.offset)
+                .ok_or_else(|| DbfError::Invalid("memo pointer offset overflows usize".into()))?;
+            let end = start
+                .checked_add(usize::from(field.length))
+                .ok_or_else(|| DbfError::Invalid("memo pointer end overflows usize".into()))?;
+            let target = self
+                .bytes
+                .get_mut(start..end)
+                .ok_or_else(|| DbfError::Invalid("memo pointer area is truncated".into()))?;
+            target.copy_from_slice(&pointer);
+            self.stored_values[index].insert(
+                field.name,
+                decode_field(b'M', target, self.header.language_driver),
+            );
+        }
+
+        self.memo = Some(memo.clone());
+        self.memo_updates.clear();
+        Ok(Some(MemoSnapshot {
+            format: memo.format,
+            bytes: memo.bytes,
+        }))
+    }
+}
+
+fn snapshot_payload(dbf: &[u8]) -> Vec<u8> {
+    let mut payload = SNAPSHOT_MAGIC.to_vec();
+    payload.extend_from_slice(dbf);
+    payload
+}
+
+fn memo_snapshot_payload(dbf: &[u8], memo: &MemoSnapshot) -> Result<Vec<u8>, DbfError> {
+    let dbf_length = u64::try_from(dbf.len())
+        .map_err(|_| DbfError::Invalid("DBF snapshot length overflows u64".into()))?;
+    let memo_length = u64::try_from(memo.bytes.len())
+        .map_err(|_| DbfError::Invalid("memo snapshot length overflows u64".into()))?;
+    let mut payload = MEMO_SNAPSHOT_MAGIC.to_vec();
+    payload.push(memo.format.tag());
+    payload.extend_from_slice(&dbf_length.to_le_bytes());
+    payload.extend_from_slice(&memo_length.to_le_bytes());
+    payload.extend_from_slice(dbf);
+    payload.extend_from_slice(&memo.bytes);
+    Ok(payload)
+}
+
+fn decode_snapshot(payload: &[u8]) -> Result<Option<RecoverySnapshot>, DbfError> {
+    if let Some(dbf) = payload.strip_prefix(SNAPSHOT_MAGIC) {
+        return Ok(Some(RecoverySnapshot {
+            dbf: dbf.to_vec(),
+            memo: None,
+        }));
+    }
+    let Some(body) = payload.strip_prefix(MEMO_SNAPSHOT_MAGIC) else {
+        return Ok(None);
+    };
+    let header = body
+        .get(..17)
+        .ok_or_else(|| DbfError::Invalid("memo snapshot header is truncated".into()))?;
+    let format = MemoFormat::from_tag(header[0])?;
+    let dbf_length = usize::try_from(u64::from_le_bytes(
+        header[1..9]
+            .try_into()
+            .expect("memo snapshot DBF length is fixed"),
+    ))
+    .map_err(|_| DbfError::Invalid("DBF snapshot length overflows usize".into()))?;
+    let memo_length = usize::try_from(u64::from_le_bytes(
+        header[9..17]
+            .try_into()
+            .expect("memo snapshot memo length is fixed"),
+    ))
+    .map_err(|_| DbfError::Invalid("memo snapshot length overflows usize".into()))?;
+    let memo_start = 17usize
+        .checked_add(dbf_length)
+        .ok_or_else(|| DbfError::Invalid("memo snapshot length overflows usize".into()))?;
+    let end = memo_start
+        .checked_add(memo_length)
+        .ok_or_else(|| DbfError::Invalid("memo snapshot length overflows usize".into()))?;
+    if end != body.len() {
+        return Err(DbfError::Invalid(
+            "memo snapshot length does not match payload".into(),
+        ));
+    }
+    Ok(Some(RecoverySnapshot {
+        dbf: body[17..memo_start].to_vec(),
+        memo: Some(MemoSnapshot {
+            format,
+            bytes: body[memo_start..end].to_vec(),
+        }),
+    }))
+}
+
+fn save_bytes_to(path: &Path, bytes: &[u8], temporary_extension: &str) -> Result<(), DbfError> {
+    let temporary_path = path.with_extension(temporary_extension);
+    let mut file = fs::File::create(&temporary_path)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    fs::rename(temporary_path, path)?;
+    Ok(())
 }
 
 impl MemoFile {
@@ -654,6 +874,68 @@ impl MemoFile {
             }
         }
     }
+
+    fn append_text(&mut self, data: &[u8]) -> Result<u32, DbfError> {
+        if self.bytes.len() < 4 {
+            return Err(DbfError::Invalid("memo header is truncated".into()));
+        }
+        let start_block = self.bytes.len() / self.block_size
+            + usize::from(self.bytes.len() % self.block_size != 0);
+        let aligned_length = start_block
+            .checked_mul(self.block_size)
+            .ok_or_else(|| DbfError::Invalid("memo block offset overflows usize".into()))?;
+        if self.bytes.len() < aligned_length {
+            self.bytes.resize(aligned_length, 0);
+        }
+
+        let mut payload = Vec::new();
+        match self.format {
+            MemoFormat::Dbase3 => {
+                if data.contains(&EOF_MARKER) {
+                    return Err(DbfError::Invalid(
+                        "dBASE III memo text contains the end marker".into(),
+                    ));
+                }
+                payload.extend_from_slice(data);
+                payload.push(EOF_MARKER);
+            }
+            MemoFormat::Dbase4 => {
+                let length = u32::try_from(data.len())
+                    .map_err(|_| DbfError::Invalid("memo text is too long".into()))?;
+                payload.extend_from_slice(&[0xff, 0xff, 0x08, 0x08]);
+                payload.extend_from_slice(&length.to_le_bytes());
+                payload.extend_from_slice(data);
+            }
+            MemoFormat::FoxPro => {
+                let length = u32::try_from(data.len())
+                    .map_err(|_| DbfError::Invalid("memo text is too long".into()))?;
+                payload.extend_from_slice(&1u32.to_be_bytes());
+                payload.extend_from_slice(&length.to_be_bytes());
+                payload.extend_from_slice(data);
+            }
+        }
+
+        let block_count =
+            payload.len() / self.block_size + usize::from(payload.len() % self.block_size != 0);
+        let padded_length = block_count
+            .checked_mul(self.block_size)
+            .ok_or_else(|| DbfError::Invalid("memo text is too long".into()))?;
+        let padding = if self.format == MemoFormat::FoxPro {
+            0
+        } else {
+            b' '
+        };
+        payload.resize(padded_length, padding);
+        self.bytes.extend_from_slice(&payload);
+
+        let next_block = start_block
+            .checked_add(block_count)
+            .and_then(|block| u32::try_from(block).ok())
+            .ok_or_else(|| DbfError::Invalid("memo block number overflows u32".into()))?;
+        self.bytes[0..4].copy_from_slice(&next_block.to_be_bytes());
+        u32::try_from(start_block)
+            .map_err(|_| DbfError::Invalid("memo block number overflows u32".into()))
+    }
 }
 
 fn find_memo_path(path: &Path) -> Option<std::path::PathBuf> {
@@ -688,6 +970,32 @@ fn is_memo_field(field_type: u8) -> bool {
     field_type.eq_ignore_ascii_case(&b'M')
 }
 
+fn empty_memo_value(field: &FieldDescriptor) -> Value {
+    if field.length == 4 {
+        Value::Number(0.into())
+    } else {
+        Value::String(String::new())
+    }
+}
+
+fn encode_memo_pointer(field: &FieldDescriptor, block: u32) -> Result<Vec<u8>, DbfError> {
+    if field.length == 4 {
+        return Ok(block.to_le_bytes().to_vec());
+    }
+    let text = block.to_string();
+    let length = usize::from(field.length);
+    if text.len() > length {
+        return Err(DbfError::Invalid(format!(
+            "memo block number for {} exceeds field width {}",
+            field.name, field.length
+        )));
+    }
+    let mut pointer = vec![b' '; length];
+    let start = length - text.len();
+    pointer[start..].copy_from_slice(text.as_bytes());
+    Ok(pointer)
+}
+
 fn transaction_error(error: TransactionError) -> DbfError {
     DbfError::Invalid(format!("WAL error: {error}"))
 }
@@ -719,6 +1027,7 @@ fn encode_field(
             output[..bytes.len()].copy_from_slice(&bytes);
             Ok(output)
         }
+        b'M' if length == 4 => Ok(value_u32(value, field)?.to_le_bytes().to_vec()),
         b'D' | b'B' | b'G' | b'M' | b'@' | b'T' => {
             let text = value_text(value, field)?;
             if text.len() > length {
@@ -841,6 +1150,24 @@ fn value_i64(value: &Value, field: &FieldDescriptor) -> Result<i64, DbfError> {
     }
 }
 
+fn value_u32(value: &Value, field: &FieldDescriptor) -> Result<u32, DbfError> {
+    match value {
+        Value::Null => Ok(0),
+        Value::Number(number) => number
+            .as_u64()
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| DbfError::Invalid(format!("field {} requires a uint32", field.name))),
+        Value::String(text) => text
+            .trim()
+            .parse::<u32>()
+            .map_err(|_| DbfError::Invalid(format!("field {} requires a uint32", field.name))),
+        _ => Err(DbfError::Invalid(format!(
+            "field {} requires a uint32",
+            field.name
+        ))),
+    }
+}
+
 fn value_f64(value: &Value, field: &FieldDescriptor) -> Result<f64, DbfError> {
     let number = match value {
         Value::Null => 0.0,
@@ -936,6 +1263,9 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, DbfError> {
 fn decode_field(field_type: u8, bytes: &[u8], language_driver: u8) -> Value {
     match field_type.to_ascii_uppercase() {
         b'C' => Value::String(text(bytes, language_driver)),
+        b'M' if bytes.len() == 4 => {
+            Value::Number(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).into())
+        }
         b'D' | b'B' | b'G' | b'M' => Value::String(text(bytes, 0)),
         b'F' | b'N' => numeric(bytes),
         b'L' => match bytes.first().map(|byte| byte.to_ascii_uppercase()) {
@@ -1232,7 +1562,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_dbase3_memo_sidecar_and_preserves_pointer_on_mutation() {
+    fn reads_and_writes_dbase3_memo_sidecar() {
         let path =
             std::env::temp_dir().join(format!("txbase-dbase3-memo-{}.dbf", std::process::id()));
         let memo_path = path.with_extension("dbt");
@@ -1267,7 +1597,7 @@ mod tests {
                     .clone(),
             )
             .unwrap();
-        let error = table
+        table
             .patch_record(
                 1,
                 serde_json::json!({"NAME": "new memo"})
@@ -1275,12 +1605,7 @@ mod tests {
                     .unwrap()
                     .clone(),
             )
-            .unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("memo field NAME cannot be changed")
-        );
+            .unwrap();
         table
             .patch_record(
                 1,
@@ -1290,22 +1615,22 @@ mod tests {
         table.save_with_wal(&path).unwrap();
 
         let reread = DbfTable::from_path(&path).unwrap();
-        assert_eq!(
-            reread.active_record(1).unwrap().values["NAME"],
-            "memo from dbt"
-        );
+        assert_eq!(reread.active_record(1).unwrap().values["NAME"], "new memo");
         assert_eq!(reread.active_record(1).unwrap().values["AGE"], 30);
         assert_eq!(
             &reread.to_bytes()[memo_start..memo_start + 10],
-            b"         1"
+            b"         2"
         );
+        let memo = MemoFile::open(&memo_path, 0x83).unwrap();
+        assert_eq!(memo.read(2).unwrap().unwrap(), b"new memo");
+        assert_eq!(u32::from_be_bytes(memo.bytes[..4].try_into().unwrap()), 3);
 
         fs::remove_file(path).unwrap();
         fs::remove_file(memo_path).unwrap();
     }
 
     #[test]
-    fn reads_foxpro_fpt_memo_sidecar() {
+    fn reads_and_writes_foxpro_fpt_memo_sidecar() {
         let path =
             std::env::temp_dir().join(format!("txbase-foxpro-memo-{}.dbf", std::process::id()));
         let memo_path = path.with_extension("fpt");
@@ -1329,11 +1654,33 @@ mod tests {
         memo[DBT_BLOCK_SIZE + 8..DBT_BLOCK_SIZE + 8 + text.len()].copy_from_slice(text);
         fs::write(&memo_path, memo).unwrap();
 
-        let table = DbfTable::from_path(&path).unwrap();
+        let mut table = DbfTable::from_path(&path).unwrap();
         assert_eq!(
             table.active_record(1).unwrap().values["NAME"],
             "memo from fpt"
         );
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "changed fpt"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        table.save_with_wal(&path).unwrap();
+
+        let reread = DbfTable::from_path(&path).unwrap();
+        assert_eq!(
+            reread.active_record(1).unwrap().values["NAME"],
+            "changed fpt"
+        );
+        assert_eq!(
+            &reread.to_bytes()[memo_start..memo_start + 10],
+            b"         2"
+        );
+        let memo = MemoFile::open(&memo_path, 0xf5).unwrap();
+        assert_eq!(memo.read(2).unwrap().unwrap(), b"changed fpt");
 
         fs::remove_file(path).unwrap();
         fs::remove_file(memo_path).unwrap();
@@ -1378,5 +1725,65 @@ mod tests {
         assert!(!wal_path.exists());
 
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn recovers_dbf_and_memo_from_txdm_snapshot() {
+        let path = std::env::temp_dir().join(format!(
+            "txbase-dbf-memo-recovery-{}-{}.dbf",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let memo_path = path.with_extension("dbt");
+        let wal_path = path.with_extension("txbase.wal");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&memo_path);
+        let _ = fs::remove_file(&wal_path);
+
+        let mut bytes = fixture();
+        bytes[0] = 0x83;
+        bytes[64 + 11] = b'M';
+        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+        let memo_start = record_start + 4;
+        bytes[memo_start..memo_start + 10].copy_from_slice(b"         1");
+        fs::write(&path, &bytes).unwrap();
+
+        let mut memo_bytes = vec![0; DBT_BLOCK_SIZE * 2];
+        let text = b"memo before crash";
+        memo_bytes[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + text.len()].copy_from_slice(text);
+        memo_bytes[DBT_BLOCK_SIZE + text.len()] = EOF_MARKER;
+        fs::write(&memo_path, memo_bytes).unwrap();
+
+        let mut table = DbfTable::from_path(&path).unwrap();
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": "memo after crash"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        let mut prepared = table.clone();
+        let memo = prepared.apply_memo_updates(&path).unwrap().unwrap();
+        let payload = memo_snapshot_payload(&prepared.to_bytes(), &memo).unwrap();
+        let mut wal = FileWal::open(&wal_path).unwrap();
+        wal.append(&payload).unwrap();
+        wal.sync().unwrap();
+        drop(wal);
+
+        let recovered = DbfTable::from_path(&path).unwrap();
+        assert_eq!(
+            recovered.active_record(1).unwrap().values["NAME"],
+            "memo after crash"
+        );
+        assert_eq!(
+            &recovered.to_bytes()[memo_start..memo_start + 10],
+            b"         2"
+        );
+        assert!(!wal_path.exists());
+
+        fs::remove_file(path).unwrap();
+        fs::remove_file(memo_path).unwrap();
     }
 }

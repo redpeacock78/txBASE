@@ -131,11 +131,12 @@ Dotted path、index、update operatorは未対応です。
 
 `DELETE`はDBFの削除markerを設定して`204 No Content`を返します。
 削除済みrecord numberは再利用せず、以後の読み取りは`404 Not Found`になります。
-serverはDBF全体の`TXDB` snapshotをWALへ書き込み、syncしてから一時ファイルをDBF pathへrenameします。
+serverはDBF-only変更では`TXDB`、memo field変更ではDBFとsidecarを含む`TXDM` snapshotをWALへ書き込み、syncしてから対象ファイルを置き換えます。
 `DbfTable::from_path`は中断されたmutationの最新snapshotを復旧します。
 WALは細粒度のmutation recordではなく全体snapshotを保存し、複数writerの調停は未対応です。
-既存のtext memoは`.dbt`または`.fpt`から読み取ります。
-新しいmemo内容の書き込みは未対応で、sidecarがある場合のmemo field変更は拒否します。
+text memoは`.dbt`または`.fpt`から読み取り、変更時は新しいblockをappendしてDBF pointerも更新します。
+sidecarとDBFは`TXDM` WAL snapshotで復旧可能な単位として保存します。
+`B`/`G`のbinary sidecar dereferenceと、この範囲外のmemo形式は未対応です。
 
 ## 検証
 
