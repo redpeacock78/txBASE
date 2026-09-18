@@ -241,7 +241,7 @@ The txbase quality path is staged:
 3. Add malformed DBF, memo, index, WAL, and JSON input corpora.
 4. Add crash-boundary and recovery tests around WAL sync and checkpoint publication.
 5. Add compatibility fixtures produced by independent xBase implementations.
-6. Add fuzzing, concurrency tests, cross-platform CI, and differential checks once those components exist.
+6. Add fuzzing, concurrency tests, and differential checks once those components exist; CI already runs the core gate on Ubuntu, macOS, and Windows.
 
 The current CI gate is deliberately only `fmt`, `clippy`, and `cargo test`.
 
