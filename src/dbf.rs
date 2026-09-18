@@ -1381,7 +1381,7 @@ fn encode_field(
             Ok(output)
         }
         b'B' | b'G' | b'M' if length == 4 => Ok(value_u32(value, field)?.to_le_bytes().to_vec()),
-        b'D' | b'B' | b'G' | b'M' | b'@' | b'T' => {
+        b'D' | b'B' | b'G' | b'M' => {
             let text = value_text(value, field)?;
             if text.len() > length {
                 return Err(DbfError::Invalid(format!(
@@ -1391,6 +1391,19 @@ fn encode_field(
             }
             let mut bytes = vec![b' '; length];
             bytes[..text.len()].copy_from_slice(text.as_bytes());
+            Ok(bytes)
+        }
+        b'@' | b'T' => {
+            if value.is_null() {
+                return Ok(vec![b' '; length]);
+            }
+            let bytes = binary_value(value, field)?;
+            if bytes.len() != length {
+                return Err(DbfError::Invalid(format!(
+                    "timestamp field {} requires exactly {length} bytes",
+                    field.name
+                )));
+            }
             Ok(bytes)
         }
         b'N' | b'F' => {
@@ -1866,6 +1879,22 @@ mod tests {
     #[test]
     fn decodes_float_fields_as_numbers() {
         assert_eq!(decode_field(b'F', b" 1.5", 0), serde_json::json!(1.5));
+    }
+
+    #[test]
+    fn round_trips_hex_timestamp_fields() {
+        let field = FieldDescriptor {
+            name: "STAMP".into(),
+            field_type: b'T',
+            length: 8,
+            decimal_count: 0,
+            offset: 1,
+        };
+        let raw = [0x00, 0x01, 0x1a, 0x7f, 0x80, 0xfe, 0xff, 0x42];
+        let value = decode_field(b'T', &raw, 0);
+
+        assert_eq!(value, serde_json::json!("00011a7f80feff42"));
+        assert_eq!(encode_field(&field, &value, 0).unwrap(), raw);
     }
 
     #[test]
