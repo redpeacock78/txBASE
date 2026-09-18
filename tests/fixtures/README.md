@@ -8,3 +8,12 @@ The source is pinned to commit
 3583ae3707e17f815695333443a457b5c7c6c7dc:
 https://github.com/SebastiaanKlippert/go-foxpro-dbf/tree/3583ae3707e17f815695333443a457b5c7c6c7dc/testdata
 and is distributed under the upstream MIT license.
+
+external-dbase4-test.dbf.hex and external-dbase4-test.dbt.hex are
+whitespace-separated hex encodings of the upstream dbase_8b.dbf and
+dbase_8b.dbt files from the independent Ruby dbf reader fixtures.
+
+The source is pinned to commit
+6b6547384439fd009815d20112b22c58eee83503:
+https://github.com/infused/dbf/tree/6b6547384439fd009815d20112b22c58eee83503/spec/fixtures
+and is distributed under the upstream MIT license.

@@ -4,7 +4,13 @@ use std::fs;
 fn decode_hex_fixture(input: &str) -> Vec<u8> {
     input
         .split_whitespace()
-        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .flat_map(|token| {
+            assert!(token.len() % 2 == 0, "hex fixture token has odd length");
+            token
+                .as_bytes()
+                .chunks_exact(2)
+                .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+        })
         .collect()
 }
 
@@ -62,6 +68,71 @@ fn reads_and_writes_a_pinned_external_foxpro_fixture() {
     assert_eq!(
         reread.active_record(1).unwrap().values["MELDING"],
         "compatibility write",
+    );
+    assert!(!wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(memo_path).unwrap();
+    fs::remove_file(lock_path).unwrap();
+}
+
+#[test]
+fn reads_and_writes_a_pinned_external_dbase4_fixture() {
+    let path =
+        std::env::temp_dir().join(format!("txbase-external-dbase4-{}.dbf", std::process::id()));
+    let memo_path = path.with_extension("dbt");
+    let lock_path = path.with_extension("txbase.lock");
+    let wal_path = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&memo_path);
+    let _ = fs::remove_file(&lock_path);
+    let _ = fs::remove_file(&wal_path);
+    fs::write(
+        &path,
+        decode_hex_fixture(include_str!(
+            "../../tests/fixtures/external-dbase4-test.dbf.hex"
+        )),
+    )
+    .unwrap();
+    fs::write(
+        &memo_path,
+        decode_hex_fixture(include_str!(
+            "../../tests/fixtures/external-dbase4-test.dbt.hex"
+        )),
+    )
+    .unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    assert_eq!(table.header.version, 0x8b);
+    assert_eq!(table.records().len(), 10);
+    assert_eq!(table.active_json().len(), 10);
+    assert_eq!(table.active_record(1).unwrap().values["CHARACTER"], "One");
+    assert_eq!(table.active_record(1).unwrap().values["DATE"], "19700101");
+    assert_eq!(table.active_record(1).unwrap().values["LOGICAL"], true);
+    assert_eq!(
+        table.active_record(1).unwrap().values["MEMO"],
+        "First memo\r\n"
+    );
+    assert_eq!(
+        table.active_record(2).unwrap().values["MEMO"],
+        "Second memo"
+    );
+
+    table
+        .patch_record(
+            2,
+            serde_json::json!({"MEMO": "compatibility write"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    table.save_with_wal(&path).unwrap();
+
+    let reread = DbfTable::from_path(&path).unwrap();
+    assert_eq!(
+        reread.active_record(2).unwrap().values["MEMO"],
+        "compatibility write"
     );
     assert!(!wal_path.exists());
 
