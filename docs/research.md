@@ -28,21 +28,21 @@ The common field encodings are also part of the compatibility contract:
 | `I` and `+` | Four-byte integer representation | Little-endian signed integer; Level 7 `+` inserts use the descriptor's next value when omitted |
 | `Y` | Eight-byte little-endian fixed-point currency | Four-decimal fixed-point string; writes validate the signed 64-bit scaled representation |
 | `M` | Text pointer to a memo block | Text from a sibling `.dbt` or `.fpt` sidecar when present; pointer text otherwise |
-| `B` and `G` | Text pointer to a binary block; Visual FoxPro `B` width 8 is a double | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; dBASE IV DBT and FPT writes append a binary block; dBASE III writes disabled |
+| `B`, `G`, and `P` | Text pointer to a binary block; Visual FoxPro `B` width 8 is a double and `P` is a picture | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; dBASE IV DBT and FPT writes append a binary block; dBASE III writes disabled |
 
 The parser therefore reads the declared header and record boundaries, checks
 field names and widths, uses the language-driver byte for the supported
 code-page mappings, and excludes records marked deleted from the JSON read
 path. Character writes reject values that the declared code-page mapping
 cannot represent. When a sibling `.dbt` or `.fpt` exists, `M` fields are
-resolved from their block pointers, while `B`/`G` payloads are exposed as hex
+resolved from their block pointers, while `B`/`G`/`P` payloads are exposed as hex
 text. Existing pointers are retained separately
 so non-memo DBF mutations do not rewrite them as text. Text changes append to
 the existing `.dbt` or `.fpt` sidecar, using the dBASE III terminator, the
 dBASE IV header-inclusive length, or the FPT length as appropriate, and update
 the DBF pointer in a `TXDM` WAL snapshot; startup recovery replaces both files
 from that snapshot. dBASE IV binary writes accept hex text, honor the DBT header
-block size, and append a length-delimited binary block, while FPT writes append a type-0 binary block;
+block size, and append a length-delimited binary block, while FPT writes append a type-0 binary block, including the Visual FoxPro `P` picture type;
 dBASE III writes, OLE semantics, and other code-page conversion remain
 explicit future work.
 

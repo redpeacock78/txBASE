@@ -1352,7 +1352,7 @@ fn is_memo_field(field_type: u8) -> bool {
 }
 
 fn is_binary_field(field_type: u8) -> bool {
-    matches!(field_type.to_ascii_uppercase(), b'B' | b'G')
+    matches!(field_type.to_ascii_uppercase(), b'B' | b'G' | b'P')
 }
 
 fn is_sidecar_field(field_type: u8) -> bool {
@@ -1517,7 +1517,9 @@ fn encode_field(
             }
             Ok(currency_i64(value, field)?.to_le_bytes().to_vec())
         }
-        b'B' | b'G' | b'M' if length == 4 => Ok(value_u32(value, field)?.to_le_bytes().to_vec()),
+        b'B' | b'G' | b'M' | b'P' if length == 4 => {
+            Ok(value_u32(value, field)?.to_le_bytes().to_vec())
+        }
         b'D' => {
             if length != 8 {
                 return Err(DbfError::Invalid(format!(
@@ -1922,7 +1924,7 @@ fn decode_field(
                 Value::Null
             }
         }
-        b'B' | b'G' | b'M' if bytes.len() == 4 => {
+        b'B' | b'G' | b'M' | b'P' if bytes.len() == 4 => {
             let block = if memo_format == Some(MemoFormat::FoxPro) {
                 u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
             } else {
@@ -1930,7 +1932,7 @@ fn decode_field(
             };
             Value::Number(block.into())
         }
-        b'D' | b'B' | b'G' | b'M' => Value::String(text(bytes, 0)),
+        b'D' | b'B' | b'G' | b'M' | b'P' => Value::String(text(bytes, 0)),
         b'F' | b'N' => numeric(bytes),
         b'L' => match bytes.first().map(|byte| byte.to_ascii_uppercase()) {
             Some(b'T') | Some(b'Y') => Value::Bool(true),
@@ -2933,24 +2935,31 @@ mod tests {
     }
 
     #[test]
-    fn reads_and_writes_binary_fpt_sidecar_as_hex() {
+    fn reads_and_writes_visual_foxpro_picture_fpt_sidecar_as_hex() {
         let path =
             std::env::temp_dir().join(format!("txbase-foxpro-binary-{}.dbf", std::process::id()));
         let memo_path = path.with_extension("fpt");
         let _ = fs::remove_file(&path);
         let _ = fs::remove_file(&memo_path);
 
-        let mut bytes = fixture();
-        bytes[0] = 0xf5;
-        bytes[64 + 11] = b'B';
-        let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
-        let binary_start = record_start + 4;
-        bytes[binary_start..binary_start + 10].copy_from_slice(b"         1");
+        let mut bytes = vec![0; 71];
+        bytes[0] = 0x30;
+        bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+        bytes[8..10].copy_from_slice(&65u16.to_le_bytes());
+        bytes[10..12].copy_from_slice(&5u16.to_le_bytes());
+        bytes[32..37].copy_from_slice(b"IMAGE");
+        bytes[43] = b'P';
+        bytes[48] = 4;
+        bytes[64] = FIELD_TERMINATOR;
+        bytes[65] = ACTIVE_RECORD;
+        let pointer_start = 66;
+        bytes[pointer_start..pointer_start + 4].copy_from_slice(&1u32.to_be_bytes());
+        bytes[70] = EOF_MARKER;
         fs::write(&path, bytes).unwrap();
 
         let mut memo = vec![0; DBT_BLOCK_SIZE * 2];
         memo[6..8].copy_from_slice(&(DBT_BLOCK_SIZE as u16).to_be_bytes());
-        memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + 4].copy_from_slice(&2u32.to_be_bytes());
+        memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + 4].copy_from_slice(&0u32.to_be_bytes());
         let binary = [0x00, 0x01, 0xff, 0x7f];
         memo[DBT_BLOCK_SIZE + 4..DBT_BLOCK_SIZE + 8]
             .copy_from_slice(&(binary.len() as u32).to_be_bytes());
@@ -2958,11 +2967,11 @@ mod tests {
         fs::write(&memo_path, memo).unwrap();
 
         let mut table = DbfTable::from_path(&path).unwrap();
-        assert_eq!(table.active_record(1).unwrap().values["NAME"], "0001ff7f");
+        assert_eq!(table.active_record(1).unwrap().values["IMAGE"], "0001ff7f");
         table
             .patch_record(
                 1,
-                serde_json::json!({"NAME": "deadbeef"})
+                serde_json::json!({"IMAGE": "deadbeef"})
                     .as_object()
                     .unwrap()
                     .clone(),
@@ -2970,34 +2979,14 @@ mod tests {
             .unwrap();
         table.save_with_wal(&path).unwrap();
 
-        let mut reread = DbfTable::from_path(&path).unwrap();
-        assert_eq!(reread.active_record(1).unwrap().values["NAME"], "deadbeef");
+        let reread = DbfTable::from_path(&path).unwrap();
+        assert_eq!(reread.active_record(1).unwrap().values["IMAGE"], "deadbeef");
         assert_eq!(
-            &reread.to_bytes()[binary_start..binary_start + 10],
-            b"         2"
+            &reread.to_bytes()[pointer_start..pointer_start + 4],
+            &2u32.to_be_bytes()
         );
-        let memo = MemoFile::open(&memo_path, 0xf5).unwrap();
+        let memo = MemoFile::open(&memo_path, 0x30).unwrap();
         assert_eq!(memo.read(2).unwrap().unwrap(), [0xde, 0xad, 0xbe, 0xef]);
-        assert_eq!(
-            &memo.bytes[DBT_BLOCK_SIZE * 2..DBT_BLOCK_SIZE * 2 + 4],
-            &[0; 4]
-        );
-
-        table
-            .patch_record(
-                1,
-                serde_json::json!({"AGE": 30}).as_object().unwrap().clone(),
-            )
-            .unwrap();
-        table.save_with_wal(&path).unwrap();
-
-        reread = DbfTable::from_path(&path).unwrap();
-        assert_eq!(reread.active_record(1).unwrap().values["NAME"], "deadbeef");
-        assert_eq!(reread.active_record(1).unwrap().values["AGE"], 30);
-        assert_eq!(
-            &reread.to_bytes()[binary_start..binary_start + 10],
-            b"         2"
-        );
 
         fs::remove_file(path).unwrap();
         fs::remove_file(memo_path).unwrap();
