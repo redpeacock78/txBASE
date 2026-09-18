@@ -134,6 +134,7 @@ impl FileWal {
             let remaining = bytes.len() - offset;
             if remaining < WAL_HEADER_SIZE {
                 file.set_len(offset as u64)?;
+                file.sync_all()?;
                 break;
             }
             if bytes[offset..offset + WAL_MAGIC.len()] != WAL_MAGIC {
@@ -157,6 +158,7 @@ impl FileWal {
                 .ok_or_else(|| TransactionError::Invalid("WAL record length overflows".into()))?;
             if end > bytes.len() {
                 file.set_len(offset as u64)?;
+                file.sync_all()?;
                 break;
             }
             let lsn = u64::from_le_bytes(
