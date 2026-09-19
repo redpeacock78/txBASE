@@ -12,7 +12,7 @@ const RECORD_HEADER_SIZE: usize = 40;
 pub fn save_with_wal(path: impl AsRef<Path>, table: &XbfTable) -> Result<(), XbfError> {
     let path = path.as_ref();
     recover_path(path)?;
-    let base_generation = current_generation(path)?;
+    let base_generation = current_generation(path, &XbfLimits::default())?;
     if table.generation <= base_generation {
         return Err(XbfError::Invalid(format!(
             "XBF generation {} is not newer than the current generation {base_generation}",
