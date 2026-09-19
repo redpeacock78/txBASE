@@ -183,14 +183,14 @@ fn reports_all_nonrepresentable_xbf_fields_and_values() {
             XbfField {
                 name: "DOC".into(),
                 ty: XbfType::Json,
-                nullable: false,
+                nullable: true,
                 primary_key: false,
                 unique: false,
             },
             XbfField {
                 name: "UUID".into(),
                 ty: XbfType::Uuid,
-                nullable: false,
+                nullable: true,
                 primary_key: false,
                 unique: false,
             },
