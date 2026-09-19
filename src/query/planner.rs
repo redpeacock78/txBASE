@@ -67,7 +67,7 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
         let Some(value) = equality_value(condition) else {
             continue;
         };
-        let Ok(Some((name, records))) = index_file.lookup_eq_for_field(field, value) else {
+        let Ok(Some((name, records))) = index_file.lookup_eq_for_field(&field, value) else {
             continue;
         };
         equality_indexes.push((name, field.clone(), records));
