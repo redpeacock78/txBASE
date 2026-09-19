@@ -70,15 +70,6 @@ pub(super) fn validate_for_table(
     table: &DbfTable,
 ) -> Result<(), IndexError> {
     validate_shape(index_file)?;
-    if index_file
-        .statistics
-        .as_ref()
-        .is_some_and(|statistics| statistics.active_record_count != table.active_records().count())
-    {
-        return Err(IndexError::Invalid(
-            "collection statistics do not match the current DBF records".into(),
-        ));
-    }
     let definitions = index_file
         .indexes
         .iter()
@@ -89,6 +80,15 @@ pub(super) fn validate_for_table(
         return Err(IndexError::Invalid(
             "index entries do not match the current DBF records".into(),
         ));
+    }
+    if let Some(statistics) = index_file.statistics.as_ref() {
+        let expected_statistics =
+            super::statistics::build(table.active_records().count(), &expected);
+        if !statistics.matches_expected(&expected_statistics) {
+            return Err(IndexError::Invalid(
+                "collection statistics do not match the current DBF records".into(),
+            ));
+        }
     }
     Ok(())
 }

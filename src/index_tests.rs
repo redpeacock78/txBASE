@@ -46,6 +46,10 @@ fn builds_and_loads_an_external_scalar_index() {
     assert_eq!(loaded.schema_json()["statistics"]["active_record_count"], 1);
     assert_eq!(loaded.equality_selectivity_estimate("NAME"), Some(1));
     assert_eq!(loaded.schema_json()["indexes"][0]["entry_count"], 1);
+    assert_eq!(
+        loaded.schema_json()["indexes"][0]["histogram_bucket_count"],
+        1
+    );
 
     remove_table_files(&path);
 }
@@ -75,6 +79,10 @@ fn builds_and_loads_a_compound_ordered_index() {
         json!(["NAME", "AGE"])
     );
     assert_eq!(loaded.schema_json()["statistics"]["active_record_count"], 2);
+    assert_eq!(
+        loaded.schema_json()["indexes"][0]["histogram_bucket_count"],
+        0
+    );
     let (name, fields, records) = loaded
         .lookup_ordered_for_fields(&["NAME", "AGE"], false)
         .unwrap()

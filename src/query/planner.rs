@@ -100,19 +100,32 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
             ordered_prefix: 0,
         };
     }
-    for (field, condition) in &request.filter {
+    let mut range_fields = request
+        .filter
+        .iter()
+        .filter_map(|(field, condition)| range_bounds(condition).map(|_| field.clone()))
+        .collect::<Vec<_>>();
+    // ponytail: bucket-overlap estimate; keep exact range candidates as the correctness path.
+    range_fields.sort_by_key(|field| {
+        let condition = request.filter.get(field).expect("range field exists");
+        let (lower, upper) = range_bounds(condition).expect("range field has bounds");
+        index_file
+            .range_selectivity_estimate(field, lower, upper)
+            .unwrap_or(usize::MAX)
+    });
+    for field in range_fields {
+        let Some(condition) = request.filter.get(&field) else {
+            continue;
+        };
         let Some((lower, upper)) = range_bounds(condition) else {
             continue;
         };
-        let Ok(Some((name, records))) = index_file.lookup_range_for_field(field, lower, upper)
+        let Ok(Some((name, records))) = index_file.lookup_range_for_field(&field, lower, upper)
         else {
             continue;
         };
         return PlannedAccess {
-            plan: QueryPlan::RangeIndex {
-                name,
-                field: field.clone(),
-            },
+            plan: QueryPlan::RangeIndex { name, field },
             records: Some(records),
             ordered_prefix: 0,
         };

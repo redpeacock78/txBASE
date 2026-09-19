@@ -125,7 +125,11 @@ The planner uses the sidecar's active-record count and each single-field index's
 
 It processes the exact candidate lists in estimated-selectivity order, which limits repeated membership checks when predicates have different expected cardinalities.
 
-The estimate assumes a uniform distribution, so it is a local statistic rather than MongoDB-style histograms or a cost-based planner.
+The equality estimate assumes a uniform distribution.
+
+Single-field range indexes use a persisted equi-depth histogram and sum the record counts of overlapping buckets.
+
+These are local selectivity estimates, not a full cost model or MongoDB planner compatibility.
 
 For a multi-key sort, a single-field index provides the first-key order and the remaining keys are sorted in memory within each equal first-key group.
 
@@ -141,7 +145,7 @@ The txBASE intersection is a local candidate-reduction feature and does not clai
 
 MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a future compound-index planner must define index field order instead of treating every index as an interchangeable lookup table.
 
-txBASE currently has an active-record count and uniform distinct-key estimate, but no value-frequency histogram, cost model, or per-field direction metadata for compound definitions.
+txBASE currently has an active-record count, a uniform distinct-key estimate for equality, and a single-field range histogram, but no full cost model or per-field direction metadata for compound definitions.
 
 The equality intersection is a bounded candidate prefilter, not a covered query or a claim of end-to-end speedup.
 
@@ -185,7 +189,7 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 
 The roadmap may later cover the following in separate contracts:
 
-1. Histogram-based index choice and mixed-direction compound planning with explicit missing, null, and collation rules.
+1. Full cost-based index choice and mixed-direction compound planning with explicit missing, null, and collation rules.
 2. A catalog for multiple tables and schema metadata.
 3. Joins and aggregation with bounded memory behavior.
 4. Cursors or streaming responses with stable snapshot rules.

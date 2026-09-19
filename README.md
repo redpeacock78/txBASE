@@ -150,7 +150,7 @@ Normal DBF saves record and apply an existing sidecar's target through the WAL; 
 
 The path-aware planner can intersect candidates from multiple valid single-field indexes for direct equality filters.
 
-It uses the sidecar's active-record and distinct-key statistics as a uniform selectivity estimate before loading the exact candidate lists; it does not claim histogram or cost-based planning.
+It uses the sidecar's active-record and distinct-key statistics as a uniform equality estimate and can order single-field range candidates with a bounded histogram estimate; it does not claim a full cost-based planner.
 
 For multi-key sorts, it can use a single-field index for the first sort key and sort only equal-key groups by the remaining keys; this is not compound-index support.
 
@@ -236,7 +236,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add histogram-based index choice, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
+Later phases may add a full cost-based index choice, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

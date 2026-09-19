@@ -14,6 +14,7 @@ const INDEX_EXTENSION: &str = "txidx";
 mod commit;
 mod lookup;
 mod ordering;
+mod statistics;
 mod storage;
 mod validation;
 
@@ -246,12 +247,6 @@ struct SourceFingerprint {
     memo: Option<FileFingerprint>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CollectionStatistics {
-    active_record_count: usize,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IndexFile {
@@ -259,7 +254,7 @@ pub struct IndexFile {
     version: u8,
     source: SourceFingerprint,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    statistics: Option<CollectionStatistics>,
+    statistics: Option<statistics::CollectionStatistics>,
     indexes: Vec<SecondaryIndex>,
 }
 
@@ -276,9 +271,7 @@ impl IndexFile {
         let table = DbfTable::from_path(dbf_path)?;
         let source = storage::source_fingerprint(dbf_path)?;
         let indexes = validation::build_indexes(&table, &definitions)?;
-        let statistics = Some(CollectionStatistics {
-            active_record_count: table.active_records().count(),
-        });
+        let statistics = Some(statistics::build(table.active_records().count(), &indexes));
         Ok(Self {
             format: INDEX_FORMAT.to_owned(),
             version: INDEX_VERSION,
@@ -360,6 +353,7 @@ impl IndexFile {
                         "entry_count": index.entries.len(),
                         "distinct_key_count": index.entries.len(),
                         "indexed_record_count": index.entries.iter().map(|entry| entry.records.len()).sum::<usize>(),
+                        "histogram_bucket_count": self.statistics.as_ref().map_or(0, |statistics| statistics.histogram_bucket_count(&index.definition.name)),
                     })
                 } else {
                     json!({
@@ -368,6 +362,7 @@ impl IndexFile {
                         "entry_count": index.entries.len(),
                         "distinct_key_count": index.entries.len(),
                         "indexed_record_count": index.entries.iter().map(|entry| entry.records.len()).sum::<usize>(),
+                        "histogram_bucket_count": self.statistics.as_ref().map_or(0, |statistics| statistics.histogram_bucket_count(&index.definition.name)),
                     })
                 }
             }).collect::<Vec<_>>(),

@@ -17,6 +17,20 @@ impl IndexFile {
         Some(records / distinct_keys + remainder)
     }
 
+    pub(crate) fn range_selectivity_estimate(
+        &self,
+        field: &str,
+        lower: Option<(&Value, bool)>,
+        upper: Option<(&Value, bool)>,
+    ) -> Option<usize> {
+        let index = self.indexes.iter().find(|index| {
+            index.definition.fields.len() == 1 && index.definition.fields[0] == field
+        })?;
+        self.statistics
+            .as_ref()?
+            .range_estimate(&index.definition.name, lower, upper)
+    }
+
     pub fn lookup_eq(&self, index_name: &str, value: &Value) -> Result<Vec<usize>, IndexError> {
         let key = IndexKey::from_value(Some(value))?;
         let index = self

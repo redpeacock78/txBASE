@@ -18,7 +18,10 @@ An index file is JSON with this top-level shape:
     "dbf": {"length": 0, "hash": 0},
     "memo": null
   },
-  "statistics": {"active_record_count": 0},
+  "statistics": {
+    "active_record_count": 0,
+    "indexes": [{"name": "NAME"}]
+  },
   "indexes": [
     {
       "definition": {"name": "NAME", "field": "NAME"},
@@ -60,6 +63,12 @@ Entries are grouped by the canonical JSON encoding of the typed key, then ordere
 Each component uses the order `Missing`, `null`, boolean, number, and string; numeric values use exact integer or floating-point comparison where representable.
 
 Record numbers within one key remain strictly increasing so equal sort keys preserve DBF physical order.
+
+A current sidecar stores the active-record count and per-index statistics.
+
+Each single-field index stores an equi-depth histogram split by typed value domain, with a lower key, upper key, distinct-key count, and indexed record count for each bucket.
+
+Compound indexes do not store histograms yet.
 
 ## Lifecycle
 
@@ -131,7 +140,7 @@ It depends on the file system honoring the file and directory sync operations us
 
 ## Current boundary
 
-The sidecar currently supports build, exact equality lookup, range candidate lookup, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, ascending compound-key construction and prefix traversal, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for that intersection, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
+The sidecar currently supports build, exact equality lookup, range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, ascending compound-key construction and prefix traversal, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for that intersection, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
@@ -149,7 +158,11 @@ The planner now records the active-record count and derives each single-field in
 
 It estimates an equality candidate count by assuming a uniform distribution, orders the candidate indexes by that estimate, and then uses exact record lists for the intersection.
 
-This estimate is a local statistic, not a histogram or a cost-based planner.
+The equality estimate is a local statistic, not a histogram or a cost-based planner.
+
+For multiple range predicates, the planner sums the record counts of overlapping histogram buckets and tries the smallest estimate first.
+
+An overlapped bucket is counted in full, so the estimate is intentionally coarse; exact range candidates still determine the returned records.
 
 The path-less `QueryExecutor` implementation remains a table-scan reference path.
 
@@ -159,6 +172,6 @@ It still materializes candidate record numbers and sorts them by physical DBF or
 
 `IndexFile::load` still validates the sidecar by rebuilding expected entries from the current DBF, so the binary-seek contract does not yet claim an end-to-end speedup.
 
-Histogram-based index choice, mixed-direction compound definitions, and cross-table atomic commits require separate contracts.
+Full cost-based index choice, mixed-direction compound definitions, and cross-table atomic commits require separate contracts.
 
-The equality, equality-intersection, statistics-ordered, range, single-field ordered, ordered-prefix, and compound-prefix planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs histograms and cross-table contracts.
+The equality, equality-intersection, statistics-ordered, histogram-ordered range, single-field ordered, ordered-prefix, and compound-prefix planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs a full cost model and cross-table contracts.
