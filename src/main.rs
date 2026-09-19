@@ -2,7 +2,7 @@ use std::env;
 use std::error::Error;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use txbase::{dbf::DbfTable, server};
+use txbase::{dbf::DbfTable, dbf::copy_table_files, server};
 
 fn main() {
     if let Err(error) = run() {
@@ -36,6 +36,83 @@ fn run() -> Result<(), Box<dyn Error>> {
         return server::serve(table, &path, &bind).map_err(Into::into);
     }
 
+    if first == "schema" || first == "verify" {
+        let path = PathBuf::from(
+            args.next()
+                .ok_or_else(|| format!("{first} requires a DBF path"))?,
+        );
+        if let Some(extra) = args.next() {
+            return Err(format!("unexpected argument: {extra}").into());
+        }
+        let table = DbfTable::from_path(&path)?;
+        table.verify()?;
+        let output = if first == "schema" {
+            table.schema_json()
+        } else {
+            serde_json::json!({"valid": true, "schema": table.schema_json()})
+        };
+        println!("{}", serde_json::to_string_pretty(&output)?);
+        return Ok(());
+    }
+
+    if first == "pack" {
+        let path = PathBuf::from(
+            args.next()
+                .ok_or_else(|| "pack requires a DBF path".to_owned())?,
+        );
+        if let Some(extra) = args.next() {
+            return Err(format!("unexpected argument: {extra}").into());
+        }
+        let mut table = DbfTable::from_path(&path)?;
+        table.pack()?;
+        table.save_with_wal(&path)?;
+        println!("pack: {}", path.display());
+        return Ok(());
+    }
+
+    if first == "recall" {
+        let path = PathBuf::from(
+            args.next()
+                .ok_or_else(|| "recall requires a DBF path".to_owned())?,
+        );
+        let raw_id = args
+            .next()
+            .ok_or_else(|| "recall requires a record number".to_owned())?;
+        let id = raw_id
+            .parse::<usize>()
+            .map_err(|_| format!("invalid record number: {raw_id}"))?;
+        if let Some(extra) = args.next() {
+            return Err(format!("unexpected argument: {extra}").into());
+        }
+        let mut table = DbfTable::from_path(&path)?;
+        table.recall_record(id)?;
+        table.save_with_wal(&path)?;
+        println!("recall: {} record {}", path.display(), id);
+        return Ok(());
+    }
+
+    if first == "backup" || first == "restore" {
+        let source = PathBuf::from(
+            args.next()
+                .ok_or_else(|| format!("{first} requires a source DBF path"))?,
+        );
+        let destination = PathBuf::from(
+            args.next()
+                .ok_or_else(|| format!("{first} requires a destination DBF path"))?,
+        );
+        if let Some(extra) = args.next() {
+            return Err(format!("unexpected argument: {extra}").into());
+        }
+        copy_table_files(&source, &destination)?;
+        println!(
+            "{}: {} -> {}",
+            first,
+            source.display(),
+            destination.display()
+        );
+        return Ok(());
+    }
+
     if first.starts_with('-') {
         return Err(format!("unknown option: {first}").into());
     }
@@ -54,6 +131,6 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage:\n  txbase FILE\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
+        "Usage:\n  txbase FILE\n  txbase schema FILE\n  txbase verify FILE\n  txbase pack FILE\n  txbase recall FILE RECORD\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. Schema and verification inspect DBF files. Backup and restore copy a DBF with its sibling memo sidecar. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
     );
 }

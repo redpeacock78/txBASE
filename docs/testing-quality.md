@@ -54,6 +54,7 @@ The current Rust test layout is already split by ownership:
 | Memo sidecars | `src/dbf/tests/memo.rs`, `memo_foxpro.rs`, `src/dbf/malformed_memo_tests.rs` |
 | DBF mutation | `src/dbf/tests/mutation.rs`, `mutation_model_tests.rs`, `writer_tests.rs` |
 | Persistence | `src/dbf/tests/persistence.rs`, `recovery_fault_tests.rs`, `src/dbf/recovery.rs` |
+| Maintenance | `src/dbf/tests/maintenance.rs`, `src/dbf/schema.rs`, `src/dbf/maintenance.rs` |
 | Malformed input | `src/dbf/malformed_tests.rs`, `src/dbf/parser_fuzz_tests.rs`, `src/query/malformed_tests.rs`, `src/transaction/malformed_tests.rs` |
 | Query and HTTP | `src/query/tests.rs`, `src/server/tests.rs`, `src/server/range.rs` |
 | Transactions | `src/transaction/tests.rs`, `src/transaction/malformed_tests.rs` |

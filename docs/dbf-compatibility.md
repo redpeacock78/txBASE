@@ -136,7 +136,30 @@ A stale path-loaded table is rejected when the DBF or memo bytes changed after t
 
 This is a recoverability contract for the current prototype, not a multi-writer replication protocol.
 
-## 6. Deliberate limits
+## 6. Maintenance commands
+
+The CLI now exposes the first local-database maintenance boundary:
+
+| Command | Behavior |
+| --- | --- |
+| `txbase schema FILE` | Prints parsed DBF header metadata and field descriptors as JSON |
+| `txbase verify FILE` | Loads the DBF, validates detected memo data, reparses the serialized DBF, and checks record boundaries |
+| `txbase pack FILE` | Removes logically deleted records, renumbers the remaining physical records, and persists the result through the existing WAL |
+| `txbase recall FILE RECORD` | Restores one logically deleted record through the existing WAL |
+| `txbase backup SOURCE DEST` | Validates `SOURCE`, then copies its DBF and detected `.dbt` or `.fpt` sidecar |
+| `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as `SOURCE` |
+
+The copy operation replaces each destination file through a synced temporary file.
+
+DBF and memo sidecar replacement is still a sequence of file operations, not a new multi-file transaction protocol.
+
+An interrupted copy should therefore be followed by `txbase verify DEST` before the destination is used.
+
+`PACK` does not compact memo sidecars or rebuild indexes.
+
+Deleted memo blocks can therefore remain as reclaimable orphan space until a sidecar-specific compaction contract exists.
+
+## 7. Deliberate limits
 
 The following are not implemented by the current DBF layer:
 

@@ -86,15 +86,47 @@ Path-loaded mutations use a `TXDP` byte-range delta when it is smaller than a co
 
 The WAL is synced before DBF or memo sidecar replacement, and startup recovery replays a durable unfinished mutation.
 
-### Recover and inspect
+### Inspect and maintain
 
-The command-line interface is intentionally small:
+Inspect a table without changing its DBF bytes:
+
+```bash
+txbase schema path/to/users.dbf
+txbase verify path/to/users.dbf
+txbase pack path/to/users.dbf
+txbase recall path/to/users.dbf 2
+```
+
+Copy a DBF and its sibling `.dbt` or `.fpt` memo sidecar:
+
+```bash
+txbase backup path/to/users.dbf backups/users.dbf
+txbase restore backups/users.dbf path/to/users.dbf
+```
+
+The command-line interface is:
 
 ```text
 Usage:
   txbase FILE
+  txbase schema FILE
+  txbase verify FILE
+  txbase pack FILE
+  txbase recall FILE RECORD
+  txbase backup SOURCE DEST
+  txbase restore SOURCE DEST
   txbase --serve FILE [--bind ADDRESS]
 ```
+
+`schema` prints the parsed header and field descriptors.
+
+`verify` reparses the loaded DBF and checks its internal record boundaries.
+
+`pack` removes logically deleted records and renumbers the remaining physical records.
+
+`recall` restores one logically deleted record by its physical record number.
+
+`backup` and `restore` validate the source first, then copy the DBF and its detected memo sidecar.
 
 The implementation currently favors a readable DBF file plus separate WAL and memo sidecars.
 
@@ -135,7 +167,7 @@ CI runs these checks on Ubuntu, macOS, and Windows.
 ### Repository layout
 
 ```text
-src/dbf/            DBF parsing, codecs, memo sidecars, mutation, WAL, and tests
+src/dbf/            DBF parsing, codecs, memo sidecars, maintenance, mutation, WAL, and tests
 src/query.rs        JSON query execution and validation
 src/query_path.rs   Dotted-path traversal and projection helpers
 src/server.rs       HTTP routing, QUERY validation, and DBF mutations

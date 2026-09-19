@@ -72,6 +72,28 @@ WALをsyncしてからDBFまたはmemo sidecarを置き換えます。
 
 起動時には未完了のmutationを復旧します。
 
+### Inspectとmaintenance
+
+schemaとverifyはDBFを読み取り、schemaとrecord boundaryを確認します。
+
+```bash
+txbase schema path/to/users.dbf
+txbase verify path/to/users.dbf
+txbase pack path/to/users.dbf
+txbase recall path/to/users.dbf 2
+```
+
+`pack`はlogical delete済みrecordを物理的に除去し、残ったrecord numberを詰め直します。
+
+`recall`はphysical record numberを指定してlogical deleteを取り消します。
+
+backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピーします。
+
+```bash
+txbase backup path/to/users.dbf backups/users.dbf
+txbase restore backups/users.dbf path/to/users.dbf
+```
+
 ## Install
 
 Rust stableを[rustup](https://rustup.rs/)でinstallします。
@@ -95,7 +117,7 @@ cargo test --all-targets --all-features
 ### 構成
 
 ```text
-src/dbf/            DBF parser、codec、memo sidecar、mutation、WAL、test
+src/dbf/            DBF parser、codec、memo sidecar、maintenance、mutation、WAL、test
 src/query.rs        JSON queryの実行とvalidation
 src/query_path.rs   dotted pathとprojectionのhelper
 src/server.rs       HTTP routing、QUERY validation、DBF mutation

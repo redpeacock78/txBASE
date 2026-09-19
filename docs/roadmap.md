@@ -1,20 +1,22 @@
 # Roadmap and explicit non-goals
 
-This roadmap distills the supplied design note, `txBASE Roadmap: CJK Compatibility, XBF, and Database Evolution`, into reviewable phases.
+This roadmap follows the supplied design note, `txBASE Roadmap: CJK Compatibility, XBF, and Database Evolution`.
 
-It is a planning document.
+It preserves the proposed phase order and marks implementation status explicitly.
 
 Items marked future are not current features.
 
 ## 1. Positioning
 
-txBASE is a file-native transactional database prototype descended from the dBASE and xBase family.
+txBASE is a file-native transactional database descended from the dBASE and xBase family.
 
-DBF remains the compatibility surface.
+DBF remains the compatibility and preservation surface.
 
 The proposed XBF format is a native extension for types and metadata that DBF cannot represent cleanly.
 
-The HTTP and JSON layers are access surfaces, not replacements for the file-format contract.
+HTTP, JSON, MCP, and WASM are access or execution surfaces above the storage formats.
+
+The long-term design point is portability for existing xBase data, not replacement of SQLite or PostgreSQL.
 
 ## 2. Current baseline
 
@@ -26,117 +28,149 @@ The repository currently provides:
 - HTTP `GET`, `QUERY`, `POST`, `PUT`, `PATCH`, and `DELETE` routes.
 - File or memory WAL types with `TXOP`, `TXDP`, `TXDB`, and `TXDM` persistence paths.
 - Startup recovery, stale-snapshot rejection, and an Ubuntu/macOS/Windows CI gate.
+- Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 
-The baseline intentionally does not include secondary indexes, joins, aggregation, MVCC, a multi-table catalog, or XBF.
+The baseline intentionally does not include a multi-table catalog, secondary indexes, cursors, multi-record transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
 
-## 3. Phase 1: compatibility and operational hardening
+## 3. Phase 1: complete the small local DBMS
 
-The first phase makes the existing DBF boundary less surprising.
-
-### Candidate scope
-
-- Define language-driver overrides instead of guessing unknown CJK encodings.
-- Distinguish Shift_JIS from CP932 and document byte-width behavior.
-- Add explicit plans for EUC-JP, GBK, GB18030, Big5, and CP949 or EUC-KR.
-- Expand DBF, DBT, FPT, and FoxPro fixtures from independent implementations.
-- Add `verify`, `backup`, and `restore` contracts.
-- Define `PACK` and `RECALL` behavior without changing logical-delete defaults.
-- Define collation and normalization behavior before adding locale-sensitive query operators.
-
-### Completion conditions
-
-Each encoding or command needs a byte-level fixture, a rejection case, a round-trip rule, and a documented compatibility status.
-
-No encoding is accepted only because a lossy fallback happened to produce readable text.
-
-## 4. Phase 2: query engine growth
-
-This phase adds query capability only after the existing scan semantics are stable.
+This phase keeps the database local and makes its operational boundary useful before adding edge or distributed behavior.
 
 ### Candidate scope
 
-- Secondary indexes with defined key encoding and duplicate ordering.
-- A catalog for multiple tables, fields, indexes, and schema metadata.
-- Joins with bounded intermediate results.
-- Aggregation with explicit null, missing-field, and numeric rules.
-- Cursors or streaming responses with a stable snapshot contract.
-- Query planning and explainable index selection.
+- Schema introspection.
+- A multi-table catalog.
+- Secondary indexes.
+- Cursor or streaming query execution.
+- Multi-record transactions.
+- `PACK` and `RECALL` maintenance operations.
+- `verify`, `backup`, and `restore` tooling.
+
+`PACK` must define whether memo blocks and indexes are rebuilt or left as reclaimable orphan space.
+
+`RECALL` must define whether it restores only the deletion marker or also participates in an indexed or transactional update.
 
 ### Completion conditions
 
-Each feature needs a reference evaluator, malformed-input tests, persistence and recovery behavior, and a migration story for existing DBF files.
+Schema introspection, verification, copy tooling, `PACK`, and `RECALL` are implemented as the first Phase 1 slice.
+
+The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
 An index is not complete until insert, update, logical delete, recovery, stale-index detection, and rebuild behavior are specified.
 
-## 5. Phase 3: transaction and concurrency growth
+A multi-record transaction is not complete until commit, rollback, crash recovery, and visibility rules are tested together.
 
-The current exclusive table lock is a safety boundary for one process path.
+## 4. Phase 2: expand the query model
 
-It is not MVCC and it is not distributed coordination.
-
-### Candidate scope
-
-- Multi-record atomic transactions.
-- Snapshot isolation or another explicitly named isolation level.
-- MVCC metadata in a separate sidecar.
-- Lock ownership, timeout, and stale-lock recovery.
-- Automatic merge or retry only where operation semantics make it safe.
-
-### Completion conditions
-
-The phase needs a state-transition model, crash matrix, concurrent-writer tests, and a clear answer for how old xBase readers see a checkpointed DBF.
-
-## 6. Phase 4: XBF native format
-
-The proposed XBF format is not a silent DBF extension.
-
-It should be a separately versioned format with a recognizable magic value, such as `TXBF`, and the media type `application/vnd.txbase.xbf` if that registration remains appropriate.
+The current record scan remains the reference execution path while the query model grows.
 
 ### Candidate scope
 
-- Modern scalar and nested types that DBF cannot represent directly.
-- Explicit schema and encoding metadata.
-- DBF to XBF and XBF to DBF conversion rules.
-- Separate `.xwl` WAL and `.xidx` index sidecars when needed.
-- Versioning, checksums, compatibility flags, and a recovery protocol.
+- Aggregation.
+- Field-to-field comparisons such as `$field` expressions.
+- Joins.
+- Constraints.
+- A simple query planner.
 
-### Completion conditions
+Joins should begin as local bounded operations.
 
-The format needs a byte-level specification, a reference reader, corruption tests, downgrade behavior, and independent fixture generation before it becomes a default.
+Distributed joins and distributed transactions remain later features.
+
+Aggregation must define missing, null, numeric overflow, and memory-limit behavior before it is added to the HTTP API.
+
+The planner must explain when it uses an index and when it scans.
+
+## 5. Phase 3: legacy international compatibility
+
+Character decoding and sorting are separate contracts.
+
+The phase must preserve DBF byte widths and reject ambiguous or unrepresentable writes.
+
+### Candidate scope
+
+- CP932 or Windows-31J.
+- A strict Shift_JIS distinction.
+- EUC-JP.
+- GBK and GB18030.
+- Big5.
+- CP949 and EUC-KR.
+- Explicit encoding overrides.
+- Collation.
+- Additional external fixtures.
+
+Every encoding needs a declared name, byte-width rule, round-trip fixture, invalid-byte behavior, and comparison policy.
+
+An override must be visible in schema or command output so a reader can reproduce the same interpretation.
+
+## 6. Phase 4: native XBF
+
+XBF is a separately versioned native format, not a silent DBF extension.
+
+The proposed magic is `TXBF`.
+
+The proposed media type is `application/vnd.txbase.xbf` if registration remains appropriate after the format is specified.
+
+### Candidate scope
+
+- XBF v1 specification.
+- UTF-8 text.
+- Explicit `NULL`.
+- Variable-length strings.
+- Modern integer types.
+- Timestamps.
+- Binary and blob values.
+- Lossless DBF to XBF conversion.
+- Validated XBF to DBF export.
+
+The first format must define headers, checksums, corruption handling, version negotiation, and downgrade behavior.
 
 DBF compatibility must remain an explicit import or export path.
 
-## 7. Phase 5: object storage and WASM
+## 7. Phase 5: edge storage
 
-The design note proposes immutable pages and a manifest compare-and-swap model for object storage such as Cloudflare R2.
-
-It also proposes a WASM boundary for browser or edge execution.
-
-These are deployment architectures, not free extensions of the local file protocol.
+The range-oriented local storage abstraction is a useful starting point, but object storage needs immutable objects and conditional manifest updates.
 
 ### Candidate scope
 
-- Immutable page layout and checksums.
-- Manifest CAS and conflict handling.
-- Partial reads and bounded memory behavior.
-- WASM-compatible codec and query boundaries.
-- Browser or edge authentication and capability policy.
+- Storage-backend redesign.
+- A WASM-compatible core.
+- An R2 or object-storage adapter.
+- Manifest compare-and-swap commits.
+- Immutable pages.
+- Generation snapshots.
 
-### Completion conditions
+The object-storage model needs a consistency contract, orphan-page cleanup policy, retry behavior, and a deterministic local fixture.
 
-The object-storage model needs a consistency contract, orphan-page cleanup policy, retry behavior, and a local emulator or deterministic test fixture.
+WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 
-## 8. Phase 6: distributed coordination
+## 8. Phase 6: advanced database features
 
-Distributed writes should come last.
+Distributed behavior comes after the local and edge contracts are stable.
 
-They require an authority model, conflict semantics, schema versioning, and observability.
+### Candidate scope
 
-Candidate technologies or deployment targets are not commitments.
+- Full MVCC.
+- Change data capture.
+- Persistent WAL history.
+- Replication.
+- Raft or another explicitly selected authority protocol.
+- Snapshot installation.
+- Follower reads.
+- Distributed partitioning.
 
-No Raft, consensus service, or multi-region replication should be introduced before the single-file and object-storage contracts are stable.
+These features require an authority model, conflict semantics, schema-version handling, recovery procedures, and observability.
 
-## 9. File granularity rule
+No consensus or multi-region feature is implied by the current exclusive table lock.
+
+## 9. XBF and shared upper layers
+
+The DBF and XBF codecs should share query, transaction, HTTP, and storage interfaces where their semantics match.
+
+The format-specific layer should own byte layout, field conversion, checksums, and recovery records.
+
+This prevents XBF from becoming a second unrelated database implementation.
+
+## 10. File granularity rule
 
 A file should be split when its code has different ownership, failure behavior, test fixtures, or change cadence.
 
@@ -146,7 +180,7 @@ Further splitting should follow a real boundary.
 
 The number of files is not a quality metric by itself.
 
-## 10. Explicit non-goals for the current slice
+## 11. Explicit non-goals for the current slice
 
 - Full dBASE command-language compatibility.
 - Full Visual FoxPro runtime compatibility.
@@ -154,6 +188,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Speculative XBF, index, join, MVCC, object-storage, or distributed code.
+- Speculative indexes, joins, aggregation, MVCC, XBF, object-storage, or distributed code without a contract and end-to-end test.
 
-These may become future work only after a concrete contract is approved and its smallest end-to-end test exists.
+The next implementation slice is intentionally local: a catalog boundary before index persistence.

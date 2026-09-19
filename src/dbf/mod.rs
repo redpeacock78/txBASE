@@ -13,6 +13,7 @@ mod codepages;
 #[cfg(test)]
 mod compatibility_tests;
 mod lock;
+mod maintenance;
 #[cfg(test)]
 mod malformed_memo_tests;
 #[cfg(test)]
@@ -30,6 +31,7 @@ mod persistence;
 mod recovery;
 #[cfg(test)]
 mod recovery_fault_tests;
+mod schema;
 #[cfg(test)]
 mod tests;
 mod wal;
@@ -52,6 +54,8 @@ use wal::{
     decode_operation_payload, decode_snapshot,
 };
 use wal::{delta_payload, memo_snapshot_payload, operation_payload, snapshot_payload};
+
+pub use maintenance::copy_table_files;
 
 const CLASSIC_HEADER_SIZE: usize = 32;
 const CLASSIC_DESCRIPTOR_SIZE: usize = 32;

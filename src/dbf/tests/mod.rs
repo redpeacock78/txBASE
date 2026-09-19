@@ -46,6 +46,7 @@ mod format;
 mod format_codepages;
 #[path = "format_foxpro.rs"]
 mod format_foxpro;
+mod maintenance;
 mod memo;
 #[path = "memo_foxpro.rs"]
 mod memo_foxpro;
