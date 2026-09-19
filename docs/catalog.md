@@ -4,7 +4,7 @@ The catalog boundary maps one database directory to the DBF tables stored direct
 
 This is the first multi-table slice in the roadmap.
 
-It does not add joins, cross-table mutations, indexes, or a second storage format.
+It does not add cross-table mutations, indexes, or a second storage format.
 
 ## Filesystem contract
 
@@ -59,6 +59,17 @@ The bounded local join boundary is separate from catalog discovery.
 Call `txbase::query::join::execute` with a `Catalog` and a validated join document to read two
 named tables without adding a manifest or cross-table write lock.
 
+The optional catalog server exposes that read-only boundary over HTTP:
+
+```bash
+txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
+```
+
+`GET /catalog` returns the discovered table schemas. `QUERY /join` accepts the same JSON join
+document as `query::join::parse`, returns a JSON array, and retains the 100,000-row join bound.
+The catalog is discovered once at server startup, while each join loads the named tables through
+the existing recovery path.
+
 An invalid DBF does not prevent directory discovery because discovery only identifies files.
 
 The invalid table is reported by `open_table`, `schema_json`, or `verify`.
@@ -98,8 +109,8 @@ The full nested schema includes the DBF header, record counts, memo sidecar dete
 
 ## Boundary
 
-The catalog currently provides discovery, lookup, schema introspection, verification, and the
-input boundary used by the bounded local join.
+The catalog currently provides discovery, lookup, schema introspection, verification, the
+input boundary used by the bounded local join, and an optional read-only HTTP surface.
 
 It does not provide a cross-table transaction.
 

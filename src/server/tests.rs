@@ -10,6 +10,13 @@ fn fixture() -> Vec<u8> {
         .collect()
 }
 
+fn temporary_catalog() -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!("txbase-server-catalog-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&path);
+    fs::create_dir(&path).unwrap();
+    path
+}
+
 fn json_request(method: Method, path: &str, body: &'static str) -> Request {
     TestRequest::new()
         .with_method(method)
@@ -168,6 +175,40 @@ fn query_endpoint_enforces_json_boundary_and_executes() {
     );
     let response = query_response(&mut valid, "/records", &table);
     assert_eq!(response.status_code(), StatusCode(200));
+}
+
+#[test]
+fn catalog_server_query_join_executes_and_exposes_schema() {
+    let root = temporary_catalog();
+    fs::write(root.join("left.dbf"), fixture()).unwrap();
+    fs::write(root.join("right.dbf"), fixture()).unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+
+    let response = super::catalog::schema_response(&catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let mut schema_body = String::new();
+    response
+        .into_reader()
+        .read_to_string(&mut schema_body)
+        .unwrap();
+    assert!(schema_body.contains("txbase-catalog"));
+
+    let mut join_request = TestRequest::new()
+        .with_method("QUERY".parse().unwrap())
+        .with_path("/join")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_body(
+            r#"{"from":"left","join":{"type":"inner","table":"right","on":{"left.ID":{"$eq":{"$field":"right.ID"}}}},"projection":{"left.NAME":1,"right.NAME":1}}"#,
+        )
+        .into();
+    let response = super::catalog::join_response(&mut join_request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let mut body = String::new();
+    response.into_reader().read_to_string(&mut body).unwrap();
+    assert!(body.contains("left.NAME"));
+    assert!(body.contains("right.NAME"));
+
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

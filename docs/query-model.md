@@ -199,7 +199,9 @@ Missing and explicit `null` join keys do not match.
 The implementation builds one in-memory equality map for the right table and rejects a result
 larger than 100,000 rows.
 This is a bounded nested execution boundary, not a cost-based planner or a streaming executor.
-The HTTP server does not expose cross-table joins yet.
+The single-table HTTP server does not expose joins. The catalog server exposes the same
+read-only boundary at `QUERY /join`; cross-table writes and transactions remain outside this
+surface.
 The join accepts the existing filter and projection rules, but not sort, pagination, aggregation,
 multiple joins, self-join aliases, or cross-table transactions.
 

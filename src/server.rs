@@ -6,6 +6,7 @@ use std::io::{Cursor, Read};
 use std::path::Path;
 use tiny_http::{Header, Method, Request, Response, Server};
 
+mod catalog;
 mod range;
 mod transaction;
 
@@ -22,6 +23,10 @@ pub fn serve(mut table: DbfTable, dbf_path: impl AsRef<Path>, bind: &str) -> Res
         handle_request(request, &mut table, dbf_path);
     }
     Ok(())
+}
+
+pub fn serve_catalog(root: impl AsRef<Path>, bind: &str) -> Result<(), String> {
+    catalog::serve(root, bind)
 }
 
 fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {

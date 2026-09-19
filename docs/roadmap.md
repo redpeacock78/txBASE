@@ -32,8 +32,9 @@ The repository currently provides:
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
-- A bounded aggregation pipeline with zero or more `$match` stages before one `$group` stage using `$count`, integer `$sum`, `$min`, and `$max`, plus final `$sort` and `$limit` stages over group output.
+- A bounded aggregation pipeline with zero or more `$match` stages before one `$group` stage using `$count`, integer `$sum`, numeric `$avg`, `$min`, and `$max`, plus final `$sort` and `$limit` stages over group output.
 - A bounded local `inner`, `left`, `semi`, or `anti` equality join plus a bounded `cross` join over two catalog tables with qualified filtering and projection.
+- A read-only catalog HTTP server exposing table schemas and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.

@@ -28,6 +28,14 @@ default listenerは`127.0.0.1:8080`です。
 
 listener addressは`--bind ADDRESS`で変更できます。
 
+複数DBFのread-only joinをHTTPから使う場合は、catalog serverを起動します。
+
+```bash
+cargo run -- --serve-catalog path/to/database
+```
+
+`GET /catalog`でschema、`QUERY /join`でbounded joinを返します。
+
 ### 読み取り
 
 ```bash
@@ -71,7 +79,8 @@ libraryにはcatalog table二つを読むboundedな`inner`、`left`、`semi`、`
 resultは最大100,000行です。
 `semi`と`anti`は右側の列を返さず、右側のmatch有無で左側の行を一度だけ返します。
 `cross`は空の`on`を要求し、候補pair数を100,000以下に制限します。
-single-table HTTP serverからはまだ利用できません。
+single-table HTTP serverからは利用できませんが、`--serve-catalog DIRECTORY`のcatalog serverでは
+read-onlyな`QUERY /join`として利用できます。cross-table writeとtransactionは未実装です。
 
 `$expr`による同一record内のfield比較も、二つのscalar operandに限定して提供します。
 
@@ -204,6 +213,7 @@ src/index.rs        scalar keyのexternal index sidecar lifecycle
 src/query.rs        JSON queryの実行とvalidation
 src/query_path.rs   dotted pathとprojectionのhelper
 src/server.rs       HTTP routing、QUERY validation、DBF mutation
+src/server/catalog.rs catalog schemaとread-only join HTTP surface
 src/transaction.rs  fileまたはmemory WALとsnapshot transaction
 src/xbf/            bounded XBF v1 codec、DBF変換、永続化、WAL、test
 tests/fixtures/     外部formatのfixture

@@ -82,7 +82,12 @@ It accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits
 supports multiple equality conditions, and is capped at 100,000 output rows.
 `semi` and `anti` emit only qualified left-table fields, based on whether a right-side match exists.
 `cross` requires an empty `on` object and caps candidate pairs at 100,000.
-This join is not exposed by the single-table HTTP server yet.
+The single-table HTTP server does not expose joins. Run the catalog server to expose the same
+bounded read-only join through `QUERY /join` and catalog schema through `GET /catalog`:
+
+```bash
+txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
+```
 
 `QUERY` follows the HTTP QUERY boundary defined by [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html), including `Accept-Query: "application/json"`.
 
@@ -168,6 +173,7 @@ Usage:
   txbase backup SOURCE DEST
   txbase restore SOURCE DEST
   txbase --serve FILE [--bind ADDRESS] [--encoding NAME]
+  txbase --serve-catalog DIRECTORY [--bind ADDRESS]
 ```
 
 `schema` prints the parsed header and field descriptors.
@@ -271,6 +277,7 @@ src/query.rs        JSON query execution and filter evaluation
 src/query/          planner, ordering, validation, bounded join, and query-specific tests
 src/query_path.rs   Dotted-path traversal and projection helpers
 src/server.rs       HTTP routing, QUERY validation, and DBF mutations
+src/server/catalog.rs Catalog schema and read-only join HTTP surface
 src/storage.rs      Range-based storage boundary
 src/transaction.rs  File or memory WAL and snapshot transactions
 src/xbf/            Bounded XBF v1 codec, DBF conversion, persistence, WAL, and tests
