@@ -81,7 +81,7 @@ fn explicit_euc_jp_and_gb18030_overrides_round_trip() {
 
 #[test]
 fn strict_shift_jis_override_round_trips_jis_text() {
-    let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some("shift_jis")).unwrap();
+    let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some("Shift_JIS")).unwrap();
     assert_eq!(table.schema_json()["encoding_override"], "Shift_JIS");
     assert_eq!(
         table.schema_json()["encoding_metadata"],

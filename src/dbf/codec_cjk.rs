@@ -129,15 +129,34 @@ fn encode_strict_shift_jis_character(character: char) -> Option<Vec<u8>> {
     if euc_errors || euc.len() != 2 || !euc.iter().all(|byte| (0xa1..=0xfe).contains(byte)) {
         return None;
     }
+    let expected = shift_jis_pair_from_euc(&euc)?;
     let (shift_jis, _, shift_jis_errors) = SHIFT_JIS.encode(&character);
-    if shift_jis_errors
-        || shift_jis.len() != 2
-        || !is_shift_jis_lead(shift_jis[0])
-        || !is_shift_jis_trail(shift_jis[1])
-    {
+    if shift_jis_errors || shift_jis.as_slice() != expected.as_slice() {
         return None;
     }
     Some(shift_jis.into_owned())
+}
+
+fn shift_jis_pair_from_euc(euc: &[u8]) -> Option<[u8; 2]> {
+    if euc.len() != 2 || euc[0] >= 0xf9 {
+        return None;
+    }
+    let row = euc[0].checked_sub(0xa1)?;
+    let cell = euc[1].checked_sub(0xa1)?;
+    let mut lead = row / 2 + 0x81;
+    if lead >= 0xa0 {
+        lead += 0x40;
+    }
+    let trail = if row % 2 == 0 {
+        let mut trail = cell + 0x40;
+        if trail >= 0x7f {
+            trail += 1;
+        }
+        trail
+    } else {
+        cell + 0x9f
+    };
+    Some([lead, trail])
 }
 
 fn is_shift_jis_lead(byte: u8) -> bool {
