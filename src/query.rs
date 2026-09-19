@@ -9,10 +9,12 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
 mod ordering;
+mod pagination;
 mod planner;
 mod validation;
 
 use ordering::{compare_records, compare_values, sort_ordered_prefix};
+pub use pagination::QueryPage;
 pub use planner::QueryPlan;
 
 pub const JSON_QUERY_MEDIA_TYPE: &str = "application/json";
@@ -31,6 +33,8 @@ pub struct QueryRequest {
     pub projection: BTreeMap<String, i8>,
     pub limit: Option<u64>,
     pub skip: Option<u64>,
+    pub page_size: Option<u64>,
+    pub cursor: Option<String>,
 }
 
 #[derive(Debug)]
@@ -57,6 +61,13 @@ pub fn parse(body: &[u8]) -> Result<QueryRequest, QueryError> {
 }
 
 pub fn execute_query(table: &DbfTable, request: &QueryRequest) -> Result<Vec<Value>, QueryError> {
+    Ok(execute_query_page(table, request)?.records)
+}
+
+pub fn execute_query_page(
+    table: &DbfTable,
+    request: &QueryRequest,
+) -> Result<QueryPage, QueryError> {
     validation::validate(request)?;
     execute_query_with_records(table, request, None, 0)
 }
@@ -66,6 +77,14 @@ pub fn execute_query_at(
     dbf_path: impl AsRef<std::path::Path>,
     request: &QueryRequest,
 ) -> Result<Vec<Value>, QueryError> {
+    Ok(execute_query_at_page(table, dbf_path, request)?.records)
+}
+
+pub fn execute_query_at_page(
+    table: &DbfTable,
+    dbf_path: impl AsRef<std::path::Path>,
+    request: &QueryRequest,
+) -> Result<QueryPage, QueryError> {
     validation::validate(request)?;
     let access = planner::choose(dbf_path.as_ref(), request);
     execute_query_with_records(table, request, access.records, access.ordered_prefix)
@@ -84,7 +103,7 @@ fn execute_query_with_records(
     request: &QueryRequest,
     candidate_numbers: Option<Vec<usize>>,
     ordered_prefix: usize,
-) -> Result<Vec<Value>, QueryError> {
+) -> Result<QueryPage, QueryError> {
     let mut records = Vec::new();
     let candidates = candidate_numbers
         .map(|numbers| {
@@ -106,24 +125,15 @@ fn execute_query_with_records(
         sort_ordered_prefix(&mut records, &request.sort, ordered_prefix);
     }
 
-    let skip = request
-        .skip
-        .unwrap_or_default()
-        .try_into()
-        .unwrap_or(usize::MAX);
-    let limit = request
-        .limit
-        .map(|limit| limit.try_into().unwrap_or(usize::MAX));
-    let records = records.into_iter().skip(skip);
-    let records = match limit {
-        Some(limit) => records.take(limit).collect::<Vec<_>>(),
-        None => records.collect::<Vec<_>>(),
-    };
+    let (records, next_cursor) = pagination::apply(records, request)?;
 
-    Ok(records
-        .into_iter()
-        .map(|record| project(record, &request.projection))
-        .collect())
+    Ok(QueryPage {
+        records: records
+            .into_iter()
+            .map(|record| project(record, &request.projection))
+            .collect(),
+        next_cursor,
+    })
 }
 
 impl QueryExecutor for DbfTable {
@@ -317,3 +327,6 @@ mod planner_compound_tests;
 
 #[cfg(test)]
 mod field_expression_tests;
+
+#[cfg(test)]
+mod cursor_tests;

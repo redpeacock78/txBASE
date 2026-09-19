@@ -60,6 +60,7 @@ The README organization follows the section shape of [texenv's README](https://g
 - [Equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
 - [Update operators](https://www.mongodb.com/docs/manual/reference/mql/update/)
 - [Atomicity and transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/)
+- [MongoDB cursors](https://www.mongodb.com/docs/manual/core/cursors/)
 
 ### Firebase
 
@@ -70,6 +71,7 @@ The README organization follows the section shape of [texenv's README](https://g
 - [Realtime Database save data](https://firebase.google.com/docs/database/admin/save-data)
 - [Realtime Database security](https://firebase.google.com/docs/database/security)
 - [Realtime Database offline capabilities](https://firebase.google.com/docs/database/android/offline-capabilities)
+- [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
 
 ### SQLite
 

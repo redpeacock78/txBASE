@@ -1,5 +1,6 @@
 use super::*;
 use std::fs;
+use std::io::Read;
 use tiny_http::{Method, StatusCode, TestRequest};
 
 fn fixture() -> Vec<u8> {
@@ -111,6 +112,18 @@ fn query_endpoint_enforces_json_boundary_and_executes() {
     );
     let response = query_response(&mut valid, "/records", &table);
     assert_eq!(response.status_code(), StatusCode(200));
+}
+
+#[test]
+fn query_endpoint_returns_cursor_pages() {
+    let table = DbfTable::from_bytes(&fixture()).unwrap();
+    let mut first = query_request(r#"{"page_size":1}"#, Some(JSON_QUERY_MEDIA_TYPE));
+    let response = query_response(&mut first, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let mut body = String::new();
+    response.into_reader().read_to_string(&mut body).unwrap();
+    assert!(body.contains(r#""records""#));
+    assert!(body.contains(r#""cursor":"1""#));
 }
 
 #[test]

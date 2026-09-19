@@ -42,7 +42,7 @@ They do not by themselves provide transaction isolation, deduplication, or a ret
 | --- | --- | --- |
 | `GET /records` | No JSON body | Active records as JSON |
 | `GET /records/{id}` | One-based physical DBF record number | One active record or `404` |
-| `QUERY /records` | `Content-Type: application/json` and a query document | Filtered JSON result with `Accept-Query` |
+| `QUERY /records` | `Content-Type: application/json` and a query document | Filtered JSON result with `Accept-Query`; paged queries return `records` and `cursor` |
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |
 | `PUT /records/{id}` | JSON object replacing fields | Resulting record |
 | `PATCH /records/{id}` | Plain field object or supported update document | Resulting record |
@@ -111,6 +111,11 @@ It returns `206 Partial Content` or `416 Range Not Satisfiable` for supported si
 
 Range handling is a representation transfer feature and does not change QUERY's method semantics.
 
+When a query includes `page_size`, the successful JSON representation is an object with
+`records` and a nullable `cursor` member.
+The cursor is a physical DBF record position and is valid only for the same stable table snapshot.
+Sorted and `skip`-based cursor links are not implemented yet.
+
 ## 5. Persistence and retries
 
 HTTP idempotence does not make the DBF write path crash-safe.
@@ -131,8 +136,8 @@ The following require explicit contracts before implementation:
 
 - `ETag`, `If-Match`, and `If-None-Match` behavior.
 - `Content-Location` and cache-key rules for QUERY bodies.
-- Pagination or cursor links.
-- Streaming and backpressure.
+- Keyset pagination or cursor links for sorted results.
+- Incremental streaming and backpressure.
 - CORS and authentication policy.
 - A standard patch media type in addition to the local update document.
 

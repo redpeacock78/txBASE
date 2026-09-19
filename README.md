@@ -58,7 +58,9 @@ curl -i -X QUERY \
   http://127.0.0.1:8080/records
 ```
 
-The current query surface is `filter`, `sort`, `projection`, `skip`, and `limit` with `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$and`, `$or`, `$not`, and bounded `$expr` field comparisons.
+The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `page_size`, and `cursor` with `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$and`, `$or`, `$not`, and bounded `$expr` field comparisons.
+
+`page_size` enables a physical-record cursor response. The next request sends the returned `cursor` with the same `page_size`; this mode does not yet combine with `sort` or `skip` and is capped at 1,000 records.
 
 `QUERY` follows the HTTP QUERY boundary defined by [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html), including `Accept-Query: "application/json"`.
 
@@ -236,7 +238,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
+Later phases may add a full cost-based index choice, sorted-query cursors, streaming, joins, aggregation, stronger multi-record transactions, CJK encodings, and an XBF native format.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

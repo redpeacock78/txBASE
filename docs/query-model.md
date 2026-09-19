@@ -20,7 +20,9 @@ The current document shape is:
   "sort": {"AGE": 1},
   "projection": {"NAME": 1, "AGE": 1},
   "skip": 0,
-  "limit": 100
+  "limit": 100,
+  "page_size": 25,
+  "cursor": "42"
 }
 ```
 
@@ -39,6 +41,25 @@ Unknown keys are rejected rather than ignored.
 The executor applies filtering, sorting, projection, skipping, and limiting in that order.
 
 Sort ties preserve DBF record order.
+
+`page_size` enables the bounded cursor response shape:
+
+```json
+{
+  "records": [{"NAME": "Alice"}],
+  "cursor": "42"
+}
+```
+
+The cursor is the one-based physical DBF record number after the returned page.
+The next request sends that token with the same `page_size` and resumes after that record.
+This first cursor contract is deliberately limited to physical-record order: `sort` and `skip`
+cannot be combined with `page_size` or `cursor`, and `page_size` is capped at 1,000.
+The token is a position, not a snapshot identifier; callers must keep the underlying table
+snapshot stable while paging.
+
+The page API bounds the response size but the current executor still materializes matching
+records before slicing the page. True incremental streaming and backpressure are separate work.
 
 ## 2. Current predicate vocabulary
 
@@ -84,6 +105,13 @@ The current txBASE subset intentionally stops at comparison, membership, logical
 MongoDB's [find command](https://www.mongodb.com/docs/manual/reference/command/find/) separates a filter from projection, sort, skip, limit, hint, and related cursor controls.
 
 That separation is useful for txBASE because query validation, result shaping, and planner access paths can evolve independently.
+
+MongoDB's find command returns an initial batch and a cursor identifier, while Firestore's
+[query cursor guidance](https://firebase.google.com/docs/firestore/query-data/query-cursors)
+uses the last document in one batch as the start point for the next batch.
+txBASE currently adopts only the latter boundary idea, represented by a physical DBF position;
+it does not claim server-side cursor lifetime, snapshot isolation, or keyset pagination over a
+sort key.
 
 MongoDB's [comparison predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/) documents operators such as `$eq`, `$gt`, `$gte`, `$lt`, `$lte`, `$ne`, `$in`, and `$nin`.
 
@@ -206,7 +234,7 @@ The roadmap may later cover the following in separate contracts:
 1. Full expression evaluation and cost-based index choice with explicit missing, null, collation, and compound-range rules.
 2. A catalog for multiple tables and schema metadata.
 3. Joins and aggregation with bounded memory behavior.
-4. Cursors or streaming responses with stable snapshot rules.
+4. Keyset cursors for sorted queries and incremental streaming with stable snapshot rules.
 5. Differential tests against a small reference evaluator.
 
 Until those contracts exist, the record scan is the simpler and more honest execution model.
@@ -220,6 +248,7 @@ Until those contracts exist, the record scan is the simpler and more honest exec
 - [MongoDB `$expr` predicate](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)
 - [MongoDB array predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
+- [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
 - [MongoDB query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
 - [MongoDB BSON comparison order](https://www.mongodb.com/docs/manual/reference/bson-type-comparison-order/)
 - [MongoDB `$gt` type bracketing](https://www.mongodb.com/docs/manual/reference/operator/query/gt/)

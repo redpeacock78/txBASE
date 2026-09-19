@@ -101,11 +101,21 @@ fn query_response_with_path(
         }
     };
     let result = match dbf_path {
-        Some(dbf_path) => query::execute_query_at(table, dbf_path, &query),
-        None => query::execute_query(table, &query),
+        Some(dbf_path) => query::execute_query_at_page(table, dbf_path, &query),
+        None => query::execute_query_page(table, &query),
     };
     match result {
-        Ok(records) => query_result_response(request, Value::Array(records)),
+        Ok(page) => {
+            let body = if query.page_size.is_some() || query.cursor.is_some() {
+                json!({
+                    "records": page.records,
+                    "cursor": page.next_cursor,
+                })
+            } else {
+                Value::Array(page.records)
+            };
+            query_result_response(request, body)
+        }
         Err(query_error) => {
             json_response(422, error("invalid_query", &query_error.to_string()), true)
         }
