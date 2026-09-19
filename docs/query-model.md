@@ -38,6 +38,17 @@ The pipeline may also end with one bounded `$sort` stage over the group output:
 }
 ```
 
+A count-only pipeline may end after its optional `$match` stages with one terminal `$count` stage:
+
+```json
+{
+  "aggregate": [
+    {"$match": {"ACTIVE": true}},
+    {"$count": "total"}
+  ]
+}
+```
+
 An optional final `$limit` may follow `$sort` (or `$group` when sorting is omitted):
 
 ```json
@@ -115,8 +126,8 @@ It remains pull-based and does not provide an asynchronous backpressure protocol
 
 ## 2. Bounded aggregation
 
-The query document can contain one blocking `$group` stage after `filter` and zero or more
-preceding `$match` stages:
+The query document can contain one terminal `$count` stage or one blocking `$group` stage after
+`filter` and zero or more preceding `$match` stages:
 
 ```json
 {
@@ -133,9 +144,9 @@ preceding `$match` stages:
 }
 ```
 
-The current aggregation boundary accepts one `$group` stage, zero or more `$match` stages before it,
-one optional `$project` stage after it, at most one final `$sort` stage, and at most one final
-`$limit` stage.
+The current aggregation boundary accepts zero or more `$match` stages followed by either one
+terminal `$count` stage or one `$group` stage. Group output may have one optional `$project` stage,
+at most one final `$sort` stage, and at most one final `$limit` stage.
 `_id` is either `null` or one dotted field reference.
 The supported accumulators are `$count: {}`, `$sum: "$FIELD"`, `$min: "$FIELD"`, and
 `$max: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
@@ -162,13 +173,16 @@ projection, skip, limit, or cursor pagination.
 Without `$sort`, group output order is not part of the contract, although the current implementation
 emits a deterministic key order. `$sort` uses the existing JSON sort ordering and stable ties.
 `$limit` accepts a non-negative integer and truncates the materialized group result after sorting.
-`$match` stages use the same predicate rules as the top-level `filter` and must precede `$group`.
-Stages after `$limit`, additional grouping stages, and expression operands remain unsupported.
+`$match` stages use the same predicate rules as the top-level `filter` and must precede `$group` or
+`$count`.
+`$count` emits one document containing the named non-negative integer field, including zero when no
+records match. It must be terminal and cannot be combined with group-output stages. Stages after
+`$limit`, additional grouping or count stages, and expression operands remain unsupported.
 
 MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as
 `$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).
 Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
-is not accepted by this first txBASE slice.
+is represented by this bounded txBASE stage, without claiming full MongoDB pipeline compatibility.
 
 ## 3. Bounded local join
 

@@ -40,7 +40,18 @@ pub(super) fn execute(
         records = filtered;
     }
 
-    let spec = &plan.group;
+    if let Some(field) = &plan.count {
+        let count = u64::try_from(records.len())
+            .map_err(|_| QueryError::Invalid("aggregate count does not fit u64".into()))?;
+        let mut output = Map::new();
+        output.insert(field.clone(), Value::Number(count.into()));
+        return Ok(vec![Value::Object(output)]);
+    }
+
+    let spec = plan
+        .group
+        .as_ref()
+        .expect("validated aggregation has a group or count stage");
     let mut groups = BTreeMap::<String, GroupState>::new();
     if spec.key_field.is_none() {
         groups.insert(String::from("null"), new_group(Value::Null, spec));

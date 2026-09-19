@@ -32,6 +32,39 @@ fn groups_filtered_records_with_count_and_integer_sum() {
 }
 
 #[test]
+fn counts_filtered_records_with_a_count_stage() {
+    let table = table_with_two_active_records();
+    let request = parse(
+        br#"{
+            "aggregate": [
+                {"$match": {"AGE": {"$gte": 20}}},
+                {"$count": "total"}
+            ]
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        execute_query(&table, &request).unwrap(),
+        vec![json!({"total": 1})]
+    );
+
+    let empty = parse(
+        br#"{
+            "aggregate": [
+                {"$match": {"AGE": {"$gt": 100}}},
+                {"$count": "total"}
+            ]
+        }"#,
+    )
+    .unwrap();
+    assert_eq!(
+        execute_query(&table, &empty).unwrap(),
+        vec![json!({"total": 0})]
+    );
+}
+
+#[test]
 fn groups_numeric_average_and_returns_null_for_missing_values() {
     let table = table_with_two_active_records();
     let request = parse(
@@ -184,7 +217,11 @@ fn rejects_unsupported_aggregation_combinations() {
     for body in [
         br#"{"aggregate":[]}"#.as_slice(),
         br#"{"sort":{"AGE":1},"aggregate":[{"$group":{"_id":null}}]}"#.as_slice(),
-        br#"{"aggregate":[{"$count":"total"}]}"#.as_slice(),
+        br#"{"aggregate":[{"$count":{}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$count":""}]}"#.as_slice(),
+        br#"{"aggregate":[{"$count":"total.value"}]}"#.as_slice(),
+        br#"{"aggregate":[{"$count":"total"},{"$match":{}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$count":"total"},{"$group":{"_id":null}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":"AGE"}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"average":{"$avg":"AGE"}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$match":{}}]}"#.as_slice(),
