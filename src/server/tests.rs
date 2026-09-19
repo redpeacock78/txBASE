@@ -218,6 +218,52 @@ fn catalog_server_query_join_executes_and_exposes_schema() {
 }
 
 #[test]
+fn catalog_server_reads_named_tables_through_record_routes() {
+    let root = temporary_catalog();
+    fs::write(root.join("left.dbf"), fixture()).unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+
+    let get = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/left/records")
+        .into();
+    let response = super::catalog::table_response(&get, "/left/records", &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let mut body = String::new();
+    response.into_reader().read_to_string(&mut body).unwrap();
+    assert!(body.contains("Alice"));
+
+    let get_record = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/left/records/1")
+        .into();
+    assert_eq!(
+        super::catalog::table_response(&get_record, "/left/records/1", &catalog).status_code(),
+        StatusCode(200)
+    );
+
+    let mut query = TestRequest::new()
+        .with_method("QUERY".parse().unwrap())
+        .with_path("/left/records")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_body(r#"{"filter":{"AGE":{"$gte":20}}}"#)
+        .into();
+    let response = super::catalog::table_query_response(&mut query, "/left/records", &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+
+    let missing = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/missing/records")
+        .into();
+    assert_eq!(
+        super::catalog::table_response(&missing, "/missing/records", &catalog).status_code(),
+        StatusCode(404)
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn explain_endpoint_reports_scan_and_index_plans() {
     let path =
         std::env::temp_dir().join(format!("txbase-server-explain-{}.dbf", std::process::id()));

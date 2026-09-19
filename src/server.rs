@@ -79,7 +79,7 @@ fn query_response(request: &mut Request, path: &str, table: &DbfTable) -> HttpRe
     query_response_with_path(request, path, table, None)
 }
 
-fn query_response_at(
+pub(super) fn query_response_at(
     request: &mut Request,
     path: &str,
     table: &DbfTable,

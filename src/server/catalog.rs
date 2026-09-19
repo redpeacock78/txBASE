@@ -1,4 +1,8 @@
-use super::{HttpResponse, error, header, json_response, query_result_response, read_json_body};
+use super::records::get_response;
+use super::{
+    HttpResponse, error, header, json_response, query_response_at, query_result_response,
+    read_json_body,
+};
 use crate::catalog::Catalog;
 use crate::query::join::{self, JoinError};
 use serde_json::Value;
@@ -18,23 +22,87 @@ pub(super) fn serve(root: impl AsRef<Path>, bind: &str) -> Result<(), String> {
 
 fn handle_request(mut request: Request, catalog: &Catalog) {
     let path = request.url().split('?').next().unwrap_or("/").to_owned();
-    let response = if matches!(request.method(), Method::Get) && path == "/catalog" {
+    let response = if matches!(request.method(), Method::Get | Method::Head) && path == "/catalog" {
         schema_response(catalog)
+    } else if matches!(request.method(), Method::Get | Method::Head)
+        && record_route(&path).is_some()
+    {
+        table_response(&request, &path, catalog)
     } else if request.method().as_str() == "QUERY" && path == "/join" {
         join_response(&mut request, catalog)
+    } else if request.method().as_str() == "QUERY" && record_route(&path).is_some() {
+        table_query_response(&mut request, &path, catalog)
     } else {
         json_response(
             405,
             error(
                 "method_not_allowed",
-                "only GET /catalog and QUERY /join are available",
+                "only GET, HEAD, and QUERY catalog routes are available",
             ),
             true,
         )
-        .with_header(header("Allow", "GET, QUERY"))
+        .with_header(header("Allow", "GET, HEAD, QUERY"))
     };
     if let Err(error) = request.respond(response) {
         eprintln!("failed to send HTTP response: {error}");
+    }
+}
+
+pub(super) fn table_response(request: &Request, path: &str, catalog: &Catalog) -> HttpResponse {
+    let Some((name, local_path)) = record_route(path) else {
+        return json_response(404, error("not_found", "resource not found"), false);
+    };
+    if catalog.table_path(name).is_none() {
+        return json_response(404, error("not_found", "table not found"), false);
+    }
+    let table = match catalog.open_table(name) {
+        Ok(table) => table,
+        Err(catalog_error) => {
+            return json_response(
+                500,
+                error("catalog_error", &catalog_error.to_string()),
+                false,
+            );
+        }
+    };
+    get_response(request, &local_path, &table)
+}
+
+pub(super) fn table_query_response(
+    request: &mut Request,
+    path: &str,
+    catalog: &Catalog,
+) -> HttpResponse {
+    let Some((name, local_path)) = record_route(path) else {
+        return json_response(404, error("not_found", "resource not found"), false);
+    };
+    if local_path != "/records" {
+        return json_response(404, error("not_found", "resource not found"), false);
+    }
+    let Some(dbf_path) = catalog.table_path(name) else {
+        return json_response(404, error("not_found", "table not found"), false);
+    };
+    let table = match catalog.open_table(name) {
+        Ok(table) => table,
+        Err(catalog_error) => {
+            return json_response(
+                500,
+                error("catalog_error", &catalog_error.to_string()),
+                false,
+            );
+        }
+    };
+    query_response_at(request, &local_path, &table, dbf_path)
+}
+
+fn record_route(path: &str) -> Option<(&str, String)> {
+    let segments = path.strip_prefix('/')?.split('/').collect::<Vec<_>>();
+    match segments.as_slice() {
+        [table, "records"] if !table.is_empty() => Some((table, String::from("/records"))),
+        [table, "records", record] if !table.is_empty() && !record.is_empty() => {
+            Some((table, format!("/records/{record}")))
+        }
+        _ => None,
     }
 }
 

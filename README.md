@@ -82,12 +82,16 @@ It accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits
 supports multiple equality conditions, and is capped at 100,000 output rows.
 `semi` and `anti` emit only qualified left-table fields, based on whether a right-side match exists.
 `cross` requires an empty `on` object and caps candidate pairs at 100,000.
-The single-table HTTP server does not expose joins. Run the catalog server to expose the same
-bounded read-only join through `QUERY /join` and catalog schema through `GET /catalog`:
+The single-table HTTP server does not expose joins. Run the catalog server to expose catalog
+schema through `GET /catalog`, named-table reads through `GET`/`HEAD /{table}/records`, and the
+same bounded read-only join through `QUERY /join`:
 
 ```bash
 txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 ```
+
+`QUERY /{table}/records` accepts the same query document as the single-table route. Catalog
+table routes are read-only; cross-table writes and transactions remain future work.
 
 The single-table server also exposes `QUERY /explain`, which returns the selected table-scan or
 index plan for the same query document.

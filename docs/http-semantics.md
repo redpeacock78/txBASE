@@ -45,7 +45,9 @@ They do not by themselves provide transaction isolation, deduplication, or a ret
 | `HEAD /records` and `HEAD /records/{id}` | Same target selection as `GET` | Same status and representation headers without response content |
 | `QUERY /records` | `Content-Type: application/json` and a query document | Filtered JSON result with `Accept-Query`; paged queries return `records` and `cursor` |
 | `QUERY /explain` | `Content-Type: application/json` and a query document | Selected table-scan or index plan with `Accept-Query` |
-| `GET /catalog` (catalog server) | No JSON body | Discovered table schemas |
+| `GET /catalog` and `HEAD /catalog` (catalog server) | No JSON body | Discovered table schemas |
+| `GET`/`HEAD /{table}/records[/{id}]` (catalog server) | No JSON body | Read-only named-table records |
+| `QUERY /{table}/records` (catalog server) | `Content-Type: application/json` and a query document | Filtered named-table records with `Accept-Query` |
 | `QUERY /join` (catalog server) | `Content-Type: application/json` and a bounded join document | Joined JSON result with `Accept-Query` |
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |
 | `POST /transaction` | JSON object containing a non-empty `operations` array | `200` after one-table atomic snapshot commit |
