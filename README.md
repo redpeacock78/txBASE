@@ -223,9 +223,10 @@ legacy readers.
 
 When a DBF language-driver byte is missing or untrusted, the read, schema, verify, pack, recall,
 and server commands accept `--encoding NAME` for the four declared CJK codecs plus explicit-only
-strict Shift_JIS, EUC-JP, and GB18030 overrides.
+strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP overrides.
 The supported aliases are `windows-31j`/`cp932`, `gbk`/`cp936`, `euc-kr`/`cp949`, and
-`big5`/`cp950`, `shift_jis`/`shift-jis`/`sjis`, `euc-jp`, and `gb18030`.
+`big5`/`cp950`, `shift_jis`/`shift-jis`/`sjis`, `euc-jp`, `gb18030`, and
+`iso-2022-jp`/`iso2022-jp`.
 The invocation override takes precedence over `*.txschema.json`, is not persisted, and is visible
 as the effective `encoding_override` and `encoding_metadata.effective` in schema output.
 `encoding_metadata` also reports the declared codec and whether the source was the language driver,

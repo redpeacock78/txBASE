@@ -123,7 +123,7 @@ schemaとverifyはDBFを読み取り、schemaとrecord boundaryを確認しま�
 
 DBF headerのlanguage-driver byteが信頼できない場合は、read、schema、verify、pack、recall、serverで`--encoding NAME`を指定できます。
 
-対応するaliasは`windows-31j`/`cp932`、strictな`shift_jis`/`shift-jis`/`sjis`、`gbk`/`cp936`、`euc-kr`/`cp949`、`big5`/`cp950`、`euc-jp`、`gb18030`です。
+対応するaliasは`windows-31j`/`cp932`、strictな`shift_jis`/`shift-jis`/`sjis`、`gbk`/`cp936`、`euc-kr`/`cp949`、`big5`/`cp950`、`euc-jp`、`gb18030`、`iso-2022-jp`/`iso2022-jp`です。
 
 invocation単位のoverrideは`*.txschema.json`より優先され、保存されません。
 
@@ -180,7 +180,7 @@ catalog joinは`txbase::query::join::parse`と`execute`から使います。
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピーします。
 
 DBF codecはVisual FoxProのCJK driver IDであるWindows-31J/CP932、GBK/CP936、EUC-KR/CP949、Big5/CP950に対応します。
-`euc-jp`と`gb18030`はlanguage-driver IDを追加せず、explicit overrideとして使えます。
+`euc-jp`、`gb18030`、`iso-2022-jp`はlanguage-driver IDを追加せず、explicit overrideとして使えます。
 malformed readはU+FFFDにし、unmappableまたはbyte width超過のwriteは拒否します。
 strictな`Shift_JIS` overrideはASCII、半角カナ、JIS X 0208を受け付け、CP932拡張はreadでU+FFFD、writeで拒否します。
 

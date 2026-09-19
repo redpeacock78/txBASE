@@ -272,3 +272,20 @@ fn accepts_strict_shift_jis_as_an_explicit_override() {
 
     cleanup(&path);
 }
+
+#[test]
+fn accepts_iso_2022_jp_as_an_explicit_override() {
+    let path = temporary_path();
+    cleanup(&path);
+    fs::write(&path, fixture()).unwrap();
+    fs::write(
+        path.with_extension("txschema.json"),
+        encoding_metadata("iso2022-jp"),
+    )
+    .unwrap();
+
+    let table = DbfTable::from_path(&path).unwrap();
+    assert_eq!(table.schema_json()["encoding_override"], "ISO-2022-JP");
+
+    cleanup(&path);
+}

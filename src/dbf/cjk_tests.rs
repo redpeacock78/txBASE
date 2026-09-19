@@ -80,6 +80,33 @@ fn explicit_euc_jp_and_gb18030_overrides_round_trip() {
 }
 
 #[test]
+fn explicit_iso_2022_jp_override_round_trips_jis_text() {
+    let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some("iso-2022-jp")).unwrap();
+    assert_eq!(table.schema_json()["encoding_override"], "ISO-2022-JP");
+    assert_eq!(
+        table.schema_json()["encoding_metadata"],
+        serde_json::json!({
+            "declared": null,
+            "effective": "ISO-2022-JP",
+            "source": "explicit-override",
+        })
+    );
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "日本"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+
+    let reloaded =
+        DbfTable::from_bytes_with_encoding(&table.to_bytes(), Some("ISO-2022-JP")).unwrap();
+    assert_eq!(reloaded.active_record(1).unwrap().values["NAME"], "日本");
+}
+
+#[test]
 fn strict_shift_jis_override_round_trips_jis_text() {
     let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some("Shift_JIS")).unwrap();
     assert_eq!(table.schema_json()["encoding_override"], "Shift_JIS");

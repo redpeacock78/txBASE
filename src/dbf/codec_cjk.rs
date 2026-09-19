@@ -1,4 +1,4 @@
-use encoding_rs::{BIG5, EUC_JP, EUC_KR, Encoding, GB18030, GBK, SHIFT_JIS};
+use encoding_rs::{BIG5, EUC_JP, EUC_KR, Encoding, GB18030, GBK, ISO_2022_JP, SHIFT_JIS};
 
 const STRICT_SHIFT_JIS: &str = "Shift_JIS";
 
@@ -38,6 +38,7 @@ pub(crate) fn canonical_encoding_name(name: &str) -> Option<&'static str> {
         "gb18030" => Some("GB18030"),
         "euc-kr" | "cp949" | "euc-kr/cp949" => Some("EUC-KR/CP949"),
         "euc-jp" => Some("EUC-JP"),
+        "iso-2022-jp" | "iso2022-jp" => Some("ISO-2022-JP"),
         "big5" | "cp950" | "big5/cp950" => Some("Big5/CP950"),
         _ => None,
     }
@@ -175,6 +176,7 @@ fn encoding(language_driver: u8, encoding_override: Option<&str>) -> Option<&'st
             "EUC-JP" => EUC_JP,
             "GB18030" => GB18030,
             "GBK/CP936" => GBK,
+            "ISO-2022-JP" => ISO_2022_JP,
             "Windows-31J/CP932" => SHIFT_JIS,
             _ => return None,
         });
