@@ -52,9 +52,11 @@ curl -i -X QUERY \
 
 `page_size`を指定すると、physical record順のページを`records`と`cursor`で返します。
 次のページでは同じ`page_size`と返却された`cursor`を送ります。
-このモードでは現時点で`sort`と`skip`を併用できず、最大1,000件です。
+`sort`を指定した場合は、sort keyとphysical record numberを含むkeyset cursorになります。
+どちらのcursor modeも`skip`とは併用できず、最大1,000件です。
 physical cursor pageは、要求されたpageとlook-aheadのmatchを見つけた時点でscanを止めます。
-sorted keyset cursorとpublicなstreamingまたはbackpressure APIは未実装です。
+sorted cursor pageは既存のsort comparatorを再利用します。
+publicなstreamingまたはbackpressure APIは未実装です。
 
 `aggregate`は一つの`$group` stageに限定し、`$count`と整数`$sum`を使えます。
 `sort`、`projection`、pagination、`limit`との併用はできません。
@@ -216,7 +218,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
 一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
-full cost model、collation-aware planning、sorted query cursor、streaming、複数stageのaggregation、cross-table constraint、CJK encodingの拡張、XBF実装はroadmapで検討します。
+full cost model、collation-aware planning、streaming、複数stageのaggregation、cross-table constraint、CJK encodingの拡張、XBF実装はroadmapで検討します。
 XBFのwire contractは[XBF v1 format draft](docs/xbf.md)に記載し、codecはまだ提供していません。
 
 ## License

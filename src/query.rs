@@ -144,7 +144,11 @@ fn execute_query_with_records(
         sort_ordered_prefix(&mut records, &request.sort, ordered_prefix);
     }
 
-    let (records, next_cursor) = pagination::apply(records, request)?;
+    let (records, next_cursor) = if pagination::is_sorted_page(request) {
+        pagination::apply_sorted(records, request)?
+    } else {
+        pagination::apply(records, request)?
+    };
 
     Ok(QueryPage {
         records: records

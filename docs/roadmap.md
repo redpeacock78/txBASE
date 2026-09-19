@@ -34,12 +34,13 @@ The repository currently provides:
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - A bounded one-stage aggregation path with `$group`, `$count`, and integer `$sum` after filtering.
 - A bounded local `inner` or `left` equality join over two catalog tables with qualified filtering and projection.
+- Physical and sorted keyset cursors with a 1,000-record page cap.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs, with normalized schema output.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 
-The baseline intentionally does not include a full cost-based index model, sorted-query cursors, streaming, multiple or planned joins, cross-table transactions, multi-stage aggregation, composite or cross-table constraints, XBF, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, streaming, multiple or planned joins, cross-table transactions, multi-stage aggregation, composite or cross-table constraints, XBF, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -75,10 +76,12 @@ It does not yet support a full cost model, collation-aware planning, or cross-ta
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
-The current cursor slice supports only physical-record pagination with `page_size` and `cursor`.
-It rejects `sort` and `skip` in that mode, caps pages at 1,000 records, and scans only until the
-requested page and one look-ahead record are found.
-Sorted keyset cursors and a public streaming or backpressure API remain future work.
+The current cursor slice supports physical-record pagination and sorted keyset pagination with
+`page_size` and `cursor`.
+It rejects `skip`, caps pages at 1,000 records, and physical pages scan only until the requested
+page and one look-ahead record are found.
+Sorted pages materialize matching record references before applying the keyset boundary.
+A public streaming or backpressure API remains future work.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 

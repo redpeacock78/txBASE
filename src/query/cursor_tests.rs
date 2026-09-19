@@ -23,6 +23,76 @@ fn paginates_in_physical_record_order() {
 }
 
 #[test]
+fn paginates_sorted_records_with_a_keyset_cursor() {
+    let table = table_with_two_active_records();
+    let request = parse(br#"{"page_size":1,"sort":{"AGE":1}}"#).unwrap();
+    let first = execute_query_page(&table, &request).unwrap();
+    assert_eq!(first.records[0]["NAME"], "Bob");
+    let cursor = first.next_cursor.clone().expect("sorted page has a cursor");
+
+    let next_request = parse(
+        serde_json::json!({
+            "page_size": 1,
+            "sort": {"AGE": 1},
+            "cursor": cursor,
+        })
+        .to_string()
+        .as_bytes(),
+    )
+    .unwrap();
+    let next = execute_query_page(&table, &next_request).unwrap();
+    assert_eq!(next.records[0]["NAME"], "Alice");
+    assert_eq!(next.next_cursor, None);
+}
+
+#[test]
+fn paginates_descending_sorted_records_with_a_keyset_cursor() {
+    let table = table_with_two_active_records();
+    let request = parse(br#"{"page_size":1,"sort":{"AGE":-1}}"#).unwrap();
+    let first = execute_query_page(&table, &request).unwrap();
+    assert_eq!(first.records[0]["NAME"], "Alice");
+    let cursor = first.next_cursor.unwrap();
+    let next_request = parse(
+        serde_json::json!({
+            "page_size": 1,
+            "sort": {"AGE": -1},
+            "cursor": cursor,
+        })
+        .to_string()
+        .as_bytes(),
+    )
+    .unwrap();
+    let next = execute_query_page(&table, &next_request).unwrap();
+    assert_eq!(next.records[0]["NAME"], "Bob");
+    assert_eq!(next.next_cursor, None);
+}
+
+#[test]
+fn rejects_a_sorted_cursor_for_a_different_sort() {
+    let table = table_with_two_active_records();
+    let request = parse(br#"{"page_size":1,"sort":{"AGE":1}}"#).unwrap();
+    let cursor = execute_query_page(&table, &request)
+        .unwrap()
+        .next_cursor
+        .unwrap();
+    let error = parse(
+        serde_json::json!({
+            "page_size": 1,
+            "sort": {"AGE": -1},
+            "cursor": cursor,
+        })
+        .to_string()
+        .as_bytes(),
+    )
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("does not match the sort definition")
+    );
+}
+
+#[test]
 fn limit_caps_physical_cursor_without_advertising_an_extra_page() {
     let table = table_with_two_active_records();
     let page =
@@ -42,7 +112,6 @@ fn limit_caps_physical_cursor_without_advertising_an_extra_page() {
 fn rejects_ambiguous_cursor_boundaries() {
     for body in [
         br#"{"cursor":"1"}"#.as_slice(),
-        br#"{"page_size":1,"sort":{"AGE":1}}"#.as_slice(),
         br#"{"page_size":1,"skip":1}"#.as_slice(),
         br#"{"page_size":0}"#.as_slice(),
         br#"{"page_size":1,"cursor":"first"}"#.as_slice(),

@@ -60,10 +60,13 @@ curl -i -X QUERY \
 
 The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `page_size`, `cursor`, and a bounded one-stage `aggregate` group with `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$and`, `$or`, `$not`, and bounded `$expr` field comparisons.
 
-`page_size` enables a physical-record cursor response. The next request sends the returned `cursor` with the same `page_size`; this mode does not yet combine with `sort` or `skip` and is capped at 1,000 records.
+`page_size` enables a cursor response. Without `sort`, the cursor follows physical record order;
+with `sort`, it is a keyset token and the next request repeats the same sort definition.
+Neither mode combines with `skip`, and both are capped at 1,000 records.
 
 Physical cursor pages scan in record order and stop after the page plus one look-ahead match.
-Sorted keyset cursors and a public streaming or backpressure API remain future work.
+Sorted cursor pages reuse the query sort comparator and provide a deterministic physical-record
+tie-breaker, but a public streaming or backpressure API remains future work.
 
 `aggregate` currently accepts one `$group` stage with `$count` and integer `$sum`; it cannot be combined with sort, projection, pagination, or limit controls.
 
@@ -278,7 +281,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, sorted-query cursors, streaming, planned and multiple joins, multi-stage aggregation, cross-table transactions, CJK encodings, and an XBF native format.
+Later phases may add a full cost-based index choice, streaming, planned and multiple joins, multi-stage aggregation, cross-table transactions, CJK encodings, and an XBF native format.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

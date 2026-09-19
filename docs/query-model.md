@@ -53,10 +53,13 @@ Sort ties preserve DBF record order.
 
 The cursor is the one-based physical DBF record number after the returned page.
 The next request sends that token with the same `page_size` and resumes after that record.
-This first cursor contract is deliberately limited to physical-record order: `sort` and `skip`
-cannot be combined with `page_size` or `cursor`, and `page_size` is capped at 1,000.
-The token is a position, not a snapshot identifier; callers must keep the underlying table
-snapshot stable while paging.
+When `sort` is present, the cursor is a JSON string containing versioned sort keys and the
+last physical record number used as a deterministic tie-breaker.
+The next request must repeat the same sort fields and directions.
+Sorted cursors are keyset boundaries, not offsets; `skip` cannot be combined with either cursor
+mode, and `page_size` is capped at 1,000.
+Neither cursor token is a snapshot identifier; callers must repeat the same query semantics and
+keep the underlying table snapshot stable while paging.
 
 Physical cursor pages scan active records in physical order and stop after one extra matching
 record proves that another page exists.
@@ -64,6 +67,10 @@ They deliberately bypass index candidate ordering, and `explain_query_at` report
 for this mode.
 This keeps the page result bounded, but does not yet provide a public streaming iterator or
 backpressure protocol.
+
+Sorted cursor pages use the existing sort comparison and materialize the matching record
+references before selecting the page.
+They provide a resumable result boundary but do not claim streaming or backpressure behavior.
 
 ## 2. Bounded aggregation
 
@@ -202,9 +209,8 @@ That separation is useful for txBASE because query validation, result shaping, a
 MongoDB's find command returns an initial batch and a cursor identifier, while Firestore's
 [query cursor guidance](https://firebase.google.com/docs/firestore/query-data/query-cursors)
 uses the last document in one batch as the start point for the next batch.
-txBASE currently adopts only the latter boundary idea, represented by a physical DBF position;
-it does not claim server-side cursor lifetime, snapshot isolation, or keyset pagination over a
-sort key.
+txBASE adopts that boundary idea for physical and sorted pages;
+it does not claim server-side cursor lifetime or snapshot isolation.
 
 MongoDB's [comparison predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/) documents operators such as `$eq`, `$gt`, `$gte`, `$lt`, `$lte`, `$ne`, `$in`, and `$nin`.
 
@@ -327,7 +333,7 @@ The roadmap may later cover the following in separate contracts:
 1. Full expression evaluation and cost-based index choice with explicit missing, null, collation, and compound-range rules.
 2. A catalog for multiple tables and schema metadata.
 3. Joins and aggregation with bounded memory behavior.
-4. Keyset cursors for sorted queries and incremental streaming with stable snapshot rules.
+4. Incremental streaming with stable snapshot rules.
 5. Differential tests against a small reference evaluator.
 
 Until those contracts exist, the record scan is the simpler and more honest execution model.

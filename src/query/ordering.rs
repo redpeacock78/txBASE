@@ -66,7 +66,7 @@ fn compare_records_from(
             };
         }
     }
-    Ordering::Equal
+    left.number.cmp(&right.number)
 }
 
 fn compare_sort_field(left: &DbfRecord, right: &DbfRecord, field: &str) -> Ordering {
@@ -76,7 +76,7 @@ fn compare_sort_field(left: &DbfRecord, right: &DbfRecord, field: &str) -> Order
     )
 }
 
-fn compare_for_sort(left: Option<&Value>, right: Option<&Value>) -> Ordering {
+pub(super) fn compare_for_sort(left: Option<&Value>, right: Option<&Value>) -> Ordering {
     match (left, right) {
         (Some(left), Some(right)) => compare_values(left, right).unwrap_or_else(|| {
             type_rank(left)

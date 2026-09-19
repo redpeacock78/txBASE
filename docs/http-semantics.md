@@ -114,8 +114,10 @@ Range handling is a representation transfer feature and does not change QUERY's 
 
 When a query includes `page_size`, the successful JSON representation is an object with
 `records` and a nullable `cursor` member.
-The cursor is a physical DBF record position and is valid only for the same stable table snapshot.
-Sorted and `skip`-based cursor links are not implemented yet.
+Without `sort`, the cursor is a physical DBF record position.
+With `sort`, it is a versioned keyset token bound to the same sort fields and directions.
+Both forms require the same query semantics and stable table snapshot, and neither can be
+combined with `skip`.
 
 ## 5. Persistence and retries
 
@@ -142,7 +144,6 @@ The following require explicit contracts before implementation:
 
 - `ETag`, `If-Match`, and `If-None-Match` behavior.
 - `Content-Location` and cache-key rules for QUERY bodies.
-- Keyset pagination or cursor links for sorted results.
 - Incremental streaming and backpressure.
 - CORS and authentication policy.
 - A standard patch media type in addition to the local update document.
