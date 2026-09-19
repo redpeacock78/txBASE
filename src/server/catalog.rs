@@ -35,7 +35,7 @@ fn handle_request(mut request: Request, catalog: &Catalog) {
             table_explain_response(&mut request, &path, catalog)
         } else if request.method().as_str() == "QUERY" && record_route(&path).is_some() {
             table_query_response(&mut request, &path, catalog)
-        } else if request.method() == Method::Post && path == "/transaction" {
+        } else if matches!(request.method(), Method::Post) && path == "/transaction" {
             super::catalog_transaction::response(&mut request, catalog)
         } else if matches!(
             request.method(),
