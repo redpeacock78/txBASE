@@ -34,7 +34,7 @@ listener addressは`--bind ADDRESS`で変更できます。
 cargo run -- --serve-catalog path/to/database
 ```
 
-`GET /catalog`でschema、`GET`/`HEAD /{table}/records`でnamed tableを読み取り、`QUERY /join`でbounded joinを返します。
+`GET /catalog`でschema、`GET`/`HEAD /{table}/records[/{id}]`でnamed tableを読み取り、`QUERY /join`でbounded joinを返します。
 `QUERY /{table}/records`と`QUERY /{table}/explain`はsingle-table serverと同じquery documentを受け付けます。catalog routeはread-onlyで、cross-table writeとtransactionは未実装です。
 
 single-table serverの`QUERY /explain`は、同じquery documentに対するtable scanまたはindex
