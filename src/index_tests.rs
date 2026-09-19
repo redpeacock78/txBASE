@@ -83,12 +83,47 @@ fn builds_and_loads_a_compound_ordered_index() {
         loaded.schema_json()["indexes"][0]["histogram_bucket_count"],
         0
     );
-    let (name, fields, records) = loaded
-        .lookup_ordered_for_fields(&["NAME", "AGE"], false)
+    let (name, fields, directions, records) = loaded
+        .lookup_ordered_for_fields(&["NAME", "AGE"], &[1, 1], &Map::new())
         .unwrap()
         .unwrap();
     assert_eq!(name, "by_name_age");
     assert_eq!(fields, vec!["NAME", "AGE"]);
+    assert_eq!(directions, vec![1, 1]);
+    assert_eq!(records.len(), 2);
+
+    remove_table_files(&path);
+}
+
+#[test]
+fn builds_a_mixed_direction_compound_index() {
+    let path = temporary_dbf();
+    let mut bytes = fixture();
+    bytes[179] = b' ';
+    fs::write(&path, bytes).unwrap();
+
+    IndexFile::build(
+        &path,
+        vec![IndexDefinition::named_fields_with_directions(
+            "by_name_age",
+            vec!["NAME".into(), "AGE".into()],
+            vec![1, -1],
+        )],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let loaded = IndexFile::load(&path).unwrap();
+    assert_eq!(
+        loaded.schema_json()["indexes"][0]["directions"],
+        json!([1, -1])
+    );
+    let (_, _, directions, records) = loaded
+        .lookup_ordered_for_fields(&["NAME", "AGE"], &[1, -1], &Map::new())
+        .unwrap()
+        .unwrap();
+    assert_eq!(directions, vec![1, -1]);
     assert_eq!(records.len(), 2);
 
     remove_table_files(&path);
@@ -190,7 +225,7 @@ fn rebuild_migrates_a_v1_sidecar() {
     ));
 
     let rebuilt = IndexFile::rebuild(&path).unwrap();
-    assert_eq!(rebuilt.schema_json()["version"], json!(2));
+    assert_eq!(rebuilt.schema_json()["version"], json!(3));
     assert!(IndexFile::load(&path).is_ok());
 
     remove_table_files(&path);

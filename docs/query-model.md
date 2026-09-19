@@ -117,7 +117,7 @@ Connecting an index to query execution is therefore not just a parser change.
 
 It needs a key encoding, null and missing-field rules, duplicate ordering, update maintenance, recovery records, stale-index detection, and a planner policy.
 
-The current planner considers direct top-level equality, single-bound-per-side range predicates, single-field ordered traversal, and compound sort requests whose fields are an index prefix.
+The current planner considers direct top-level equality, single-bound-per-side range predicates, single-field ordered traversal, and compound sort requests whose fields match an index suffix after an exact equality prefix.
 
 Multiple valid single-field equality indexes may be intersected by record number before the normal filter pipeline.
 
@@ -133,11 +133,13 @@ These are local selectivity estimates, not a full cost model or MongoDB planner 
 
 For a multi-key sort, a single-field index provides the first-key order and the remaining keys are sorted in memory within each equal first-key group.
 
-An ascending compound index provides the complete order when the requested sort fields match its prefix.
+An ascending or mixed-direction compound index provides the complete order when the requested sort fields match its indexed fields after any exact equality prefix.
 
-The planner accepts the index order or its complete reverse, so all-ascending and all-descending requests can avoid an in-memory sort.
+The planner accepts the index order or its complete reverse, so compatible mixed-direction requests can avoid an in-memory sort as well.
 
-Mixed sort directions fall back to `TableScan` unless the single-field ordered-prefix path can preserve the first key and sort the ties.
+The planner compares exact candidate counts for compatible compound definitions, then prefers a shorter definition and a stable name tie-breaker.
+
+This local candidate-count choice is not a full cost model because it does not estimate index I/O, memory, cache state, collation, or range selectivity for compound keys.
 
 MongoDB's current guidance recommends a compound index for queries that repeatedly search multiple fields.
 
@@ -145,7 +147,7 @@ The txBASE intersection is a local candidate-reduction feature and does not clai
 
 MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a future compound-index planner must define index field order instead of treating every index as an interchangeable lookup table.
 
-txBASE currently has an active-record count, a uniform distinct-key estimate for equality, and a single-field range histogram, but no full cost model or per-field direction metadata for compound definitions.
+txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, and per-field direction metadata for compound definitions, but no full cost model.
 
 The equality intersection is a bounded candidate prefilter, not a covered query or a claim of end-to-end speedup.
 
@@ -189,7 +191,7 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 
 The roadmap may later cover the following in separate contracts:
 
-1. Full cost-based index choice and mixed-direction compound planning with explicit missing, null, and collation rules.
+1. Full cost-based index choice with explicit missing, null, collation, and compound-range rules.
 2. A catalog for multiple tables and schema metadata.
 3. Joins and aggregation with bounded memory behavior.
 4. Cursors or streaming responses with stable snapshot rules.

@@ -34,7 +34,7 @@ pub enum QueryPlan {
     CompoundOrderedIndex {
         name: String,
         fields: Vec<String>,
-        direction: i8,
+        directions: Vec<i8>,
     },
 }
 
@@ -131,22 +131,17 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
         };
     }
     if !request.sort.is_empty() {
-        let (_first_field, first_direction) =
-            request.sort.iter().next().expect("sort is non-empty");
-        let all_directions_match = request
-            .sort
-            .values()
-            .all(|direction| direction == first_direction);
-        if request.sort.len() > 1 && all_directions_match {
+        if request.sort.len() > 1 {
             let fields = request.sort.keys().map(String::as_str).collect::<Vec<_>>();
-            if let Ok(Some((name, index_fields, records))) =
-                index_file.lookup_ordered_for_fields(&fields, *first_direction == -1)
+            let directions = request.sort.values().copied().collect::<Vec<_>>();
+            if let Ok(Some((name, index_fields, index_directions, records))) =
+                index_file.lookup_ordered_for_fields(&fields, &directions, &request.filter)
             {
                 return PlannedAccess {
                     plan: QueryPlan::CompoundOrderedIndex {
                         name,
                         fields: index_fields,
-                        direction: *first_direction,
+                        directions: index_directions,
                     },
                     records: Some(records),
                     ordered_prefix: request.sort.len(),

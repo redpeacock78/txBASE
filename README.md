@@ -122,7 +122,7 @@ Usage:
   txbase catalog DIRECTORY
   txbase verify-catalog DIRECTORY
   txbase index build FILE FIELD...
-  txbase index build-compound FILE NAME FIELD FIELD...
+  txbase index build-compound FILE NAME FIELD[:1|-1] FIELD[:1|-1]...
   txbase index verify FILE
   txbase index rebuild FILE
   txbase pack FILE
@@ -142,7 +142,7 @@ Usage:
 
 `index build` creates one external scalar-key index per field.
 
-`index build-compound` creates one ascending compound-key index in the declared field order.
+`index build-compound` creates one compound-key index in the declared field order; each field may use `:1`, `:-1`, `:asc`, or `:desc`.
 
 `index verify` rejects a sidecar whose DBF or memo source is stale.
 
@@ -150,11 +150,11 @@ Normal DBF saves record and apply an existing sidecar's target through the WAL; 
 
 The path-aware planner can intersect candidates from multiple valid single-field indexes for direct equality filters.
 
-It uses the sidecar's active-record and distinct-key statistics as a uniform equality estimate and can order single-field range candidates with a bounded histogram estimate; it does not claim a full cost-based planner.
+It uses the sidecar's active-record and distinct-key statistics as a uniform equality estimate and can order single-field range candidates with a bounded histogram estimate; compatible compound sort candidates use exact candidate counts, not a full cost-based planner.
 
 For multi-key sorts, it can use a single-field index for the first sort key and sort only equal-key groups by the remaining keys; this is not compound-index support.
 
-It can also use an ascending compound index for a matching multi-key sort, including the complete reverse direction; mixed sort directions remain a table-scan boundary.
+It can also use a per-field-direction compound index for a matching multi-key sort, including the complete reverse direction and an exact equality prefix.
 
 `pack` removes logically deleted records and renumbers the remaining physical records.
 

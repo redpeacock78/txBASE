@@ -8,7 +8,7 @@ use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 
 const INDEX_FORMAT: &str = "txbase-index";
-const INDEX_VERSION: u8 = 2;
+const INDEX_VERSION: u8 = 3;
 const INDEX_EXTENSION: &str = "txidx";
 
 mod commit;
@@ -74,6 +74,7 @@ impl From<DbfError> for IndexError {
 pub struct IndexDefinition {
     name: String,
     fields: Vec<String>,
+    directions: Vec<i8>,
 }
 
 impl Serialize for IndexDefinition {
@@ -81,12 +82,17 @@ impl Serialize for IndexDefinition {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("IndexDefinition", 2)?;
+        let has_directions = self.directions.iter().any(|direction| *direction != 1);
+        let mut state =
+            serializer.serialize_struct("IndexDefinition", if has_directions { 3 } else { 2 })?;
         state.serialize_field("name", &self.name)?;
         if self.fields.len() == 1 {
             state.serialize_field("field", &self.fields[0])?;
         } else {
             state.serialize_field("fields", &self.fields)?;
+        }
+        if has_directions {
+            state.serialize_field("directions", &self.directions)?;
         }
         state.end()
     }
@@ -105,6 +111,8 @@ impl<'de> Deserialize<'de> for IndexDefinition {
             field: Option<String>,
             #[serde(default)]
             fields: Option<Vec<String>>,
+            #[serde(default)]
+            directions: Option<Vec<i8>>,
         }
 
         let wire = Wire::deserialize(deserializer)?;
@@ -120,9 +128,24 @@ impl<'de> Deserialize<'de> for IndexDefinition {
                 return Err(DeError::custom("index definition requires field or fields"));
             }
         };
+        let directions = wire.directions.unwrap_or_else(|| vec![1; fields.len()]);
+        if directions.len() != fields.len() {
+            return Err(DeError::custom(
+                "index definition directions must match field count",
+            ));
+        }
+        if directions
+            .iter()
+            .any(|direction| !matches!(direction, -1 | 1))
+        {
+            return Err(DeError::custom(
+                "index definition directions must be 1 or -1",
+            ));
+        }
         Ok(Self {
             name: wire.name,
             fields,
+            directions,
         })
     }
 }
@@ -133,6 +156,7 @@ impl IndexDefinition {
         Self {
             name: field.clone(),
             fields: vec![field],
+            directions: vec![1],
         }
     }
 
@@ -140,13 +164,27 @@ impl IndexDefinition {
         Self {
             name: name.into(),
             fields: vec![field.into()],
+            directions: vec![1],
         }
     }
 
     pub fn named_fields(name: impl Into<String>, fields: Vec<String>) -> Self {
         Self {
             name: name.into(),
+            directions: vec![1; fields.len()],
             fields,
+        }
+    }
+
+    pub fn named_fields_with_directions(
+        name: impl Into<String>,
+        fields: Vec<String>,
+        directions: Vec<i8>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            fields,
+            directions,
         }
     }
 
@@ -160,6 +198,10 @@ impl IndexDefinition {
 
     pub fn fields(&self) -> &[String] {
         &self.fields
+    }
+
+    pub fn directions(&self) -> &[i8] {
+        &self.directions
     }
 }
 
@@ -359,6 +401,7 @@ impl IndexFile {
                     json!({
                         "name": index.definition.name,
                         "fields": index.definition.fields,
+                        "directions": index.definition.directions,
                         "entry_count": index.entries.len(),
                         "distinct_key_count": index.entries.len(),
                         "indexed_record_count": index.entries.iter().map(|entry| entry.records.len()).sum::<usize>(),

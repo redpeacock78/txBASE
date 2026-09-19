@@ -336,7 +336,7 @@ fn uses_a_compound_index_for_multi_key_sort() {
         QueryPlan::CompoundOrderedIndex {
             name: "by_name_age".into(),
             fields: vec!["NAME".into(), "AGE".into()],
-            direction: 1,
+            directions: vec![1, 1],
         }
     );
     let indexed = execute_query_at(&table, &path, &request).unwrap();
@@ -349,7 +349,7 @@ fn uses_a_compound_index_for_multi_key_sort() {
         QueryPlan::CompoundOrderedIndex {
             name: "by_name_age".into(),
             fields: vec!["NAME".into(), "AGE".into()],
-            direction: -1,
+            directions: vec![1, 1],
         }
     );
     let indexed = execute_query_at(&table, &path, &descending).unwrap();

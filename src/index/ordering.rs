@@ -25,6 +25,26 @@ pub(super) fn compare_keys(left: &IndexKey, right: &IndexKey) -> Ordering {
     }
 }
 
+pub(super) fn compare_index_keys(left: &IndexKey, right: &IndexKey, directions: &[i8]) -> Ordering {
+    match (left, right) {
+        (IndexKey::Compound(left), IndexKey::Compound(right)) => left
+            .iter()
+            .zip(right)
+            .enumerate()
+            .map(|(position, (left, right))| {
+                let ordering = compare_keys(left, right);
+                if directions.get(position) == Some(&-1) {
+                    ordering.reverse()
+                } else {
+                    ordering
+                }
+            })
+            .find(|ordering| !ordering.is_eq())
+            .unwrap_or_else(|| left.len().cmp(&right.len())),
+        _ => compare_keys(left, right),
+    }
+}
+
 pub(super) fn key_domain(key: &IndexKey) -> u8 {
     match key {
         IndexKey::Missing => 0,

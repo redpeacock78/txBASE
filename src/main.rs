@@ -101,12 +101,22 @@ fn run() -> Result<(), Box<dyn Error>> {
                 let name = args
                     .next()
                     .ok_or_else(|| "index build-compound requires an index name".to_owned())?;
-                let fields = args.collect::<Vec<_>>();
+                let mut fields = Vec::new();
+                let mut directions = Vec::new();
+                for specification in args {
+                    let (field, direction) = parse_compound_field(&specification)?;
+                    fields.push(field);
+                    directions.push(direction);
+                }
                 if fields.len() < 2 {
                     return Err("index build-compound requires at least two fields".into());
                 }
-                let index =
-                    IndexFile::build(&path, vec![IndexDefinition::named_fields(name, fields)])?;
+                let definition = if directions.iter().all(|direction| *direction == 1) {
+                    IndexDefinition::named_fields(name, fields)
+                } else {
+                    IndexDefinition::named_fields_with_directions(name, fields, directions)
+                };
+                let index = IndexFile::build(&path, vec![definition])?;
                 index.save(&path)?;
                 println!("{}", serde_json::to_string_pretty(&index.schema_json())?);
             }
@@ -211,6 +221,26 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage:\n  txbase FILE\n  txbase schema FILE\n  txbase verify FILE\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase index build FILE FIELD...\n  txbase index build-compound FILE NAME FIELD FIELD...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE\n  txbase recall FILE RECORD\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. Schema, catalog, verification, and index commands inspect DBF files. Backup and restore copy a DBF with its sibling memo sidecar. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
+        "Usage:\n  txbase FILE\n  txbase schema FILE\n  txbase verify FILE\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase index build FILE FIELD...\n  txbase index build-compound FILE NAME FIELD[:1|-1] FIELD[:1|-1]...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE\n  txbase recall FILE RECORD\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. Schema, catalog, verification, and index commands inspect DBF files. Backup and restore copy a DBF with its sibling memo sidecar. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
     );
+}
+
+fn parse_compound_field(specification: &str) -> Result<(String, i8), Box<dyn Error>> {
+    let Some((field, raw_direction)) = specification.split_once(':') else {
+        return Ok((specification.to_owned(), 1));
+    };
+    if field.is_empty() {
+        return Err("compound index field name is empty".into());
+    }
+    let direction = match raw_direction.to_ascii_lowercase().as_str() {
+        "1" | "asc" => 1,
+        "-1" | "desc" => -1,
+        _ => {
+            return Err(format!(
+                "compound index direction must be 1, -1, asc, or desc: {raw_direction}"
+            )
+            .into());
+        }
+    };
+    Ok((field.to_owned(), direction))
 }

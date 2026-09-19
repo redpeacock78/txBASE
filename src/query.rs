@@ -265,3 +265,6 @@ mod tests;
 
 #[cfg(test)]
 mod planner_tests;
+
+#[cfg(test)]
+mod planner_compound_tests;

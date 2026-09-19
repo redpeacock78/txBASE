@@ -41,7 +41,8 @@ pub(super) fn validate_shape(index_file: &IndexFile) -> Result<(), IndexError> {
             )?;
             let key = &entry.key;
             if previous_key.as_ref().is_some_and(|previous| {
-                ordering::compare_keys(previous, key) != std::cmp::Ordering::Less
+                ordering::compare_index_keys(previous, key, index.definition.directions())
+                    != std::cmp::Ordering::Less
             }) {
                 return Err(IndexError::Invalid(format!(
                     "index {} entries are not sorted",
@@ -125,7 +126,9 @@ pub(super) fn build_indexes(
             .into_values()
             .map(|(key, records)| IndexEntry { key, records })
             .collect::<Vec<_>>();
-        entries.sort_by(|left, right| ordering::compare_keys(&left.key, &right.key));
+        entries.sort_by(|left, right| {
+            ordering::compare_index_keys(&left.key, &right.key, definition.directions())
+        });
         let mut merged = Vec::<IndexEntry>::with_capacity(entries.len());
         for mut entry in entries {
             if let Some(previous) = merged.last_mut() {
@@ -164,6 +167,27 @@ fn validate_definition(
             "index {} has no fields",
             definition.name
         )));
+    }
+    if definition.directions.len() != definition.fields.len() {
+        return Err(IndexError::Invalid(format!(
+            "index {} directions do not match field count",
+            definition.name
+        )));
+    }
+    if definition
+        .directions
+        .iter()
+        .any(|direction| !matches!(direction, -1 | 1))
+    {
+        return Err(IndexError::Invalid(format!(
+            "index {} directions must be 1 or -1",
+            definition.name
+        )));
+    }
+    if definition.fields.len() == 1 && definition.directions.first() != Some(&1) {
+        return Err(IndexError::Invalid(
+            "single-field indexes must use ascending order".into(),
+        ));
     }
     let mut fields = BTreeSet::new();
     for field_name in &definition.fields {

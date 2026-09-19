@@ -6,14 +6,14 @@ The sidecar path for `users.dbf` is `users.txidx`.
 
 The DBF remains readable by legacy xBase tools because the index is not embedded in the DBF bytes.
 
-## Version 2 contract
+## Version 3 contract
 
 An index file is JSON with this top-level shape:
 
 ```json
 {
   "format": "txbase-index",
-  "version": 2,
+  "version": 3,
   "source": {
     "dbf": {"length": 0, "hash": 0},
     "memo": null
@@ -41,6 +41,16 @@ A compound definition uses an ordered `fields` array instead of `field`:
 ```json
 {"name": "by_name_age", "fields": ["NAME", "AGE"]}
 ```
+
+A version 3 compound definition may add a `directions` array with one `1` or `-1` value per field:
+
+```json
+{"name": "by_score_name", "fields": ["SCORE", "NAME"], "directions": [-1, 1]}
+```
+
+When `directions` is absent, every field is ascending for compatibility with older sidecars.
+
+Single-field indexes remain ascending because range lookup and histogram boundaries use ascending key order.
 
 The real `length` and `hash` values are generated from the DBF and detected memo sidecar.
 
@@ -84,6 +94,12 @@ Build one ascending compound index in the declared field order:
 txbase index build-compound path/to/users.dbf by_name_age NAME AGE
 ```
 
+Add per-field directions with `:1`, `:-1`, `:asc`, or `:desc`:
+
+```bash
+txbase index build-compound path/to/users.dbf by_score_name SCORE:-1 NAME:1
+```
+
 Verify the sidecar against the current DBF and memo bytes:
 
 ```bash
@@ -98,7 +114,7 @@ txbase index rebuild path/to/users.dbf
 
 `index rebuild` also migrates a version 1 sidecar to the current format when its definitions can be read.
 
-A version 1 sidecar is not used for query planning until it has been rebuilt.
+A version 1 or version 2 sidecar is not used for query planning until it has been rebuilt.
 
 `load` and `verify` recover the DBF first, then compare the stored source fingerprint.
 
@@ -140,7 +156,7 @@ It depends on the file system honoring the file and directory sync operations us
 
 ## Current boundary
 
-The sidecar currently supports build, exact equality lookup, range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, ascending compound-key construction and prefix traversal, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for that intersection, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
+The sidecar currently supports build, exact equality lookup, range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, per-field-direction compound-key construction and prefix traversal, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for that intersection, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
@@ -150,9 +166,11 @@ The path-aware query executor uses equality, equality intersection, range, singl
 
 For a multi-key sort, a single-field index supplies the first sort-key order and the executor stably sorts only equal-key groups by the remaining keys.
 
-When the requested sort fields are a prefix of an ascending compound definition, the planner can consume the index order directly for all-ascending or all-descending directions.
+When the requested sort fields match a compound definition after an exact equality prefix, the planner can consume the index order directly for the requested directions or their complete reverse.
 
-Mixed sort directions do not use the current compound index because the definition has no per-field direction metadata.
+The planner compares the exact candidate counts of compatible compound definitions and prefers the smallest candidate set, then the shortest definition and a stable name tie-breaker.
+
+This is a local candidate-count heuristic, not a full I/O, memory, or statistics cost model.
 
 The planner now records the active-record count and derives each single-field index's distinct-key count from its entries.
 
@@ -172,6 +190,6 @@ It still materializes candidate record numbers and sorts them by physical DBF or
 
 `IndexFile::load` still validates the sidecar by rebuilding expected entries from the current DBF, so the binary-seek contract does not yet claim an end-to-end speedup.
 
-Full cost-based index choice, mixed-direction compound definitions, and cross-table atomic commits require separate contracts.
+Full cost-based index choice, collation-aware planning, and cross-table atomic commits require separate contracts.
 
 The equality, equality-intersection, statistics-ordered, histogram-ordered range, single-field ordered, ordered-prefix, and compound-prefix planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs a full cost model and cross-table contracts.

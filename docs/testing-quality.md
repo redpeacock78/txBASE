@@ -120,7 +120,11 @@ A delta with the wrong base must be rejected.
 
 `src/query/planner_tests.rs::uses_an_ordered_index_prefix_for_multi_key_sort` covers first-key index traversal, secondary-key tie sorting, and table-scan equivalence.
 
-`src/query/planner_tests.rs::uses_a_compound_index_for_multi_key_sort` covers compound-key prefix order, complete reverse traversal, mixed-direction fallback, and table-scan equivalence.
+`src/query/planner_tests.rs::uses_a_compound_index_for_multi_key_sort` covers ascending compound-key prefix order, complete reverse traversal, mixed-direction fallback, and table-scan equivalence.
+
+`src/query/planner_compound_tests.rs::uses_a_mixed_direction_compound_index` covers per-field directions, complete reverse traversal, unsupported direction combinations, and table-scan equivalence.
+
+`src/query/planner_compound_tests.rs::chooses_a_compound_sort_index_with_the_smallest_equality_prefix` covers equality-prefix candidate counting and compound-plan equivalence with the table scan.
 
 ### Compatibility tests
 
