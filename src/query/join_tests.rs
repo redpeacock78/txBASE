@@ -105,6 +105,45 @@ fn left_join_keeps_unmatched_left_record_and_inner_join_drops_it() {
 }
 
 #[test]
+fn semi_and_anti_join_emit_only_matching_or_unmatched_left_rows() {
+    let root = catalog_with_posts();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut semi = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "semi",
+            "table": "posts",
+            "on": {
+              "users.ID": {"$eq": {"$field": "posts.ID"}}
+            }
+          },
+          "projection": {"users.NAME": 1, "posts.NAME": 1}
+        }"#,
+    )
+    .unwrap();
+
+    let rows = execute(&catalog, &semi).unwrap();
+    assert_eq!(rows, vec![json!({"users.NAME": "Alice"})]);
+
+    semi.join.kind = super::join::JoinType::Anti;
+    let rows = execute(&catalog, &semi).unwrap();
+    assert!(rows.is_empty());
+
+    semi.join.on.insert(
+        String::from("users.AGE"),
+        super::join::JoinCondition {
+            equality: super::join::JoinField {
+                field: String::from("posts.ID"),
+            },
+        },
+    );
+    let rows = execute(&catalog, &semi).unwrap();
+    assert_eq!(rows, vec![json!({"users.NAME": "Alice"})]);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn join_accepts_multiple_equality_conditions() {
     let request = parse(
         br#"{

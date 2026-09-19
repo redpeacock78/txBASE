@@ -64,9 +64,10 @@ long-lived snapshotの安定性とbackpressureは未実装です。
 `$count`と整数`$sum`をサポートします。
 `sort`、`projection`、pagination、`limit`との併用はできません。
 
-libraryにはcatalog table二つを読むboundedな`inner`または`left` equality joinもあります。
+libraryにはcatalog table二つを読むboundedな`inner`、`left`、`semi`、`anti` equality joinもあります。
 添付仕様の`from`、`join.on`、`filter`、`projection`を受け付け、qualified keyのJSONを返します。
 resultは最大100,000行です。
+`semi`と`anti`は右側の列を返さず、右側のmatch有無で左側の行を一度だけ返します。
 single-table HTTP serverからはまだ利用できません。
 
 `$expr`による同一record内のfield比較も、二つのscalar operandに限定して提供します。

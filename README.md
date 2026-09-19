@@ -75,9 +75,10 @@ or resumable result boundary; backpressure and stable long-lived snapshot rules 
 
 `aggregate` currently accepts one `$group` stage with `$count` and integer `$sum`, optionally preceded by bounded `$match` stages; it cannot be combined with sort, projection, pagination, or limit controls.
 
-The library also exposes one bounded local `inner` or `left` equality join over two catalog tables.
+The library also exposes one bounded local `inner`, `left`, `semi`, or `anti` equality join over two catalog tables.
 It accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,
 supports multiple equality conditions, and is capped at 100,000 output rows.
+`semi` and `anti` emit only qualified left-table fields, based on whether a right-side match exists.
 This join is not exposed by the single-table HTTP server yet.
 
 `QUERY` follows the HTTP QUERY boundary defined by [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html), including `Accept-Query: "application/json"`.

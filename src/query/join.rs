@@ -15,6 +15,8 @@ pub const MAX_JOIN_ROWS: usize = 100_000;
 pub enum JoinType {
     Inner,
     Left,
+    Semi,
+    Anti,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -118,13 +120,27 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
         let matches =
             encoded_key(&left_record.values, &local_fields)?.and_then(|key| right_by_key.get(&key));
         let had_matches = matches.is_some_and(|records| !records.is_empty());
-        if let Some(matches) = matches {
-            for right_record in matches {
-                emit(&mut output, request, left_record, Some(right_record))?;
+        match &request.join.kind {
+            JoinType::Inner => {
+                if let Some(matches) = matches {
+                    for right_record in matches {
+                        emit(&mut output, request, left_record, Some(right_record))?;
+                    }
+                }
             }
-        }
-        if !had_matches && matches!(request.join.kind, JoinType::Left) {
-            emit(&mut output, request, left_record, None)?;
+            JoinType::Left => {
+                if let Some(matches) = matches {
+                    for right_record in matches {
+                        emit(&mut output, request, left_record, Some(right_record))?;
+                    }
+                }
+                if !had_matches {
+                    emit(&mut output, request, left_record, None)?;
+                }
+            }
+            JoinType::Semi if had_matches => emit(&mut output, request, left_record, None)?,
+            JoinType::Anti if !had_matches => emit(&mut output, request, left_record, None)?,
+            JoinType::Semi | JoinType::Anti => {}
         }
     }
     Ok(output)
