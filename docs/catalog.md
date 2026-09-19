@@ -55,6 +55,10 @@ catalog.verify()?;
 
 `verify` loads and verifies every discovered table, reporting the table name when a table fails.
 
+The bounded local join boundary is separate from catalog discovery.
+Call `txbase::query::join::execute` with a `Catalog` and a validated join document to read two
+named tables without adding a manifest or cross-table write lock.
+
 An invalid DBF does not prevent directory discovery because discovery only identifies files.
 
 The invalid table is reported by `open_table`, `schema_json`, or `verify`.
@@ -94,7 +98,8 @@ The full nested schema includes the DBF header, record counts, memo sidecar dete
 
 ## Boundary
 
-The catalog currently provides discovery, lookup, schema introspection, and verification.
+The catalog currently provides discovery, lookup, schema introspection, verification, and the
+input boundary used by the bounded local join.
 
 It does not provide a cross-table transaction.
 
@@ -102,4 +107,7 @@ It does not provide a shared lock across tables.
 
 It does not infer relationships from field names.
 
-Joins and multi-record transactions require separate contracts for visibility, failure recovery, and malformed input.
+The local join supports one `inner` or `left` equality condition and a hard result bound.
+It does not provide a cost-based planner, streaming, multiple joins, or cross-table writes.
+Cross-table transactions still require separate contracts for visibility, failure recovery, and
+malformed input.

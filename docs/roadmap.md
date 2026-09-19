@@ -33,9 +33,10 @@ The repository currently provides:
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - A bounded one-stage aggregation path with `$group`, `$count`, and integer `$sum` after filtering.
+- A bounded local `inner` or `left` equality join over two catalog tables with qualified filtering and projection.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 
-The baseline intentionally does not include a full cost-based index model, sorted-query cursors, streaming, cross-table transactions, multi-stage aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, sorted-query cursors, streaming, multiple or planned joins, cross-table transactions, multi-stage aggregation, constraints, XBF, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -95,7 +96,10 @@ The current record scan remains the reference execution path while the query mod
 - Constraints.
 - Full range, histogram-based, and mixed-direction compound cost planning.
 
-Joins should begin as local bounded operations.
+The first join slice is local and bounded.
+It implements one equality condition and uses an in-memory right-side map.
+Future join work must define planner selection, streaming, multiple conditions, and null or missing
+field semantics before adding broader query surfaces.
 
 Distributed joins and distributed transactions remain later features.
 

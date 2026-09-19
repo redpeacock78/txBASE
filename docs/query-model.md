@@ -100,7 +100,57 @@ MongoDB documents `$group` as a blocking stage and specifies accumulator behavio
 Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 is not accepted by this first txBASE slice.
 
-## 3. Current predicate vocabulary
+## 3. Bounded local join
+
+The library exposes one bounded local join through `txbase::query::join`.
+It accepts the relation shape from the roadmap and supports one equality condition between two
+catalog tables:
+
+```json
+{
+  "from": "users",
+  "join": {
+    "type": "left",
+    "table": "posts",
+    "on": {
+      "users.ID": {
+        "$eq": {
+          "$field": "posts.USER_ID"
+        }
+      }
+    }
+  },
+  "filter": {
+    "users.ACTIVE": true
+  },
+  "projection": {
+    "users.NAME": 1,
+    "posts.TITLE": 1
+  }
+}
+```
+
+`join.parse` validates this JSON and `join::execute` loads the named tables from a `Catalog`.
+The current join types are `inner` and `left`.
+The result is a flat JSON object whose keys are qualified as `table.field`.
+An unmatched left row is retained without right-table fields.
+Missing and explicit `null` join keys do not match.
+
+The implementation builds one in-memory equality map for the right table and rejects a result
+larger than 100,000 rows.
+This is a bounded nested execution boundary, not a cost-based planner or a streaming executor.
+The HTTP server does not expose cross-table joins yet.
+The join accepts the existing filter and projection rules, but not sort, pagination, aggregation,
+multiple join conditions, self-join aliases, or cross-table transactions.
+
+MongoDB's [`$lookup` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/)
+is the reference vocabulary.
+MongoDB describes `$lookup` as a left outer join that adds matching foreign documents as an array,
+while txBASE currently emits flat relational rows to match the attached join plan.
+The MongoDB documentation also calls out the performance cost of an unindexed foreign-side join,
+which is why this first slice has a hard result bound and no claim of planner-level performance.
+
+## 4. Current predicate vocabulary
 
 | Family | Operators | Current rule |
 | --- | --- | --- |

@@ -9,6 +9,7 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
 mod aggregation;
+pub mod join;
 mod ordering;
 mod pagination;
 mod planner;
@@ -151,7 +152,7 @@ impl QueryExecutor for DbfTable {
     }
 }
 
-fn matches_filter(
+pub(crate) fn matches_filter(
     values: &Map<String, Value>,
     filter: &Map<String, Value>,
 ) -> Result<bool, QueryError> {
@@ -342,3 +343,6 @@ mod cursor_tests;
 
 #[cfg(test)]
 mod aggregation_tests;
+
+#[cfg(test)]
+mod join_tests;

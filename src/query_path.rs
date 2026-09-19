@@ -3,8 +3,15 @@ use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
 pub(crate) fn project(record: &DbfRecord, projection: &BTreeMap<String, i8>) -> Value {
+    project_values(&record.values, projection)
+}
+
+pub(crate) fn project_values(
+    source: &Map<String, Value>,
+    projection: &BTreeMap<String, i8>,
+) -> Value {
     if projection.is_empty() {
-        return Value::Object(record.values.clone());
+        return Value::Object(source.clone());
     }
     if projection.values().any(|value| *value == 1) {
         let mut values = Map::new();
@@ -12,14 +19,14 @@ pub(crate) fn project(record: &DbfRecord, projection: &BTreeMap<String, i8>) -> 
             if *inclusion != 1 {
                 continue;
             }
-            let Some(value) = field_value(&record.values, field) else {
+            let Some(value) = field_value(source, field) else {
                 continue;
             };
-            insert_projected_value(&mut values, &record.values, field, value);
+            insert_projected_value(&mut values, source, field, value);
         }
         return Value::Object(values);
     }
-    let mut values = record.values.clone();
+    let mut values = source.clone();
     for field in projection
         .iter()
         .filter_map(|(field, exclusion)| (*exclusion == 0).then_some(field))

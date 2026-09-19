@@ -19,7 +19,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | Firestore and Realtime Database design | [Firebase model](firebase-model.md) | Reference |
 | SQLite test breadth and quality | [Testing and quality](testing-quality.md) | Current test map plus reference |
 | HTTP methods, PATCH, and QUERY | [HTTP semantics](http-semantics.md) | Current routes plus protocol reference |
-| Multi-table DBF discovery and schema lookup | [Catalog](catalog.md) | Current boundary plus future relational work |
+| Multi-table DBF discovery and bounded local equality join | [Catalog](catalog.md) and [Query model](query-model.md) | Current boundary plus future relational work |
 | External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, equality, histogram-estimated range ordering, ordered-prefix traversal, mixed-direction compound-prefix sorting, equality-prefix candidate choice, uniform-statistics-ordered equality intersection, and future full cost model |
 | CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Future |
 
@@ -63,6 +63,7 @@ The README organization follows the section shape of [texenv's README](https://g
 - [MongoDB cursors](https://www.mongodb.com/docs/manual/core/cursors/)
 - [MongoDB `$group` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
+- [MongoDB `$lookup` join stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/)
 
 ### Firebase
 

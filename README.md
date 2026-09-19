@@ -64,6 +64,11 @@ The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `p
 
 `aggregate` currently accepts one `$group` stage with `$count` and integer `$sum`; it cannot be combined with sort, projection, pagination, or limit controls.
 
+The library also exposes one bounded local `inner` or `left` equality join over two catalog tables.
+It accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,
+and is capped at 100,000 output rows.
+This join is not exposed by the single-table HTTP server yet.
+
 `QUERY` follows the HTTP QUERY boundary defined by [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html), including `Accept-Query: "application/json"`.
 
 ### Mutate
@@ -220,7 +225,7 @@ src/dbf/            DBF parsing, codecs, memo sidecars, maintenance, mutation, W
 src/catalog.rs      Direct-child DBF discovery, table lookup, and catalog verification
 src/index.rs        External scalar and compound-key index sidecar lifecycle
 src/query.rs        JSON query execution and filter evaluation
-src/query/          planner, ordering, validation, and query-specific tests
+src/query/          planner, ordering, validation, bounded join, and query-specific tests
 src/query_path.rs   Dotted-path traversal and projection helpers
 src/server.rs       HTTP routing, QUERY validation, and DBF mutations
 src/storage.rs      Range-based storage boundary
@@ -251,7 +256,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, sorted-query cursors, streaming, joins, aggregation, cross-table transactions, CJK encodings, and an XBF native format.
+Later phases may add a full cost-based index choice, sorted-query cursors, streaming, planned and multiple joins, multi-stage aggregation, cross-table transactions, CJK encodings, and an XBF native format.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

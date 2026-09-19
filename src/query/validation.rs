@@ -28,7 +28,7 @@ pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
     validate_filter(&request.filter, "filter")
 }
 
-fn validate_filter(filter: &Map<String, Value>, path: &str) -> Result<(), QueryError> {
+pub(super) fn validate_filter(filter: &Map<String, Value>, path: &str) -> Result<(), QueryError> {
     for (field, condition) in filter {
         match field.as_str() {
             "$and" | "$or" => {

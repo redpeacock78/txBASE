@@ -57,6 +57,11 @@ curl -i -X QUERY \
 `aggregate`は一つの`$group` stageに限定し、`$count`と整数`$sum`を使えます。
 `sort`、`projection`、pagination、`limit`との併用はできません。
 
+libraryにはcatalog table二つを読むboundedな`inner`または`left` equality joinもあります。
+添付仕様の`from`、`join.on`、`filter`、`projection`を受け付け、qualified keyのJSONを返します。
+resultは最大100,000行です。
+single-table HTTP serverからはまだ利用できません。
+
 `$expr`による同一record内のfield比較も、二つのscalar operandに限定して提供します。
 
 predicateは`$eq`、`$ne`、`$gt`、`$gte`、`$lt`、`$lte`、`$in`、`$nin`、`$and`、`$or`、`$not`、限定された`$expr`です。
@@ -121,6 +126,9 @@ txbase recall path/to/users.dbf 2
 `index rebuild`は明示的な修復手段です。
 
 path-aware plannerは、複数のsingle-field indexが有効なdirect equality filterであれば候補recordをintersectionできます。
+
+catalog joinは`txbase::query::join::parse`と`execute`から使います。
+複数join、cost-based planner、streaming、cross-table transactionは未実装です。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピーします。
 
