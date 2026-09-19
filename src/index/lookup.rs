@@ -1,6 +1,8 @@
 use super::{IndexError, IndexFile, IndexKey, ordering};
 use serde_json::Value;
 
+type CompoundOrdered = (String, Vec<String>, Vec<usize>);
+
 impl IndexFile {
     pub fn lookup_eq(&self, index_name: &str, value: &Value) -> Result<Vec<usize>, IndexError> {
         let key = IndexKey::from_value(Some(value))?;
@@ -130,7 +132,7 @@ impl IndexFile {
         &self,
         fields: &[&str],
         descending: bool,
-    ) -> Result<Option<(String, Vec<String>, Vec<usize>)>, IndexError> {
+    ) -> Result<Option<CompoundOrdered>, IndexError> {
         if fields.len() < 2 {
             return Ok(None);
         }
