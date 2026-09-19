@@ -7,4 +7,5 @@ pub mod storage;
 pub mod transaction;
 pub mod xbase;
 
+mod json_order;
 mod query_path;

@@ -1,5 +1,6 @@
 use super::*;
 use crate::index::{IndexDefinition, IndexFile};
+use serde_json::Number;
 use std::fs;
 
 fn table_with_two_active_records() -> DbfTable {
@@ -266,12 +267,18 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
         DbfTable::from_bytes(&bytes).unwrap()
     };
     fs::write(&path, bytes).unwrap();
-    IndexFile::build(&path, vec![IndexDefinition::named("by_name", "NAME")])
-        .unwrap()
-        .save(&path)
-        .unwrap();
+    IndexFile::build(
+        &path,
+        vec![
+            IndexDefinition::named("by_name", "NAME"),
+            IndexDefinition::named("by_age", "AGE"),
+        ],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
 
-    let request = parse(br#"{"filter":{"AGE":30,"NAME":"Alice"}}"#).unwrap();
+    let request = parse(br#"{"filter":{"ACTIVE":true,"NAME":"Alice"}}"#).unwrap();
     assert_eq!(
         explain_query_at(&path, &request).unwrap(),
         QueryPlan::EqualityIndex {
@@ -282,6 +289,19 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
     assert_eq!(
         execute_query_at(&table, &path, &request).unwrap(),
         execute_query(&table, &request).unwrap()
+    );
+
+    let range_request = parse(br#"{"filter":{"AGE":{"$gt":7,"$lt":31}}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &range_request).unwrap(),
+        QueryPlan::RangeIndex {
+            name: "by_age".into(),
+            field: "AGE".into(),
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &range_request).unwrap(),
+        execute_query(&table, &range_request).unwrap()
     );
 
     fs::remove_file(&sidecar).unwrap();

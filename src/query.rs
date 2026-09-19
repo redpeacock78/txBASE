@@ -2,7 +2,7 @@ use crate::dbf::{DbfRecord, DbfTable};
 use crate::query_path::{field_value, project};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Number, Value};
+use serde_json::{Map, Value};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -277,38 +277,10 @@ fn compare_for_sort(left: Option<&Value>, right: Option<&Value>) -> Ordering {
 
 fn compare_values(left: &Value, right: &Value) -> Option<Ordering> {
     match (left, right) {
-        (Value::Null, Value::Null) => Some(Ordering::Equal),
-        (Value::Bool(left), Value::Bool(right)) => Some(left.cmp(right)),
-        (Value::Number(left), Value::Number(right)) => compare_numbers(left, right),
-        (Value::String(left), Value::String(right)) => Some(left.cmp(right)),
         (Value::Array(left), Value::Array(right)) => Some(json_text(left).cmp(&json_text(right))),
         (Value::Object(left), Value::Object(right)) => Some(json_text(left).cmp(&json_text(right))),
-        _ => None,
+        _ => crate::json_order::compare_scalar_values(left, right),
     }
-}
-
-fn compare_numbers(left: &Number, right: &Number) -> Option<Ordering> {
-    if let (Some(left), Some(right)) = (left.as_i64(), right.as_i64()) {
-        return Some(left.cmp(&right));
-    }
-    if let (Some(left), Some(right)) = (left.as_u64(), right.as_u64()) {
-        return Some(left.cmp(&right));
-    }
-    if let (Some(left), Some(right)) = (left.as_i64(), right.as_u64()) {
-        return Some(if left < 0 {
-            Ordering::Less
-        } else {
-            (left as u64).cmp(&right)
-        });
-    }
-    if let (Some(left), Some(right)) = (left.as_u64(), right.as_i64()) {
-        return Some(if right < 0 {
-            Ordering::Greater
-        } else {
-            left.cmp(&(right as u64))
-        });
-    }
-    left.as_f64()?.partial_cmp(&right.as_f64()?)
 }
 
 fn json_text<T: Serialize>(value: &T) -> String {

@@ -92,10 +92,12 @@ DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sid
 
 Direct DBF edits, unsupported sidecar definitions, and refresh I/O failures leave the sidecar stale; `index rebuild` is the explicit repair path.
 
-The path-aware query executor uses an equality sidecar when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
+The path-aware query executor uses equality or range sidecar candidates when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
 
 The path-less `QueryExecutor` implementation remains a table-scan reference path.
 
-Range scans, ordered index traversal, multi-index selection, and crash-atomic DBF/index commits require separate contracts.
+The range candidate lookup scans the validated sidecar entries; it does not yet promise binary range seeks or ordered index traversal.
 
-The equality planner is tested alongside mutation, recovery, stale-index, and rebuild behavior; broader index support still needs range, sort, and crash-atomic contracts.
+Ordered index traversal, multi-index selection, and crash-atomic DBF/index commits require separate contracts.
+
+The equality and range planners are tested alongside mutation, recovery, stale-index, and rebuild behavior; broader index support still needs ordered-sort and crash-atomic contracts.

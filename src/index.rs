@@ -9,6 +9,7 @@ const INDEX_FORMAT: &str = "txbase-index";
 const INDEX_VERSION: u8 = 1;
 const INDEX_EXTENSION: &str = "txidx";
 
+mod ordering;
 mod storage;
 mod validation;
 
@@ -263,6 +264,32 @@ impl IndexFile {
                 .map(|entry| entry.records.clone())
                 .unwrap_or_default(),
         )))
+    }
+
+    pub(crate) fn lookup_range_for_field(
+        &self,
+        field: &str,
+        lower: Option<(&Value, bool)>,
+        upper: Option<(&Value, bool)>,
+    ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
+        if lower.is_none() && upper.is_none() {
+            return Err(IndexError::Invalid("range must have a bound".into()));
+        }
+        let Some(index) = self
+            .indexes
+            .iter()
+            .find(|index| index.definition.field == field)
+        else {
+            return Ok(None);
+        };
+        let mut records = index
+            .entries
+            .iter()
+            .filter(|entry| ordering::in_range(&entry.key, lower, upper))
+            .flat_map(|entry| entry.records.iter().copied())
+            .collect::<Vec<_>>();
+        records.sort_unstable();
+        Ok(Some((index.definition.name.clone(), records)))
     }
 
     pub fn schema_json(&self) -> Value {
