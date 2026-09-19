@@ -66,7 +66,12 @@ Neither mode combines with `skip`, and both are capped at 1,000 records.
 
 Physical cursor pages scan in record order and stop after the page plus one look-ahead match.
 Sorted cursor pages reuse the query sort comparator and provide a deterministic physical-record
-tie-breaker, but a public streaming or backpressure API remains future work.
+tie-breaker.
+
+The library also exposes `query::stream_query`, a borrowed iterator that applies filter,
+projection, skip, and limit without materializing the matching record set.
+It deliberately rejects sort, aggregate, page-size, and cursor controls, which need a blocking
+or resumable result boundary; backpressure and stable long-lived snapshot rules remain future work.
 
 `aggregate` currently accepts one `$group` stage with `$count` and integer `$sum`; it cannot be combined with sort, projection, pagination, or limit controls.
 
@@ -290,7 +295,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming, planned and multiple joins, multi-stage aggregation, cross-table transactions, additional CJK encodings, and schema-preserving XBF export.
+Later phases may add a full cost-based index choice, streaming backpressure and stable snapshots, planned and multiple joins, multi-stage aggregation, cross-table transactions, additional CJK encodings, and schema-preserving XBF export.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

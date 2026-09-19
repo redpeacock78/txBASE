@@ -56,7 +56,9 @@ curl -i -X QUERY \
 どちらのcursor modeも`skip`とは併用できず、最大1,000件です。
 physical cursor pageは、要求されたpageとlook-aheadのmatchを見つけた時点でscanを止めます。
 sorted cursor pageは既存のsort comparatorを再利用します。
-publicなstreamingまたはbackpressure APIは未実装です。
+libraryの`query::stream_query`は、matching record全体をmaterializeせずにfilter、projection、skip、limitを適用するborrowed iteratorです。
+sort、aggregate、page-size、cursorはblockingまたはresume boundaryを必要とするため拒否します。
+long-lived snapshotの安定性とbackpressureは未実装です。
 
 `aggregate`は一つの`$group` stageに限定し、`$count`と整数`$sum`を使えます。
 `sort`、`projection`、pagination、`limit`との併用はできません。
@@ -147,7 +149,7 @@ txbase xbf export path/to/users.xbf path/to/users.dbf
 path-aware plannerは、複数のsingle-field indexが有効なdirect equality filterであれば候補recordをintersectionできます。
 
 catalog joinは`txbase::query::join::parse`と`execute`から使います。
-複数join、cost-based planner、streaming、cross-table transactionは未実装です。
+複数join、cost-based planner、backpressure付きのstreaming、cross-table transactionは未実装です。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピーします。
 
@@ -226,7 +228,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
 一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
-full cost model、collation-aware planning、streaming、複数stageのaggregation、cross-table constraint、CJK encodingの拡張はroadmapで検討します。
+full cost model、collation-aware planning、backpressure付きのstreaming、複数stageのaggregation、cross-table constraint、CJK encodingの拡張はroadmapで検討します。
 XBFのwire contractは[XBF v1 format draft](docs/xbf.md)に記載しています。draftのcodec、DBFからXBFへの変換、限定されたXBFからDBFへのexport、durable snapshot path、generation付きfull-snapshot WAL recoveryは提供しますが、schemaを保持するexportは未対応です。
 
 ## License

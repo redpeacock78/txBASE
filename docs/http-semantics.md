@@ -144,7 +144,7 @@ The following require explicit contracts before implementation:
 
 - `ETag`, `If-Match`, and `If-None-Match` behavior.
 - `Content-Location` and cache-key rules for QUERY bodies.
-- Incremental streaming and backpressure.
+- HTTP streaming and backpressure.
 - CORS and authentication policy.
 - A standard patch media type in addition to the local update document.
 

@@ -65,12 +65,19 @@ Physical cursor pages scan active records in physical order and stop after one e
 record proves that another page exists.
 They deliberately bypass index candidate ordering, and `explain_query_at` reports a table scan
 for this mode.
-This keeps the page result bounded, but does not yet provide a public streaming iterator or
-backpressure protocol.
+This keeps the page result bounded.
 
 Sorted cursor pages use the existing sort comparison and materialize the matching record
 references before selecting the page.
 They provide a resumable result boundary but do not claim streaming or backpressure behavior.
+
+The library also exposes `query::stream_query` for a borrowed, pull-based iterator over active
+records.
+It applies `filter`, `projection`, `skip`, and `limit` as records are consumed, so it does not
+materialize the matching record set.
+It rejects `sort`, `aggregate`, `page_size`, and `cursor` because those controls require a
+blocking or resumable result boundary.
+The iterator does not provide a long-lived snapshot or an asynchronous backpressure protocol.
 
 ## 2. Bounded aggregation
 
@@ -333,7 +340,7 @@ The roadmap may later cover the following in separate contracts:
 1. Full expression evaluation and cost-based index choice with explicit missing, null, collation, and compound-range rules.
 2. A catalog for multiple tables and schema metadata.
 3. Joins and aggregation with bounded memory behavior.
-4. Incremental streaming with stable snapshot rules.
+4. Backpressure and stable snapshot rules for long-lived streams.
 5. Differential tests against a small reference evaluator.
 
 Until those contracts exist, the record scan is the simpler and more honest execution model.

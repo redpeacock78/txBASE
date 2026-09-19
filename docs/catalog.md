@@ -108,6 +108,6 @@ It does not provide a shared lock across tables.
 It does not infer relationships from field names.
 
 The local join supports one `inner` or `left` equality condition and a hard result bound.
-It does not provide a cost-based planner, streaming, multiple joins, or cross-table writes.
+It does not provide a cost-based planner, streaming backpressure, multiple joins, or cross-table writes.
 Cross-table transactions still require separate contracts for visibility, failure recovery, and
 malformed input.
