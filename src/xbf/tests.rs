@@ -1,7 +1,9 @@
 use super::{
     XbfField, XbfLimits, XbfRecord, XbfTable, XbfType, XbfValue, decode, decode_with_limits,
-    encode, encode_with_limits,
+    encode, encode_with_limits, read_path, write_path,
 };
+use std::fs;
+use std::path::PathBuf;
 
 fn fixture() -> XbfTable {
     XbfTable {
@@ -214,4 +216,26 @@ fn rejects_duplicate_unique_values_and_non_nullable_nulls() {
         }],
     };
     assert!(encode_with_limits(&table, &XbfLimits::default()).is_err());
+}
+
+#[test]
+fn writes_and_reads_a_durable_snapshot_path() {
+    let path = snapshot_test_path();
+    let _ = fs::remove_file(&path);
+    let table = fixture();
+
+    write_path(&path, &table).unwrap();
+    assert_eq!(read_path(&path).unwrap(), table);
+    write_path(&path, &table).unwrap();
+    assert_eq!(read_path(&path).unwrap(), table);
+
+    fs::remove_file(&path).unwrap();
+}
+
+fn snapshot_test_path() -> PathBuf {
+    std::env::temp_dir().join(format!(
+        "txbase-xbf-snapshot-{}-{}.xbf",
+        std::process::id(),
+        line!()
+    ))
 }

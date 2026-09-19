@@ -4,11 +4,12 @@ XBF is the proposed native txBASE snapshot format.
 
 This document is a design contract, not a compatibility claim.
 
-The repository now contains a bounded in-memory v1 codec at
-`txbase::xbf::{encode, decode}`. It validates the draft header, section checksums,
-schema, directory, typed records, constraints, and configured size limits.
-Durable `.xbf` files, DBF conversion, and `.xwl` recovery are still outside the
-supported-format boundary.
+The repository now contains a bounded v1 codec at
+`txbase::xbf::{encode, decode}` and durable snapshot helpers at
+`txbase::xbf::{read_path, write_path}`.
+The codec validates the draft header, section checksums, schema, directory, typed
+records, constraints, and configured size limits.
+DBF conversion and `.xwl` recovery are still outside the supported-format boundary.
 
 The codec is intentionally kept in the format layer. It does not add a second
 query or HTTP implementation.
@@ -200,7 +201,7 @@ Checksum failure is corruption, not an empty table.
 
 An invalid snapshot must not be replaced by a best-effort rewrite.
 
-The maximum file, section, record, field-name, and value sizes must be explicit configuration limits before the codec is implemented.
+The codec exposes explicit limits for file, section, record, field-name, and value sizes.
 
 ## 8. Generations and transaction log
 
@@ -242,14 +243,14 @@ This prevents XBF from becoming a second unrelated database implementation.
 
 ## 11. Implementation gates
 
-The draft codec currently has a deterministic in-memory fixture covering every
-non-reserved v1 type, corruption checks, constraint checks, and explicit size
-limits. Before XBF is advertised as a supported durable format, the repository
-still needs:
+The draft codec and snapshot writer currently have a deterministic fixture
+covering every non-reserved v1 type, corruption checks, constraint checks,
+explicit size limits, and a sync-and-reload path round trip. Before XBF is
+advertised as a complete supported format, the repository still needs:
 
 - Malformed header, section, checksum, directory, UTF-8, and payload corpora.
 - Round-trip tests for DBF to XBF and representability failures for XBF to DBF.
 - Crash and recovery tests for the snapshot and `.xwl` generation boundary.
-- A durable snapshot writer and a CLI or library entry point that makes file-format selection explicit.
+- An `.xwl` format that names its base generation and a recovery procedure that rejects mismatches.
 
 Until those gates exist, XBF remains a draft and is not advertised as a supported format.
