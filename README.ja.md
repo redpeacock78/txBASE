@@ -62,7 +62,8 @@ sort、aggregate、page-size、cursorはblockingまたはresume boundaryを必�
 非同期backpressure protocolは未実装です。
 
 `aggregate`は一つの`$group` stageと、その前に0個以上置けるboundedな`$match` stage、group後に一つだけ置ける出力用`$sort`と`$limit` stageを使えます。
-`$count`、整数`$sum`、および比較可能な値に対する`$min` / `$max`をサポートします。
+`$count`、整数`$sum`、数値の`$avg`、および比較可能な値に対する`$min` / `$max`をサポートします。
+`$avg`はmissing、null、非数値を無視し、group内に数値がなければ`null`を返します。
 top-levelの`sort`、`projection`、pagination、`limit`との併用はできません。
 
 libraryにはcatalog table二つを読むboundedな`inner`、`left`、`semi`、`anti` equality joinと`cross` joinがあります。

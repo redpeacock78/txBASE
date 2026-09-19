@@ -25,6 +25,7 @@ pub(super) struct AccumulatorSpec {
 #[derive(Debug, Clone)]
 pub(super) enum AccumulatorKind {
     Count,
+    Average(String),
     Sum(String),
     Min(String),
     Max(String),
@@ -200,6 +201,12 @@ fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
             "$count" if operand.as_object().is_some_and(|object| object.is_empty()) => {
                 AccumulatorKind::Count
             }
+            "$avg" => AccumulatorKind::Average(field_reference(
+                operand.as_str().ok_or_else(|| {
+                    QueryError::Invalid(format!("$group.{name}.$avg must be a field reference"))
+                })?,
+                &format!("$group.{name}.$avg"),
+            )?),
             "$sum" => AccumulatorKind::Sum(field_reference(
                 operand.as_str().ok_or_else(|| {
                     QueryError::Invalid(format!("$group.{name}.$sum must be a field reference"))

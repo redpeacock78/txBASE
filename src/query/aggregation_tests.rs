@@ -32,6 +32,26 @@ fn groups_filtered_records_with_count_and_integer_sum() {
 }
 
 #[test]
+fn groups_numeric_average_and_returns_null_for_missing_values() {
+    let table = table_with_two_active_records();
+    let request = parse(
+        br#"{
+            "aggregate": [{"$group": {
+                "_id": null,
+                "average_age": {"$avg": "$AGE"},
+                "missing_average": {"$avg": "$MISSING"}
+            }}]
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        execute_query(&table, &request).unwrap(),
+        vec![json!({"_id": null, "average_age": 18.0, "missing_average": null})]
+    );
+}
+
+#[test]
 fn groups_comparable_extremes_and_returns_null_for_missing_values() {
     let table = table_with_two_active_records();
     let request = parse(
@@ -143,6 +163,7 @@ fn rejects_unsupported_aggregation_combinations() {
         br#"{"sort":{"AGE":1},"aggregate":[{"$group":{"_id":null}}]}"#.as_slice(),
         br#"{"aggregate":[{"$count":"total"}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":"AGE"}}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null,"average":{"$avg":"AGE"}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$match":{}}]}"#.as_slice(),
         br#"{"aggregate":[{"$sort":{"_id":1}},{"$group":{"_id":null}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$sort":{}}]}"#.as_slice(),

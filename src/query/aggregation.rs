@@ -12,6 +12,7 @@ pub(super) use super::aggregation_plan::validate;
 #[derive(Debug)]
 enum AccumulatorState {
     Count(u64),
+    Average { total: f64, count: u64 },
     Sum(i128),
     Min(Option<Value>),
     Max(Option<Value>),
@@ -71,6 +72,28 @@ pub(super) fn execute(
                         QueryError::Invalid("aggregate count overflows u64".into())
                     })?;
                 }
+                (
+                    AccumulatorState::Average { total, count },
+                    aggregation_plan::AccumulatorKind::Average(field),
+                ) => {
+                    let Some(value) = field_value(&record.values, field) else {
+                        continue;
+                    };
+                    let Some(number) = value.as_number().and_then(serde_json::Number::as_f64)
+                    else {
+                        continue;
+                    };
+                    let next_total = *total + number;
+                    if !next_total.is_finite() {
+                        return Err(QueryError::Invalid(format!(
+                            "aggregate $avg field {field} exceeds finite JSON number range"
+                        )));
+                    }
+                    *total = next_total;
+                    *count = count.checked_add(1).ok_or_else(|| {
+                        QueryError::Invalid("aggregate average count overflows u64".into())
+                    })?;
+                }
                 (AccumulatorState::Sum(total), aggregation_plan::AccumulatorKind::Sum(field)) => {
                     let Some(value) = field_value(&record.values, field) else {
                         continue;
@@ -126,6 +149,10 @@ fn new_group(key: Value, spec: &aggregation_plan::GroupSpec) -> GroupState {
             .iter()
             .map(|accumulator| match &accumulator.kind {
                 aggregation_plan::AccumulatorKind::Count => AccumulatorState::Count(0),
+                aggregation_plan::AccumulatorKind::Average(_) => AccumulatorState::Average {
+                    total: 0.0,
+                    count: 0,
+                },
                 aggregation_plan::AccumulatorKind::Sum(_) => AccumulatorState::Sum(0),
                 aggregation_plan::AccumulatorKind::Min(_) => AccumulatorState::Min(None),
                 aggregation_plan::AccumulatorKind::Max(_) => AccumulatorState::Max(None),
@@ -143,6 +170,21 @@ fn finish_group(
     for (state, accumulator) in group.accumulators.into_iter().zip(&spec.accumulators) {
         let value = match state {
             AccumulatorState::Count(count) => Value::Number(count.into()),
+            AccumulatorState::Average { total, count } => {
+                if count == 0 {
+                    Value::Null
+                } else {
+                    let average = total / count as f64;
+                    serde_json::Number::from_f64(average)
+                        .map(Value::Number)
+                        .ok_or_else(|| {
+                            QueryError::Invalid(format!(
+                                "aggregate {} does not fit JSON",
+                                accumulator.name
+                            ))
+                        })?
+                }
+            }
             AccumulatorState::Sum(total) => {
                 Value::Number(number_from_i128(total, &accumulator.name)?)
             }
