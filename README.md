@@ -146,6 +146,8 @@ Normal DBF saves record and apply an existing sidecar's target through the WAL; 
 
 The path-aware planner can intersect candidates from multiple valid single-field indexes for direct equality filters.
 
+For multi-key sorts, it can use a single-field index for the first sort key and sort only equal-key groups by the remaining keys; this is not compound-index support.
+
 `pack` removes logically deleted records and renumbers the remaining physical records.
 
 `recall` restores one logically deleted record by its physical record number.
@@ -194,7 +196,8 @@ CI runs these checks on Ubuntu, macOS, and Windows.
 src/dbf/            DBF parsing, codecs, memo sidecars, maintenance, mutation, WAL, and tests
 src/catalog.rs      Direct-child DBF discovery, table lookup, and catalog verification
 src/index.rs        External scalar-key index sidecar lifecycle
-src/query.rs        JSON query execution and validation
+src/query.rs        JSON query execution and filter evaluation
+src/query/          planner, ordering, validation, and query-specific tests
 src/query_path.rs   Dotted-path traversal and projection helpers
 src/server.rs       HTTP routing, QUERY validation, and DBF mutations
 src/storage.rs      Range-based storage boundary
@@ -225,7 +228,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add multi-key ordered planning, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
+Later phases may add compound-index-backed ordering, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

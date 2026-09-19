@@ -116,13 +116,15 @@ It depends on the file system honoring the file and directory sync operations us
 
 ## Current boundary
 
-The sidecar currently supports build, exact equality lookup, range candidate lookup, single-field ordered traversal, equality candidate intersection across multiple single-field indexes, candidate-count ordering for that intersection, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
+The sidecar currently supports build, exact equality lookup, range candidate lookup, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, equality candidate intersection across multiple single-field indexes, candidate-count ordering for that intersection, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
 Direct DBF edits, unsupported sidecar definitions, and refresh I/O failures leave the sidecar stale; `index rebuild` is the explicit repair path.
 
-The path-aware query executor uses equality, equality intersection, range, or single-field ordered sidecar traversal when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
+The path-aware query executor uses equality, equality intersection, range, or ordered sidecar traversal when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
+
+For a multi-key sort, a single-field index supplies the first sort-key order and the executor stably sorts only equal-key groups by the remaining keys.
 
 For equality intersection, it uses the exact candidate-list length as a bounded local ordering heuristic; it does not maintain collection statistics or estimate selectivity.
 
@@ -134,6 +136,6 @@ It still materializes candidate record numbers and sorts them by physical DBF or
 
 `IndexFile::load` still validates the sidecar by rebuilding expected entries from the current DBF, so the binary-seek contract does not yet claim an end-to-end speedup.
 
-Multi-key ordered traversal, selectivity-aware index choice, and cross-table atomic commits require separate contracts.
+Compound-index-backed multi-key traversal, selectivity-aware index choice, and cross-table atomic commits require separate contracts.
 
-The equality, equality-intersection, range, and single-field ordered planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs multi-key and cross-table contracts.
+The equality, equality-intersection, range, single-field ordered, and ordered-prefix planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs compound-index and cross-table contracts.

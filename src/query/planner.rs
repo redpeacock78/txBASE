@@ -26,12 +26,17 @@ pub enum QueryPlan {
         field: String,
         direction: i8,
     },
+    OrderedIndexPrefix {
+        name: String,
+        field: String,
+        direction: i8,
+    },
 }
 
 pub(super) struct PlannedAccess {
     pub(super) plan: QueryPlan,
     pub(super) records: Option<Vec<usize>>,
-    pub(super) ordered: bool,
+    pub(super) ordered_prefix: usize,
 }
 
 pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
@@ -75,7 +80,7 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
         return PlannedAccess {
             plan,
             records: Some(records),
-            ordered: false,
+            ordered_prefix: 0,
         };
     }
     for (field, condition) in &request.filter {
@@ -92,24 +97,33 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
                 field: field.clone(),
             },
             records: Some(records),
-            ordered: false,
+            ordered_prefix: 0,
         };
     }
-    if request.sort.len() == 1 {
+    if !request.sort.is_empty() {
         let (field, direction) = request.sort.iter().next().expect("sort has one field");
         let Ok(Some((name, records))) =
             index_file.lookup_ordered_for_field(field, *direction == -1)
         else {
             return table_scan();
         };
-        return PlannedAccess {
-            plan: QueryPlan::OrderedIndex {
+        let plan = if request.sort.len() == 1 {
+            QueryPlan::OrderedIndex {
                 name,
                 field: field.clone(),
                 direction: *direction,
-            },
+            }
+        } else {
+            QueryPlan::OrderedIndexPrefix {
+                name,
+                field: field.clone(),
+                direction: *direction,
+            }
+        };
+        return PlannedAccess {
+            plan,
             records: Some(records),
-            ordered: true,
+            ordered_prefix: 1,
         };
     }
     table_scan()
@@ -119,7 +133,7 @@ fn table_scan() -> PlannedAccess {
     PlannedAccess {
         plan: QueryPlan::TableScan,
         records: None,
-        ordered: false,
+        ordered_prefix: 0,
     }
 }
 

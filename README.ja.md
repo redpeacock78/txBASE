@@ -170,7 +170,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 当面はDBF、memo、WAL、query、HTTPのcontractをfixtureとfailure testで固めます。
 
-secondary index sidecarの自動更新と単純なequality、equality intersection、range、single-field ordered plannerは実装済みです。multi-key ordered planner、join、aggregation、cursor、multi-record transaction、CJK encoding、XBFはroadmapで検討します。
+secondary index sidecarの自動更新と単純なequality、equality intersection、range、single-field ordered planner、multi-key sortのordered-prefix plannerは実装済みです。compound index、join、aggregation、cursor、multi-record transaction、CJK encoding、XBFはroadmapで検討します。
 
 ## License
 

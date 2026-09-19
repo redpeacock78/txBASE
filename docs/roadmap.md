@@ -30,9 +30,9 @@ The repository currently provides:
 - Startup recovery, stale-snapshot rejection, and an Ubuntu/macOS/Windows CI gate.
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
-- A rebuildable external scalar-key index sidecar with equality and range candidate lookup, single-field ordered traversal, equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
+- A rebuildable external scalar-key index sidecar with equality and range candidate lookup, single-field and ordered-prefix traversal, equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 
-The baseline intentionally does not include multi-key ordered-sort planner behavior, cursors, multi-record transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
+The baseline intentionally does not include compound-index-backed multi-key ordering, cursors, multi-record transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -62,13 +62,13 @@ It provides table discovery, named table loading, schema output, and per-table v
 
 It does not yet provide shared locks, relationships, cross-table index coordination, or cross-table transactions.
 
-The index sidecar foundation is implemented for scalar keys, exact equality and range candidate lookup, single-field ordered traversal, equality candidate intersection ordered by exact candidate cardinality, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
+The index sidecar foundation is implemented for scalar keys, exact equality and range candidate lookup, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, equality candidate intersection ordered by exact candidate cardinality, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support multi-key ordered planning, collection-statistics-based selectivity choice, compound indexes, or cross-table atomic commits.
+It does not yet support compound-index-backed multi-key planning, collection-statistics-based selectivity choice, compound indexes, or cross-table atomic commits.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
-An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, multi-key ordered planning, and crash behavior are specified and tested together.
+An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, compound-index-backed multi-key planning, and crash behavior are specified and tested together.
 
 A multi-record transaction is not complete until commit, rollback, crash recovery, and visibility rules are tested together.
 
@@ -82,7 +82,7 @@ The current record scan remains the reference execution path while the query mod
 - Field-to-field comparisons such as `$field` expressions.
 - Joins.
 - Constraints.
-- Range, ordered-sort, selectivity-aware, and compound-index query planning.
+- Range, compound-index-backed ordered-sort, and collection-statistics-based query planning.
 
 Joins should begin as local bounded operations.
 
@@ -202,4 +202,4 @@ The number of files is not a quality metric by itself.
 - Automatic CJK conversion when the declared encoding is ambiguous.
 - Planner-backed indexes, joins, aggregation, MVCC, XBF, object-storage, or distributed code without a contract and end-to-end test.
 
-The next index slice is intentionally local: multi-key ordered planning or selectivity-aware index choice, after their contracts are written.
+The next index slice is intentionally local: compound-index-backed multi-key planning or collection-statistics-based selectivity choice, after their contracts are written.

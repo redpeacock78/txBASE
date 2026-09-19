@@ -1,4 +1,4 @@
-use crate::dbf::{DbfRecord, DbfTable};
+use crate::dbf::DbfTable;
 use crate::query_path::{field_value, project};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -8,9 +8,11 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
+mod ordering;
 mod planner;
 mod validation;
 
+use ordering::{compare_records, compare_values, sort_ordered_prefix};
 pub use planner::QueryPlan;
 
 pub const JSON_QUERY_MEDIA_TYPE: &str = "application/json";
@@ -56,7 +58,7 @@ pub fn parse(body: &[u8]) -> Result<QueryRequest, QueryError> {
 
 pub fn execute_query(table: &DbfTable, request: &QueryRequest) -> Result<Vec<Value>, QueryError> {
     validation::validate(request)?;
-    execute_query_with_records(table, request, None, false)
+    execute_query_with_records(table, request, None, 0)
 }
 
 pub fn execute_query_at(
@@ -66,7 +68,7 @@ pub fn execute_query_at(
 ) -> Result<Vec<Value>, QueryError> {
     validation::validate(request)?;
     let access = planner::choose(dbf_path.as_ref(), request);
-    execute_query_with_records(table, request, access.records, access.ordered)
+    execute_query_with_records(table, request, access.records, access.ordered_prefix)
 }
 
 pub fn explain_query_at(
@@ -81,7 +83,7 @@ fn execute_query_with_records(
     table: &DbfTable,
     request: &QueryRequest,
     candidate_numbers: Option<Vec<usize>>,
-    ordered: bool,
+    ordered_prefix: usize,
 ) -> Result<Vec<Value>, QueryError> {
     let mut records = Vec::new();
     let candidates = candidate_numbers
@@ -98,8 +100,10 @@ fn execute_query_with_records(
         }
     }
 
-    if !ordered {
+    if ordered_prefix == 0 {
         records.sort_by(|left, right| compare_records(left, right, &request.sort));
+    } else if ordered_prefix < request.sort.len() {
+        sort_ordered_prefix(&mut records, &request.sort, ordered_prefix);
     }
 
     let skip = request
@@ -249,58 +253,6 @@ fn compare_any(
     }
 }
 
-fn compare_records(left: &DbfRecord, right: &DbfRecord, sort: &IndexMap<String, i8>) -> Ordering {
-    for (field, direction) in sort {
-        let left_value = field_value(&left.values, field);
-        let right_value = field_value(&right.values, field);
-        let ordering = compare_for_sort(left_value.as_ref(), right_value.as_ref());
-        if ordering != Ordering::Equal {
-            return if *direction == 1 {
-                ordering
-            } else {
-                ordering.reverse()
-            };
-        }
-    }
-    Ordering::Equal
-}
-
-fn compare_for_sort(left: Option<&Value>, right: Option<&Value>) -> Ordering {
-    match (left, right) {
-        (Some(left), Some(right)) => compare_values(left, right).unwrap_or_else(|| {
-            type_rank(left)
-                .cmp(&type_rank(right))
-                .then_with(|| left.to_string().cmp(&right.to_string()))
-        }),
-        (None, None) => Ordering::Equal,
-        (None, Some(_)) => Ordering::Less,
-        (Some(_), None) => Ordering::Greater,
-    }
-}
-
-fn compare_values(left: &Value, right: &Value) -> Option<Ordering> {
-    match (left, right) {
-        (Value::Array(left), Value::Array(right)) => Some(json_text(left).cmp(&json_text(right))),
-        (Value::Object(left), Value::Object(right)) => Some(json_text(left).cmp(&json_text(right))),
-        _ => crate::json_order::compare_scalar_values(left, right),
-    }
-}
-
-fn json_text<T: Serialize>(value: &T) -> String {
-    serde_json::to_string(value).unwrap_or_default()
-}
-
-fn type_rank(value: &Value) -> u8 {
-    match value {
-        Value::Null => 0,
-        Value::Bool(_) => 1,
-        Value::Number(_) => 2,
-        Value::String(_) => 3,
-        Value::Array(_) => 4,
-        Value::Object(_) => 5,
-    }
-}
-
 pub trait QueryExecutor {
     fn execute(&self, request: &QueryRequest) -> Result<Vec<Value>, QueryError>;
 }
@@ -310,3 +262,6 @@ mod malformed_tests;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod planner_tests;
