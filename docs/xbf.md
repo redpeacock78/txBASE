@@ -215,6 +215,8 @@ The optional `.xwl` log may contain the existing txBASE operation IR and snapsho
 
 The current library provides `save_with_wal` and `recover_path` for a full-snapshot record.
 Recovery validates the embedded snapshot before applying it, accepts an already-installed target generation idempotently, and rejects a different current generation.
+The WAL record, including its XBF-specific header, must fit the transaction layer's 16 MiB record limit.
+`write_path` can still persist a larger snapshot within the ordinary XBF file limit, but `save_with_wal` rejects an oversized WAL record before creating the `.xwl` file.
 
 A recovery procedure must reject a log that targets a different base generation.
 

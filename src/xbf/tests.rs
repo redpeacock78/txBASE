@@ -390,6 +390,12 @@ fn rejects_a_generation_mismatched_xbf_wal() {
     fs::remove_file(&wal_path).unwrap();
 }
 
+#[test]
+fn rejects_xbf_wal_records_over_the_file_wal_limit() {
+    assert!(super::wal::validate_record_size(crate::transaction::MAX_WAL_RECORD_SIZE + 1).is_err());
+    assert!(super::wal::validate_record_size(crate::transaction::MAX_WAL_RECORD_SIZE).is_ok());
+}
+
 fn snapshot_test_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
         "txbase-xbf-snapshot-{}-{name}.xbf",

@@ -1,7 +1,7 @@
 use super::checksum::crc32c;
 use super::persistence::{read_path, write_encoded_path};
 use super::{XbfError, XbfTable, decode, encode};
-use crate::transaction::{FileWal, Wal};
+use crate::transaction::{FileWal, MAX_WAL_RECORD_SIZE, Wal};
 use std::fs;
 use std::path::Path;
 
@@ -20,14 +20,11 @@ pub fn save_with_wal(path: impl AsRef<Path>, table: &XbfTable) -> Result<(), Xbf
         )));
     }
     let snapshot = encode(table)?;
+    let record = encode_record(base_generation, table.generation, &snapshot)?;
+    validate_record_size(record.len())?;
     let wal_path = wal_path(path);
     let mut wal = FileWal::open(&wal_path).map_err(wal_error)?;
-    wal.append(&encode_record(
-        base_generation,
-        table.generation,
-        &snapshot,
-    )?)
-    .map_err(wal_error)?;
+    wal.append(&record).map_err(wal_error)?;
     wal.sync().map_err(wal_error)?;
     write_encoded_path(path, &snapshot)?;
     wal.clear().map_err(wal_error)?;
@@ -133,6 +130,15 @@ fn decode_record(payload: &[u8]) -> Result<(u64, u64, Vec<u8>), XbfError> {
         ));
     }
     Ok((base_generation, target_generation, snapshot))
+}
+
+pub(super) fn validate_record_size(length: usize) -> Result<(), XbfError> {
+    if length > MAX_WAL_RECORD_SIZE {
+        return Err(XbfError::Invalid(format!(
+            "XBF WAL record exceeds the txBASE WAL limit of {MAX_WAL_RECORD_SIZE} bytes"
+        )));
+    }
+    Ok(())
 }
 
 fn current_generation(path: &Path) -> Result<u64, XbfError> {

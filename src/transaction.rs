@@ -5,7 +5,7 @@ use std::path::Path;
 
 const WAL_MAGIC: [u8; 4] = *b"TXWL";
 const WAL_HEADER_SIZE: usize = 16;
-const MAX_WAL_RECORD_SIZE: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_WAL_RECORD_SIZE: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Lsn(pub u64);
