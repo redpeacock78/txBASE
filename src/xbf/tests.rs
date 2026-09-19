@@ -221,7 +221,7 @@ fn rejects_duplicate_unique_values_and_non_nullable_nulls() {
 
 #[test]
 fn writes_and_reads_a_durable_snapshot_path() {
-    let path = snapshot_test_path();
+    let path = snapshot_test_path("durable");
     let _ = fs::remove_file(&path);
     let table = fixture();
 
@@ -235,7 +235,7 @@ fn writes_and_reads_a_durable_snapshot_path() {
 
 #[test]
 fn recovers_a_generation_checked_full_snapshot_wal() {
-    let path = snapshot_test_path();
+    let path = snapshot_test_path("recovery");
     let wal_path = path.with_extension("xwl");
     let _ = fs::remove_file(&path);
     let _ = fs::remove_file(&wal_path);
@@ -261,7 +261,7 @@ fn recovers_a_generation_checked_full_snapshot_wal() {
 
 #[test]
 fn rejects_a_generation_mismatched_xbf_wal() {
-    let path = snapshot_test_path();
+    let path = snapshot_test_path("mismatch");
     let wal_path = path.with_extension("xwl");
     let _ = fs::remove_file(&path);
     let _ = fs::remove_file(&wal_path);
@@ -289,10 +289,9 @@ fn rejects_a_generation_mismatched_xbf_wal() {
     fs::remove_file(&wal_path).unwrap();
 }
 
-fn snapshot_test_path() -> PathBuf {
+fn snapshot_test_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
-        "txbase-xbf-snapshot-{}-{}.xbf",
+        "txbase-xbf-snapshot-{}-{name}.xbf",
         std::process::id(),
-        line!()
     ))
 }
