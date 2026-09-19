@@ -18,6 +18,7 @@ An index file is JSON with this top-level shape:
     "dbf": {"length": 0, "hash": 0},
     "memo": null
   },
+  "statistics": {"active_record_count": 0},
   "indexes": [
     {
       "definition": {"name": "NAME", "field": "NAME"},
@@ -130,7 +131,7 @@ It depends on the file system honoring the file and directory sync operations us
 
 ## Current boundary
 
-The sidecar currently supports build, exact equality lookup, range candidate lookup, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, ascending compound-key construction and prefix traversal, equality candidate intersection across multiple single-field indexes, candidate-count ordering for that intersection, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
+The sidecar currently supports build, exact equality lookup, range candidate lookup, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, ascending compound-key construction and prefix traversal, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for that intersection, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
@@ -144,7 +145,11 @@ When the requested sort fields are a prefix of an ascending compound definition,
 
 Mixed sort directions do not use the current compound index because the definition has no per-field direction metadata.
 
-For equality intersection, it uses the exact candidate-list length as a bounded local ordering heuristic; it does not maintain collection statistics or estimate selectivity.
+The planner now records the active-record count and derives each single-field index's distinct-key count from its entries.
+
+It estimates an equality candidate count by assuming a uniform distribution, orders the candidate indexes by that estimate, and then uses exact record lists for the intersection.
+
+This estimate is a local statistic, not a histogram or a cost-based planner.
 
 The path-less `QueryExecutor` implementation remains a table-scan reference path.
 
@@ -154,6 +159,6 @@ It still materializes candidate record numbers and sorts them by physical DBF or
 
 `IndexFile::load` still validates the sidecar by rebuilding expected entries from the current DBF, so the binary-seek contract does not yet claim an end-to-end speedup.
 
-Collection-statistics-based index choice, mixed-direction compound definitions, and cross-table atomic commits require separate contracts.
+Histogram-based index choice, mixed-direction compound definitions, and cross-table atomic commits require separate contracts.
 
-The equality, equality-intersection, range, single-field ordered, ordered-prefix, and compound-prefix planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs collection statistics and cross-table contracts.
+The equality, equality-intersection, statistics-ordered, range, single-field ordered, ordered-prefix, and compound-prefix planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs histograms and cross-table contracts.

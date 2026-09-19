@@ -48,8 +48,22 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
     let Ok(index_file) = IndexFile::load(dbf_path) else {
         return table_scan();
     };
+    let mut equality_fields = request
+        .filter
+        .iter()
+        .filter_map(|(field, condition)| equality_value(condition).map(|_| field.clone()))
+        .collect::<Vec<_>>();
+    // ponytail: uniform distribution estimate; add histograms only if skew makes plan choices measurable.
+    equality_fields.sort_by_key(|field| {
+        index_file
+            .equality_selectivity_estimate(field)
+            .unwrap_or(usize::MAX)
+    });
     let mut equality_indexes = Vec::new();
-    for (field, condition) in &request.filter {
+    for field in equality_fields {
+        let Some(condition) = request.filter.get(&field) else {
+            continue;
+        };
         let Some(value) = equality_value(condition) else {
             continue;
         };
@@ -58,8 +72,6 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
         };
         equality_indexes.push((name, field.clone(), records));
     }
-    // ponytail: order by exact candidate count; add statistics only with a real cost model.
-    equality_indexes.sort_by_key(|(_, _, records)| records.len());
     if let Some((name, field, first_records)) = equality_indexes.first() {
         let mut records = first_records.clone();
         for (_, _, candidates) in equality_indexes.iter().skip(1) {

@@ -134,7 +134,7 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
 }
 
 #[test]
-fn orders_equality_intersection_by_candidate_cardinality() {
+fn orders_equality_intersection_by_index_statistics() {
     let path = std::env::temp_dir().join(format!(
         "txbase-query-planner-selectivity-{}.dbf",
         std::process::id()

@@ -4,6 +4,19 @@ use serde_json::Value;
 type CompoundOrdered = (String, Vec<String>, Vec<usize>);
 
 impl IndexFile {
+    pub(crate) fn equality_selectivity_estimate(&self, field: &str) -> Option<usize> {
+        let index = self.indexes.iter().find(|index| {
+            index.definition.fields.len() == 1 && index.definition.fields[0] == field
+        })?;
+        let distinct_keys = index.entries.len();
+        if distinct_keys == 0 {
+            return Some(0);
+        }
+        let records = self.active_record_count();
+        let remainder = if records % distinct_keys == 0 { 0 } else { 1 };
+        Some(records / distinct_keys + remainder)
+    }
+
     pub fn lookup_eq(&self, index_name: &str, value: &Value) -> Result<Vec<usize>, IndexError> {
         let key = IndexKey::from_value(Some(value))?;
         let index = self

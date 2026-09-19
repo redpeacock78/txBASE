@@ -68,6 +68,9 @@ fn refreshed_index(
         .collect::<Vec<_>>();
     let indexes = super::validation::build_indexes(table, &definitions)?;
     let source = super::storage::source_fingerprint_for(dbf_path, dbf_bytes, memo_bytes)?;
+    let statistics = Some(super::CollectionStatistics {
+        active_record_count: table.active_records().count(),
+    });
     if existing.source == source && existing.indexes == indexes {
         return Ok(None);
     }
@@ -76,6 +79,7 @@ fn refreshed_index(
         format: INDEX_FORMAT.to_owned(),
         version: INDEX_VERSION,
         source,
+        statistics,
         indexes,
     }))
 }

@@ -246,12 +246,20 @@ struct SourceFingerprint {
     memo: Option<FileFingerprint>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CollectionStatistics {
+    active_record_count: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IndexFile {
     format: String,
     version: u8,
     source: SourceFingerprint,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    statistics: Option<CollectionStatistics>,
     indexes: Vec<SecondaryIndex>,
 }
 
@@ -268,10 +276,14 @@ impl IndexFile {
         let table = DbfTable::from_path(dbf_path)?;
         let source = storage::source_fingerprint(dbf_path)?;
         let indexes = validation::build_indexes(&table, &definitions)?;
+        let statistics = Some(CollectionStatistics {
+            active_record_count: table.active_records().count(),
+        });
         Ok(Self {
             format: INDEX_FORMAT.to_owned(),
             version: INDEX_VERSION,
             source,
+            statistics,
             indexes,
         })
     }
@@ -320,23 +332,42 @@ impl IndexFile {
             .collect()
     }
 
+    pub(crate) fn active_record_count(&self) -> usize {
+        self.statistics
+            .as_ref()
+            .map(|statistics| statistics.active_record_count)
+            .unwrap_or_else(|| {
+                self.indexes
+                    .first()
+                    .map(|index| index.entries.iter().map(|entry| entry.records.len()).sum())
+                    .unwrap_or_default()
+            })
+    }
+
     pub fn schema_json(&self) -> Value {
         json!({
             "format": self.format,
             "version": self.version,
             "source": self.source,
+            "statistics": {
+                "active_record_count": self.active_record_count(),
+            },
             "indexes": self.indexes.iter().map(|index| {
                 if index.definition.fields.len() == 1 {
                     json!({
                         "name": index.definition.name,
                         "field": index.definition.fields[0],
                         "entry_count": index.entries.len(),
+                        "distinct_key_count": index.entries.len(),
+                        "indexed_record_count": index.entries.iter().map(|entry| entry.records.len()).sum::<usize>(),
                     })
                 } else {
                     json!({
                         "name": index.definition.name,
                         "fields": index.definition.fields,
                         "entry_count": index.entries.len(),
+                        "distinct_key_count": index.entries.len(),
+                        "indexed_record_count": index.entries.iter().map(|entry| entry.records.len()).sum::<usize>(),
                     })
                 }
             }).collect::<Vec<_>>(),

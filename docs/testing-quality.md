@@ -114,7 +114,7 @@ A delta with the wrong base must be rejected.
 
 `src/query/planner_tests.rs::uses_a_valid_equality_index_and_preserves_scan_results` covers single-index equality, equality intersection, empty intersections, range, ordered traversal, and table-scan equivalence.
 
-`src/query/planner_tests.rs::orders_equality_intersection_by_candidate_cardinality` covers the local smallest-candidate-first heuristic and compares its result with the table scan.
+`src/query/planner_tests.rs::orders_equality_intersection_by_index_statistics` covers uniform distinct-key estimates and compares the statistics-ordered result with the table scan.
 
 `src/query/planner_tests.rs::uses_an_ordered_index_prefix_for_multi_key_sort` covers first-key index traversal, secondary-key tie sorting, and table-scan equivalence.
 

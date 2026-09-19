@@ -121,9 +121,11 @@ The current planner considers direct top-level equality, single-bound-per-side r
 
 Multiple valid single-field equality indexes may be intersected by record number before the normal filter pipeline.
 
-The planner processes those candidate lists from the smallest exact list to the largest, which limits repeated membership checks when predicates have different cardinalities.
+The planner uses the sidecar's active-record count and each single-field index's distinct-key count to estimate equality cardinality before loading candidate lists.
 
-This is a local candidate-ordering heuristic, not MongoDB-style statistics, histograms, or a cost-based planner.
+It processes the exact candidate lists in estimated-selectivity order, which limits repeated membership checks when predicates have different expected cardinalities.
+
+The estimate assumes a uniform distribution, so it is a local statistic rather than MongoDB-style histograms or a cost-based planner.
 
 For a multi-key sort, a single-field index provides the first-key order and the remaining keys are sorted in memory within each equal first-key group.
 
@@ -139,7 +141,7 @@ The txBASE intersection is a local candidate-reduction feature and does not clai
 
 MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a future compound-index planner must define index field order instead of treating every index as an interchangeable lookup table.
 
-txBASE currently has no collection statistics or selectivity estimate, and compound definitions do not carry per-field direction metadata.
+txBASE currently has an active-record count and uniform distinct-key estimate, but no value-frequency histogram, cost model, or per-field direction metadata for compound definitions.
 
 The equality intersection is a bounded candidate prefilter, not a covered query or a claim of end-to-end speedup.
 
@@ -183,7 +185,7 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 
 The roadmap may later cover the following in separate contracts:
 
-1. Collection-statistics-based index choice and mixed-direction compound planning with explicit missing, null, and collation rules.
+1. Histogram-based index choice and mixed-direction compound planning with explicit missing, null, and collation rules.
 2. A catalog for multiple tables and schema metadata.
 3. Joins and aggregation with bounded memory behavior.
 4. Cursors or streaming responses with stable snapshot rules.
