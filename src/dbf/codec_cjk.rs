@@ -23,10 +23,10 @@ pub(crate) fn encoding_name(language_driver: u8) -> Option<&'static str> {
 
 fn encoding(language_driver: u8) -> Option<&'static Encoding> {
     Some(match language_driver {
-        0x78 => &BIG5,
-        0x79 => &EUC_KR,
-        0x7a => &GBK,
-        0x7b => &SHIFT_JIS,
+        0x78 => BIG5,
+        0x79 => EUC_KR,
+        0x7a => GBK,
+        0x7b => SHIFT_JIS,
         _ => return None,
     })
 }
