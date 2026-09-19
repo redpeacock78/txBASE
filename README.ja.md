@@ -95,7 +95,7 @@ HTTP境界の詳細は[HTTP method semantics](docs/http-semantics.md)を参照�
 `HEAD /records`と`HEAD /records/{id}`はGETと同じstatus/headerを返し、response bodyを転送しません。
 
 成功する`GET /records`と`GET /records/{id}`は現在のtable representationを示すstrongな`ETag`を返します。
-GETは`If-None-Match`にも対応し、一致すれば`304 Not Modified`を返します。
+GETとHEADは`If-None-Match`にも対応し、一致すれば`304 Not Modified`を返します。
 `POST`、`PUT`、`PATCH`、`DELETE`、`POST /transaction`には任意の`If-Match`を付けられます。
 currentなstrong tagまたは既存resourceに対する`*`以外は`412 Precondition Failed`となり、tableは変更されません。
 
