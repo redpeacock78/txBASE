@@ -123,9 +123,9 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
             )));
         }
         let mut output = Vec::new();
-        for left_record in &left_records {
-            for right_record in &right_records {
-                emit(&mut output, request, *left_record, Some(*right_record))?;
+        for &left_record in &left_records {
+            for &right_record in &right_records {
+                emit(&mut output, request, left_record, Some(right_record))?;
             }
         }
         return Ok(output);
