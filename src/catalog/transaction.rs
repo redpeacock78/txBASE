@@ -1,4 +1,4 @@
-pub(crate) use super::journal::{CatalogReadLock, CatalogWriteLock, read_lock};
+pub(crate) use super::journal::{CatalogReadLock, CatalogWriteLock, read_lock, write_lock};
 use super::journal::{FileChange, commit};
 use super::{Catalog, CatalogError, CatalogTransactionError};
 use crate::dbf::DbfTable;
