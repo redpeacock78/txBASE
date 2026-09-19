@@ -81,7 +81,7 @@ The current txBASE subset intentionally stops at comparison, membership, and log
 
 MongoDB's [find command](https://www.mongodb.com/docs/manual/reference/command/find/) separates a filter from projection, sort, skip, limit, hint, and related cursor controls.
 
-That separation is useful for txBASE because query validation, result shaping, and a future planner can evolve independently.
+That separation is useful for txBASE because query validation, result shaping, and planner access paths can evolve independently.
 
 MongoDB's [comparison predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/) documents operators such as `$eq`, `$gt`, `$gte`, `$lt`, `$lte`, `$ne`, `$in`, and `$nin`.
 
@@ -99,13 +99,19 @@ The [MongoDB query optimization guide](https://www.mongodb.com/docs/manual/core/
 
 It also warns that low-selectivity operators such as `$ne` and `$nin` often do not benefit from an index in the same way as selective equality predicates.
 
-txBASE currently uses the record scan as the query executor reference path.
+txBASE keeps the record scan as the query executor reference path.
 
-The repository now has a rebuildable external scalar-key sidecar in [`docs/indexes.md`](indexes.md), but the query executor does not consume it automatically.
+The path-aware query entry point now attempts one external scalar-key equality lookup before applying the same filter, sort, projection, skip, and limit pipeline.
+
+The planner reports either `TableScan` or `EqualityIndex` through `explain_query_at`.
+
+Missing, stale, malformed, and semantically unsupported sidecars fall back to `TableScan` because the sidecar is an optional acceleration structure.
 
 Connecting an index to query execution is therefore not just a parser change.
 
 It needs a key encoding, null and missing-field rules, duplicate ordering, update maintenance, recovery records, stale-index detection, and a planner policy.
+
+The current planner only considers direct top-level equality predicates and preserves the table scan for range, sort, logical, and nested-path planning.
 
 The roadmap keeps index design separate from the query syntax so a query document does not imply an implementation strategy.
 
@@ -147,7 +153,7 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 
 The roadmap may later cover the following in separate contracts:
 
-1. Planner use for secondary indexes with explicit missing, null, and collation rules.
+1. Range, ordered-sort, and multi-index planning with explicit missing, null, and collation rules.
 2. A catalog for multiple tables and schema metadata.
 3. Joins and aggregation with bounded memory behavior.
 4. Cursors or streaming responses with stable snapshot rules.
@@ -164,5 +170,6 @@ Until those contracts exist, the record scan is the simpler and more honest exec
 - [MongoDB array predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [MongoDB query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
+- [SQLite query planning](https://www.sqlite.org/queryplanner.html)
 - [MongoDB update operators](https://www.mongodb.com/docs/manual/reference/mql/update/)
 - [MongoDB atomicity and transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/)

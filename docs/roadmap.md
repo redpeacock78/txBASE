@@ -30,9 +30,9 @@ The repository currently provides:
 - Startup recovery, stale-snapshot rejection, and an Ubuntu/macOS/Windows CI gate.
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
-- A rebuildable external scalar-key index sidecar with equality lookup and DBF/memo freshness checks.
+- A rebuildable external scalar-key index sidecar with equality lookup, path-aware equality planning, and DBF/memo freshness checks.
 
-The baseline intentionally does not include planner-backed secondary indexes, cursors, multi-record transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
+The baseline intentionally does not include range or sort planner behavior, cursors, multi-record transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -62,13 +62,13 @@ It provides table discovery, named table loading, schema output, and per-table v
 
 It does not yet provide shared locks, relationships, cross-table index coordination, or cross-table transactions.
 
-The index sidecar foundation is implemented for scalar keys, exact equality lookup, stale detection, explicit rebuild, and best-effort refresh after normal persistence or WAL recovery.
+The index sidecar foundation is implemented for scalar keys, exact equality lookup, path-aware equality planning, stale detection, explicit rebuild, and best-effort refresh after normal persistence or WAL recovery.
 
-It does not yet participate in query planning or provide crash-atomic DBF/index commits.
+It does not yet support range or ordered-sort planning, multi-index selection, or crash-atomic DBF/index commits.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
-An index is not complete until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, and planner use are specified and tested together.
+An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, range and sort planning, and crash behavior are specified and tested together.
 
 A multi-record transaction is not complete until commit, rollback, crash recovery, and visibility rules are tested together.
 
@@ -82,7 +82,7 @@ The current record scan remains the reference execution path while the query mod
 - Field-to-field comparisons such as `$field` expressions.
 - Joins.
 - Constraints.
-- A simple query planner.
+- Range, ordered-sort, and multi-index query planning.
 
 Joins should begin as local bounded operations.
 

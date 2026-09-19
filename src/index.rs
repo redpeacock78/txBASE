@@ -241,6 +241,30 @@ impl IndexFile {
             .unwrap_or_default())
     }
 
+    pub(crate) fn lookup_eq_for_field(
+        &self,
+        field: &str,
+        value: &Value,
+    ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
+        let Some(index) = self
+            .indexes
+            .iter()
+            .find(|index| index.definition.field == field)
+        else {
+            return Ok(None);
+        };
+        let key = IndexKey::from_value(Some(value))?;
+        Ok(Some((
+            index.definition.name.clone(),
+            index
+                .entries
+                .iter()
+                .find(|entry| entry.key == key)
+                .map(|entry| entry.records.clone())
+                .unwrap_or_default(),
+        )))
+    }
+
     pub fn schema_json(&self) -> Value {
         json!({
             "format": self.format,

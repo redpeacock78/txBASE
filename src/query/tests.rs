@@ -1,4 +1,6 @@
 use super::*;
+use crate::index::{IndexDefinition, IndexFile};
+use std::fs;
 
 fn table_with_two_active_records() -> DbfTable {
     let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
@@ -240,4 +242,59 @@ fn compares_large_integer_values_exactly() {
     let condition = serde_json::json!({"$gt": u64::MAX - 1});
 
     assert!(matches_condition(Some(&maximum), &condition).unwrap());
+}
+
+#[test]
+fn uses_a_valid_equality_index_and_preserves_scan_results() {
+    let path =
+        std::env::temp_dir().join(format!("txbase-query-planner-{}.dbf", std::process::id()));
+    let sidecar = crate::index::sidecar_path(&path);
+    let lock = path.with_extension("txbase.lock");
+    let wal = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&sidecar);
+    let _ = fs::remove_file(&lock);
+    let _ = fs::remove_file(&wal);
+
+    let bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    let table = {
+        let mut bytes = bytes.clone();
+        bytes[179] = b' ';
+        DbfTable::from_bytes(&bytes).unwrap()
+    };
+    fs::write(&path, bytes).unwrap();
+    IndexFile::build(&path, vec![IndexDefinition::named("by_name", "NAME")])
+        .unwrap()
+        .save(&path)
+        .unwrap();
+
+    let request = parse(br#"{"filter":{"AGE":30,"NAME":"Alice"}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &request).unwrap(),
+        QueryPlan::EqualityIndex {
+            name: "by_name".into(),
+            field: "NAME".into(),
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &request).unwrap(),
+        execute_query(&table, &request).unwrap()
+    );
+
+    fs::remove_file(&sidecar).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &request).unwrap(),
+        QueryPlan::TableScan
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &request).unwrap(),
+        execute_query(&table, &request).unwrap()
+    );
+
+    fs::remove_file(path).unwrap();
+    let _ = fs::remove_file(lock);
+    let _ = fs::remove_file(wal);
 }

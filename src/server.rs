@@ -29,7 +29,7 @@ fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
     let response = if matches!(request.method(), Method::Get) {
         get_response(&path, table)
     } else if is_query {
-        query_response(&mut request, &path, table)
+        query_response_at(&mut request, &path, table, dbf_path)
     } else if matches!(request.method(), Method::Post) {
         post_response(&mut request, &path, table, dbf_path)
     } else if matches!(request.method(), Method::Put) {
@@ -67,7 +67,26 @@ fn get_response(path: &str, table: &DbfTable) -> HttpResponse {
     }
 }
 
+#[cfg(test)]
 fn query_response(request: &mut Request, path: &str, table: &DbfTable) -> HttpResponse {
+    query_response_with_path(request, path, table, None)
+}
+
+fn query_response_at(
+    request: &mut Request,
+    path: &str,
+    table: &DbfTable,
+    dbf_path: &Path,
+) -> HttpResponse {
+    query_response_with_path(request, path, table, Some(dbf_path))
+}
+
+fn query_response_with_path(
+    request: &mut Request,
+    path: &str,
+    table: &DbfTable,
+    dbf_path: Option<&Path>,
+) -> HttpResponse {
     if path != "/records" {
         return json_response(404, error("not_found", "resource not found"), false);
     }
@@ -81,7 +100,11 @@ fn query_response(request: &mut Request, path: &str, table: &DbfTable) -> HttpRe
             return json_response(422, error("invalid_query", &query_error.to_string()), true);
         }
     };
-    match query::execute_query(table, &query) {
+    let result = match dbf_path {
+        Some(dbf_path) => query::execute_query_at(table, dbf_path, &query),
+        None => query::execute_query(table, &query),
+    };
+    match result {
         Ok(records) => query_result_response(request, Value::Array(records)),
         Err(query_error) => {
             json_response(422, error("invalid_query", &query_error.to_string()), true)

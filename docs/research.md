@@ -20,7 +20,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | SQLite test breadth and quality | [Testing and quality](testing-quality.md) | Current test map plus reference |
 | HTTP methods, PATCH, and QUERY | [HTTP semantics](http-semantics.md) | Current routes plus protocol reference |
 | Multi-table DBF discovery and schema lookup | [Catalog](catalog.md) | Current boundary plus future relational work |
-| External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance plus future planner |
+| External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance and equality planner plus future range planner |
 | CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Future |
 
 ## Research method
@@ -67,6 +67,8 @@ The README organization follows the section shape of [texenv's README](https://g
 ### SQLite
 
 - [How SQLite Is Tested](https://sqlite.org/testing.html)
+- [SQLite query planning](https://sqlite.org/queryplanner.html)
+- [SQLite requirements](https://sqlite.org/requirements.html)
 - [SQLite TH3](https://sqlite.org/th3.html)
 - [SQLite limits](https://sqlite.org/limits.html)
 

@@ -8,7 +8,10 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
+mod planner;
 mod validation;
+
+pub use planner::QueryPlan;
 
 pub const JSON_QUERY_MEDIA_TYPE: &str = "application/json";
 pub const SUPPORTED_FILTER_OPERATORS: &[&str] = &[
@@ -53,8 +56,42 @@ pub fn parse(body: &[u8]) -> Result<QueryRequest, QueryError> {
 
 pub fn execute_query(table: &DbfTable, request: &QueryRequest) -> Result<Vec<Value>, QueryError> {
     validation::validate(request)?;
+    execute_query_with_records(table, request, None)
+}
+
+pub fn execute_query_at(
+    table: &DbfTable,
+    dbf_path: impl AsRef<std::path::Path>,
+    request: &QueryRequest,
+) -> Result<Vec<Value>, QueryError> {
+    validation::validate(request)?;
+    let access = planner::choose(dbf_path.as_ref(), request);
+    execute_query_with_records(table, request, access.records)
+}
+
+pub fn explain_query_at(
+    dbf_path: impl AsRef<std::path::Path>,
+    request: &QueryRequest,
+) -> Result<QueryPlan, QueryError> {
+    validation::validate(request)?;
+    Ok(planner::choose(dbf_path.as_ref(), request).plan)
+}
+
+fn execute_query_with_records(
+    table: &DbfTable,
+    request: &QueryRequest,
+    candidate_numbers: Option<Vec<usize>>,
+) -> Result<Vec<Value>, QueryError> {
     let mut records = Vec::new();
-    for record in table.active_records() {
+    let candidates = candidate_numbers
+        .map(|numbers| {
+            numbers
+                .into_iter()
+                .filter_map(|number| table.active_record(number))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| table.active_records().collect());
+    for record in candidates {
         if matches_filter(&record.values, &request.filter)? {
             records.push(record);
         }
