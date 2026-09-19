@@ -32,7 +32,7 @@ The repository currently provides:
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
-- A bounded aggregation pipeline with zero or more `$match` stages before one `$group` stage using `$count`, integer `$sum`, `$min`, and `$max`, plus one final `$sort` over group output.
+- A bounded aggregation pipeline with zero or more `$match` stages before one `$group` stage using `$count`, integer `$sum`, `$min`, and `$max`, plus final `$sort` and `$limit` stages over group output.
 - A bounded local `inner`, `left`, `semi`, or `anti` equality join plus a bounded `cross` join over two catalog tables with qualified filtering and projection.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
@@ -42,7 +42,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, and generation-checked full-snapshot WAL recovery with explicit size limits and section checksums.
 
-The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, multiple or planned joins, cross-table transactions, aggregation stages beyond bounded `$match`, `$group`, and final `$sort`, composite or cross-table constraints, a multi-file atomic XBF export commit, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, multiple or planned joins, cross-table transactions, aggregation stages beyond bounded `$match`, `$group`, final `$sort`, and final `$limit`, composite or cross-table constraints, a multi-file atomic XBF export commit, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 

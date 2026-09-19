@@ -112,6 +112,9 @@ pub(super) fn execute(
     if let Some(sort) = &plan.sort {
         output.sort_by(|left, right| compare_output_values(left, right, sort));
     }
+    if let Some(limit) = plan.limit {
+        output.truncate(limit.try_into().unwrap_or(usize::MAX));
+    }
     Ok(output)
 }
 

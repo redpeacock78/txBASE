@@ -37,6 +37,18 @@ The pipeline may also end with one bounded `$sort` stage over the group output:
 }
 ```
 
+An optional final `$limit` may follow `$sort` (or `$group` when sorting is omitted):
+
+```json
+{
+  "aggregate": [
+    {"$group": {"_id": "$COUNTRY", "count": {"$count": {}}}},
+    {"$sort": {"count": -1}},
+    {"$limit": 10}
+  ]
+}
+```
+
 The top-level keys are validated.
 
 Unknown keys are rejected rather than ignored.
@@ -114,7 +126,7 @@ preceding `$match` stages:
 ```
 
 The current aggregation boundary accepts one `$group` stage, zero or more `$match` stages before it,
-and at most one final `$sort` stage.
+at most one final `$sort` stage, and at most one final `$limit` stage.
 `_id` is either `null` or one dotted field reference.
 The supported accumulators are `$count: {}`, `$sum: "$FIELD"`, `$min: "$FIELD"`, and
 `$max: "$FIELD"`.
@@ -133,8 +145,9 @@ The executor rejects more than 10,000 groups and rejects combining aggregation w
 projection, skip, limit, or cursor pagination.
 Without `$sort`, group output order is not part of the contract, although the current implementation
 emits a deterministic key order. `$sort` uses the existing JSON sort ordering and stable ties.
+`$limit` accepts a non-negative integer and truncates the materialized group result after sorting.
 `$match` stages use the same predicate rules as the top-level `filter` and must precede `$group`.
-Stages after `$sort`, additional grouping stages, and expression operands remain unsupported.
+Stages after `$limit`, additional grouping stages, and expression operands remain unsupported.
 
 MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as
 `$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).

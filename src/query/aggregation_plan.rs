@@ -13,6 +13,7 @@ pub(super) struct AggregationPlan {
     pub(super) matches: Vec<Map<String, Value>>,
     pub(super) group: GroupSpec,
     pub(super) sort: Option<IndexMap<String, i8>>,
+    pub(super) limit: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +59,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
     let mut matches = Vec::new();
     let mut group = None;
     let mut sort = None;
+    let mut limit = None;
     for (index, stage) in stages.iter().enumerate() {
         if stage.len() != 1 {
             return Err(QueryError::Invalid(format!(
@@ -74,8 +76,11 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
                 matches.push(filter.clone());
             }
             "$group" if group.is_none() => group = Some(parse_group(value)?),
-            "$sort" if group.is_some() && sort.is_none() => {
+            "$sort" if group.is_some() && sort.is_none() && limit.is_none() => {
                 sort = Some(parse_sort(value, index)?);
+            }
+            "$limit" if group.is_some() && limit.is_none() => {
+                limit = Some(parse_limit(value, index)?);
             }
             "$match" => {
                 return Err(QueryError::Invalid(format!(
@@ -89,7 +94,12 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
             }
             "$sort" => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate stage {index}.$sort must follow $group and appear once"
+                    "aggregate stage {index}.$sort must follow $group, precede $limit, and appear once"
+                )));
+            }
+            "$limit" => {
+                return Err(QueryError::Invalid(format!(
+                    "aggregate stage {index}.$limit must follow $group and appear once"
                 )));
             }
             _ => {
@@ -106,6 +116,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
         matches,
         group,
         sort,
+        limit,
     })
 }
 
@@ -138,6 +149,15 @@ fn parse_sort(value: &Value, index: usize) -> Result<IndexMap<String, i8>, Query
         sort.insert(field.clone(), direction as i8);
     }
     Ok(sort)
+}
+
+fn parse_limit(value: &Value, index: usize) -> Result<u64, QueryError> {
+    let Some(limit) = value.as_u64() else {
+        return Err(QueryError::Invalid(format!(
+            "aggregate stage {index}.$limit must be a non-negative integer"
+        )));
+    };
+    Ok(limit)
 }
 
 fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {

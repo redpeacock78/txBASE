@@ -61,7 +61,7 @@ sort、aggregate、page-size、cursorはblockingまたはresume boundaryを必�
 `query::stream_query_snapshot`はloaded tableのcloneを保持するため、元tableへの後続mutationから独立したpull-based iteratorです。
 非同期backpressure protocolは未実装です。
 
-`aggregate`は一つの`$group` stageと、その前に0個以上置けるboundedな`$match` stage、group後に一つだけ置ける出力用`$sort` stageを使えます。
+`aggregate`は一つの`$group` stageと、その前に0個以上置けるboundedな`$match` stage、group後に一つだけ置ける出力用`$sort`と`$limit` stageを使えます。
 `$count`、整数`$sum`、および比較可能な値に対する`$min` / `$max`をサポートします。
 top-levelの`sort`、`projection`、pagination、`limit`との併用はできません。
 

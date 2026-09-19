@@ -114,6 +114,29 @@ fn sorts_group_output_after_grouping() {
 }
 
 #[test]
+fn limits_sorted_group_output() {
+    let table = table_with_two_active_records();
+    let request = parse(
+        br#"{
+            "aggregate": [
+                {"$group": {
+                    "_id": "$AGE",
+                    "count": {"$count": {}}
+                }},
+                {"$sort": {"_id": -1}},
+                {"$limit": 1}
+            ]
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        execute_query(&table, &request).unwrap(),
+        vec![json!({"_id": 29, "count": 1})]
+    );
+}
+
+#[test]
 fn rejects_unsupported_aggregation_combinations() {
     for body in [
         br#"{"aggregate":[]}"#.as_slice(),
@@ -126,6 +149,10 @@ fn rejects_unsupported_aggregation_combinations() {
         br#"{"aggregate":[{"$group":{"_id":null}},{"$sort":{"_id":2}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$sort":{"_id":1}},{"$sort":{"_id":1}}]}"#
             .as_slice(),
+        br#"{"aggregate":[{"$limit":1},{"$group":{"_id":null}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null}},{"$limit":-1}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null}},{"$limit":1},{"$limit":1}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null}},{"$limit":1},{"$sort":{"_id":1}}]}"#.as_slice(),
     ] {
         assert!(parse(body).is_err(), "expected rejection for {body:?}");
     }
