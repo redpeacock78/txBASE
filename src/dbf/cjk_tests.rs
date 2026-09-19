@@ -107,6 +107,22 @@ fn explicit_iso_2022_jp_override_round_trips_jis_text() {
 }
 
 #[test]
+fn iso_2022_jp_decodes_a_pinned_jis_fixture_and_replaces_truncated_sequences() {
+    assert_eq!(
+        text_with_encoding(
+            &[0x1b, 0x24, 0x42, 0x46, 0x7c, 0x4b, 0x5c, 0x1b, 0x28, 0x42],
+            0,
+            Some("ISO-2022-JP"),
+        ),
+        "日本"
+    );
+    assert_eq!(
+        text_with_encoding(&[0x1b, 0x24, 0x42, 0x46], 0, Some("ISO-2022-JP")),
+        "�"
+    );
+}
+
+#[test]
 fn strict_shift_jis_override_round_trips_jis_text() {
     let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some("Shift_JIS")).unwrap();
     assert_eq!(table.schema_json()["encoding_override"], "Shift_JIS");
