@@ -129,6 +129,8 @@ txbase index verify path/to/users.dbf
 txbase index rebuild path/to/users.dbf
 txbase pack path/to/users.dbf
 txbase recall path/to/users.dbf 2
+txbase xbf import path/to/users.dbf path/to/users.xbf
+txbase xbf export path/to/users.xbf path/to/users.dbf
 ```
 
 Copy a DBF and its sibling `.dbt` or `.fpt` memo sidecar:
@@ -185,6 +187,9 @@ It can also use a per-field-direction compound index for a matching multi-key so
 `pack` removes logically deleted records and renumbers the remaining physical records.
 
 `recall` restores one logically deleted record by its physical record number.
+
+`xbf import` converts a loaded DBF table to a bounded XBF snapshot. `xbf export` converts only the
+representable XBF subset to a DBF file and reports unsupported types or values as errors.
 
 `backup` and `restore` validate the source first, then copy the DBF and its detected memo sidecar.
 

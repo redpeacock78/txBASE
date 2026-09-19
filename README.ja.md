@@ -121,11 +121,16 @@ txbase index verify path/to/users.dbf
 txbase index rebuild path/to/users.dbf
 txbase pack path/to/users.dbf
 txbase recall path/to/users.dbf 2
+txbase xbf import path/to/users.dbf path/to/users.xbf
+txbase xbf export path/to/users.xbf path/to/users.dbf
 ```
 
 `pack`はlogical delete済みrecordを物理的に除去し、残ったrecord numberを詰め直します。
 
 `recall`はphysical record numberを指定してlogical deleteを取り消します。
+
+`xbf import`はDBF tableをbounded XBF snapshotへ変換します。
+`xbf export`は表現可能なXBF subsetだけをDBFへ変換し、unsupported typeやvalueはerrorにします。
 
 `catalog`はdirectory直下のDBF tableを発見し、各tableのschemaを表示します。
 
