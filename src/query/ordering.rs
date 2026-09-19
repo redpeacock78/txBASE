@@ -6,6 +6,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::cmp::Ordering;
 
+#[cfg(test)]
 pub(super) fn compare_records(
     left: &DbfRecord,
     right: &DbfRecord,
