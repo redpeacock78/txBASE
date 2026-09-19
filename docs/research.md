@@ -21,7 +21,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | Contract-to-test traceability | [Quality contract matrix](quality-matrix.md) | Current evidence map |
 | HTTP methods, PATCH, and QUERY | [HTTP semantics](http-semantics.md) | Current routes plus protocol reference |
 | Relational schema constraints over DBF | [Schema metadata](schema-metadata.md) | Current local subset plus future relational work |
-| Native XBF storage format | [XBF v1 draft](xbf.md) | Draft codec, snapshot path, and generation-checked WAL; conversion future |
+| Native XBF storage format | [XBF v1 draft](xbf.md) | Draft codec, DBF conversion/export, snapshot path, generation-checked WAL, and journaled schema export |
 | Multi-table DBF discovery and bounded local equality join | [Catalog](catalog.md) and [Query model](query-model.md) | Current boundary plus future relational work |
 | External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, equality, histogram-estimated range ordering, ordered-prefix traversal, mixed-direction compound-prefix sorting, equality-prefix candidate choice, uniform-statistics-ordered equality intersection, and future full cost model |
 | CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Future |

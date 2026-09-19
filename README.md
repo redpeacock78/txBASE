@@ -223,9 +223,9 @@ legacy readers.
 
 When a DBF language-driver byte is missing or untrusted, the read, schema, verify, pack, recall,
 and server commands accept `--encoding NAME` for the four declared CJK codecs plus explicit-only
-EUC-JP and GB18030 overrides.
+strict Shift_JIS, EUC-JP, and GB18030 overrides.
 The supported aliases are `windows-31j`/`cp932`, `gbk`/`cp936`, `euc-kr`/`cp949`, and
-`big5`/`cp950`, `euc-jp`, and `gb18030`.
+`big5`/`cp950`, `shift_jis`/`shift-jis`/`sjis`, `euc-jp`, and `gb18030`.
 The invocation override takes precedence over `*.txschema.json`, is not persisted, and is visible
 as the effective `encoding_override` and `encoding_metadata.effective` in schema output.
 `encoding_metadata` also reports the declared codec and whether the source was the language driver,
@@ -234,6 +234,8 @@ an explicit override, or the fallback.
 The DBF codec recognizes the Visual FoxPro CJK driver IDs for Windows-31J/CP932, GBK/CP936,
 EUC-KR/CP949, and Big5/CP950.
 Malformed reads use U+FFFD and writes reject unmappable or over-width values.
+The explicit `Shift_JIS` override accepts ASCII, half-width Katakana, and JIS X 0208; CP932
+extensions decode as U+FFFD and are rejected on write.
 
 An optional `users.txschema.json` sidecar adds one-field `primary`, `unique`, and `not_null`
 constraints and can explicitly select one of the supported CJK codecs without changing legacy DBF bytes.

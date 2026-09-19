@@ -257,7 +257,7 @@ fn applies_a_path_encoding_override_without_persisting_it() {
 }
 
 #[test]
-fn rejects_an_encoding_override_outside_the_declared_slice() {
+fn accepts_strict_shift_jis_as_an_explicit_override() {
     let path = temporary_path();
     cleanup(&path);
     fs::write(&path, fixture()).unwrap();
@@ -267,12 +267,8 @@ fn rejects_an_encoding_override_outside_the_declared_slice() {
     )
     .unwrap();
 
-    let error = DbfTable::from_path(&path).unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("unsupported schema encoding override")
-    );
+    let table = DbfTable::from_path(&path).unwrap();
+    assert_eq!(table.schema_json()["encoding_override"], "Shift_JIS");
 
     cleanup(&path);
 }

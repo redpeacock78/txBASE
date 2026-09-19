@@ -1,10 +1,15 @@
 use encoding_rs::{BIG5, EUC_JP, EUC_KR, Encoding, GB18030, GBK, SHIFT_JIS};
 
+const STRICT_SHIFT_JIS: &str = "Shift_JIS";
+
 pub(super) fn decode(
     bytes: &[u8],
     language_driver: u8,
     encoding_override: Option<&str>,
 ) -> Option<String> {
+    if is_strict_shift_jis(encoding_override) {
+        return Some(decode_strict_shift_jis(bytes));
+    }
     let encoding = encoding(language_driver, encoding_override)?;
     Some(encoding.decode_without_bom_handling(bytes).0.into_owned())
 }
@@ -14,6 +19,12 @@ pub(super) fn encode(
     language_driver: u8,
     encoding_override: Option<&str>,
 ) -> Option<(Vec<u8>, bool)> {
+    if is_strict_shift_jis(encoding_override) {
+        return Some(match encode_strict_shift_jis(text) {
+            Some(bytes) => (bytes, false),
+            None => (Vec::new(), true),
+        });
+    }
     let encoding = encoding(language_driver, encoding_override)?;
     let (bytes, _, had_errors) = encoding.encode(text);
     Some((bytes.into_owned(), had_errors))
@@ -22,6 +33,7 @@ pub(super) fn encode(
 pub(crate) fn canonical_encoding_name(name: &str) -> Option<&'static str> {
     match name.to_ascii_lowercase().as_str() {
         "windows-31j" | "cp932" | "windows-31j/cp932" => Some("Windows-31J/CP932"),
+        "shift_jis" | "shift-jis" | "sjis" => Some(STRICT_SHIFT_JIS),
         "gbk" | "cp936" | "gbk/cp936" => Some("GBK/CP936"),
         "gb18030" => Some("GB18030"),
         "euc-kr" | "cp949" | "euc-kr/cp949" => Some("EUC-KR/CP949"),
@@ -39,6 +51,101 @@ pub(crate) fn encoding_name(language_driver: u8) -> Option<&'static str> {
         0x7b => "Windows-31J/CP932",
         _ => return None,
     })
+}
+
+fn is_strict_shift_jis(encoding_override: Option<&str>) -> bool {
+    encoding_override
+        .and_then(canonical_encoding_name)
+        .is_some_and(|name| name == STRICT_SHIFT_JIS)
+}
+
+fn decode_strict_shift_jis(bytes: &[u8]) -> String {
+    let mut output = String::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if byte <= 0x7f {
+            output.push(char::from(byte));
+            index += 1;
+            continue;
+        }
+        if (0xa1..=0xdf).contains(&byte) {
+            output.push(
+                char::from_u32(0xff61 + u32::from(byte - 0xa1)).expect("half-width katakana"),
+            );
+            index += 1;
+            continue;
+        }
+
+        let is_pair = is_shift_jis_lead(byte)
+            && bytes
+                .get(index + 1)
+                .is_some_and(|trail| is_shift_jis_trail(*trail));
+        if !is_pair {
+            output.push('\u{fffd}');
+            index += 1;
+            continue;
+        }
+
+        let pair = &bytes[index..index + 2];
+        let (decoded, had_errors) = SHIFT_JIS.decode_without_bom_handling(pair);
+        let mut characters = decoded.chars();
+        let character = match (characters.next(), characters.next()) {
+            (Some(character), None) => Some(character),
+            _ => None,
+        };
+        if !had_errors
+            && character
+                .and_then(encode_strict_shift_jis_character)
+                .is_some_and(|encoded| encoded.as_slice() == pair)
+        {
+            output.push(character.expect("checked strict Shift_JIS character"));
+        } else {
+            output.push('\u{fffd}');
+        }
+        index += 2;
+    }
+    output
+}
+
+fn encode_strict_shift_jis(text: &str) -> Option<Vec<u8>> {
+    let mut output = Vec::new();
+    for character in text.chars() {
+        output.extend(encode_strict_shift_jis_character(character)?);
+    }
+    Some(output)
+}
+
+fn encode_strict_shift_jis_character(character: char) -> Option<Vec<u8>> {
+    if character <= '\u{7f}' {
+        return Some(vec![character as u8]);
+    }
+    if ('\u{ff61}'..='\u{ff9f}').contains(&character) {
+        return Some(vec![(0xa1 + (character as u32 - 0xff61)) as u8]);
+    }
+
+    let character = character.to_string();
+    let (euc, _, euc_errors) = EUC_JP.encode(&character);
+    if euc_errors || euc.len() != 2 || !euc.iter().all(|byte| (0xa1..=0xfe).contains(byte)) {
+        return None;
+    }
+    let (shift_jis, _, shift_jis_errors) = SHIFT_JIS.encode(&character);
+    if shift_jis_errors
+        || shift_jis.len() != 2
+        || !is_shift_jis_lead(shift_jis[0])
+        || !is_shift_jis_trail(shift_jis[1])
+    {
+        return None;
+    }
+    Some(shift_jis.into_owned())
+}
+
+fn is_shift_jis_lead(byte: u8) -> bool {
+    (0x81..=0x9f).contains(&byte) || (0xe0..=0xfc).contains(&byte)
+}
+
+fn is_shift_jis_trail(byte: u8) -> bool {
+    (0x40..=0x7e).contains(&byte) || (0x80..=0xfc).contains(&byte)
 }
 
 fn encoding(language_driver: u8, encoding_override: Option<&str>) -> Option<&'static Encoding> {

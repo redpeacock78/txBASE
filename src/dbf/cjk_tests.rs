@@ -80,6 +80,53 @@ fn explicit_euc_jp_and_gb18030_overrides_round_trip() {
 }
 
 #[test]
+fn strict_shift_jis_override_round_trips_jis_text() {
+    let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some("shift_jis")).unwrap();
+    assert_eq!(table.schema_json()["encoding_override"], "Shift_JIS");
+    assert_eq!(
+        table.schema_json()["encoding_metadata"],
+        serde_json::json!({
+            "declared": null,
+            "effective": "Shift_JIS",
+            "source": "explicit-override",
+        })
+    );
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "日本"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+
+    let reloaded =
+        DbfTable::from_bytes_with_encoding(&table.to_bytes(), Some("Shift_JIS")).unwrap();
+    assert_eq!(reloaded.active_record(1).unwrap().values["NAME"], "日本");
+}
+
+#[test]
+fn strict_shift_jis_rejects_cp932_extensions() {
+    let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some("shift-jis")).unwrap();
+    let error = table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "ⅰ"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("outside Shift_JIS"));
+
+    assert_eq!(
+        text_with_encoding(&[0xfa, 0x40], 0, Some("Shift_JIS")),
+        "\u{fffd}"
+    );
+}
+
+#[test]
 fn rejects_unrepresentable_or_overwide_cjk_values() {
     let mut bytes = fixture();
     bytes[29] = 0x7b;

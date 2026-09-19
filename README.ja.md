@@ -123,7 +123,7 @@ schemaとverifyはDBFを読み取り、schemaとrecord boundaryを確認しま�
 
 DBF headerのlanguage-driver byteが信頼できない場合は、read、schema、verify、pack、recall、serverで`--encoding NAME`を指定できます。
 
-対応するaliasは`windows-31j`/`cp932`、`gbk`/`cp936`、`euc-kr`/`cp949`、`big5`/`cp950`、`euc-jp`、`gb18030`です。
+対応するaliasは`windows-31j`/`cp932`、strictな`shift_jis`/`shift-jis`/`sjis`、`gbk`/`cp936`、`euc-kr`/`cp949`、`big5`/`cp950`、`euc-jp`、`gb18030`です。
 
 invocation単位のoverrideは`*.txschema.json`より優先され、保存されません。
 
@@ -182,6 +182,7 @@ backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピ�
 DBF codecはVisual FoxProのCJK driver IDであるWindows-31J/CP932、GBK/CP936、EUC-KR/CP949、Big5/CP950に対応します。
 `euc-jp`と`gb18030`はlanguage-driver IDを追加せず、explicit overrideとして使えます。
 malformed readはU+FFFDにし、unmappableまたはbyte width超過のwriteは拒否します。
+strictな`Shift_JIS` overrideはASCII、半角カナ、JIS X 0208を受け付け、CP932拡張はreadでU+FFFD、writeで拒否します。
 
 optionalな`users.txschema.json` sidecarは、legacy DBF byteを変更せずに一つのfieldへ`primary`、`unique`、`not_null`を設定します。
 同じsidecarで対応済みのCJK codecを明示的に選択できます。
@@ -258,7 +259,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
 一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
-full cost model、collation-aware planning、backpressure付きのstreaming、追加のaggregation stage、cross-table constraint、CJK encodingの拡張はroadmapで検討します。
+full cost model、collation-aware planning、backpressure付きのstreaming、追加のaggregation stage、cross-table constraint、追加のCJK encodingはroadmapで検討します。
 XBFのwire contractは[XBF v1 format draft](docs/xbf.md)に記載しています。draftのcodec、DBFからXBFへの変換、限定されたXBFからDBFへのexport、schema sidecar付きjournal export、durable snapshot path、generation付きfull-snapshot WAL recoveryを提供します。strictな複数file reader atomicityとobject-storage commitは未対応です。
 
 ## License
