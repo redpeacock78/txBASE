@@ -231,7 +231,9 @@ recoverable `TXSE` export boundary. A later DBF read resumes an interrupted repl
 targets changed by another writer; it does not promise one physically atomic snapshot to external
 legacy readers.
 
-`backup` and `restore` validate the source first, then copy the DBF and its detected memo sidecar.
+`backup` and `restore` validate the source first, then copy the DBF, detected memo and schema
+sidecars, plus a present valid `.txidx` sidecar. A stale or malformed source index is rejected;
+an absent source index removes an old destination index.
 
 When a DBF language-driver byte is missing or untrusted, the read, schema, verify, pack, recall,
 and server commands accept `--encoding NAME` for the four declared CJK codecs plus explicit-only

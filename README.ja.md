@@ -185,7 +185,8 @@ path-aware plannerは、複数のsingle-field indexが有効なdirect equality f
 catalog joinは`txbase::query::join::parse`と`execute`から使います。
 複数join、cost-based planner、backpressure付きのstreaming、cross-table transactionは未実装です。
 
-backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピーします。
+backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt`、`.txschema.json`、有効な`.txidx` sidecarもコピーします。
+sourceのindexがstaleまたは壊れている場合は拒否し、sourceにindexがなければdestinationの古いindexを削除します。
 
 DBF codecはVisual FoxProのCJK driver IDであるWindows-31J/CP932、GBK/CP936、EUC-KR/CP949、Big5/CP950に対応します。
 `euc-jp`、`gb18030`、`iso-2022-jp`はlanguage-driver IDを追加せず、explicit overrideとして使えます。

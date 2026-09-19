@@ -3,6 +3,7 @@ use super::{
     ACTIVE_RECORD, DbfError, DbfTable, EOF_MARKER, find_memo_path, sync_parent_directory,
     write_record_count,
 };
+use crate::index::{IndexFile, sidecar_path};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -30,11 +31,23 @@ pub fn copy_table_files(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(error.into()),
     };
+    let source_index = sidecar_path(source);
+    let index_bytes = match fs::read(&source_index) {
+        Ok(bytes) => {
+            IndexFile::load(source).map_err(|error| {
+                DbfError::Invalid(format!("cannot validate source index sidecar: {error}"))
+            })?;
+            Some(bytes)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
     let destination_memo = source_memo.as_ref().and_then(|path| {
         path.extension()
             .map(|extension| destination.with_extension(extension))
     });
     let destination_schema = schema_metadata_path(destination);
+    let destination_index = sidecar_path(destination);
 
     let dbf_temp = write_temp(destination, &dbf_bytes, "dbf")?;
     let memo_temp = match (&destination_memo, &memo_bytes) {
@@ -45,6 +58,10 @@ pub fn copy_table_files(
         .as_ref()
         .map(|bytes| write_temp(&destination_schema, bytes, "schema"))
         .transpose()?;
+    let index_temp = index_bytes
+        .as_ref()
+        .map(|bytes| write_temp(&destination_index, bytes, "index"))
+        .transpose()?;
 
     if let Err(error) = replace_file(&dbf_temp, destination) {
         let _ = fs::remove_file(&dbf_temp);
@@ -52,6 +69,9 @@ pub fn copy_table_files(
             let _ = fs::remove_file(path);
         }
         if let Some(path) = schema_temp {
+            let _ = fs::remove_file(path);
+        }
+        if let Some(path) = index_temp {
             let _ = fs::remove_file(path);
         }
         return Err(error.into());
@@ -66,10 +86,16 @@ pub fn copy_table_files(
     } else {
         remove_file_if_exists(&destination_schema)?;
     }
+    if let Some(temp) = index_temp {
+        replace_file(&temp, &destination_index)?;
+    } else {
+        remove_file_if_exists(&destination_index)?;
+    }
     sync_parent_directory(destination)?;
     if let Some(path) = destination_memo.as_ref() {
         sync_parent_directory(path)?;
     }
+    sync_parent_directory(&destination_index)?;
     Ok(())
 }
 

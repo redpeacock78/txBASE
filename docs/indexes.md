@@ -132,9 +132,13 @@ Rebuild preserves the definitions in the existing sidecar and regenerates entrie
 
 Writes use a synced temporary file followed by replacement of the `.txidx` path.
 
-The current `backup` and `restore` commands copy DBF and memo files only.
+`backup` and `restore` validate and copy a present `.txidx` sidecar together with the DBF,
+memo, and schema sidecars. The source index must be fresh and structurally valid; a stale or
+malformed source is rejected instead of creating a backup that would look queryable but use
+wrong record numbers. If the source has no index, an old destination `.txidx` is removed.
 
-Rebuild the index at the destination instead of treating a missing `.txidx` file as a backup artifact.
+The index remains derived state, so a backup without a `.txidx` can still be restored and rebuilt
+explicitly at the destination.
 
 ## Crash boundary
 

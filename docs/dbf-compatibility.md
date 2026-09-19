@@ -186,7 +186,7 @@ The CLI now exposes the first local-database maintenance boundary:
 | `txbase verify FILE` | Loads the DBF, validates detected memo data, reparses the serialized DBF, and checks record boundaries |
 | `txbase pack FILE` | Removes logically deleted records, renumbers the remaining physical records, and persists the result through the existing WAL |
 | `txbase recall FILE RECORD` | Restores one logically deleted record through the existing WAL |
-| `txbase backup SOURCE DEST` | Validates `SOURCE`, then copies its DBF and detected `.dbt` or `.fpt` sidecar |
+| `txbase backup SOURCE DEST` | Validates `SOURCE`, then copies its DBF, detected `.dbt` or `.fpt`, schema, and valid `.txidx` sidecars |
 | `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as `SOURCE` |
 
 The copy operation replaces each destination file through a synced temporary file.

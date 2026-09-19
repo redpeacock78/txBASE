@@ -10,7 +10,7 @@ fn fixture() -> Vec<u8> {
 }
 
 fn remove_table_files(path: &std::path::Path) {
-    for extension in ["dbf", "dbt", "fpt", "txbase.wal", "txbase.lock"] {
+    for extension in ["dbf", "dbt", "fpt", "txidx", "txbase.wal", "txbase.lock"] {
         let candidate = if extension == "dbf" {
             path.to_path_buf()
         } else {
@@ -71,6 +71,111 @@ fn copy_table_files_preserves_dbf_and_memo_sidecar() {
     );
 
     let _ = fs::remove_file(source.with_extension("dbt"));
+    remove_table_files(&source);
+    remove_table_files(&destination);
+}
+
+#[test]
+fn copy_table_files_preserves_a_valid_index_sidecar() {
+    let source = std::env::temp_dir().join(format!(
+        "txbase-maintenance-index-source-{}.dbf",
+        std::process::id()
+    ));
+    let destination = std::env::temp_dir().join(format!(
+        "txbase-maintenance-index-destination-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&source);
+    remove_table_files(&destination);
+
+    fs::write(&source, fixture()).unwrap();
+    crate::index::IndexFile::build(
+        &source,
+        vec![crate::index::IndexDefinition::for_field("NAME")],
+    )
+    .unwrap()
+    .save(&source)
+    .unwrap();
+
+    copy_table_files(&source, &destination).unwrap();
+
+    let restored = crate::index::IndexFile::load(&destination).unwrap();
+    assert_eq!(restored.index_names(), vec!["NAME"]);
+
+    remove_table_files(&source);
+    remove_table_files(&destination);
+}
+
+#[test]
+fn copy_table_files_rejects_a_stale_source_index() {
+    let source = std::env::temp_dir().join(format!(
+        "txbase-maintenance-stale-index-source-{}.dbf",
+        std::process::id()
+    ));
+    let destination = std::env::temp_dir().join(format!(
+        "txbase-maintenance-stale-index-destination-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&source);
+    remove_table_files(&destination);
+
+    fs::write(&source, fixture()).unwrap();
+    crate::index::IndexFile::build(
+        &source,
+        vec![crate::index::IndexDefinition::for_field("NAME")],
+    )
+    .unwrap()
+    .save(&source)
+    .unwrap();
+    let mut changed = DbfTable::from_path(&source).unwrap();
+    changed
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "Changed"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    fs::write(&source, changed.to_bytes()).unwrap();
+
+    let destination_before = fixture();
+    fs::write(&destination, &destination_before).unwrap();
+    let error = copy_table_files(&source, &destination).unwrap_err();
+    assert!(error.to_string().contains("source index sidecar"));
+    assert_eq!(fs::read(&destination).unwrap(), destination_before);
+
+    remove_table_files(&source);
+    remove_table_files(&destination);
+}
+
+#[test]
+fn copy_table_files_removes_an_old_destination_index_when_source_has_none() {
+    let source = std::env::temp_dir().join(format!(
+        "txbase-maintenance-no-index-source-{}.dbf",
+        std::process::id()
+    ));
+    let destination = std::env::temp_dir().join(format!(
+        "txbase-maintenance-no-index-destination-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&source);
+    remove_table_files(&destination);
+
+    fs::write(&source, fixture()).unwrap();
+    fs::write(&destination, fixture()).unwrap();
+    crate::index::IndexFile::build(
+        &destination,
+        vec![crate::index::IndexDefinition::for_field("NAME")],
+    )
+    .unwrap()
+    .save(&destination)
+    .unwrap();
+
+    copy_table_files(&source, &destination).unwrap();
+
+    assert!(!crate::index::sidecar_path(&destination).exists());
+
     remove_table_files(&source);
     remove_table_files(&destination);
 }
