@@ -4,8 +4,12 @@ impl DbfTable {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, DbfError> {
         let path = path.as_ref();
         let _lock = TableLock::acquire(path)?;
-        Self::recover_wal(path)?;
-        Self::load_path(path)
+        let recovered = Self::recover_wal(path)?;
+        let table = Self::load_path(path)?;
+        if recovered {
+            let _ = crate::index::refresh_if_present(path, &table);
+        }
+        Ok(table)
     }
 
     pub(super) fn has_sidecar_fields(&self) -> bool {

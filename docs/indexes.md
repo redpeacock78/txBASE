@@ -70,6 +70,10 @@ txbase index rebuild path/to/users.dbf
 
 `load` and `verify` recover the DBF first, then compare the stored source fingerprint.
 
+When a `.txidx` file already exists, normal DBF persistence and WAL recovery attempt to refresh it from the committed table state.
+
+This refresh is best effort: a refresh error does not make the DBF mutation fail, and the next `load` or `verify` rejects the stale or invalid sidecar.
+
 A DBF or memo change returns a stale-index error instead of returning potentially wrong record numbers.
 
 Rebuild preserves the definitions in the existing sidecar and regenerates entries from active records.
@@ -82,14 +86,14 @@ Rebuild the index at the destination instead of treating a missing `.txidx` file
 
 ## Current boundary
 
-The sidecar currently supports build, exact equality lookup, stale detection, validation, and rebuild.
+The sidecar currently supports build, exact equality lookup, stale detection, validation, rebuild, and best-effort refresh after normal persistence or WAL recovery.
 
-DBF insert, update, logical delete, `PACK`, and `RECALL` do not update the sidecar automatically.
+DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
-Those mutations intentionally make the sidecar stale until an explicit rebuild.
+Direct DBF edits, unsupported sidecar definitions, and refresh I/O failures leave the sidecar stale; `index rebuild` is the explicit repair path.
 
 The query executor still uses the table scan reference path.
 
-Range scans, ordered index traversal, planner selection, crash-atomic DBF/index commits, and automatic maintenance require separate contracts.
+Range scans, ordered index traversal, planner selection, and crash-atomic DBF/index commits require separate contracts.
 
 An index is not treated as complete until those mutation, recovery, stale-index, and rebuild behaviors are tested together.

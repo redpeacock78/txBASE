@@ -30,15 +30,15 @@ impl DbfTable {
         Ok(table)
     }
 
-    pub(super) fn recover_wal(path: &Path) -> Result<(), DbfError> {
+    pub(super) fn recover_wal(path: &Path) -> Result<bool, DbfError> {
         let wal_path = path.with_extension("txbase.wal");
         if !wal_path.exists() {
-            return Ok(());
+            return Ok(false);
         }
         let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
         if wal.records().is_empty() {
             finish_recovery(wal, &wal_path);
-            return Ok(());
+            return Ok(false);
         }
         let snapshot =
             wal.records().iter().rev().find_map(|(_, payload)| {
@@ -58,7 +58,7 @@ impl DbfTable {
             }
             save_bytes_to(path, &snapshot.dbf, "txbase.tmp")?;
             finish_recovery(wal, &wal_path);
-            return Ok(());
+            return Ok(true);
         }
 
         let operation = wal.records().iter().rev().find_map(|(_, payload)| {
@@ -69,7 +69,7 @@ impl DbfTable {
             }
         });
         let Some(operation) = operation else {
-            return Ok(());
+            return Ok(false);
         };
         let operation = operation?;
         let mut table = Self::load_path(path)?;
@@ -90,7 +90,7 @@ impl DbfTable {
         }
         save_bytes_to(path, &table.bytes, "txbase.tmp")?;
         finish_recovery(wal, &wal_path);
-        Ok(())
+        Ok(true)
     }
 
     fn apply_operation(&mut self, operation: &OperationIr) -> Result<(), DbfError> {

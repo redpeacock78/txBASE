@@ -100,7 +100,7 @@ txbase recall path/to/users.dbf 2
 
 `index verify`はDBFまたはmemo sidecarが変更されたindexをstaleとして拒否します。
 
-`index rebuild`はtable mutation後にindex entryを再生成します。
+通常のDBF保存とWAL recoveryは既存sidecarをbest effortで更新し、`index rebuild`は明示的な修復手段です。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピーします。
 
@@ -164,7 +164,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 当面はDBF、memo、WAL、query、HTTPのcontractをfixtureとfailure testで固めます。
 
-secondary indexの自動更新とquery planner、join、aggregation、cursor、multi-record transaction、CJK encoding、XBFはroadmapで検討します。
+secondary index sidecarの自動更新は実装済みです。query planner、join、aggregation、cursor、multi-record transaction、CJK encoding、XBFはroadmapで検討します。
 
 ## License
 

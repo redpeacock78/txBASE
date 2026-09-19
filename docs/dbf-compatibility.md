@@ -155,7 +155,7 @@ DBF and memo sidecar replacement is still a sequence of file operations, not a n
 
 An interrupted copy should therefore be followed by `txbase verify DEST` before the destination is used.
 
-`PACK` does not compact memo sidecars or rebuild indexes.
+`PACK` does not compact memo sidecars. An existing index sidecar is refreshed after the packed DBF is saved, but memo blocks remain untouched.
 
 Deleted memo blocks can therefore remain as reclaimable orphan space until a sidecar-specific compaction contract exists.
 
@@ -163,7 +163,7 @@ Deleted memo blocks can therefore remain as reclaimable orphan space until a sid
 
 The following are not implemented by the current DBF layer:
 
-- Production and secondary index maintenance.
+- Planner-backed secondary index selection and production-scale index maintenance.
 - OLE semantics and arbitrary external memo formats.
 - Complete Visual FoxPro expression or command compatibility.
 - Automatic merge and retry for concurrent writers.

@@ -1,5 +1,6 @@
 use super::super::*;
 use super::fixture;
+use crate::index::{IndexDefinition, IndexFile};
 use crate::xbase::{OperationIr, OperationMethod};
 use fs2::FileExt;
 use std::fs::OpenOptions;
@@ -136,6 +137,59 @@ fn recovers_latest_snapshot_from_wal_before_reading() {
     assert!(!wal_path.exists());
 
     fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn recovery_refreshes_an_existing_index_sidecar() {
+    let path =
+        std::env::temp_dir().join(format!("txbase-index-recovery-{}.dbf", std::process::id()));
+    let wal_path = path.with_extension("txbase.wal");
+    let index_path = path.with_extension("txidx");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&index_path);
+
+    let original = fixture();
+    let mut pending = DbfTable::from_bytes(&original).unwrap();
+    pending
+        .insert_record(
+            serde_json::json!({
+                "ID": 3,
+                "NAME": "Carol",
+                "AGE": 42,
+                "ACTIVE": true
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        )
+        .unwrap();
+    fs::write(&path, &original).unwrap();
+    IndexFile::build(&path, vec![IndexDefinition::for_field("NAME")])
+        .unwrap()
+        .save(&path)
+        .unwrap();
+
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    let mut payload = SNAPSHOT_MAGIC.to_vec();
+    payload.extend_from_slice(&pending.to_bytes());
+    wal.append(&payload).unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    let recovered = DbfTable::from_path(&path).unwrap();
+    assert_eq!(recovered.active_record(3).unwrap().values["NAME"], "Carol");
+    assert_eq!(
+        IndexFile::load(&path)
+            .unwrap()
+            .lookup_eq("NAME", &serde_json::json!("Carol"))
+            .unwrap(),
+        vec![3]
+    );
+    assert!(!wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(index_path).unwrap();
 }
 
 #[test]

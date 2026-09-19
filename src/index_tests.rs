@@ -49,7 +49,7 @@ fn builds_and_loads_an_external_scalar_index() {
 }
 
 #[test]
-fn mutation_makes_the_sidecar_stale_until_rebuild() {
+fn mutation_refreshes_the_sidecar_after_save() {
     let path = temporary_dbf();
     IndexFile::build(&path, vec![IndexDefinition::for_field("NAME")])
         .unwrap()
@@ -62,17 +62,10 @@ fn mutation_makes_the_sidecar_stale_until_rebuild() {
     table.patch_record(1, patch).unwrap();
     table.save_with_wal(&path).unwrap();
 
-    assert!(matches!(
-        IndexFile::load(&path),
-        Err(IndexError::Stale { .. })
-    ));
-
-    IndexFile::rebuild(&path).unwrap();
+    let index = IndexFile::load(&path).unwrap();
+    assert!(index.lookup_eq("NAME", &json!("Alice")).unwrap().is_empty());
     assert_eq!(
-        IndexFile::load(&path)
-            .unwrap()
-            .lookup_eq("NAME", &json!("Caroline"))
-            .unwrap(),
+        index.lookup_eq("NAME", &json!("Caroline")).unwrap(),
         vec![1]
     );
 
@@ -80,7 +73,7 @@ fn mutation_makes_the_sidecar_stale_until_rebuild() {
 }
 
 #[test]
-fn logical_delete_is_removed_by_rebuild() {
+fn logical_delete_is_removed_after_save() {
     let path = temporary_dbf();
     IndexFile::build(&path, vec![IndexDefinition::for_field("ID")])
         .unwrap()
@@ -90,18 +83,43 @@ fn logical_delete_is_removed_by_rebuild() {
     let mut table = DbfTable::from_path(&path).unwrap();
     table.delete_record(1).unwrap();
     table.save_with_wal(&path).unwrap();
-    assert!(matches!(
-        IndexFile::load(&path),
-        Err(IndexError::Stale { .. })
-    ));
 
-    IndexFile::rebuild(&path).unwrap();
     assert!(
         IndexFile::load(&path)
             .unwrap()
             .lookup_eq("ID", &json!(1))
             .unwrap()
             .is_empty()
+    );
+
+    remove_table_files(&path);
+}
+
+#[test]
+fn direct_dbf_change_leaves_the_sidecar_stale_until_rebuild() {
+    let path = temporary_dbf();
+    IndexFile::build(&path, vec![IndexDefinition::for_field("NAME")])
+        .unwrap()
+        .save(&path)
+        .unwrap();
+
+    let mut bytes = fs::read(&path).unwrap();
+    let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+    bytes[record_start + 4..record_start + 14].copy_from_slice(b"Zoe       ");
+    fs::write(&path, bytes).unwrap();
+
+    assert!(matches!(
+        IndexFile::load(&path),
+        Err(IndexError::Stale { .. })
+    ));
+
+    IndexFile::rebuild(&path).unwrap();
+    assert_eq!(
+        IndexFile::load(&path)
+            .unwrap()
+            .lookup_eq("NAME", &json!("Zoe"))
+            .unwrap(),
+        vec![1]
     );
 
     remove_table_files(&path);

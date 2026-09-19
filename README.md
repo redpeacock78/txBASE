@@ -140,7 +140,7 @@ Usage:
 
 `index verify` rejects a sidecar whose DBF or memo source is stale.
 
-`index rebuild` regenerates entries after a table mutation.
+Normal DBF saves and WAL recovery refresh an existing sidecar on a best-effort basis; `index rebuild` is the explicit repair path.
 
 `pack` removes logically deleted records and renumbers the remaining physical records.
 
@@ -221,7 +221,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add automatic secondary-index maintenance and planner use, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
+Later phases may add secondary-index planner use, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

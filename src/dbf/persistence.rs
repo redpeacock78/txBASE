@@ -9,9 +9,11 @@ impl DbfTable {
         }
         let path = path.as_ref();
         let _lock = TableLock::acquire(path)?;
-        Self::recover_wal(path)?;
+        let _ = Self::recover_wal(path)?;
         self.ensure_source_current(path)?;
-        save_bytes_to(path, &self.bytes, "txbase.tmp")
+        save_bytes_to(path, &self.bytes, "txbase.tmp")?;
+        let _ = crate::index::refresh_if_present(path, self);
+        Ok(())
     }
 
     fn ensure_source_current(&self, path: &Path) -> Result<(), DbfError> {
@@ -61,7 +63,7 @@ impl DbfTable {
         operation: Option<&OperationIr>,
     ) -> Result<(), DbfError> {
         let _lock = TableLock::acquire(path)?;
-        Self::recover_wal(path)?;
+        let _ = Self::recover_wal(path)?;
         self.ensure_source_current(path)?;
         let mut prepared = self.clone();
         let memo_snapshot = prepared.apply_memo_updates(path)?;
@@ -86,6 +88,7 @@ impl DbfTable {
             save_bytes_to(&memo_path, &memo.bytes, "txbase.memo.tmp")?;
         }
         save_bytes_to(path, &prepared.bytes, "txbase.tmp")?;
+        let _ = crate::index::refresh_if_present(path, &prepared);
         if wal.clear().is_ok() {
             drop(wal);
             let _ = fs::remove_file(wal_path);

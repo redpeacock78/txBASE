@@ -32,7 +32,7 @@ The repository currently provides:
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A rebuildable external scalar-key index sidecar with equality lookup and DBF/memo freshness checks.
 
-The baseline intentionally does not include secondary indexes, cursors, multi-record transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
+The baseline intentionally does not include planner-backed secondary indexes, cursors, multi-record transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -60,11 +60,11 @@ The catalog currently derives table identity from direct-child DBF filenames and
 
 It provides table discovery, named table loading, schema output, and per-table verification.
 
-It does not yet provide shared locks, relationships, automatic index maintenance, or cross-table transactions.
+It does not yet provide shared locks, relationships, cross-table index coordination, or cross-table transactions.
 
-The index sidecar foundation is implemented for scalar keys, exact equality lookup, stale detection, and explicit rebuild.
+The index sidecar foundation is implemented for scalar keys, exact equality lookup, stale detection, explicit rebuild, and best-effort refresh after normal persistence or WAL recovery.
 
-It does not yet maintain itself during DBF mutation or participate in query planning.
+It does not yet participate in query planning or provide crash-atomic DBF/index commits.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
@@ -200,6 +200,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Speculative indexes, joins, aggregation, MVCC, XBF, object-storage, or distributed code without a contract and end-to-end test.
+- Planner-backed indexes, joins, aggregation, MVCC, XBF, object-storage, or distributed code without a contract and end-to-end test.
 
-The next implementation slice is intentionally local: automatic index maintenance across persistence and recovery before planner use.
+The next index slice is intentionally local: planner use and a crash-atomic DBF/index commit contract.

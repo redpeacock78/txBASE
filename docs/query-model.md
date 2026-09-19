@@ -147,7 +147,7 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 
 The roadmap may later cover the following in separate contracts:
 
-1. Secondary indexes with explicit missing, null, and collation rules.
+1. Planner use for secondary indexes with explicit missing, null, and collation rules.
 2. A catalog for multiple tables and schema metadata.
 3. Joins and aggregation with bounded memory behavior.
 4. Cursors or streaming responses with stable snapshot rules.
