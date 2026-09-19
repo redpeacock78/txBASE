@@ -19,6 +19,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | Firestore and Realtime Database design | [Firebase model](firebase-model.md) | Reference |
 | SQLite test breadth and quality | [Testing and quality](testing-quality.md) | Current test map plus reference |
 | HTTP methods, PATCH, and QUERY | [HTTP semantics](http-semantics.md) | Current routes plus protocol reference |
+| Multi-table DBF discovery and schema lookup | [Catalog](catalog.md) | Current boundary plus future relational work |
 | CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Future |
 
 ## Research method

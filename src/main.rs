@@ -2,7 +2,7 @@ use std::env;
 use std::error::Error;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use txbase::{dbf::DbfTable, dbf::copy_table_files, server};
+use txbase::{catalog::Catalog, dbf::DbfTable, dbf::copy_table_files, server};
 
 fn main() {
     if let Err(error) = run() {
@@ -52,6 +52,24 @@ fn run() -> Result<(), Box<dyn Error>> {
             serde_json::json!({"valid": true, "schema": table.schema_json()})
         };
         println!("{}", serde_json::to_string_pretty(&output)?);
+        return Ok(());
+    }
+
+    if first == "catalog" || first == "verify-catalog" {
+        let path = PathBuf::from(
+            args.next()
+                .ok_or_else(|| format!("{first} requires a directory path"))?,
+        );
+        if let Some(extra) = args.next() {
+            return Err(format!("unexpected argument: {extra}").into());
+        }
+        let catalog = Catalog::from_path(&path)?;
+        if first == "verify-catalog" {
+            catalog.verify()?;
+            println!("{}", serde_json::json!({"valid": true}));
+        } else {
+            println!("{}", serde_json::to_string_pretty(&catalog.schema_json()?)?);
+        }
         return Ok(());
     }
 
@@ -131,6 +149,6 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage:\n  txbase FILE\n  txbase schema FILE\n  txbase verify FILE\n  txbase pack FILE\n  txbase recall FILE RECORD\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. Schema and verification inspect DBF files. Backup and restore copy a DBF with its sibling memo sidecar. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
+        "Usage:\n  txbase FILE\n  txbase schema FILE\n  txbase verify FILE\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase pack FILE\n  txbase recall FILE RECORD\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. Schema, catalog, and verification inspect DBF files. Backup and restore copy a DBF with its sibling memo sidecar. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
     );
 }
