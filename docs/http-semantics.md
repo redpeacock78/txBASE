@@ -72,6 +72,11 @@ The validator is opaque and is not an authenticity or authorization token. It is
 current in-memory DBF bytes and resolved active JSON values, so memo-backed values participate in
 the representation identity.
 
+`GET /records` and `GET /records/{id}` also accept `If-None-Match`. A matching strong or weak tag,
+or `*` for an existing resource, returns `304 Not Modified` with the current `ETag` and no body;
+an unmatched value returns the normal representation. This cache-validation behavior is currently
+limited to `GET`.
+
 ## 3. PATCH
 
 [RFC 5789](https://www.rfc-editor.org/rfc/rfc5789.html) defines `PATCH` as applying a patch document to a resource.
@@ -86,10 +91,10 @@ For collision-sensitive patches, the RFC recommends conditional requests such as
 
 txBASE currently accepts `application/json` plain field patches and the typed `$set`, `$unset`, and `$inc` subset described in [the query model](query-model.md).
 
-txBASE implements a strong table representation tag and optional `If-Match` protection for the
-state-changing routes described above.
+txBASE implements a strong table representation tag, optional `If-Match` protection for the
+state-changing routes described above, and GET-only `If-None-Match` cache validation.
 
-It does not yet implement `If-None-Match`, JSON Patch, or JSON Merge Patch media types.
+It does not yet implement mutation-side `If-None-Match`, JSON Patch, or JSON Merge Patch media types.
 
 The MongoDB-shaped update document is an application format inside the JSON body.
 
@@ -160,7 +165,7 @@ Clients must not infer exactly-once effects from a successful TCP exchange alone
 
 The following require explicit contracts before implementation:
 
-- `If-None-Match` behavior.
+- `If-None-Match` behavior for unsafe methods.
 - `Content-Location` and cache-key rules for QUERY bodies.
 - HTTP streaming and backpressure.
 - CORS and authentication policy.

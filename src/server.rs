@@ -35,7 +35,7 @@ fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
     let path = request.url().split('?').next().unwrap_or("/").to_owned();
     let is_query = request.method().as_str() == "QUERY";
     let response = if matches!(request.method(), Method::Get) {
-        get_response(&path, table)
+        get_response(&request, &path, table)
     } else if is_query {
         if path == "/explain" {
             explain::response(&mut request, dbf_path)
@@ -70,8 +70,11 @@ fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
     }
 }
 
-fn get_response(path: &str, table: &DbfTable) -> HttpResponse {
+fn get_response(request: &Request, path: &str, table: &DbfTable) -> HttpResponse {
     if path == "/records" {
+        if let Some(response) = etag::not_modified(request, table, true) {
+            return response;
+        }
         return etag::with_current(
             json_response(200, Value::Array(table.active_json()), true),
             table,
@@ -81,7 +84,13 @@ fn get_response(path: &str, table: &DbfTable) -> HttpResponse {
         return json_response(404, error("not_found", "resource not found"), false);
     };
     match table.active_record(id) {
-        Some(record) => etag::with_current(json_response(200, record_json(record), true), table),
+        Some(record) => {
+            if let Some(response) = etag::not_modified(request, table, true) {
+                response
+            } else {
+                etag::with_current(json_response(200, record_json(record), true), table)
+            }
+        }
         None => json_response(404, error("not_found", "record not found"), false),
     }
 }

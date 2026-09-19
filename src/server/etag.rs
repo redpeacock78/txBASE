@@ -1,4 +1,4 @@
-use super::{DbfTable, HttpResponse, error, header, json_response, request_header};
+use super::{DbfTable, HttpResponse, Response, error, header, json_response, request_header};
 use tiny_http::Request;
 
 pub(super) fn current(table: &DbfTable) -> String {
@@ -11,6 +11,23 @@ pub(super) fn current(table: &DbfTable) -> String {
 
 pub(super) fn with_current(response: HttpResponse, table: &DbfTable) -> HttpResponse {
     response.with_header(header("ETag", &current(table)))
+}
+
+pub(super) fn not_modified(
+    request: &Request,
+    table: &DbfTable,
+    resource_exists: bool,
+) -> Option<HttpResponse> {
+    let value = request_header(request, "If-None-Match")?;
+    let tag = current(table);
+    if !matches_if_none_match(value, &tag, resource_exists) {
+        return None;
+    }
+    Some(
+        Response::from_data(Vec::<u8>::new())
+            .with_status_code(304)
+            .with_header(header("ETag", &tag)),
+    )
 }
 
 pub(super) fn require_if_match(
@@ -45,6 +62,17 @@ fn matches_if_match(value: &str, current: &str, resource_exists: bool) -> bool {
         return false;
     }
     resource_exists && tags.contains(&current)
+}
+
+fn matches_if_none_match(value: &str, current: &str, resource_exists: bool) -> bool {
+    let tags = value.split(',').map(str::trim).collect::<Vec<_>>();
+    if tags.len() == 1 && tags[0] == "*" {
+        return resource_exists;
+    }
+    resource_exists
+        && tags
+            .iter()
+            .any(|tag| tag.strip_prefix("W/").unwrap_or(tag) == current)
 }
 
 fn fnv1a(bytes: &[u8]) -> u64 {

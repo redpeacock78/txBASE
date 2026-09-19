@@ -57,11 +57,20 @@ fn transaction_request(tag: &str) -> Request {
         .into()
 }
 
+fn get_request(path: &str, tag: Option<&str>) -> Request {
+    let request = TestRequest::new().with_method(Method::Get).with_path(path);
+    match tag {
+        Some(tag) => request.with_header(header("If-None-Match", tag)).into(),
+        None => request.into(),
+    }
+}
+
 #[test]
 fn mutation_etag_prevents_lost_update() {
     let path = test_path("mutation");
     let mut table = prepare(&path);
-    let response = get_response("/records", &table);
+    let request = get_request("/records", None);
+    let response = get_response(&request, "/records", &table);
     assert_eq!(response.status_code(), StatusCode(200));
     let current = header_value(&response, "ETag");
     let before = fs::read(&path).unwrap();
@@ -86,7 +95,8 @@ fn mutation_etag_prevents_lost_update() {
 fn if_match_requires_strong_tags_and_supports_existing_wildcard() {
     let path = test_path("matching");
     let mut table = prepare(&path);
-    let current = header_value(&get_response("/records", &table), "ETag");
+    let request = get_request("/records", None);
+    let current = header_value(&get_response(&request, "/records", &table), "ETag");
 
     let mut weak = patch_request(&format!("W/{current}"));
     let response = update_response(&mut weak, "/records/1", &mut table, &path, false);
@@ -115,7 +125,8 @@ fn if_match_requires_strong_tags_and_supports_existing_wildcard() {
 fn transaction_etag_precondition_is_atomic() {
     let path = test_path("transaction");
     let mut table = prepare(&path);
-    let current = header_value(&get_response("/records", &table), "ETag");
+    let request = get_request("/records", None);
+    let current = header_value(&get_response(&request, "/records", &table), "ETag");
     let before = fs::read(&path).unwrap();
 
     let mut stale = transaction_request("\"stale\"");
@@ -128,6 +139,31 @@ fn transaction_etag_precondition_is_atomic() {
     assert_eq!(response.status_code(), StatusCode(200));
     assert_ne!(header_value(&response, "ETag"), current);
     assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
+
+    cleanup(&path);
+}
+
+#[test]
+fn if_none_match_returns_not_modified_for_current_representation() {
+    let path = test_path("cache");
+    let table = prepare(&path);
+    let request = get_request("/records", None);
+    let current = header_value(&get_response(&request, "/records", &table), "ETag");
+
+    let request = get_request("/records", Some(&current));
+    let response = get_response(&request, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(304));
+    assert_eq!(header_value(&response, "ETag"), current);
+    assert!(response.into_reader().into_inner().is_empty());
+
+    let weak = format!("W/{current}");
+    let request = get_request("/records/1", Some(&weak));
+    let response = get_response(&request, "/records/1", &table);
+    assert_eq!(response.status_code(), StatusCode(304));
+
+    let request = get_request("/records", Some("\"stale\""));
+    let response = get_response(&request, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(200));
 
     cleanup(&path);
 }
