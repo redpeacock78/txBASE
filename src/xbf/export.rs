@@ -3,6 +3,9 @@ use super::{XbfError, XbfField, XbfTable, XbfType, XbfValue};
 use crate::dbf::DbfTable;
 use serde_json::{Map, Number, Value, json};
 use std::collections::BTreeSet;
+use std::fs;
+use std::io::Write;
+use std::path::Path;
 
 const CLASSIC_HEADER_SIZE: usize = 32;
 const CLASSIC_DESCRIPTOR_SIZE: usize = 32;
@@ -26,6 +29,33 @@ pub fn to_dbf_with_schema(table: &XbfTable) -> Result<(DbfTable, Value), XbfErro
     super::schema::validate_constraints(&table.fields, &table.records)?;
     let dbf = to_dbf_inner(table, true)?;
     Ok((dbf, schema_metadata(table)))
+}
+
+pub fn save_dbf_with_schema(table: &XbfTable, path: impl AsRef<Path>) -> Result<(), XbfError> {
+    let path = path.as_ref();
+    let (dbf, schema) = to_dbf_with_schema(table)?;
+    let temporary_path =
+        path.with_extension(format!("txbase.xbf-export-{}.tmp", std::process::id()));
+    if path == temporary_path {
+        return Err(XbfError::Invalid(
+            "XBF export destination conflicts with its temporary path".into(),
+        ));
+    }
+    let temporary_schema_path = temporary_path.with_extension("txschema.json");
+    let result = (|| {
+        dbf.save_to(&temporary_path).map_err(dbf_error)?;
+        let schema_bytes = serde_json::to_vec_pretty(&schema).map_err(|error| {
+            XbfError::Invalid(format!("schema metadata encoding failed: {error}"))
+        })?;
+        let mut file = fs::File::create(&temporary_schema_path)?;
+        file.write_all(&schema_bytes)?;
+        file.write_all(b"\n")?;
+        file.sync_all()?;
+        crate::dbf::copy_table_files(&temporary_path, path).map_err(dbf_error)
+    })();
+    let _ = fs::remove_file(&temporary_path);
+    let _ = fs::remove_file(&temporary_schema_path);
+    result
 }
 
 fn to_dbf_inner(table: &XbfTable, preserve_constraints: bool) -> Result<DbfTable, XbfError> {

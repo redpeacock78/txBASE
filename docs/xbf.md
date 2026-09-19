@@ -17,6 +17,9 @@ table; it does not claim full DBF schema or type compatibility.
 `to_dbf_with_schema` additionally returns a `txbase-schema` JSON value that
 preserves representable `primary`, `unique`, and `not_null` constraints for a
 caller-managed sidecar.
+`save_dbf_with_schema` stages that DBF and sidecar, validates them through the
+existing DBF copy boundary, and writes `*.txschema.json` beside the destination.
+It does not claim one atomic WAL commit across the DBF and sidecar.
 
 The codec is intentionally kept in the format layer. It does not add a second
 query or HTTP implementation.
@@ -263,9 +266,12 @@ DBF values are representable and returns their sidecar metadata separately.
 The returned `DbfTable` can then use its existing `save_to` or `save_with_wal`
 path.
 
+`save_dbf_with_schema` is the file-level convenience path. The CLI exposes it
+as `xbf export XBF DBF --schema`.
+
 The in-memory conversion does not persist XBF generation or write the sidecar
-itself; a file-level export command with a multi-file recovery contract remains
-future work.
+itself. The file-level helper writes the two files through the existing DBF
+copy path; a multi-file recovery contract remains future work.
 
 Examples include variable-length UTF-8 text, timestamps, UUIDs, unsupported nullability, and characters outside the selected code page.
 
@@ -289,6 +295,7 @@ advertised as a complete supported format, the repository still needs:
 - Malformed header, section, checksum, directory, UTF-8, and payload corpora.
 - Round-trip tests for DBF to XBF and representability failures for XBF to DBF.
 - Crash and recovery tests for the snapshot and `.xwl` generation boundary.
-- Broader XBF-to-DBF representability reporting and schema-preserving export.
+- Broader XBF-to-DBF representability reporting and a multi-file atomic export
+  recovery contract.
 
 Until those gates exist, XBF remains a draft and is not advertised as a supported format.

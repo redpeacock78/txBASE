@@ -8,6 +8,8 @@ mod values;
 mod wal;
 
 #[cfg(test)]
+mod export_tests;
+#[cfg(test)]
 mod tests;
 
 use std::error::Error;
@@ -163,7 +165,7 @@ impl From<std::io::Error> for XbfError {
 
 pub use codec::{decode, decode_with_limits, encode, encode_with_limits};
 pub use conversion::from_dbf;
-pub use export::{to_dbf, to_dbf_with_schema};
+pub use export::{save_dbf_with_schema, to_dbf, to_dbf_with_schema};
 pub use persistence::{read_path, read_path_with_limits, write_path, write_path_with_limits};
 pub use wal::{recover_path, save_with_wal};
 
@@ -180,6 +182,10 @@ impl XbfTable {
         &self,
     ) -> Result<(crate::dbf::DbfTable, serde_json::Value), XbfError> {
         export::to_dbf_with_schema(self)
+    }
+
+    pub fn save_dbf_with_schema(&self, path: impl AsRef<std::path::Path>) -> Result<(), XbfError> {
+        export::save_dbf_with_schema(self, path)
     }
 
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self, XbfError> {

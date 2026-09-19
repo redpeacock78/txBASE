@@ -140,6 +140,7 @@ txbase pack path/to/users.dbf
 txbase recall path/to/users.dbf 2
 txbase xbf import path/to/users.dbf path/to/users.xbf
 txbase xbf export path/to/users.xbf path/to/users.dbf
+txbase xbf export path/to/users.xbf path/to/users.dbf --schema
 ```
 
 Copy a DBF and its sibling `.dbt` or `.fpt` memo sidecar:
@@ -200,7 +201,8 @@ It can also use a per-field-direction compound index for a matching multi-key so
 `xbf import` converts a loaded DBF table to a bounded XBF snapshot. `xbf export` converts only the
 representable XBF subset to a DBF file and reports unsupported types or values as errors.
 The library API `XbfTable::to_dbf_with_schema` additionally returns sidecar JSON for representable
-`primary`, `unique`, and `not_null` constraints; the CLI export remains DBF-only.
+`primary`, `unique`, and `not_null` constraints. `XbfTable::save_dbf_with_schema` and CLI
+`xbf export --schema` write that metadata to the sibling `.txschema.json` sidecar.
 
 `backup` and `restore` validate the source first, then copy the DBF and its detected memo sidecar.
 
@@ -301,7 +303,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming backpressure and stable snapshots, planned and multiple joins, additional aggregation stages, cross-table transactions, additional CJK encodings, and schema-preserving XBF export.
+Later phases may add a full cost-based index choice, streaming backpressure, planned and multiple joins, additional aggregation stages, cross-table transactions, additional CJK encodings, and a multi-file atomic commit protocol for XBF export.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

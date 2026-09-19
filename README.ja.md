@@ -129,6 +129,7 @@ txbase pack path/to/users.dbf
 txbase recall path/to/users.dbf 2
 txbase xbf import path/to/users.dbf path/to/users.xbf
 txbase xbf export path/to/users.xbf path/to/users.dbf
+txbase xbf export path/to/users.xbf path/to/users.dbf --schema
 ```
 
 `pack`はlogical delete済みrecordを物理的に除去し、残ったrecord numberを詰め直します。
@@ -137,7 +138,8 @@ txbase xbf export path/to/users.xbf path/to/users.dbf
 
 `xbf import`はDBF tableをbounded XBF snapshotへ変換します。
 `xbf export`は表現可能なXBF subsetだけをDBFへ変換し、unsupported typeやvalueはerrorにします。
-libraryの`XbfTable::to_dbf_with_schema`は、表現可能な`primary`、`unique`、`not_null`のsidecar JSONも返します。CLI exportは従来どおりDBFだけを書きます。
+libraryの`XbfTable::to_dbf_with_schema`は、表現可能な`primary`、`unique`、`not_null`のsidecar JSONを返します。
+`XbfTable::save_dbf_with_schema`とCLIの`xbf export --schema`は、そのmetadataを`.txschema.json` sidecarへ書きます。
 
 `catalog`はdirectory直下のDBF tableを発見し、各tableのschemaを表示します。
 
@@ -234,7 +236,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
 一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
 full cost model、collation-aware planning、backpressure付きのstreaming、追加のaggregation stage、cross-table constraint、CJK encodingの拡張はroadmapで検討します。
-XBFのwire contractは[XBF v1 format draft](docs/xbf.md)に記載しています。draftのcodec、DBFからXBFへの変換、限定されたXBFからDBFへのexport、durable snapshot path、generation付きfull-snapshot WAL recoveryは提供しますが、schemaを保持するexportは未対応です。
+XBFのwire contractは[XBF v1 format draft](docs/xbf.md)に記載しています。draftのcodec、DBFからXBFへの変換、限定されたXBFからDBFへのexport、schema sidecar付きfile export、durable snapshot path、generation付きfull-snapshot WAL recoveryを提供します。DBFとsidecarを一つのWALでcommitするmulti-file atomic protocolは未対応です。
 
 ## License
 
