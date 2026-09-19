@@ -92,6 +92,20 @@ The current `backup` and `restore` commands copy DBF and memo files only.
 
 Rebuild the index at the destination instead of treating a missing `.txidx` file as a backup artifact.
 
+## Crash boundary
+
+The current contract treats the index as derived state rather than as a second source of truth.
+
+The DBF and memo state are recovered from the durable WAL payload first, and recovery then attempts to refresh an existing index sidecar.
+
+If an interruption leaves the sidecar stale, its source fingerprint and exact-entry validation reject it before query planning can use it.
+
+The path-aware executor then falls back to a table scan, so a stale optional index does not change query results.
+
+This is crash-recoverable derived state, not one atomic filesystem rename across the DBF, memo, and index files.
+
+An atomic DBF/index contract still needs a durable target bundle or manifest, recovery rules for every replacement boundary, and fault-injection tests that prove the bundle is either usable or rejected.
+
 ## Current boundary
 
 The sidecar currently supports build, exact equality lookup, range candidate lookup, single-field ordered traversal, stale detection, validation, rebuild, and best-effort refresh after normal persistence or WAL recovery.
@@ -104,7 +118,11 @@ The path-aware query executor uses equality, range, or single-field ordered side
 
 The path-less `QueryExecutor` implementation remains a table-scan reference path.
 
-The range candidate lookup still scans the validated sidecar entries; it does not yet promise binary range seeks.
+The range candidate lookup narrows the typed key domain and uses binary seeks for the lower and upper bounds.
+
+It still materializes candidate record numbers and sorts them by physical DBF order before the normal filter pipeline.
+
+`IndexFile::load` still validates the sidecar by rebuilding expected entries from the current DBF, so the binary-seek contract does not yet claim an end-to-end speedup.
 
 Multi-key ordered traversal, multi-index selection, and crash-atomic DBF/index commits require separate contracts.
 

@@ -302,6 +302,25 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
         execute_query(&table, &range_request).unwrap()
     );
 
+    let lower_bound_request = parse(br#"{"filter":{"NAME":{"$gte":"Bob"}}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &lower_bound_request).unwrap(),
+        QueryPlan::RangeIndex {
+            name: "by_name".into(),
+            field: "NAME".into(),
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &lower_bound_request).unwrap(),
+        execute_query(&table, &lower_bound_request).unwrap()
+    );
+
+    let mismatched_bound_request = parse(br#"{"filter":{"NAME":{"$gt":7}}}"#).unwrap();
+    assert_eq!(
+        execute_query_at(&table, &path, &mismatched_bound_request).unwrap(),
+        execute_query(&table, &mismatched_bound_request).unwrap()
+    );
+
     let sort_request = parse(br#"{"sort":{"NAME":-1}}"#).unwrap();
     assert_eq!(
         explain_query_at(&path, &sort_request).unwrap(),

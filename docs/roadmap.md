@@ -64,7 +64,7 @@ It does not yet provide shared locks, relationships, cross-table index coordinat
 
 The index sidecar foundation is implemented for scalar keys, exact equality and range candidate lookup, single-field ordered traversal, path-aware planning, stale detection, explicit rebuild, and best-effort refresh after normal persistence or WAL recovery.
 
-It does not yet support binary range seeks, multi-key ordered planning, multi-index selection, or crash-atomic DBF/index commits.
+It does not yet support multi-key ordered planning, multi-index selection, or crash-atomic DBF/index commits.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
@@ -202,4 +202,4 @@ The number of files is not a quality metric by itself.
 - Automatic CJK conversion when the declared encoding is ambiguous.
 - Planner-backed indexes, joins, aggregation, MVCC, XBF, object-storage, or distributed code without a contract and end-to-end test.
 
-The next index slice is intentionally local: planner use and a crash-atomic DBF/index commit contract.
+The next index slice is intentionally local: a crash-atomic DBF/index commit contract.

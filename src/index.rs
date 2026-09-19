@@ -9,6 +9,7 @@ const INDEX_FORMAT: &str = "txbase-index";
 const INDEX_VERSION: u8 = 2;
 const INDEX_EXTENSION: &str = "txidx";
 
+mod lookup;
 mod ordering;
 mod storage;
 mod validation;
@@ -225,96 +226,6 @@ impl IndexFile {
             .iter()
             .map(|index| index.definition.name.clone())
             .collect()
-    }
-
-    pub fn lookup_eq(&self, index_name: &str, value: &Value) -> Result<Vec<usize>, IndexError> {
-        let key = IndexKey::from_value(Some(value))?;
-        let index = self
-            .indexes
-            .iter()
-            .find(|index| index.definition.name == index_name)
-            .ok_or_else(|| IndexError::Invalid(format!("index not found: {index_name}")))?;
-        Ok(index
-            .entries
-            .iter()
-            .find(|entry| ordering::compare_keys(&entry.key, &key) == std::cmp::Ordering::Equal)
-            .map(|entry| entry.records.clone())
-            .unwrap_or_default())
-    }
-
-    pub(crate) fn lookup_eq_for_field(
-        &self,
-        field: &str,
-        value: &Value,
-    ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
-        let Some(index) = self
-            .indexes
-            .iter()
-            .find(|index| index.definition.field == field)
-        else {
-            return Ok(None);
-        };
-        let key = IndexKey::from_value(Some(value))?;
-        Ok(Some((
-            index.definition.name.clone(),
-            index
-                .entries
-                .iter()
-                .find(|entry| ordering::compare_keys(&entry.key, &key) == std::cmp::Ordering::Equal)
-                .map(|entry| entry.records.clone())
-                .unwrap_or_default(),
-        )))
-    }
-
-    pub(crate) fn lookup_range_for_field(
-        &self,
-        field: &str,
-        lower: Option<(&Value, bool)>,
-        upper: Option<(&Value, bool)>,
-    ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
-        if lower.is_none() && upper.is_none() {
-            return Err(IndexError::Invalid("range must have a bound".into()));
-        }
-        let Some(index) = self
-            .indexes
-            .iter()
-            .find(|index| index.definition.field == field)
-        else {
-            return Ok(None);
-        };
-        let mut records = index
-            .entries
-            .iter()
-            .filter(|entry| ordering::in_range(&entry.key, lower, upper))
-            .flat_map(|entry| entry.records.iter().copied())
-            .collect::<Vec<_>>();
-        records.sort_unstable();
-        Ok(Some((index.definition.name.clone(), records)))
-    }
-
-    pub(crate) fn lookup_ordered_for_field(
-        &self,
-        field: &str,
-        descending: bool,
-    ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
-        let Some(index) = self
-            .indexes
-            .iter()
-            .find(|index| index.definition.field == field)
-        else {
-            return Ok(None);
-        };
-        let mut records = Vec::new();
-        if descending {
-            for entry in index.entries.iter().rev() {
-                records.extend(entry.records.iter().copied());
-            }
-        } else {
-            for entry in &index.entries {
-                records.extend(entry.records.iter().copied());
-            }
-        }
-        Ok(Some((index.definition.name.clone(), records)))
     }
 
     pub fn schema_json(&self) -> Value {

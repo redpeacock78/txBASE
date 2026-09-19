@@ -17,6 +17,25 @@ pub(super) fn compare_keys(left: &IndexKey, right: &IndexKey) -> Ordering {
     }
 }
 
+pub(super) fn key_domain(key: &IndexKey) -> u8 {
+    match key {
+        IndexKey::Missing => 0,
+        IndexKey::Null => 1,
+        IndexKey::Scalar(value) => value_domain(value),
+    }
+}
+
+pub(super) fn value_domain(value: &Value) -> u8 {
+    match value {
+        Value::Null => 1,
+        Value::Bool(_) => 2,
+        Value::Number(_) => 3,
+        Value::String(_) => 4,
+        Value::Array(_) => 5,
+        Value::Object(_) => 6,
+    }
+}
+
 pub(super) fn compare_key_to_value(key: &IndexKey, value: &Value) -> Option<Ordering> {
     match key {
         IndexKey::Missing => None,
@@ -24,30 +43,6 @@ pub(super) fn compare_key_to_value(key: &IndexKey, value: &Value) -> Option<Orde
         IndexKey::Scalar(actual) => compare_scalar_values(actual, value),
         _ => None,
     }
-}
-
-pub(super) fn in_range(
-    key: &IndexKey,
-    lower: Option<(&Value, bool)>,
-    upper: Option<(&Value, bool)>,
-) -> bool {
-    if let Some((value, inclusive)) = lower {
-        let Some(ordering) = compare_key_to_value(key, value) else {
-            return false;
-        };
-        if !(inclusive && ordering.is_ge() || !inclusive && ordering.is_gt()) {
-            return false;
-        }
-    }
-    if let Some((value, inclusive)) = upper {
-        let Some(ordering) = compare_key_to_value(key, value) else {
-            return false;
-        };
-        if !(inclusive && ordering.is_le() || !inclusive && ordering.is_lt()) {
-            return false;
-        }
-    }
-    true
 }
 
 fn scalar_type_rank(value: &Value) -> u8 {
