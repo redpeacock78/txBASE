@@ -60,7 +60,7 @@ libraryの`query::stream_query`は、matching record全体をmaterializeせず�
 sort、aggregate、page-size、cursorはblockingまたはresume boundaryを必要とするため拒否します。
 long-lived snapshotの安定性とbackpressureは未実装です。
 
-`aggregate`は一つの`$group` stageと、その前に置くboundedな`$match` stageを使えます。
+`aggregate`は一つの`$group` stageと、その前に0個以上置けるboundedな`$match` stageを使えます。
 `$count`と整数`$sum`をサポートします。
 `sort`、`projection`、pagination、`limit`との併用はできません。
 
