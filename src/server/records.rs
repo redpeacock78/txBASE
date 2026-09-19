@@ -39,7 +39,17 @@ pub(super) fn post_response(
     table: &mut DbfTable,
     dbf_path: &Path,
 ) -> HttpResponse {
-    if path != "/records" {
+    post_response_at(request, path, path, table, dbf_path)
+}
+
+pub(super) fn post_response_at(
+    request: &mut Request,
+    operation_path: &str,
+    location_path: &str,
+    table: &mut DbfTable,
+    dbf_path: &Path,
+) -> HttpResponse {
+    if operation_path != "/records" {
         return json_response(404, error("not_found", "resource not found"), false);
     }
     if let Err(response) = etag::require_if_match(request, table, true) {
@@ -51,7 +61,7 @@ pub(super) fn post_response(
     };
     let operation = OperationIr {
         method: OperationMethod::Post,
-        path: path.to_owned(),
+        path: operation_path.to_owned(),
         body: Some(Value::Object(values.clone())),
     };
     let original = table.clone();
@@ -71,7 +81,7 @@ pub(super) fn post_response(
     };
     etag::with_current(
         json_response(201, record_json(record), false)
-            .with_header(header("Location", &format!("/records/{id}"))),
+            .with_header(header("Location", &format!("{location_path}/{id}"))),
         table,
     )
 }

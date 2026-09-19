@@ -1,4 +1,4 @@
-use super::records::get_response;
+use super::records::{delete_response, get_response, post_response_at, update_response};
 use super::{
     HttpResponse, error, header, json_response, query_response_at, query_result_response,
     read_json_body,
@@ -22,29 +22,36 @@ pub(super) fn serve(root: impl AsRef<Path>, bind: &str) -> Result<(), String> {
 
 fn handle_request(mut request: Request, catalog: &Catalog) {
     let path = request.url().split('?').next().unwrap_or("/").to_owned();
-    let response = if matches!(request.method(), Method::Get | Method::Head) && path == "/catalog" {
-        schema_response(catalog)
-    } else if matches!(request.method(), Method::Get | Method::Head)
-        && record_route(&path).is_some()
-    {
-        table_response(&request, &path, catalog)
-    } else if request.method().as_str() == "QUERY" && path == "/join" {
-        join_response(&mut request, catalog)
-    } else if request.method().as_str() == "QUERY" && table_explain_route(&path).is_some() {
-        table_explain_response(&mut request, &path, catalog)
-    } else if request.method().as_str() == "QUERY" && record_route(&path).is_some() {
-        table_query_response(&mut request, &path, catalog)
-    } else {
-        json_response(
+    let response =
+        if matches!(request.method(), Method::Get | Method::Head) && path == "/catalog" {
+            schema_response(catalog)
+        } else if matches!(request.method(), Method::Get | Method::Head)
+            && record_route(&path).is_some()
+        {
+            table_response(&request, &path, catalog)
+        } else if request.method().as_str() == "QUERY" && path == "/join" {
+            join_response(&mut request, catalog)
+        } else if request.method().as_str() == "QUERY" && table_explain_route(&path).is_some() {
+            table_explain_response(&mut request, &path, catalog)
+        } else if request.method().as_str() == "QUERY" && record_route(&path).is_some() {
+            table_query_response(&mut request, &path, catalog)
+        } else if matches!(
+            request.method(),
+            Method::Post | Method::Put | Method::Patch | Method::Delete
+        ) && record_route(&path).is_some()
+        {
+            table_mutation_response(&mut request, &path, catalog)
+        } else {
+            json_response(
             405,
             error(
                 "method_not_allowed",
-                "only GET, HEAD, and QUERY catalog routes are available",
+                "only GET, HEAD, POST, PUT, PATCH, DELETE, and QUERY catalog routes are available",
             ),
             true,
         )
-        .with_header(header("Allow", "GET, HEAD, QUERY"))
-    };
+        .with_header(header("Allow", "GET, HEAD, POST, PUT, PATCH, DELETE, QUERY"))
+        };
     if let Err(error) = request.respond(response) {
         eprintln!("failed to send HTTP response: {error}");
     }
@@ -95,6 +102,44 @@ pub(super) fn table_query_response(
         }
     };
     query_response_at(request, &local_path, &table, dbf_path)
+}
+
+pub(super) fn table_mutation_response(
+    request: &mut Request,
+    path: &str,
+    catalog: &Catalog,
+) -> HttpResponse {
+    let Some((name, local_path)) = record_route(path) else {
+        return json_response(404, error("not_found", "resource not found"), false);
+    };
+    let Some(dbf_path) = catalog.table_path(name) else {
+        return json_response(404, error("not_found", "table not found"), false);
+    };
+    let mut table = match catalog.open_table(name) {
+        Ok(table) => table,
+        Err(catalog_error) => {
+            return json_response(
+                500,
+                error("catalog_error", &catalog_error.to_string()),
+                false,
+            );
+        }
+    };
+    match request.method() {
+        Method::Post => post_response_at(request, &local_path, path, &mut table, dbf_path),
+        Method::Put => update_response(request, &local_path, &mut table, dbf_path, true),
+        Method::Patch => update_response(request, &local_path, &mut table, dbf_path, false),
+        Method::Delete => delete_response(request, &local_path, &mut table, dbf_path),
+        _ => json_response(
+            405,
+            error(
+                "method_not_allowed",
+                "only POST, PUT, PATCH, and DELETE table routes are available",
+            ),
+            true,
+        )
+        .with_header(header("Allow", "POST, PUT, PATCH, DELETE")),
+    }
 }
 
 pub(super) fn table_explain_response(

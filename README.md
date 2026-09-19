@@ -83,16 +83,17 @@ supports multiple equality conditions, and is capped at 100,000 output rows.
 `semi` and `anti` emit only qualified left-table fields, based on whether a right-side match exists.
 `cross` requires an empty `on` object and caps candidate pairs at 100,000.
 The single-table HTTP server does not expose joins. Run the catalog server to expose catalog
-schema through `GET /catalog`, named-table reads through `GET`/`HEAD /{table}/records`, and the
-same bounded read-only join through `QUERY /join`:
+schema through `GET /catalog`, named-table reads and independent mutations through
+`GET`/`HEAD`/`POST`/`PUT`/`PATCH`/`DELETE /{table}/records[/{id}]`, and the same bounded join through
+`QUERY /join`:
 
 ```bash
 txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 ```
 
 `QUERY /{table}/records` and `QUERY /{table}/explain` accept the same query document as the
-single-table routes. Catalog table routes are read-only; cross-table writes and transactions
-remain future work.
+single-table routes. Named-table mutations reuse single-table WAL/ETag behavior and commit one
+DBF at a time; cross-table atomic writes and transactions remain future work.
 
 The single-table server also exposes `QUERY /explain`, which returns the selected table-scan or
 index plan for the same query document.
@@ -305,7 +306,7 @@ src/query_path.rs   Dotted-path traversal and projection helpers
 src/server.rs       HTTP routing, QUERY validation, and shared HTTP responses
 src/server/records.rs DBF record routes and mutation persistence
 src/server/etag.rs  HTTP representation validators and conditional requests
-src/server/catalog.rs Catalog schema and read-only join HTTP surface
+src/server/catalog.rs Catalog schema, named-table HTTP surface, and bounded join
 src/server/explain.rs Query-plan explanation HTTP surface
 src/storage.rs      Range-based storage boundary
 src/transaction.rs  File or memory WAL and snapshot transactions

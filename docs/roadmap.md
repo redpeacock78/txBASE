@@ -35,7 +35,7 @@ The repository currently provides:
 - Strong table representation ETags on successful reads, GET/HEAD If-None-Match validation, and optional If-Match protection for single-table mutations and transactions.
 - A bounded aggregation pipeline with zero or more `$match` stages before one `$group` stage using `$count`, integer `$sum`, numeric `$avg`, `$min`, and `$max`, plus final `$sort` and `$limit` stages over group output.
 - A bounded local `inner`, `left`, `semi`, or `anti` equality join plus a bounded `cross` join over two catalog tables with qualified filtering and projection.
-- A read-only catalog HTTP server exposing table schemas, named-table records and plans, and the bounded local join.
+- A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.
@@ -70,7 +70,8 @@ Schema introspection, verification, copy tooling, `PACK`, `RECALL`, and the firs
 
 The catalog currently derives table identity from direct-child DBF filenames and does not persist a separate manifest.
 
-It provides table discovery, named table loading, schema output, and per-table verification.
+It provides table discovery, named table loading, schema output, per-table verification, and
+independent named-table HTTP mutations that reuse the single-table persistence boundary.
 
 It does not yet provide shared locks, relationships, cross-table index coordination, or cross-table transactions.
 

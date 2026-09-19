@@ -284,6 +284,66 @@ fn catalog_server_reads_named_tables_through_record_routes() {
 }
 
 #[test]
+fn catalog_server_mutates_named_tables_with_single_table_semantics() {
+    let root = temporary_catalog();
+    fs::write(root.join("left.dbf"), fixture()).unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+
+    let mut post = json_request(
+        Method::Post,
+        "/left/records",
+        r#"{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}"#,
+    );
+    let response = super::catalog::table_mutation_response(&mut post, "/left/records", &catalog);
+    assert_eq!(response.status_code(), StatusCode(201));
+    assert_eq!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("Location"))
+            .map(|header| header.value.as_str()),
+        Some("/left/records/3")
+    );
+    assert!(
+        catalog
+            .open_table("left")
+            .unwrap()
+            .active_record(3)
+            .is_some()
+    );
+
+    let mut patch = json_request(Method::Patch, "/left/records/3", r#"{"$inc":{"AGE":1}}"#);
+    let response = super::catalog::table_mutation_response(&mut patch, "/left/records/3", &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert_eq!(
+        catalog
+            .open_table("left")
+            .unwrap()
+            .active_record(3)
+            .unwrap()
+            .values["AGE"],
+        43
+    );
+
+    let delete = TestRequest::new()
+        .with_method(Method::Delete)
+        .with_path("/left/records/3")
+        .into();
+    let response =
+        super::catalog::table_mutation_response(&mut delete, "/left/records/3", &catalog);
+    assert_eq!(response.status_code(), StatusCode(204));
+    assert!(
+        catalog
+            .open_table("left")
+            .unwrap()
+            .active_record(3)
+            .is_none()
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn explain_endpoint_reports_scan_and_index_plans() {
     let path =
         std::env::temp_dir().join(format!("txbase-server-explain-{}.dbf", std::process::id()));

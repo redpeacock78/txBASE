@@ -28,14 +28,15 @@ default listenerは`127.0.0.1:8080`です。
 
 listener addressは`--bind ADDRESS`で変更できます。
 
-複数DBFのread-only joinをHTTPから使う場合は、catalog serverを起動します。
+複数DBFのjoinをHTTPから使う場合は、catalog serverを起動します。
 
 ```bash
 cargo run -- --serve-catalog path/to/database
 ```
 
-`GET /catalog`でschema、`GET`/`HEAD /{table}/records[/{id}]`でnamed tableを読み取り、`QUERY /join`でbounded joinを返します。
-`QUERY /{table}/records`と`QUERY /{table}/explain`はsingle-table serverと同じquery documentを受け付けます。catalog routeはread-onlyで、cross-table writeとtransactionは未実装です。
+`GET /catalog`でschema、`GET`/`HEAD /{table}/records[/{id}]`でnamed tableを読み取れます。
+`POST /{table}/records`と`PUT`/`PATCH`/`DELETE /{table}/records/{id}`は、single-table serverと同じWAL/ETag semanticsで一つのDBFを更新します。
+`QUERY /{table}/records`と`QUERY /{table}/explain`はsingle-table serverと同じquery documentを受け付け、`QUERY /join`はbounded joinを返します。cross-table atomic write、transaction ID、MVCC visibilityは未実装です。
 
 single-table serverの`QUERY /explain`は、同じquery documentに対するtable scanまたはindex
 planを構造化JSONで返します。
@@ -234,7 +235,7 @@ src/query_path.rs   dotted pathとprojectionのhelper
 src/server.rs       HTTP routing、QUERY validation、共通HTTP response
 src/server/records.rs DBF recordのGET/POST/PUT/PATCH/DELETEとmutation persistence
 src/server/etag.rs  HTTP representation validatorとconditional request
-src/server/catalog.rs catalog schemaとread-only join HTTP surface
+src/server/catalog.rs catalog schema、named-table HTTP surface、bounded join
 src/server/explain.rs query plan explanation HTTP surface
 src/transaction.rs  fileまたはmemory WALとsnapshot transaction
 src/xbf/            bounded XBF v1 codec、DBF変換、永続化、WAL、test

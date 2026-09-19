@@ -4,7 +4,7 @@ The catalog boundary maps one database directory to the DBF tables stored direct
 
 This is the first multi-table slice in the roadmap.
 
-It does not add cross-table mutations, indexes, or a second storage format.
+It does not add cross-table atomic mutations, indexes, or a second storage format.
 
 ## Filesystem contract
 
@@ -59,7 +59,7 @@ The bounded local join boundary is separate from catalog discovery.
 Call `txbase::query::join::execute` with a `Catalog` and a validated join document to read two
 named tables without adding a manifest or cross-table write lock.
 
-The optional catalog server exposes that read-only boundary over HTTP:
+The optional catalog server exposes that boundary over HTTP:
 
 ```bash
 txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
@@ -72,9 +72,11 @@ the single-table route, and `QUERY /{table}/explain` returns the same selected p
 single-table `QUERY /explain`. `QUERY /join` accepts the same JSON join document as
 `query::join::parse`, returns a JSON array, and retains the 100,000-row join bound.
 
-These catalog table routes are read-only. The catalog is discovered once at server startup, while
-each request loads the named table through the existing recovery path. Cross-table writes and
-transactions are not exposed.
+`POST /{table}/records` and `PUT`/`PATCH`/`DELETE /{table}/records/{id}` reuse the single-table
+mutation, WAL, ETag, validation, and constraint behavior. Each request commits only its named
+DBF; the catalog does not provide cross-table atomicity, transaction IDs, or MVCC visibility.
+The catalog is discovered once at server startup, while each request loads the named table through
+the existing recovery path. Named-table mutations do not add or remove tables.
 
 An invalid DBF does not prevent directory discovery because discovery only identifies files.
 
@@ -116,7 +118,8 @@ The full nested schema includes the DBF header, record counts, memo sidecar dete
 ## Boundary
 
 The catalog currently provides discovery, lookup, schema introspection, verification, the
-input boundary used by the bounded local join, and an optional read-only HTTP surface.
+input boundary used by the bounded local join, and an optional HTTP surface for independent
+named-table reads and mutations.
 
 It does not provide a cross-table transaction.
 
