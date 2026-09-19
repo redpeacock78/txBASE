@@ -25,6 +25,7 @@ The repository currently provides:
 - DBF parsing and writing for selected classic and Visual FoxPro fields.
 - DBT and FPT memo or binary sidecar paths for the supported formats.
 - JSON query execution with a small MongoDB-inspired predicate vocabulary.
+- Bounded `$expr` field-to-field comparisons that remain on the table-scan reference path.
 - HTTP `GET`, `QUERY`, `POST`, `PUT`, `PATCH`, and `DELETE` routes.
 - File or memory WAL types with `TXOP`, `TXDP`, `TXDB`, and `TXDM` persistence paths.
 - Startup recovery, stale-snapshot rejection, and an Ubuntu/macOS/Windows CI gate.
@@ -79,7 +80,7 @@ The current record scan remains the reference execution path while the query mod
 ### Candidate scope
 
 - Aggregation.
-- Field-to-field comparisons such as `$field` expressions.
+- Full expression evaluation beyond the bounded `$expr` comparison form.
 - Joins.
 - Constraints.
 - Full range, histogram-based, and mixed-direction compound cost planning.

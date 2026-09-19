@@ -14,7 +14,8 @@ The current document shape is:
 {
   "filter": {
     "AGE": {"$gte": 20, "$lt": 30},
-    "COUNTRY": {"$in": ["JP", "TW"]}
+    "COUNTRY": {"$in": ["JP", "TW"]},
+    "$expr": {"$gt": ["$AGE", "$MIN_AGE"]}
   },
   "sort": {"AGE": 1},
   "projection": {"NAME": 1, "AGE": 1},
@@ -46,6 +47,7 @@ Sort ties preserve DBF record order.
 | Comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` | Compare decoded JSON values using the engine's explicit type rules |
 | Membership | `$in`, `$nin` | Match a value against a list of candidate values |
 | Logical | `$and`, `$or`, `$not` | Compose or invert predicate documents |
+| Expression | `$expr` | Compare two scalar literals or field references from the same record |
 
 An empty `$and` matches every record.
 
@@ -77,7 +79,7 @@ The current implementation does not promise every MongoDB projection rule, posit
 
 The [MongoDB query predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/) groups predicates into comparison, logical, array, element, evaluation, bitwise, geospatial, and miscellaneous families.
 
-The current txBASE subset intentionally stops at comparison, membership, and logical predicates.
+The current txBASE subset intentionally stops at comparison, membership, logical, and bounded field-expression predicates.
 
 MongoDB's [find command](https://www.mongodb.com/docs/manual/reference/command/find/) separates a filter from projection, sort, skip, limit, hint, and related cursor controls.
 
@@ -92,6 +94,16 @@ MongoDB compares BSON values with BSON-specific type and array rules, while txBA
 The shared operator names therefore do not imply shared results for mixed types, missing fields, arrays, or documents.
 
 MongoDB's [logical predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/) documents `$and`, `$or`, `$nor`, and `$not`.
+
+MongoDB's [`$expr` predicate](https://www.mongodb.com/docs/manual/reference/operator/query/expr/) allows expressions inside a query predicate, including comparisons between two fields from the same document.
+
+txBASE implements only the bounded form `{"$expr":{"$gt":["$LEFT","$RIGHT"]}}` with one comparison operator and two scalar operands.
+
+A string operand beginning with `$` is a dotted field reference; all other scalar operands are literals.
+
+If either field reference is missing, the expression does not match.
+
+The expression path uses the table scan because a field-to-field comparison is not a constant-bound index lookup.
 
 MongoDB's [array predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/) covers operators such as `$all`, `$elemMatch`, and `$size` that txBASE does not currently implement.
 
@@ -191,7 +203,7 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 
 The roadmap may later cover the following in separate contracts:
 
-1. Full cost-based index choice with explicit missing, null, collation, and compound-range rules.
+1. Full expression evaluation and cost-based index choice with explicit missing, null, collation, and compound-range rules.
 2. A catalog for multiple tables and schema metadata.
 3. Joins and aggregation with bounded memory behavior.
 4. Cursors or streaming responses with stable snapshot rules.
@@ -205,6 +217,7 @@ Until those contracts exist, the record scan is the simpler and more honest exec
 - [MongoDB query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [MongoDB comparison predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/)
 - [MongoDB logical predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)
+- [MongoDB `$expr` predicate](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)
 - [MongoDB array predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [MongoDB query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)

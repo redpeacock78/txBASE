@@ -46,12 +46,54 @@ fn validate_filter(filter: &Map<String, Value>, path: &str) -> Result<(), QueryE
                     .ok_or_else(|| QueryError::Invalid(format!("{path}.$not must be an object")))?;
                 validate_filter(clause, &format!("{path}.$not"))?;
             }
+            "$expr" => validate_expression(condition, &format!("{path}.$expr"))?,
             field if field.starts_with('$') => {
                 return Err(QueryError::Invalid(format!(
                     "unsupported logical operator {field}"
                 )));
             }
             _ => validate_condition(condition, &format!("{path}.{field}"))?,
+        }
+    }
+    Ok(())
+}
+
+fn validate_expression(expression: &Value, path: &str) -> Result<(), QueryError> {
+    let expression = expression
+        .as_object()
+        .ok_or_else(|| QueryError::Invalid(format!("{path} must be an object")))?;
+    let Some((operator, operands)) = expression.iter().next() else {
+        return Err(QueryError::Invalid(format!("{path} cannot be empty")));
+    };
+    if expression.len() != 1
+        || !matches!(
+            operator.as_str(),
+            "$eq" | "$ne" | "$gt" | "$gte" | "$lt" | "$lte"
+        )
+    {
+        return Err(QueryError::Invalid(format!(
+            "{path} supports one comparison operator"
+        )));
+    }
+    let operands = operands
+        .as_array()
+        .ok_or_else(|| QueryError::Invalid(format!("{path}.{operator} must be an array")))?;
+    if operands.len() != 2 {
+        return Err(QueryError::Invalid(format!(
+            "{path}.{operator} requires two operands"
+        )));
+    }
+    for (index, operand) in operands.iter().enumerate() {
+        if let Some(reference) = operand.as_str().and_then(|value| value.strip_prefix('$')) {
+            if reference.is_empty() {
+                return Err(QueryError::Invalid(format!(
+                    "{path}.{operator}[{index}] has an empty field reference"
+                )));
+            }
+        } else if operand.is_array() || operand.is_object() {
+            return Err(QueryError::Invalid(format!(
+                "{path}.{operator}[{index}] must be a scalar or field reference"
+            )));
         }
     }
     Ok(())

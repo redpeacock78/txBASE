@@ -126,6 +126,8 @@ A delta with the wrong base must be rejected.
 
 `src/query/planner_compound_tests.rs::chooses_a_compound_sort_index_with_the_smallest_equality_prefix` covers equality-prefix candidate counting and compound-plan equivalence with the table scan.
 
+`src/query/field_expression_tests.rs` covers dotted field references, missing operands, and malformed or unsupported `$expr` documents.
+
 ### Compatibility tests
 
 Fixtures should come from independent readers or writers when possible.

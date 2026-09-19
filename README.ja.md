@@ -50,7 +50,9 @@ curl -i -X QUERY \
 
 現在のqueryは`filter`、`sort`、`projection`、`skip`、`limit`を提供します。
 
-predicateは`$eq`、`$ne`、`$gt`、`$gte`、`$lt`、`$lte`、`$in`、`$nin`、`$and`、`$or`、`$not`です。
+`$expr`による同一record内のfield比較も、二つのscalar operandに限定して提供します。
+
+predicateは`$eq`、`$ne`、`$gt`、`$gte`、`$lt`、`$lte`、`$in`、`$nin`、`$and`、`$or`、`$not`、限定された`$expr`です。
 
 HTTP境界の詳細は[HTTP method semantics](docs/http-semantics.md)を参照してください。
 

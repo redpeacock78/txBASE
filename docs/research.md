@@ -51,6 +51,7 @@ The README organization follows the section shape of [texenv's README](https://g
 - [Documents](https://www.mongodb.com/docs/manual/core/document/)
 - [Query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [Find command](https://www.mongodb.com/docs/manual/reference/command/find/)
+- [`$expr` field expressions](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)
 - [Query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
 - [Explain and execution statistics](https://www.mongodb.com/docs/manual/reference/method/db.collection.explain/)
 - [MongoDB compound indexes](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/)
