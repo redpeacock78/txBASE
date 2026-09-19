@@ -16,7 +16,7 @@ const MAX_BODY: usize = 1024 * 1024;
 type HttpResponse = Response<Cursor<Vec<u8>>>;
 
 use range::query_result_response;
-use records::{delete_response, get_response, persist_mutation, post_response, update_response};
+use records::{delete_response, get_response, post_response, update_response};
 
 pub fn serve(mut table: DbfTable, dbf_path: impl AsRef<Path>, bind: &str) -> Result<(), String> {
     let dbf_path = dbf_path.as_ref();

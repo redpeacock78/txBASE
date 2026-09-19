@@ -1,5 +1,6 @@
 use super::*;
 use crate::index::{IndexDefinition, IndexFile};
+use crate::xbase::{OperationIr, OperationMethod};
 use std::fs;
 use std::io::Read;
 use tiny_http::{Method, StatusCode, TestRequest};
@@ -365,7 +366,8 @@ fn reloads_disk_state_after_persistence_failure() {
         path: "/records/1".into(),
         body: None,
     };
-    let response = persist_mutation(&mut table, original, &path, &operation).unwrap_err();
+    let response =
+        super::records::persist_mutation(&mut table, original, &path, &operation).unwrap_err();
     assert_eq!(response.status_code(), StatusCode(500));
     assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
 
