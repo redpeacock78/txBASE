@@ -81,7 +81,7 @@ fn explicit_euc_jp_and_gb18030_overrides_round_trip() {
 
 #[test]
 fn explicit_iso_2022_jp_override_round_trips_jis_text() {
-    let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some("iso-2022-jp")).unwrap();
+    let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some("ISO-2022-JP")).unwrap();
     assert_eq!(table.schema_json()["encoding_override"], "ISO-2022-JP");
     assert_eq!(
         table.schema_json()["encoding_metadata"],
