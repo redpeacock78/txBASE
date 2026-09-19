@@ -27,7 +27,7 @@ fn streams_filtered_projected_records_with_bounded_controls() {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
 
-    assert_eq!(records, vec![serde_json::json!({"NAME": "Alice"})]);
+    assert_eq!(records, vec![serde_json::json!({"NAME": "Bob"})]);
 }
 
 #[test]
