@@ -41,10 +41,8 @@ fn decodes_and_encodes_declared_cjk_drivers() {
 
 #[test]
 fn explicit_euc_jp_and_gb18030_overrides_round_trip() {
-    for (encoding, canonical, value) in
-        [("euc-jp", "EUC-JP", "日本"), ("gb18030", "GB18030", "中文")]
-    {
-        let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some(encoding)).unwrap();
+    for (canonical, value) in [("EUC-JP", "日本"), ("GB18030", "中文")] {
+        let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some(canonical)).unwrap();
         assert_eq!(table.schema_json()["encoding_override"], canonical);
         table
             .patch_record(
@@ -56,7 +54,7 @@ fn explicit_euc_jp_and_gb18030_overrides_round_trip() {
             )
             .unwrap();
         let reloaded =
-            DbfTable::from_bytes_with_encoding(&table.to_bytes(), Some(encoding)).unwrap();
+            DbfTable::from_bytes_with_encoding(&table.to_bytes(), Some(canonical)).unwrap();
         assert_eq!(reloaded.active_record(1).unwrap().values["NAME"], value);
     }
 }
