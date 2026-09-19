@@ -1,7 +1,7 @@
 use super::conversion::{civil_from_days, days_from_civil};
 use super::{XbfError, XbfField, XbfTable, XbfType, XbfValue};
 use crate::dbf::DbfTable;
-use serde_json::{Map, Number, Value};
+use serde_json::{Map, Number, Value, json};
 use std::collections::BTreeSet;
 
 const CLASSIC_HEADER_SIZE: usize = 32;
@@ -19,6 +19,16 @@ struct ExportField {
 }
 
 pub fn to_dbf(table: &XbfTable) -> Result<DbfTable, XbfError> {
+    to_dbf_inner(table, false)
+}
+
+pub fn to_dbf_with_schema(table: &XbfTable) -> Result<(DbfTable, Value), XbfError> {
+    super::schema::validate_constraints(&table.fields, &table.records)?;
+    let dbf = to_dbf_inner(table, true)?;
+    Ok((dbf, schema_metadata(table)))
+}
+
+fn to_dbf_inner(table: &XbfTable, preserve_constraints: bool) -> Result<DbfTable, XbfError> {
     for record in &table.records {
         if record.values.len() != table.fields.len() {
             return Err(XbfError::Invalid(
@@ -37,7 +47,7 @@ pub fn to_dbf(table: &XbfTable) -> Result<DbfTable, XbfError> {
             .iter()
             .map(|record| &record.values[index])
             .collect::<Vec<_>>();
-        descriptors.push(descriptor(field, &values)?);
+        descriptors.push(descriptor(field, &values, preserve_constraints)?);
     }
 
     let mut dbf =
@@ -55,14 +65,18 @@ pub fn to_dbf(table: &XbfTable) -> Result<DbfTable, XbfError> {
     Ok(dbf)
 }
 
-fn descriptor(field: &XbfField, values: &[&XbfValue]) -> Result<ExportField, XbfError> {
+fn descriptor(
+    field: &XbfField,
+    values: &[&XbfValue],
+    preserve_constraints: bool,
+) -> Result<ExportField, XbfError> {
     if field.name.is_empty() || field.name.len() > 10 || !field.name.is_ascii() {
         return Err(invalid(
             field,
             "DBF field names must be non-empty ASCII of at most 10 bytes",
         ));
     }
-    if field.primary_key || field.unique {
+    if !preserve_constraints && (field.primary_key || field.unique) {
         return Err(invalid(
             field,
             "DBF export cannot preserve primary or unique constraints",
@@ -132,6 +146,27 @@ fn descriptor(field: &XbfField, values: &[&XbfValue]) -> Result<ExportField, Xbf
         ));
     }
     Ok(result)
+}
+
+fn schema_metadata(table: &XbfTable) -> Value {
+    let mut fields = Map::new();
+    for field in &table.fields {
+        let mut metadata = Map::new();
+        if field.primary_key {
+            metadata.insert(String::from("primary"), Value::Bool(true));
+        } else if field.unique {
+            metadata.insert(String::from("unique"), Value::Bool(true));
+        }
+        if !field.nullable {
+            metadata.insert(String::from("not_null"), Value::Bool(true));
+        }
+        fields.insert(field.name.clone(), Value::Object(metadata));
+    }
+    json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": fields,
+    })
 }
 
 fn variable_width(field: &XbfField, values: &[&XbfValue], binary: bool) -> Result<u8, XbfError> {

@@ -197,6 +197,47 @@ fn exports_a_representable_xbf_table_to_dbf() {
 }
 
 #[test]
+fn exports_xbf_constraints_as_schema_metadata() {
+    let table = XbfTable {
+        generation: 4,
+        fields: vec![
+            XbfField {
+                name: "ID".into(),
+                ty: XbfType::Signed64,
+                nullable: false,
+                primary_key: true,
+                unique: true,
+            },
+            XbfField {
+                name: "NAME".into(),
+                ty: XbfType::String,
+                nullable: false,
+                primary_key: false,
+                unique: true,
+            },
+        ],
+        records: vec![XbfRecord {
+            deleted: false,
+            values: vec![XbfValue::Signed64(1), XbfValue::String("Alice".into())],
+        }],
+    };
+
+    let (dbf, schema) = super::to_dbf_with_schema(&table).unwrap();
+    assert_eq!(dbf.active_record(1).unwrap().values["NAME"], "Alice");
+    assert_eq!(
+        schema,
+        serde_json::json!({
+            "format": "txbase-schema",
+            "version": 1,
+            "fields": {
+                "ID": {"primary": true, "not_null": true},
+                "NAME": {"unique": true, "not_null": true}
+            }
+        })
+    );
+}
+
+#[test]
 fn rejects_nonrepresentable_xbf_dbf_export_types() {
     let table = XbfTable {
         generation: 0,

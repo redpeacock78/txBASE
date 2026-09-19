@@ -199,6 +199,8 @@ It can also use a per-field-direction compound index for a matching multi-key so
 
 `xbf import` converts a loaded DBF table to a bounded XBF snapshot. `xbf export` converts only the
 representable XBF subset to a DBF file and reports unsupported types or values as errors.
+The library API `XbfTable::to_dbf_with_schema` additionally returns sidecar JSON for representable
+`primary`, `unique`, and `not_null` constraints; the CLI export remains DBF-only.
 
 `backup` and `restore` validate the source first, then copy the DBF and its detected memo sidecar.
 

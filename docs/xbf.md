@@ -14,6 +14,9 @@ The full-snapshot `.xwl` path records base and target generations and rejects a
 generation mismatch during recovery.
 The bounded `to_dbf` helper exports representable tables to an in-memory DBF
 table; it does not claim full DBF schema or type compatibility.
+`to_dbf_with_schema` additionally returns a `txbase-schema` JSON value that
+preserves representable `primary`, `unique`, and `not_null` constraints for a
+caller-managed sidecar.
 
 The codec is intentionally kept in the format layer. It does not add a second
 query or HTTP implementation.
@@ -251,14 +254,17 @@ Legacy bytes are decoded before becoming XBF UTF-8 text.
 
 The current `XBF -> DBF` boundary supports an in-memory classic DBF table with
 `C`, binary `C`, `N`, `L`, `D`, and Visual FoxPro `T` fields.
-It rejects UUID and JSON values, non-ASCII or over-wide field names, values over
-the DBF field limits, unsigned integers above the exact numeric range, primary
-or unique constraints, and NULL text or binary values.
+The direct `to_dbf` path rejects UUID and JSON values, non-ASCII or over-wide
+field names, values over the DBF field limits, unsigned integers above the
+exact numeric range, primary or unique constraints, and NULL text or binary
+values.
+The `to_dbf_with_schema` path accepts primary and unique constraints when the
+DBF values are representable and returns their sidecar metadata separately.
 The returned `DbfTable` can then use its existing `save_to` or `save_with_wal`
 path.
 
-The export does not persist XBF generation, primary/unique metadata, or a
-separate representability report; broader schema-preserving export remains
+The in-memory conversion does not persist XBF generation or write the sidecar
+itself; a file-level export command with a multi-file recovery contract remains
 future work.
 
 Examples include variable-length UTF-8 text, timestamps, UUIDs, unsupported nullability, and characters outside the selected code page.
