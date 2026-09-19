@@ -37,6 +37,7 @@ fn groups_comparable_extremes_and_returns_null_for_missing_values() {
     let request = parse(
         br#"{
             "aggregate": [{"$group": {
+                "_id": null,
                 "youngest": {"$min": "$AGE"},
                 "oldest": {"$max": "$AGE"},
                 "missing_min": {"$min": "$MISSING"}
