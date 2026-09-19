@@ -188,12 +188,9 @@ fn validate_definition(
 
 fn validate_key(key: &IndexKey, field_count: usize, index_name: &str) -> Result<(), IndexError> {
     match (field_count, key) {
-        (
-            1,
-            IndexKey::Scalar(Value::Array(_)) | IndexKey::Scalar(Value::Object(_)),
-        ) => Err(IndexError::Invalid(
-            "only scalar values can be indexed".into(),
-        )),
+        (1, IndexKey::Scalar(Value::Array(_)) | IndexKey::Scalar(Value::Object(_))) => Err(
+            IndexError::Invalid("only scalar values can be indexed".into()),
+        ),
         (1, IndexKey::Missing | IndexKey::Null | IndexKey::Scalar(_)) => Ok(()),
         (1, IndexKey::Compound(_)) => Err(IndexError::Invalid(format!(
             "index {index_name} has a compound key for one field"
