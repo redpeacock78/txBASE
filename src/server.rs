@@ -35,7 +35,7 @@ pub fn serve_catalog(root: impl AsRef<Path>, bind: &str) -> Result<(), String> {
 fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
     let path = request.url().split('?').next().unwrap_or("/").to_owned();
     let is_query = request.method().as_str() == "QUERY";
-    let response = if matches!(request.method(), Method::Get) {
+    let response = if matches!(request.method(), Method::Get | Method::Head) {
         get_response(&request, &path, table)
     } else if is_query {
         if path == "/explain" {
@@ -60,11 +60,14 @@ fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
             405,
             error(
                 "method_not_allowed",
-                "only GET, POST, PUT, PATCH, DELETE, and QUERY are available",
+                "only GET, HEAD, POST, PUT, PATCH, DELETE, and QUERY are available",
             ),
             true,
         )
-        .with_header(header("Allow", "GET, POST, PUT, PATCH, DELETE, QUERY"))
+        .with_header(header(
+            "Allow",
+            "GET, HEAD, POST, PUT, PATCH, DELETE, QUERY",
+        ))
     };
     if let Err(error) = request.respond(response) {
         eprintln!("failed to send HTTP response: {error}");

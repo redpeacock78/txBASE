@@ -92,6 +92,9 @@ txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 The single-table server also exposes `QUERY /explain`, which returns the selected table-scan or
 index plan for the same query document.
 
+`HEAD /records` and `HEAD /records/{id}` reuse the GET status and representation headers without
+transferring response content.
+
 `QUERY` follows the HTTP QUERY boundary defined by [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html), including `Accept-Query: "application/json"`.
 
 ### Mutate

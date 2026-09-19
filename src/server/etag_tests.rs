@@ -225,3 +225,30 @@ fn if_none_match_returns_not_modified_for_current_representation() {
 
     cleanup(&path);
 }
+
+#[test]
+fn head_reuses_record_headers_and_conditional_status() {
+    let path = test_path("head");
+    let table = prepare(&path);
+    let request = get_request("/records", None);
+    let current = header_value(&get_response(&request, "/records", &table), "ETag");
+
+    let request = TestRequest::new()
+        .with_method(Method::Head)
+        .with_path("/records")
+        .into();
+    let response = get_response(&request, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert_eq!(header_value(&response, "ETag"), current);
+
+    let request = TestRequest::new()
+        .with_method(Method::Head)
+        .with_path("/records")
+        .with_header(header("If-None-Match", &current))
+        .into();
+    let response = get_response(&request, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(304));
+    assert_eq!(header_value(&response, "ETag"), current);
+
+    cleanup(&path);
+}

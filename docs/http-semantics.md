@@ -23,7 +23,7 @@ The common method properties are:
 | Method | Safe | Idempotent | txBASE role |
 | --- | --- | --- | --- |
 | `GET` | Yes | Yes | Read records or one record |
-| `HEAD` | Yes | Yes | Not implemented |
+| `HEAD` | Yes | Yes | Read headers for records or one record |
 | `OPTIONS` | Yes | Yes | Not implemented |
 | `TRACE` | Yes | Yes | Not implemented |
 | `POST` | No | No | Create a physical DBF record |
@@ -42,6 +42,7 @@ They do not by themselves provide transaction isolation, deduplication, or a ret
 | --- | --- | --- |
 | `GET /records` | No JSON body | Active records as JSON |
 | `GET /records/{id}` | One-based physical DBF record number | One active record or `404` |
+| `HEAD /records` and `HEAD /records/{id}` | Same target selection as `GET` | Same status and representation headers without response content |
 | `QUERY /records` | `Content-Type: application/json` and a query document | Filtered JSON result with `Accept-Query`; paged queries return `records` and `cursor` |
 | `QUERY /explain` | `Content-Type: application/json` and a query document | Selected table-scan or index plan with `Accept-Query` |
 | `GET /catalog` (catalog server) | No JSON body | Discovered table schemas |
@@ -72,10 +73,10 @@ The validator is opaque and is not an authenticity or authorization token. It is
 current in-memory DBF bytes and resolved active JSON values, so memo-backed values participate in
 the representation identity.
 
-`GET /records` and `GET /records/{id}` also accept `If-None-Match`. A matching strong or weak tag,
+`GET /records` and `HEAD /records` (and their `/{id}` forms) also accept `If-None-Match`. A matching strong or weak tag,
 or `*` for an existing resource, returns `304 Not Modified` with the current `ETag` and no body;
 an unmatched value returns the normal representation. This cache-validation behavior is currently
-limited to `GET`.
+limited to `GET` and `HEAD`.
 
 ## 3. PATCH
 
@@ -92,7 +93,7 @@ For collision-sensitive patches, the RFC recommends conditional requests such as
 txBASE currently accepts `application/json` plain field patches and the typed `$set`, `$unset`, and `$inc` subset described in [the query model](query-model.md).
 
 txBASE implements a strong table representation tag, optional `If-Match` protection for the
-state-changing routes described above, and GET-only `If-None-Match` cache validation.
+state-changing routes described above, and GET/HEAD-only `If-None-Match` cache validation.
 
 It does not yet implement mutation-side `If-None-Match`, JSON Patch, or JSON Merge Patch media types.
 
