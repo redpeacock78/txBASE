@@ -93,7 +93,7 @@ impl CollectionStatistics {
             && self
                 .indexes
                 .as_ref()
-                .map_or(true, |indexes| Some(indexes) == expected.indexes.as_ref())
+                .is_none_or(|indexes| Some(indexes) == expected.indexes.as_ref())
     }
 }
 
