@@ -9,13 +9,25 @@ type RangeBounds<'a> = (Option<RangeBound<'a>>, Option<RangeBound<'a>>);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryPlan {
     TableScan,
-    EqualityIndex { name: String, field: String },
-    RangeIndex { name: String, field: String },
+    EqualityIndex {
+        name: String,
+        field: String,
+    },
+    RangeIndex {
+        name: String,
+        field: String,
+    },
+    OrderedIndex {
+        name: String,
+        field: String,
+        direction: i8,
+    },
 }
 
 pub(super) struct PlannedAccess {
     pub(super) plan: QueryPlan,
     pub(super) records: Option<Vec<usize>>,
+    pub(super) ordered: bool,
 }
 
 pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
@@ -35,6 +47,7 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
                 field: field.clone(),
             },
             records: Some(records),
+            ordered: false,
         };
     }
     for (field, condition) in &request.filter {
@@ -51,6 +64,24 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
                 field: field.clone(),
             },
             records: Some(records),
+            ordered: false,
+        };
+    }
+    if request.sort.len() == 1 {
+        let (field, direction) = request.sort.iter().next().expect("sort has one field");
+        let Ok(Some((name, records))) =
+            index_file.lookup_ordered_for_field(field, *direction == -1)
+        else {
+            return table_scan();
+        };
+        return PlannedAccess {
+            plan: QueryPlan::OrderedIndex {
+                name,
+                field: field.clone(),
+                direction: *direction,
+            },
+            records: Some(records),
+            ordered: true,
         };
     }
     table_scan()
@@ -60,6 +91,7 @@ fn table_scan() -> PlannedAccess {
     PlannedAccess {
         plan: QueryPlan::TableScan,
         records: None,
+        ordered: false,
     }
 }
 

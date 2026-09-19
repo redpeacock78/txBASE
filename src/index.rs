@@ -6,7 +6,7 @@ use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 
 const INDEX_FORMAT: &str = "txbase-index";
-const INDEX_VERSION: u8 = 1;
+const INDEX_VERSION: u8 = 2;
 const INDEX_EXTENSION: &str = "txidx";
 
 mod ordering;
@@ -197,7 +197,7 @@ impl IndexFile {
 
     pub fn rebuild(dbf_path: impl AsRef<Path>) -> Result<Self, IndexError> {
         let dbf_path = dbf_path.as_ref();
-        let existing = storage::read_sidecar(&sidecar_path(dbf_path))?;
+        let existing = storage::read_sidecar_unvalidated(&sidecar_path(dbf_path))?;
         let definitions = existing
             .indexes
             .iter()
@@ -237,7 +237,7 @@ impl IndexFile {
         Ok(index
             .entries
             .iter()
-            .find(|entry| entry.key == key)
+            .find(|entry| ordering::compare_keys(&entry.key, &key) == std::cmp::Ordering::Equal)
             .map(|entry| entry.records.clone())
             .unwrap_or_default())
     }
@@ -260,7 +260,7 @@ impl IndexFile {
             index
                 .entries
                 .iter()
-                .find(|entry| entry.key == key)
+                .find(|entry| ordering::compare_keys(&entry.key, &key) == std::cmp::Ordering::Equal)
                 .map(|entry| entry.records.clone())
                 .unwrap_or_default(),
         )))
@@ -289,6 +289,31 @@ impl IndexFile {
             .flat_map(|entry| entry.records.iter().copied())
             .collect::<Vec<_>>();
         records.sort_unstable();
+        Ok(Some((index.definition.name.clone(), records)))
+    }
+
+    pub(crate) fn lookup_ordered_for_field(
+        &self,
+        field: &str,
+        descending: bool,
+    ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
+        let Some(index) = self
+            .indexes
+            .iter()
+            .find(|index| index.definition.field == field)
+        else {
+            return Ok(None);
+        };
+        let mut records = Vec::new();
+        if descending {
+            for entry in index.entries.iter().rev() {
+                records.extend(entry.records.iter().copied());
+            }
+        } else {
+            for entry in &index.entries {
+                records.extend(entry.records.iter().copied());
+            }
+        }
         Ok(Some((index.definition.name.clone(), records)))
     }
 

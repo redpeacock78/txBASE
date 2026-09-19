@@ -221,7 +221,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add ordered-sort planning, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
+Later phases may add multi-key ordered planning, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

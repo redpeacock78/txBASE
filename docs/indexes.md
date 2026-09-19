@@ -6,14 +6,14 @@ The sidecar path for `users.dbf` is `users.txidx`.
 
 The DBF remains readable by legacy xBase tools because the index is not embedded in the DBF bytes.
 
-## Version 1 contract
+## Version 2 contract
 
 An index file is JSON with this top-level shape:
 
 ```json
 {
   "format": "txbase-index",
-  "version": 1,
+  "version": 2,
   "source": {
     "dbf": {"length": 0, "hash": 0},
     "memo": null
@@ -46,7 +46,11 @@ Records use one-based physical DBF record numbers.
 
 Deleted records are not indexed.
 
-Entries are grouped by the canonical JSON encoding of the typed key and record numbers are strictly increasing.
+Entries are grouped by the canonical JSON encoding of the typed key, then ordered by the typed scalar order used by query sorting.
+
+The order is `Missing`, `null`, boolean, number, and string; numeric values use exact integer or floating-point comparison where representable.
+
+Record numbers within one key remain strictly increasing so equal sort keys preserve DBF physical order.
 
 ## Lifecycle
 
@@ -68,6 +72,10 @@ Rebuild the existing definitions after a table mutation:
 txbase index rebuild path/to/users.dbf
 ```
 
+`index rebuild` also migrates a version 1 sidecar to the current format when its definitions can be read.
+
+A version 1 sidecar is not used for query planning until it has been rebuilt.
+
 `load` and `verify` recover the DBF first, then compare the stored source fingerprint.
 
 When a `.txidx` file already exists, normal DBF persistence and WAL recovery attempt to refresh it from the committed table state.
@@ -86,18 +94,18 @@ Rebuild the index at the destination instead of treating a missing `.txidx` file
 
 ## Current boundary
 
-The sidecar currently supports build, exact equality lookup, stale detection, validation, rebuild, and best-effort refresh after normal persistence or WAL recovery.
+The sidecar currently supports build, exact equality lookup, range candidate lookup, single-field ordered traversal, stale detection, validation, rebuild, and best-effort refresh after normal persistence or WAL recovery.
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
 Direct DBF edits, unsupported sidecar definitions, and refresh I/O failures leave the sidecar stale; `index rebuild` is the explicit repair path.
 
-The path-aware query executor uses equality or range sidecar candidates when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
+The path-aware query executor uses equality, range, or single-field ordered sidecar traversal when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
 
 The path-less `QueryExecutor` implementation remains a table-scan reference path.
 
-The range candidate lookup scans the validated sidecar entries; it does not yet promise binary range seeks or ordered index traversal.
+The range candidate lookup still scans the validated sidecar entries; it does not yet promise binary range seeks.
 
-Ordered index traversal, multi-index selection, and crash-atomic DBF/index commits require separate contracts.
+Multi-key ordered traversal, multi-index selection, and crash-atomic DBF/index commits require separate contracts.
 
-The equality and range planners are tested alongside mutation, recovery, stale-index, and rebuild behavior; broader index support still needs ordered-sort and crash-atomic contracts.
+The equality, range, and single-field ordered planners are tested alongside mutation, recovery, stale-index, and rebuild behavior; broader index support still needs multi-key and crash-atomic contracts.

@@ -1,4 +1,6 @@
-use super::{IndexDefinition, IndexEntry, IndexError, IndexFile, IndexKey, SecondaryIndex};
+use super::{
+    IndexDefinition, IndexEntry, IndexError, IndexFile, IndexKey, SecondaryIndex, ordering,
+};
 use crate::dbf::DbfTable;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -54,17 +56,16 @@ pub(super) fn validate_shape(index_file: &IndexFile) -> Result<(), IndexError> {
                     "only scalar values can be indexed".into(),
                 ));
             }
-            let token = key_token(&entry.key)?;
-            if previous_key
-                .as_ref()
-                .is_some_and(|previous| previous >= &token)
-            {
+            let key = &entry.key;
+            if previous_key.as_ref().is_some_and(|previous| {
+                ordering::compare_keys(previous, key) != std::cmp::Ordering::Less
+            }) {
                 return Err(IndexError::Invalid(format!(
                     "index {} entries are not sorted",
                     index.definition.name
                 )));
             }
-            previous_key = Some(token);
+            previous_key = Some(key.clone());
 
             let mut previous_record = 0;
             for record in &entry.records {
@@ -146,12 +147,25 @@ pub(super) fn build_indexes(
                 .1
                 .push(record.number);
         }
+        let mut entries = grouped
+            .into_values()
+            .map(|(key, records)| IndexEntry { key, records })
+            .collect::<Vec<_>>();
+        entries.sort_by(|left, right| ordering::compare_keys(&left.key, &right.key));
+        let mut merged = Vec::<IndexEntry>::with_capacity(entries.len());
+        for mut entry in entries {
+            if let Some(previous) = merged.last_mut()
+                && ordering::compare_keys(&previous.key, &entry.key) == std::cmp::Ordering::Equal
+            {
+                previous.records.append(&mut entry.records);
+                previous.records.sort_unstable();
+            } else {
+                merged.push(entry);
+            }
+        }
         indexes.push(SecondaryIndex {
             definition: definition.clone(),
-            entries: grouped
-                .into_values()
-                .map(|(key, records)| IndexEntry { key, records })
-                .collect(),
+            entries: merged,
         });
     }
     Ok(indexes)

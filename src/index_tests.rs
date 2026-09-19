@@ -126,6 +126,31 @@ fn direct_dbf_change_leaves_the_sidecar_stale_until_rebuild() {
 }
 
 #[test]
+fn rebuild_migrates_a_v1_sidecar() {
+    let path = temporary_dbf();
+    let sidecar = sidecar_path(&path);
+    IndexFile::build(&path, vec![IndexDefinition::for_field("NAME")])
+        .unwrap()
+        .save(&path)
+        .unwrap();
+
+    let mut document: Value = serde_json::from_slice(&fs::read(&sidecar).unwrap()).unwrap();
+    document["version"] = json!(1);
+    fs::write(&sidecar, serde_json::to_vec_pretty(&document).unwrap()).unwrap();
+
+    assert!(matches!(
+        IndexFile::load(&path),
+        Err(IndexError::Invalid(message)) if message.contains("unsupported version")
+    ));
+
+    let rebuilt = IndexFile::rebuild(&path).unwrap();
+    assert_eq!(rebuilt.schema_json()["version"], json!(2));
+    assert!(IndexFile::load(&path).is_ok());
+
+    remove_table_files(&path);
+}
+
+#[test]
 fn non_scalar_fields_and_unknown_fields_are_rejected() {
     let path = temporary_dbf();
     let error = IndexFile::build(&path, vec![IndexDefinition::for_field("MISSING")]).unwrap_err();

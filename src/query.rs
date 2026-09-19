@@ -56,7 +56,7 @@ pub fn parse(body: &[u8]) -> Result<QueryRequest, QueryError> {
 
 pub fn execute_query(table: &DbfTable, request: &QueryRequest) -> Result<Vec<Value>, QueryError> {
     validation::validate(request)?;
-    execute_query_with_records(table, request, None)
+    execute_query_with_records(table, request, None, false)
 }
 
 pub fn execute_query_at(
@@ -66,7 +66,7 @@ pub fn execute_query_at(
 ) -> Result<Vec<Value>, QueryError> {
     validation::validate(request)?;
     let access = planner::choose(dbf_path.as_ref(), request);
-    execute_query_with_records(table, request, access.records)
+    execute_query_with_records(table, request, access.records, access.ordered)
 }
 
 pub fn explain_query_at(
@@ -81,6 +81,7 @@ fn execute_query_with_records(
     table: &DbfTable,
     request: &QueryRequest,
     candidate_numbers: Option<Vec<usize>>,
+    ordered: bool,
 ) -> Result<Vec<Value>, QueryError> {
     let mut records = Vec::new();
     let candidates = candidate_numbers
@@ -97,7 +98,9 @@ fn execute_query_with_records(
         }
     }
 
-    records.sort_by(|left, right| compare_records(left, right, &request.sort));
+    if !ordered {
+        records.sort_by(|left, right| compare_records(left, right, &request.sort));
+    }
 
     let skip = request
         .skip

@@ -261,11 +261,9 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
         .split_whitespace()
         .map(|token| u8::from_str_radix(token, 16).unwrap())
         .collect::<Vec<_>>();
-    let table = {
-        let mut bytes = bytes.clone();
-        bytes[179] = b' ';
-        DbfTable::from_bytes(&bytes).unwrap()
-    };
+    let mut bytes = bytes;
+    bytes[179] = b' ';
+    let table = DbfTable::from_bytes(&bytes).unwrap();
     fs::write(&path, bytes).unwrap();
     IndexFile::build(
         &path,
@@ -302,6 +300,20 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
     assert_eq!(
         execute_query_at(&table, &path, &range_request).unwrap(),
         execute_query(&table, &range_request).unwrap()
+    );
+
+    let sort_request = parse(br#"{"sort":{"NAME":-1}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &sort_request).unwrap(),
+        QueryPlan::OrderedIndex {
+            name: "by_name".into(),
+            field: "NAME".into(),
+            direction: -1,
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &sort_request).unwrap(),
+        execute_query(&table, &sort_request).unwrap()
     );
 
     fs::remove_file(&sidecar).unwrap();

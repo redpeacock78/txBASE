@@ -5,10 +5,14 @@ use std::io::Write;
 use std::path::Path;
 
 pub(super) fn read_sidecar(path: &Path) -> Result<IndexFile, IndexError> {
-    let bytes = fs::read(path)?;
-    let index = serde_json::from_slice::<IndexFile>(&bytes)?;
+    let index = read_sidecar_unvalidated(path)?;
     super::validation::validate_shape(&index)?;
     Ok(index)
+}
+
+pub(super) fn read_sidecar_unvalidated(path: &Path) -> Result<IndexFile, IndexError> {
+    let bytes = fs::read(path)?;
+    Ok(serde_json::from_slice::<IndexFile>(&bytes)?)
 }
 
 pub(super) fn source_fingerprint(path: &Path) -> Result<SourceFingerprint, IndexError> {

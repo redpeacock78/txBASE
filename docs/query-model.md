@@ -101,9 +101,9 @@ It also warns that low-selectivity operators such as `$ne` and `$nin` often do n
 
 txBASE keeps the record scan as the query executor reference path.
 
-The path-aware query entry point now attempts one external scalar-key equality or range lookup before applying the same filter, sort, projection, skip, and limit pipeline.
+The path-aware query entry point now attempts one external scalar-key equality, range, or one-field ordered traversal before applying the same filter, sort, projection, skip, and limit pipeline.
 
-The planner reports `TableScan`, `EqualityIndex`, or `RangeIndex` through `explain_query_at`.
+The planner reports `TableScan`, `EqualityIndex`, `RangeIndex`, or `OrderedIndex` through `explain_query_at`.
 
 Missing, stale, malformed, and semantically unsupported sidecars fall back to `TableScan` because the sidecar is an optional acceleration structure.
 
@@ -111,7 +111,9 @@ Connecting an index to query execution is therefore not just a parser change.
 
 It needs a key encoding, null and missing-field rules, duplicate ordering, update maintenance, recovery records, stale-index detection, and a planner policy.
 
-The current planner only considers direct top-level equality and single-bound-per-side range predicates and preserves the table scan for sort, logical, and nested-path planning.
+The current planner only considers direct top-level equality, single-bound-per-side range predicates, and one-field sort requests.
+
+It preserves the table scan for multi-key sort, logical, and nested-path planning.
 
 The roadmap keeps index design separate from the query syntax so a query document does not imply an implementation strategy.
 
