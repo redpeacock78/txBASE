@@ -292,7 +292,9 @@ src/index.rs        External scalar and compound-key index sidecar lifecycle
 src/query.rs        JSON query execution and filter evaluation
 src/query/          planner, ordering, validation, bounded join, and query-specific tests
 src/query_path.rs   Dotted-path traversal and projection helpers
-src/server.rs       HTTP routing, QUERY validation, and DBF mutations
+src/server.rs       HTTP routing, QUERY validation, and shared HTTP responses
+src/server/records.rs DBF record routes and mutation persistence
+src/server/etag.rs  HTTP representation validators and conditional requests
 src/server/catalog.rs Catalog schema and read-only join HTTP surface
 src/server/explain.rs Query-plan explanation HTTP surface
 src/storage.rs      Range-based storage boundary

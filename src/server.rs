@@ -1,6 +1,5 @@
-use crate::dbf::{DbfError, DbfRecord, DbfTable};
+use crate::dbf::{DbfError, DbfTable};
 use crate::query::{self, JSON_QUERY_MEDIA_TYPE};
-use crate::xbase::{OperationIr, OperationMethod};
 use serde_json::{Map, Value, json};
 use std::io::{Cursor, Read};
 use std::path::Path;
@@ -10,12 +9,14 @@ mod catalog;
 mod etag;
 mod explain;
 mod range;
+mod records;
 mod transaction;
 
 const MAX_BODY: usize = 1024 * 1024;
 type HttpResponse = Response<Cursor<Vec<u8>>>;
 
 use range::query_result_response;
+use records::{delete_response, get_response, persist_mutation, post_response, update_response};
 
 pub fn serve(mut table: DbfTable, dbf_path: impl AsRef<Path>, bind: &str) -> Result<(), String> {
     let dbf_path = dbf_path.as_ref();
@@ -70,31 +71,6 @@ fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
     }
 }
 
-fn get_response(request: &Request, path: &str, table: &DbfTable) -> HttpResponse {
-    if path == "/records" {
-        if let Some(response) = etag::not_modified(request, table, true) {
-            return response;
-        }
-        return etag::with_current(
-            json_response(200, Value::Array(table.active_json()), true),
-            table,
-        );
-    }
-    let Ok(id) = record_id(path) else {
-        return json_response(404, error("not_found", "resource not found"), false);
-    };
-    match table.active_record(id) {
-        Some(record) => {
-            if let Some(response) = etag::not_modified(request, table, true) {
-                response
-            } else {
-                etag::with_current(json_response(200, record_json(record), true), table)
-            }
-        }
-        None => json_response(404, error("not_found", "record not found"), false),
-    }
-}
-
 #[cfg(test)]
 fn query_response(request: &mut Request, path: &str, table: &DbfTable) -> HttpResponse {
     query_response_with_path(request, path, table, None)
@@ -146,154 +122,6 @@ fn query_response_with_path(
         }
         Err(query_error) => {
             json_response(422, error("invalid_query", &query_error.to_string()), true)
-        }
-    }
-}
-
-fn post_response(
-    request: &mut Request,
-    path: &str,
-    table: &mut DbfTable,
-    dbf_path: &Path,
-) -> HttpResponse {
-    if path != "/records" {
-        return json_response(404, error("not_found", "resource not found"), false);
-    }
-    if let Err(response) = etag::require_if_match(request, table, true) {
-        return response;
-    }
-    let values = match read_json_object(request, "POST", false) {
-        Ok(values) => values,
-        Err(response) => return response,
-    };
-    let operation = OperationIr {
-        method: OperationMethod::Post,
-        path: path.to_owned(),
-        body: Some(Value::Object(values.clone())),
-    };
-    let original = table.clone();
-    let id = match table.insert_record(values) {
-        Ok(id) => id,
-        Err(error) => return dbf_error_response(error),
-    };
-    if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
-        return response;
-    }
-    let Some(record) = table.active_record(id) else {
-        return json_response(
-            500,
-            error("storage_error", "inserted record is unavailable"),
-            false,
-        );
-    };
-    etag::with_current(
-        json_response(201, record_json(record), false)
-            .with_header(header("Location", &format!("/records/{id}"))),
-        table,
-    )
-}
-
-fn update_response(
-    request: &mut Request,
-    path: &str,
-    table: &mut DbfTable,
-    dbf_path: &Path,
-    replace: bool,
-) -> HttpResponse {
-    let Ok(id) = record_id(path) else {
-        return json_response(404, error("not_found", "resource not found"), false);
-    };
-    if table.active_record(id).is_none() {
-        return json_response(404, error("not_found", "record not found"), false);
-    }
-    if let Err(response) = etag::require_if_match(request, table, true) {
-        return response;
-    }
-    let values = match read_json_object(request, if replace { "PUT" } else { "PATCH" }, false) {
-        Ok(values) => values,
-        Err(response) => return response,
-    };
-    let operation = OperationIr {
-        method: if replace {
-            OperationMethod::Put
-        } else {
-            OperationMethod::Patch
-        },
-        path: path.to_owned(),
-        body: Some(Value::Object(values.clone())),
-    };
-    let original = table.clone();
-    let result = if replace {
-        table.replace_record(id, values)
-    } else {
-        table.patch_record(id, values)
-    };
-    if let Err(error) = result {
-        return dbf_error_response(error);
-    }
-    if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
-        return response;
-    }
-    match table.active_record(id) {
-        Some(record) => etag::with_current(json_response(200, record_json(record), false), table),
-        None => json_response(
-            500,
-            error("storage_error", "updated record is unavailable"),
-            false,
-        ),
-    }
-}
-
-fn delete_response(
-    request: &Request,
-    path: &str,
-    table: &mut DbfTable,
-    dbf_path: &Path,
-) -> HttpResponse {
-    let Ok(id) = record_id(path) else {
-        return json_response(404, error("not_found", "resource not found"), false);
-    };
-    if table.active_record(id).is_none() {
-        return json_response(404, error("not_found", "record not found"), false);
-    }
-    if let Err(response) = etag::require_if_match(request, table, true) {
-        return response;
-    }
-    let operation = OperationIr {
-        method: OperationMethod::Delete,
-        path: path.to_owned(),
-        body: None,
-    };
-    let original = table.clone();
-    if let Err(error) = table.delete_record(id) {
-        return dbf_error_response(error);
-    }
-    if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
-        return response;
-    }
-    etag::with_current(
-        Response::from_string(String::new()).with_status_code(204),
-        table,
-    )
-}
-
-fn persist_mutation(
-    table: &mut DbfTable,
-    original: DbfTable,
-    dbf_path: &Path,
-    operation: &OperationIr,
-) -> Result<(), HttpResponse> {
-    match table.save_with_operation(dbf_path, operation) {
-        Ok(()) => Ok(()),
-        Err(dbf_error) => {
-            let encoding = original.effective_encoding_override().map(str::to_owned);
-            *table = DbfTable::from_path_with_encoding(dbf_path, encoding.as_deref())
-                .unwrap_or(original);
-            Err(json_response(
-                500,
-                error("storage_error", &dbf_error.to_string()),
-                false,
-            ))
         }
     }
 }
@@ -372,14 +200,6 @@ fn read_json_body(
     Ok(body)
 }
 
-fn record_id(path: &str) -> Result<usize, ()> {
-    let Some(raw_id) = path.strip_prefix("/records/") else {
-        return Err(());
-    };
-    let id = raw_id.parse::<usize>().map_err(|_| ())?;
-    (id > 0).then_some(id).ok_or(())
-}
-
 fn dbf_error_response(dbf_error: DbfError) -> HttpResponse {
     match dbf_error {
         DbfError::Invalid(message) if message == "record not found" => {
@@ -402,10 +222,6 @@ fn request_header<'a>(request: &'a Request, name: &'static str) -> Option<&'a st
 
 fn content_type(request: &Request) -> Option<&str> {
     request_header(request, "Content-Type")
-}
-
-fn record_json(record: &DbfRecord) -> Value {
-    Value::Object(record.values.clone())
 }
 
 fn error(code: &str, message: &str) -> Value {

@@ -92,6 +92,11 @@ predicateは`$eq`、`$ne`、`$gt`、`$gte`、`$lt`、`$lte`、`$in`、`$nin`、`
 
 HTTP境界の詳細は[HTTP method semantics](docs/http-semantics.md)を参照してください。
 
+成功する`GET /records`と`GET /records/{id}`は現在のtable representationを示すstrongな`ETag`を返します。
+GETは`If-None-Match`にも対応し、一致すれば`304 Not Modified`を返します。
+`POST`、`PUT`、`PATCH`、`DELETE`、`POST /transaction`には任意の`If-Match`を付けられます。
+currentなstrong tagまたは既存resourceに対する`*`以外は`412 Precondition Failed`となり、tableは変更されません。
+
 ### Mutation
 
 `POST`はrecordを作成します。
@@ -222,7 +227,9 @@ src/catalog.rs      directory直下のDBF発見、table lookup、catalog verify
 src/index.rs        scalar keyのexternal index sidecar lifecycle
 src/query.rs        JSON queryの実行とvalidation
 src/query_path.rs   dotted pathとprojectionのhelper
-src/server.rs       HTTP routing、QUERY validation、DBF mutation
+src/server.rs       HTTP routing、QUERY validation、共通HTTP response
+src/server/records.rs DBF recordのGET/POST/PUT/PATCH/DELETEとmutation persistence
+src/server/etag.rs  HTTP representation validatorとconditional request
 src/server/catalog.rs catalog schemaとread-only join HTTP surface
 src/server/explain.rs query plan explanation HTTP surface
 src/transaction.rs  fileまたはmemory WALとsnapshot transaction
