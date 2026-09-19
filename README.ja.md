@@ -195,6 +195,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 - [SQLite testingとquality](docs/testing-quality.md)
 - [HTTP semanticsとQUERY](docs/http-semantics.md)
 - [Schema metadataとlocal constraint](docs/schema-metadata.md)
+- [XBF v1 format draft](docs/xbf.md)
 - [Roadmapと明示的なnon-goal](docs/roadmap.md)
 - [Research index](docs/research.md)
 
@@ -204,7 +205,8 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
 一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
-full cost model、collation-aware planning、sorted query cursor、streaming、複数stageのaggregation、cross-table constraint、CJK encodingの拡張、XBFはroadmapで検討します。
+full cost model、collation-aware planning、sorted query cursor、streaming、複数stageのaggregation、cross-table constraint、CJK encodingの拡張、XBF実装はroadmapで検討します。
+XBFのwire contractは[XBF v1 format draft](docs/xbf.md)に記載し、codecはまだ提供していません。
 
 ## License
 

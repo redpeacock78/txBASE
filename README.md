@@ -260,6 +260,7 @@ Files are split when ownership or maintenance becomes clearer; a crate split sho
 - [SQLite testing and quality model](docs/testing-quality.md)
 - [HTTP method semantics and QUERY](docs/http-semantics.md)
 - [Schema metadata and local constraints](docs/schema-metadata.md)
+- [XBF v1 format draft](docs/xbf.md)
 - [Roadmap and explicit non-goals](docs/roadmap.md)
 - [Research index and source policy](docs/research.md)
 

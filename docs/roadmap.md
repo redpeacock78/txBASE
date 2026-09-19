@@ -12,7 +12,7 @@ txBASE is a file-native transactional database descended from the dBASE and xBas
 
 DBF remains the compatibility and preservation surface.
 
-The proposed XBF format is a native extension for types and metadata that DBF cannot represent cleanly.
+The proposed XBF format is a native format for types and metadata that DBF cannot represent cleanly.
 
 HTTP, JSON, MCP, and WASM are access or execution surfaces above the storage formats.
 
@@ -145,6 +145,8 @@ An override must be visible in schema or command output so a reader can reproduc
 ## 6. Phase 4: native XBF
 
 XBF is a separately versioned native format, not a silent DBF extension.
+
+The v1 wire contract is drafted in [XBF v1 format draft](xbf.md); no XBF bytes are a current supported format yet.
 
 The proposed magic is `TXBF`.
 
