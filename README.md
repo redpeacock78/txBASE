@@ -89,6 +89,9 @@ bounded read-only join through `QUERY /join` and catalog schema through `GET /ca
 txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 ```
 
+The single-table server also exposes `QUERY /explain`, which returns the selected table-scan or
+index plan for the same query document.
+
 `QUERY` follows the HTTP QUERY boundary defined by [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html), including `Accept-Query: "application/json"`.
 
 ### Mutate
@@ -278,6 +281,7 @@ src/query/          planner, ordering, validation, bounded join, and query-speci
 src/query_path.rs   Dotted-path traversal and projection helpers
 src/server.rs       HTTP routing, QUERY validation, and DBF mutations
 src/server/catalog.rs Catalog schema and read-only join HTTP surface
+src/server/explain.rs Query-plan explanation HTTP surface
 src/storage.rs      Range-based storage boundary
 src/transaction.rs  File or memory WAL and snapshot transactions
 src/xbf/            Bounded XBF v1 codec, DBF conversion, persistence, WAL, and tests

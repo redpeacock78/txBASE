@@ -43,6 +43,7 @@ They do not by themselves provide transaction isolation, deduplication, or a ret
 | `GET /records` | No JSON body | Active records as JSON |
 | `GET /records/{id}` | One-based physical DBF record number | One active record or `404` |
 | `QUERY /records` | `Content-Type: application/json` and a query document | Filtered JSON result with `Accept-Query`; paged queries return `records` and `cursor` |
+| `QUERY /explain` | `Content-Type: application/json` and a query document | Selected table-scan or index plan with `Accept-Query` |
 | `GET /catalog` (catalog server) | No JSON body | Discovered table schemas |
 | `QUERY /join` (catalog server) | `Content-Type: application/json` and a bounded join document | Joined JSON result with `Accept-Query` |
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |

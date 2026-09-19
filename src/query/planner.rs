@@ -1,12 +1,14 @@
 use super::QueryRequest;
 use crate::index::IndexFile;
+use serde::Serialize;
 use serde_json::Value;
 use std::path::Path;
 
 type RangeBound<'a> = (&'a Value, bool);
 type RangeBounds<'a> = (Option<RangeBound<'a>>, Option<RangeBound<'a>>);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum QueryPlan {
     TableScan,
     EqualityIndex {

@@ -36,6 +36,9 @@ cargo run -- --serve-catalog path/to/database
 
 `GET /catalog`でschema、`QUERY /join`でbounded joinを返します。
 
+single-table serverの`QUERY /explain`は、同じquery documentに対するtable scanまたはindex
+planを構造化JSONで返します。
+
 ### 読み取り
 
 ```bash
@@ -214,6 +217,7 @@ src/query.rs        JSON queryの実行とvalidation
 src/query_path.rs   dotted pathとprojectionのhelper
 src/server.rs       HTTP routing、QUERY validation、DBF mutation
 src/server/catalog.rs catalog schemaとread-only join HTTP surface
+src/server/explain.rs query plan explanation HTTP surface
 src/transaction.rs  fileまたはmemory WALとsnapshot transaction
 src/xbf/            bounded XBF v1 codec、DBF変換、永続化、WAL、test
 tests/fixtures/     外部formatのfixture

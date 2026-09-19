@@ -301,6 +301,10 @@ The path-aware query entry point now attempts external scalar-key equality, rang
 
 The planner reports `TableScan`, `EqualityIndex`, `RangeIndex`, `OrderedIndex`, `OrderedIndexPrefix`, or `CompoundOrderedIndex` through `explain_query_at`.
 
+The single-table HTTP server exposes the same explanation as `QUERY /explain`; its response is
+`{"plan": {"kind": "table_scan"}}` or a tagged index-plan object with the selected name,
+fields, and directions. The explanation is descriptive and does not promise a speedup.
+
 Missing, stale, malformed, and semantically unsupported sidecars fall back to `TableScan` because the sidecar is an optional acceleration structure.
 
 Connecting an index to query execution is therefore not just a parser change.

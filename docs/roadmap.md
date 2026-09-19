@@ -119,7 +119,8 @@ Distributed joins and distributed transactions remain later features.
 
 Aggregation must define missing, null, numeric overflow, and memory-limit behavior before it is added to the HTTP API.
 
-The planner must explain when it uses an index and when it scans.
+The planner explanation boundary is implemented by `explain_query_at` and `QUERY /explain`.
+Full cost-based choice remains future work.
 
 The first constraint slice is an optional schema sidecar.
 It enforces one-field `primary`, `unique`, and `not_null` properties on active records and mutation candidates without changing legacy DBF bytes.

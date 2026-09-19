@@ -7,6 +7,7 @@ use std::path::Path;
 use tiny_http::{Header, Method, Request, Response, Server};
 
 mod catalog;
+mod explain;
 mod range;
 mod transaction;
 
@@ -35,7 +36,11 @@ fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
     let response = if matches!(request.method(), Method::Get) {
         get_response(&path, table)
     } else if is_query {
-        query_response_at(&mut request, &path, table, dbf_path)
+        if path == "/explain" {
+            explain::response(&mut request, dbf_path)
+        } else {
+            query_response_at(&mut request, &path, table, dbf_path)
+        }
     } else if matches!(request.method(), Method::Post) {
         if path == "/transaction" {
             transaction::response(&mut request, table, dbf_path)

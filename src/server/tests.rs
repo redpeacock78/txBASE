@@ -1,4 +1,5 @@
 use super::*;
+use crate::index::{IndexDefinition, IndexFile};
 use std::fs;
 use std::io::Read;
 use tiny_http::{Method, StatusCode, TestRequest};
@@ -209,6 +210,60 @@ fn catalog_server_query_join_executes_and_exposes_schema() {
     assert!(body.contains("right.NAME"));
 
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn explain_endpoint_reports_scan_and_index_plans() {
+    let path =
+        std::env::temp_dir().join(format!("txbase-server-explain-{}.dbf", std::process::id()));
+    let sidecar = crate::index::sidecar_path(&path);
+    let lock = path.with_extension("txbase.lock");
+    let wal = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&sidecar);
+    let _ = fs::remove_file(&lock);
+    let _ = fs::remove_file(&wal);
+    fs::write(&path, fixture()).unwrap();
+
+    let mut scan_request = TestRequest::new()
+        .with_method("QUERY".parse().unwrap())
+        .with_path("/explain")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_body(r#"{"filter":{"NAME":"Alice"}}"#)
+        .into();
+    let response = super::explain::response(&mut scan_request, &path);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let mut scan_body = String::new();
+    response
+        .into_reader()
+        .read_to_string(&mut scan_body)
+        .unwrap();
+    assert!(scan_body.contains(r#""kind":"table_scan""#));
+
+    IndexFile::build(&path, vec![IndexDefinition::named("by_name", "NAME")])
+        .unwrap()
+        .save(&path)
+        .unwrap();
+    let mut index_request = TestRequest::new()
+        .with_method("QUERY".parse().unwrap())
+        .with_path("/explain")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_body(r#"{"filter":{"NAME":"Alice"}}"#)
+        .into();
+    let response = super::explain::response(&mut index_request, &path);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let mut index_body = String::new();
+    response
+        .into_reader()
+        .read_to_string(&mut index_body)
+        .unwrap();
+    assert!(index_body.contains(r#""kind":"equality_index""#));
+    assert!(index_body.contains("by_name"));
+
+    let _ = fs::remove_file(path);
+    let _ = fs::remove_file(sidecar);
+    let _ = fs::remove_file(lock);
+    let _ = fs::remove_file(wal);
 }
 
 #[test]
