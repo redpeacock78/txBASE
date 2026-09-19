@@ -1,7 +1,9 @@
 use super::{QueryError, QueryRequest, matches_filter, validation};
 use crate::dbf::DbfRecord;
 use crate::query_path::field_value;
+use indexmap::IndexMap;
 use serde_json::{Map, Value};
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 pub(super) const MAX_GROUPS: usize = 10_000;
@@ -16,6 +18,7 @@ struct GroupSpec {
 struct AggregationPlan {
     matches: Vec<Map<String, Value>>,
     group: GroupSpec,
+    sort: Option<IndexMap<String, i8>>,
 }
 
 #[derive(Debug, Clone)]
@@ -147,10 +150,14 @@ pub(super) fn execute(
         }
     }
 
-    groups
+    let mut output = groups
         .into_values()
         .map(|group| finish_group(group, spec))
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    if let Some(sort) = &plan.sort {
+        output.sort_by(|left, right| compare_output_values(left, right, sort));
+    }
+    Ok(output)
 }
 
 fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, QueryError> {
@@ -162,6 +169,7 @@ fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, QueryError> {
 
     let mut matches = Vec::new();
     let mut group = None;
+    let mut sort = None;
     for (index, stage) in stages.iter().enumerate() {
         if stage.len() != 1 {
             return Err(QueryError::Invalid(format!(
@@ -178,6 +186,9 @@ fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, QueryError> {
                 matches.push(filter.clone());
             }
             "$group" if group.is_none() => group = Some(parse_group(value)?),
+            "$sort" if group.is_some() && sort.is_none() => {
+                sort = Some(parse_sort(value, index)?);
+            }
             "$match" => {
                 return Err(QueryError::Invalid(format!(
                     "aggregate stage {index}.$match must precede $group"
@@ -187,6 +198,11 @@ fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, QueryError> {
                 return Err(QueryError::Invalid(
                     "aggregate supports only one $group stage".into(),
                 ));
+            }
+            "$sort" => {
+                return Err(QueryError::Invalid(format!(
+                    "aggregate stage {index}.$sort must follow $group and appear once"
+                )));
             }
             _ => {
                 return Err(QueryError::Invalid(format!(
@@ -198,7 +214,42 @@ fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, QueryError> {
 
     let group =
         group.ok_or_else(|| QueryError::Invalid("aggregate requires a $group stage".into()))?;
-    Ok(AggregationPlan { matches, group })
+    Ok(AggregationPlan {
+        matches,
+        group,
+        sort,
+    })
+}
+
+fn parse_sort(value: &Value, index: usize) -> Result<IndexMap<String, i8>, QueryError> {
+    let object = value.as_object().ok_or_else(|| {
+        QueryError::Invalid(format!("aggregate stage {index}.$sort must be an object"))
+    })?;
+    if object.is_empty() {
+        return Err(QueryError::Invalid(format!(
+            "aggregate stage {index}.$sort cannot be empty"
+        )));
+    }
+    let mut sort = IndexMap::new();
+    for (field, direction) in object {
+        if field.is_empty() {
+            return Err(QueryError::Invalid(format!(
+                "aggregate stage {index}.$sort contains an empty field"
+            )));
+        }
+        let Some(direction) = direction.as_i64() else {
+            return Err(QueryError::Invalid(format!(
+                "aggregate sort direction for {field} must be 1 or -1"
+            )));
+        };
+        if !matches!(direction, -1 | 1) {
+            return Err(QueryError::Invalid(format!(
+                "aggregate sort direction for {field} must be 1 or -1"
+            )));
+        }
+        sort.insert(field.clone(), direction as i8);
+    }
+    Ok(sort)
 }
 
 fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
@@ -357,6 +408,25 @@ fn update_extreme(
         *current = Some(value);
     }
     Ok(())
+}
+
+fn compare_output_values(left: &Value, right: &Value, sort: &IndexMap<String, i8>) -> Ordering {
+    let left = left.as_object();
+    let right = right.as_object();
+    for (field, direction) in sort {
+        let ordering = super::ordering::compare_for_sort(
+            left.and_then(|values| values.get(field)),
+            right.and_then(|values| values.get(field)),
+        );
+        if ordering != Ordering::Equal {
+            return if *direction == 1 {
+                ordering
+            } else {
+                ordering.reverse()
+            };
+        }
+    }
+    Ordering::Equal
 }
 
 fn number_from_i128(value: i128, name: &str) -> Result<serde_json::Number, QueryError> {

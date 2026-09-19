@@ -26,6 +26,17 @@ The current document shape is:
 }
 ```
 
+The pipeline may also end with one bounded `$sort` stage over the group output:
+
+```json
+{
+  "aggregate": [
+    {"$group": {"_id": "$COUNTRY", "count": {"$count": {}}}},
+    {"$sort": {"count": -1, "_id": 1}}
+  ]
+}
+```
+
 The top-level keys are validated.
 
 Unknown keys are rejected rather than ignored.
@@ -102,7 +113,8 @@ preceding `$match` stages:
 }
 ```
 
-The current aggregation boundary accepts one `$group` stage and zero or more `$match` stages before it.
+The current aggregation boundary accepts one `$group` stage, zero or more `$match` stages before it,
+and at most one final `$sort` stage.
 `_id` is either `null` or one dotted field reference.
 The supported accumulators are `$count: {}`, `$sum: "$FIELD"`, `$min: "$FIELD"`, and
 `$max: "$FIELD"`.
@@ -117,12 +129,12 @@ Missing and `null` `$min` / `$max` inputs are ignored; an all-missing or all-nul
 `null` for that accumulator.
 Non-null `$min` / `$max` values must be comparable under the existing JSON ordering rules.
 Incomparable values are rejected.
-The executor rejects more than 10,000 groups and rejects combining aggregation with sort,
+The executor rejects more than 10,000 groups and rejects combining aggregation with top-level sort,
 projection, skip, limit, or cursor pagination.
-Group output order is not part of the contract, although the current implementation emits a
-deterministic key order.
+Without `$sort`, group output order is not part of the contract, although the current implementation
+emits a deterministic key order. `$sort` uses the existing JSON sort ordering and stable ties.
 `$match` stages use the same predicate rules as the top-level `filter` and must precede `$group`.
-Stages after `$group`, additional grouping stages, and expression operands remain unsupported.
+Stages after `$sort`, additional grouping stages, and expression operands remain unsupported.
 
 MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as
 `$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).
