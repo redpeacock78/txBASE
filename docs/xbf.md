@@ -27,6 +27,8 @@ reads resume an interrupted export. Recovery rejects a target changed by
 another writer instead of overwriting it. This is a crash-recovery and
 conflict-detection boundary; it does not claim that external legacy readers
 observe all files as one physically atomic snapshot.
+When an existing `.txidx` sidecar is present, the export refreshes it from the
+committed DBF state instead of leaving a stale candidate index behind.
 
 The codec is intentionally kept in the format layer. It does not add a second
 query or HTTP implementation.
@@ -289,7 +291,8 @@ The file-level path writes a journal beside the destination and removes it only
 after all desired targets are applied. The journal covers the DBF, schema
 sidecar, and both DBT/FPT case variants, so a stale memo sidecar is removed as
 part of the export. A normal `DbfTable::from_path` call recovers a pending
-journal before loading records.
+journal before loading records. An existing external index is refreshed at the
+same export boundary; it is derived state and is not copied from the XBF input.
 
 The CLI also exposes `xbf report XBF`, which prints the representability report
 without writing a DBF or schema sidecar.

@@ -160,6 +160,10 @@ The sidecar currently supports build, exact equality lookup, range candidate loo
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
+Schema-preserving XBF-to-DBF export also refreshes an existing sidecar after its
+`TXSE` journal applies the new DBF state; the XBF input does not provide an
+index to copy.
+
 Direct DBF edits, unsupported sidecar definitions, and refresh I/O failures leave the sidecar stale; `index rebuild` is the explicit repair path.
 
 The path-aware query executor uses equality, equality intersection, range, single-field ordered, or compound-prefix ordered sidecar traversal when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
