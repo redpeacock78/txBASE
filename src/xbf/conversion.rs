@@ -237,13 +237,11 @@ fn decode_hex(value: &str) -> Option<Vec<u8>> {
     if !is_hex(value) {
         return None;
     }
-    Some(
-        value
-            .as_bytes()
-            .chunks_exact(2)
-            .map(|pair| (hex_digit(pair[0])? << 4) | hex_digit(pair[1])?)
-            .collect::<Option<Vec<_>>>()?,
-    )
+    let mut bytes = Vec::with_capacity(value.len() / 2);
+    for pair in value.as_bytes().chunks_exact(2) {
+        bytes.push((hex_digit(pair[0])? << 4) | hex_digit(pair[1])?);
+    }
+    Some(bytes)
 }
 
 fn is_hex(value: &str) -> bool {
