@@ -129,3 +129,43 @@ fn discards_a_wal_with_a_torn_payload() {
     fs::remove_file(path).unwrap();
     fs::remove_file(lock_path).unwrap();
 }
+
+#[test]
+fn keeps_a_wal_with_a_malformed_index_snapshot() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-malformed-index-recovery-{}.dbf",
+        std::process::id()
+    ));
+    let wal_path = path.with_extension("txbase.wal");
+    let lock_path = path.with_extension("txbase.lock");
+    let original = fixture();
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&lock_path);
+    fs::write(&path, &original).unwrap();
+
+    let mut pending = DbfTable::from_bytes(&original).unwrap();
+    pending
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "Recovered"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(&snapshot_payload(&pending.to_bytes())).unwrap();
+    wal.append(b"TXDI{}").unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    let error = DbfTable::from_path(&path).unwrap_err();
+    assert!(error.to_string().contains("index sidecar error"));
+    assert_eq!(fs::read(&path).unwrap(), original);
+    assert!(wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(wal_path).unwrap();
+    fs::remove_file(lock_path).unwrap();
+}

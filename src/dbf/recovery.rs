@@ -86,11 +86,7 @@ impl DbfTable {
             finish_recovery(wal, &wal_path);
             return Ok(false);
         }
-        let index_payload = wal.records().iter().rev().find_map(|(_, payload)| {
-            crate::index::decode_snapshot_payload(payload)
-                .ok()
-                .flatten()
-        });
+        let index_payload = find_index_payload(&wal)?;
         let snapshot =
             wal.records().iter().rev().find_map(|(_, payload)| {
                 match decode_wal_payload(path, payload) {
@@ -221,6 +217,17 @@ fn operation_record_id(path: &str) -> Result<usize, DbfError> {
     (id > 0)
         .then_some(id)
         .ok_or_else(|| DbfError::Invalid("operation record id must be positive".into()))
+}
+
+fn find_index_payload(wal: &FileWal) -> Result<Option<Vec<u8>>, DbfError> {
+    for (_, payload) in wal.records().iter().rev() {
+        if let Some(payload) =
+            crate::index::decode_snapshot_payload(payload).map_err(super::index_error)?
+        {
+            return Ok(Some(payload));
+        }
+    }
+    Ok(None)
 }
 
 fn finish_recovery(mut wal: FileWal, wal_path: &Path) {
