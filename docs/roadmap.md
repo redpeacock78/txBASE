@@ -73,8 +73,9 @@ It does not yet support a full cost model, collation-aware planning, or cross-ta
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
 The current cursor slice supports only physical-record pagination with `page_size` and `cursor`.
-It rejects `sort` and `skip` in that mode, caps pages at 1,000 records, and still materializes
-matching records before slicing.
+It rejects `sort` and `skip` in that mode, caps pages at 1,000 records, and scans only until the
+requested page and one look-ahead record are found.
+Sorted keyset cursors and a public streaming or backpressure API remain future work.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 

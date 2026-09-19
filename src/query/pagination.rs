@@ -1,5 +1,6 @@
-use super::{QueryError, QueryRequest};
-use crate::dbf::DbfRecord;
+use super::{QueryError, QueryRequest, matches_filter};
+use crate::dbf::{DbfRecord, DbfTable};
+use crate::query_path::project;
 use serde_json::Value;
 
 pub(super) const MAX_PAGE_SIZE: u64 = 1_000;
@@ -38,6 +39,58 @@ pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
         cursor_position(cursor)?;
     }
     Ok(())
+}
+
+pub(super) fn is_physical_page(request: &QueryRequest) -> bool {
+    request.page_size.is_some() || request.cursor.is_some()
+}
+
+pub(super) fn execute_physical_page(
+    table: &DbfTable,
+    request: &QueryRequest,
+) -> Result<QueryPage, QueryError> {
+    let cursor = request
+        .cursor
+        .as_deref()
+        .map(cursor_position)
+        .transpose()?
+        .unwrap_or_default();
+    let page_size = request
+        .page_size
+        .expect("physical page validation requires page_size")
+        .try_into()
+        .unwrap_or(usize::MAX);
+    let limit = request
+        .limit
+        .map(|limit| limit.try_into().unwrap_or(usize::MAX));
+    let mut records = Vec::with_capacity(page_size);
+    let mut matched = 0usize;
+    let mut has_more = false;
+    let mut last_number = None;
+
+    for record in table.active_records() {
+        if record.number <= cursor {
+            continue;
+        }
+        if limit.is_some_and(|limit| matched >= limit) {
+            break;
+        }
+        if !matches_filter(&record.values, &request.filter)? {
+            continue;
+        }
+        matched = matched.saturating_add(1);
+        if records.len() == page_size {
+            has_more = true;
+            break;
+        }
+        last_number = Some(record.number);
+        records.push(project(record, &request.projection));
+    }
+
+    Ok(QueryPage {
+        records,
+        next_cursor: has_more.then(|| last_number.expect("page has a last record").to_string()),
+    })
 }
 
 pub(super) fn apply<'a>(
@@ -84,7 +137,7 @@ pub(super) fn apply<'a>(
     Ok((records, next_cursor))
 }
 
-fn cursor_position(cursor: &str) -> Result<usize, QueryError> {
+pub(super) fn cursor_position(cursor: &str) -> Result<usize, QueryError> {
     cursor
         .parse::<usize>()
         .map_err(|_| QueryError::Invalid("cursor must be a decimal physical record number".into()))

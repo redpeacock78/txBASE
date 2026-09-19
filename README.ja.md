@@ -53,6 +53,8 @@ curl -i -X QUERY \
 `page_size`を指定すると、physical record順のページを`records`と`cursor`で返します。
 次のページでは同じ`page_size`と返却された`cursor`を送ります。
 このモードでは現時点で`sort`と`skip`を併用できず、最大1,000件です。
+physical cursor pageは、要求されたpageとlook-aheadのmatchを見つけた時点でscanを止めます。
+sorted keyset cursorとpublicなstreamingまたはbackpressure APIは未実装です。
 
 `aggregate`は一つの`$group` stageに限定し、`$count`と整数`$sum`を使えます。
 `sort`、`projection`、pagination、`limit`との併用はできません。

@@ -23,6 +23,22 @@ fn paginates_in_physical_record_order() {
 }
 
 #[test]
+fn limit_caps_physical_cursor_without_advertising_an_extra_page() {
+    let table = table_with_two_active_records();
+    let page =
+        execute_query_page(&table, &parse(br#"{"page_size":1,"limit":1}"#).unwrap()).unwrap();
+
+    assert_eq!(page.records.len(), 1);
+    assert_eq!(page.next_cursor, None);
+
+    let request = parse(br#"{"page_size":1,"filter":{"ID":1}}"#).unwrap();
+    assert_eq!(
+        explain_query_at("missing-index-source.dbf", &request).unwrap(),
+        QueryPlan::TableScan
+    );
+}
+
+#[test]
 fn rejects_ambiguous_cursor_boundaries() {
     for body in [
         br#"{"cursor":"1"}"#.as_slice(),

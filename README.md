@@ -62,6 +62,9 @@ The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `p
 
 `page_size` enables a physical-record cursor response. The next request sends the returned `cursor` with the same `page_size`; this mode does not yet combine with `sort` or `skip` and is capped at 1,000 records.
 
+Physical cursor pages scan in record order and stop after the page plus one look-ahead match.
+Sorted keyset cursors and a public streaming or backpressure API remain future work.
+
 `aggregate` currently accepts one `$group` stage with `$count` and integer `$sum`; it cannot be combined with sort, projection, pagination, or limit controls.
 
 The library also exposes one bounded local `inner` or `left` equality join over two catalog tables.

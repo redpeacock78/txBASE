@@ -58,8 +58,12 @@ cannot be combined with `page_size` or `cursor`, and `page_size` is capped at 1,
 The token is a position, not a snapshot identifier; callers must keep the underlying table
 snapshot stable while paging.
 
-The page API bounds the response size but the current executor still materializes matching
-records before slicing the page. True incremental streaming and backpressure are separate work.
+Physical cursor pages scan active records in physical order and stop after one extra matching
+record proves that another page exists.
+They deliberately bypass index candidate ordering, and `explain_query_at` reports a table scan
+for this mode.
+This keeps the page result bounded, but does not yet provide a public streaming iterator or
+backpressure protocol.
 
 ## 2. Bounded aggregation
 

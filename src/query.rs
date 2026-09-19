@@ -72,6 +72,9 @@ pub fn execute_query_page(
     request: &QueryRequest,
 ) -> Result<QueryPage, QueryError> {
     validation::validate(request)?;
+    if pagination::is_physical_page(request) {
+        return pagination::execute_physical_page(table, request);
+    }
     execute_query_with_records(table, request, None, 0)
 }
 
@@ -89,6 +92,9 @@ pub fn execute_query_at_page(
     request: &QueryRequest,
 ) -> Result<QueryPage, QueryError> {
     validation::validate(request)?;
+    if pagination::is_physical_page(request) {
+        return pagination::execute_physical_page(table, request);
+    }
     let access = planner::choose(dbf_path.as_ref(), request);
     execute_query_with_records(table, request, access.records, access.ordered_prefix)
 }
@@ -98,6 +104,9 @@ pub fn explain_query_at(
     request: &QueryRequest,
 ) -> Result<QueryPlan, QueryError> {
     validation::validate(request)?;
+    if pagination::is_physical_page(request) {
+        return Ok(QueryPlan::TableScan);
+    }
     Ok(planner::choose(dbf_path.as_ref(), request).plan)
 }
 
