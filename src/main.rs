@@ -100,11 +100,22 @@ fn run() -> Result<(), Box<dyn Error>> {
     if first == "xbf" {
         let operation = args
             .next()
-            .ok_or_else(|| "xbf requires import or export".to_owned())?;
+            .ok_or_else(|| "xbf requires import, export, or report".to_owned())?;
         let source = PathBuf::from(
             args.next()
                 .ok_or_else(|| format!("xbf {operation} requires a source path"))?,
         );
+        if operation == "report" {
+            if let Some(extra) = args.next() {
+                return Err(format!("unexpected argument: {extra}").into());
+            }
+            let table = XbfTable::from_path(&source)?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&table.dbf_export_report())?
+            );
+            return Ok(());
+        }
         let destination = PathBuf::from(
             args.next()
                 .ok_or_else(|| format!("xbf {operation} requires a destination path"))?,
@@ -274,7 +285,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage:\n  txbase FILE [--encoding NAME]\n  txbase schema FILE [--encoding NAME]\n  txbase verify FILE [--encoding NAME]\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase xbf import DBF XBF [--encoding NAME]\n  txbase xbf export XBF DBF [--schema]\n  txbase index build FILE FIELD...\n  txbase index build-compound FILE NAME FIELD[:1|-1] FIELD[:1|-1]...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE [--encoding NAME]\n  txbase recall FILE RECORD [--encoding NAME]\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS] [--encoding NAME]\n  txbase --serve-catalog DIRECTORY [--bind ADDRESS]\n\nReads active DBF records as JSON. NAME accepts the supported CJK aliases and takes precedence over a schema sidecar override for that invocation. Schema, catalog, verification, and index commands inspect DBF files. xbf import writes a bounded XBF snapshot from a DBF; xbf export writes a representable XBF table as DBF, and --schema also writes its constraint sidecar. Backup and restore copy a DBF with its sibling memo sidecar. The single-table server exposes GET /records, GET /records/{{id}}, QUERY /records, QUERY /explain, and JSON mutations. The catalog server exposes GET /catalog and QUERY /join for bounded read-only joins."
+        "Usage:\n  txbase FILE [--encoding NAME]\n  txbase schema FILE [--encoding NAME]\n  txbase verify FILE [--encoding NAME]\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase xbf import DBF XBF [--encoding NAME]\n  txbase xbf export XBF DBF [--schema]\n  txbase xbf report XBF\n  txbase index build FILE FIELD...\n  txbase index build-compound FILE NAME FIELD[:1|-1] FIELD[:1|-1]...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE [--encoding NAME]\n  txbase recall FILE RECORD [--encoding NAME]\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS] [--encoding NAME]\n  txbase --serve-catalog DIRECTORY [--bind ADDRESS]\n\nReads active DBF records as JSON. NAME accepts the supported CJK aliases and takes precedence over a schema sidecar override for that invocation. Schema, catalog, verification, and index commands inspect DBF files. xbf import writes a bounded XBF snapshot from a DBF; xbf export writes a representable XBF table as DBF, and --schema also writes its constraint sidecar; xbf report checks DBF representability without writing. Backup and restore copy a DBF with its sibling memo sidecar. The single-table server exposes GET /records, GET /records/{{id}}, QUERY /records, QUERY /explain, and JSON mutations. The catalog server exposes GET /catalog and QUERY /join for bounded read-only joins."
     );
 }
 

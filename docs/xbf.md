@@ -276,6 +276,9 @@ will preserve constraints; use the schema-aware export path when
 `save_dbf_with_schema` is the file-level convenience path. The CLI exposes it
 as `xbf export XBF DBF --schema`.
 
+The CLI also exposes `xbf report XBF`, which prints the representability report
+without writing a DBF or schema sidecar.
+
 The in-memory conversion does not persist XBF generation or write the sidecar
 itself. The file-level helper writes the two files through the existing DBF
 copy path; a multi-file recovery contract remains future work.

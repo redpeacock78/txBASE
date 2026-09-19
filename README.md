@@ -149,6 +149,7 @@ txbase recall path/to/users.dbf 2
 txbase xbf import path/to/users.dbf path/to/users.xbf
 txbase xbf export path/to/users.xbf path/to/users.dbf
 txbase xbf export path/to/users.xbf path/to/users.dbf --schema
+txbase xbf report path/to/users.xbf
 ```
 
 Copy a DBF and its sibling `.dbt` or `.fpt` memo sidecar:
@@ -311,6 +312,8 @@ Files are split when ownership or maintenance becomes clearer; a crate split sho
 - [Research index and source policy](docs/research.md)
 
 ## Todo
+
+`xbf report` checks XBF-to-DBF type/value representability and reports whether a schema sidecar is needed, without writing files.
 
 The roadmap is research-led and does not turn every compatibility idea into code.
 

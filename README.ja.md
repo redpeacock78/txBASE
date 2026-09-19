@@ -143,6 +143,7 @@ txbase recall path/to/users.dbf 2
 txbase xbf import path/to/users.dbf path/to/users.xbf
 txbase xbf export path/to/users.xbf path/to/users.dbf
 txbase xbf export path/to/users.xbf path/to/users.dbf --schema
+txbase xbf report path/to/users.xbf
 ```
 
 `pack`はlogical delete済みrecordを物理的に除去し、残ったrecord numberを詰め直します。
@@ -247,6 +248,8 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 - [Research index](docs/research.md)
 
 ## Todo
+
+`xbf report`はファイルを書き込まず、XBFの型・値がDBFへ変換可能かとschema sidecarの要否を確認します。
 
 当面はDBF、memo、WAL、query、HTTPのcontractをfixtureとfailure testで固めます。
 
