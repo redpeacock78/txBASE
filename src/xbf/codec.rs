@@ -117,7 +117,8 @@ pub fn encode_with_limits(table: &XbfTable, limits: &XbfLimits) -> Result<Vec<u8
     put_u64(&mut header, GENERATION, table.generation);
     put_u32(&mut header, HEADER_CRC, 0);
     put_u32(&mut header, RESERVED, 0);
-    put_u32(&mut header, HEADER_CRC, crc32c(&header));
+    let header_crc = crc32c(&header);
+    put_u32(&mut header, HEADER_CRC, header_crc);
 
     let total_size = checked_add(
         checked_add(
