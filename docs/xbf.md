@@ -5,13 +5,14 @@ XBF is the proposed native txBASE snapshot format.
 This document is a design contract, not a compatibility claim.
 
 The repository now contains a bounded v1 codec at
-`txbase::xbf::{encode, decode}` and durable snapshot helpers at
+`txbase::xbf::{encode, decode}`, a bounded DBF-to-XBF conversion helper at
+`txbase::xbf::{from_dbf, XbfTable::from_dbf}`, and durable snapshot helpers at
 `txbase::xbf::{read_path, write_path}`.
 The codec validates the draft header, section checksums, schema, directory, typed
 records, constraints, and configured size limits.
 The full-snapshot `.xwl` path records base and target generations and rejects a
 generation mismatch during recovery.
-DBF conversion remains outside the supported-format boundary.
+XBF-to-DBF export remains outside the supported-format boundary.
 
 The codec is intentionally kept in the format layer. It does not add a second
 query or HTTP implementation.
@@ -222,6 +223,19 @@ Byte deltas and logical operation replay are optimizations after the snapshot pr
 
 ## 9. DBF conversion
 
+The current conversion slice accepts a loaded `DbfTable` and produces an
+in-memory `XbfTable`.
+It preserves field names, physical record order, deletion flags, decoded values,
+binary payloads represented by the DBF layer, and nulls that the DBF reader can
+distinguish.
+DBF system fields such as `_NullFlags` are not exposed as user fields.
+The imported generation is `0` because DBF has no txBASE generation metadata.
+Unsupported or malformed DBF field values fail the conversion instead of being
+coerced silently.
+
+This helper does not write an XBF file by itself; pass its result to
+`write_path` or `save_to`.
+
 `DBF -> XBF` must preserve:
 
 - Field names and values.
@@ -232,7 +246,8 @@ Byte deltas and logical operation replay are optimizations after the snapshot pr
 
 Legacy bytes are decoded before becoming XBF UTF-8 text.
 
-`XBF -> DBF` must first report every value or schema property that cannot be represented by the selected DBF target.
+`XBF -> DBF` remains future work and must first report every value or schema
+property that cannot be represented by the selected DBF target.
 
 Examples include variable-length UTF-8 text, timestamps, UUIDs, unsupported nullability, and characters outside the selected code page.
 
@@ -256,6 +271,6 @@ advertised as a complete supported format, the repository still needs:
 - Malformed header, section, checksum, directory, UTF-8, and payload corpora.
 - Round-trip tests for DBF to XBF and representability failures for XBF to DBF.
 - Crash and recovery tests for the snapshot and `.xwl` generation boundary.
-- DBF/XBF conversion and representability reporting for both directions.
+- XBF-to-DBF conversion and representability reporting for the reverse direction.
 
 Until those gates exist, XBF remains a draft and is not advertised as a supported format.

@@ -127,7 +127,7 @@ pub struct FieldDescriptor {
 }
 
 impl FieldDescriptor {
-    fn is_system(&self) -> bool {
+    pub(crate) fn is_system(&self) -> bool {
         self.flags & 0x01 != 0 || self.name.eq_ignore_ascii_case("_NULLFLAGS")
     }
 
@@ -139,7 +139,7 @@ impl FieldDescriptor {
         self.flags & 0x02 != 0
     }
 
-    fn is_binary(&self) -> bool {
+    pub(crate) fn is_binary(&self) -> bool {
         matches!(
             self.field_type.to_ascii_uppercase(),
             b'Q' | b'G' | b'P' | b'W'

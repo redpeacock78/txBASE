@@ -116,6 +116,28 @@ fn fixture() -> XbfTable {
 }
 
 #[test]
+fn converts_a_dbf_fixture_to_xbf_without_dropping_records() {
+    let bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|byte| u8::from_str_radix(byte, 16).unwrap())
+        .collect::<Vec<_>>();
+    let dbf = crate::dbf::DbfTable::from_bytes(&bytes).unwrap();
+
+    let xbf = super::from_dbf(&dbf).unwrap();
+
+    assert_eq!(xbf.generation, 0);
+    assert_eq!(xbf.fields[0].name, "ID");
+    assert_eq!(xbf.fields[0].ty, XbfType::Signed64);
+    assert_eq!(xbf.fields[1].name, "NAME");
+    assert_eq!(xbf.fields[1].ty, XbfType::String);
+    assert_eq!(xbf.fields[2].name, "AGE");
+    assert_eq!(xbf.fields[2].ty, XbfType::Signed64);
+    assert_eq!(xbf.records.len(), dbf.records().len());
+    assert_eq!(xbf.records[0].deleted, dbf.records()[0].deleted);
+    assert!(matches!(xbf.records[0].values[1], XbfValue::String(_)));
+}
+
+#[test]
 fn round_trips_a_fixture_with_every_v1_value_type() {
     let table = fixture();
     let bytes = encode(&table).unwrap();
