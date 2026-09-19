@@ -32,7 +32,7 @@ The repository currently provides:
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
-- A bounded one-stage aggregation path with `$group`, `$count`, and integer `$sum` after filtering.
+- A bounded aggregation pipeline with zero or more `$match` stages before one `$group` stage using `$count` and integer `$sum`.
 - A bounded local `inner` or `left` equality join over two catalog tables with qualified filtering and projection.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - A borrowed query stream for incremental filter and projection over an in-memory table snapshot.
@@ -42,7 +42,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory XBF-to-DBF export, durable snapshot path, and generation-checked full-snapshot WAL recovery with explicit size limits and section checksums; schema-preserving export remains future.
 
-The baseline intentionally does not include a full cost-based index model, streaming backpressure or long-lived snapshot rules, multiple or planned joins, cross-table transactions, multi-stage aggregation, composite or cross-table constraints, schema-preserving XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, streaming backpressure or long-lived snapshot rules, multiple or planned joins, cross-table transactions, aggregation stages beyond `$match` plus `$group`, composite or cross-table constraints, schema-preserving XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -101,7 +101,7 @@ The current record scan remains the reference execution path while the query mod
 
 ### Candidate scope
 
-- Multi-stage aggregation and accumulator expressions.
+- Additional aggregation stages and accumulator expressions.
 - Full expression evaluation beyond the bounded `$expr` comparison form.
 - Joins.
 - Constraints.

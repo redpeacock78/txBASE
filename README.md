@@ -58,7 +58,7 @@ curl -i -X QUERY \
   http://127.0.0.1:8080/records
 ```
 
-The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `page_size`, `cursor`, and a bounded one-stage `aggregate` group with `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$and`, `$or`, `$not`, and bounded `$expr` field comparisons.
+The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `page_size`, `cursor`, and a bounded `aggregate` pipeline with `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$and`, `$or`, `$not`, and bounded `$expr` field comparisons.
 
 `page_size` enables a cursor response. Without `sort`, the cursor follows physical record order;
 with `sort`, it is a keyset token and the next request repeats the same sort definition.
@@ -73,7 +73,7 @@ projection, skip, and limit without materializing the matching record set.
 It deliberately rejects sort, aggregate, page-size, and cursor controls, which need a blocking
 or resumable result boundary; backpressure and stable long-lived snapshot rules remain future work.
 
-`aggregate` currently accepts one `$group` stage with `$count` and integer `$sum`; it cannot be combined with sort, projection, pagination, or limit controls.
+`aggregate` currently accepts one `$group` stage with `$count` and integer `$sum`, optionally preceded by bounded `$match` stages; it cannot be combined with sort, projection, pagination, or limit controls.
 
 The library also exposes one bounded local `inner` or `left` equality join over two catalog tables.
 It accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,
@@ -295,7 +295,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming backpressure and stable snapshots, planned and multiple joins, multi-stage aggregation, cross-table transactions, additional CJK encodings, and schema-preserving XBF export.
+Later phases may add a full cost-based index choice, streaming backpressure and stable snapshots, planned and multiple joins, additional aggregation stages, cross-table transactions, additional CJK encodings, and schema-preserving XBF export.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

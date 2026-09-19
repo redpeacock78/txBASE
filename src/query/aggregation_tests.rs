@@ -44,12 +44,37 @@ fn missing_group_fields_share_the_null_group() {
 }
 
 #[test]
+fn applies_match_stages_before_grouping() {
+    let table = table_with_two_active_records();
+    let request = parse(
+        br#"{
+            "aggregate": [
+                {"$match": {"AGE": {"$gte": 20}}},
+                {"$match": {"ACTIVE": true}},
+                {"$group": {
+                    "_id": null,
+                    "count": {"$count": {}},
+                    "total_age": {"$sum": "$AGE"}
+                }}
+            ]
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        execute_query(&table, &request).unwrap(),
+        vec![json!({"_id": null, "count": 1, "total_age": 29})]
+    );
+}
+
+#[test]
 fn rejects_unsupported_aggregation_combinations() {
     for body in [
         br#"{"aggregate":[]}"#.as_slice(),
         br#"{"sort":{"AGE":1},"aggregate":[{"$group":{"_id":null}}]}"#.as_slice(),
         br#"{"aggregate":[{"$count":"total"}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":"AGE"}}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null}},{"$match":{}}]}"#.as_slice(),
     ] {
         assert!(parse(body).is_err(), "expected rejection for {body:?}");
     }

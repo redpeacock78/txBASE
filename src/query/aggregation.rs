@@ -1,4 +1,4 @@
-use super::{QueryError, QueryRequest};
+use super::{QueryError, QueryRequest, matches_filter, validation};
 use crate::dbf::DbfRecord;
 use crate::query_path::field_value;
 use serde_json::{Map, Value};
@@ -10,6 +10,12 @@ pub(super) const MAX_GROUPS: usize = 10_000;
 struct GroupSpec {
     key_field: Option<String>,
     accumulators: Vec<AccumulatorSpec>,
+}
+
+#[derive(Debug, Clone)]
+struct AggregationPlan {
+    matches: Vec<Map<String, Value>>,
+    group: GroupSpec,
 }
 
 #[derive(Debug, Clone)]
@@ -59,10 +65,22 @@ pub(super) fn execute(
     records: &[&DbfRecord],
     stages: &[Map<String, Value>],
 ) -> Result<Vec<Value>, QueryError> {
-    let spec = parse(stages)?;
+    let plan = parse(stages)?;
+    let mut records = records.to_vec();
+    for filter in &plan.matches {
+        let mut filtered = Vec::with_capacity(records.len());
+        for record in records {
+            if matches_filter(&record.values, filter)? {
+                filtered.push(record);
+            }
+        }
+        records = filtered;
+    }
+
+    let spec = &plan.group;
     let mut groups = BTreeMap::<String, GroupState>::new();
     if spec.key_field.is_none() {
-        groups.insert(String::from("null"), new_group(Value::Null, &spec));
+        groups.insert(String::from("null"), new_group(Value::Null, spec));
     }
 
     for record in records {
@@ -79,7 +97,7 @@ pub(super) fn execute(
                     "aggregate group count exceeds {MAX_GROUPS}"
                 )));
             }
-            groups.insert(encoded_key.clone(), new_group(key, &spec));
+            groups.insert(encoded_key.clone(), new_group(key, spec));
         }
         let group = groups
             .get_mut(&encoded_key)
@@ -121,26 +139,59 @@ pub(super) fn execute(
 
     groups
         .into_values()
-        .map(|group| finish_group(group, &spec))
+        .map(|group| finish_group(group, spec))
         .collect()
 }
 
-fn parse(stages: &[Map<String, Value>]) -> Result<GroupSpec, QueryError> {
-    let [stage] = stages else {
+fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, QueryError> {
+    if stages.is_empty() {
         return Err(QueryError::Invalid(
-            "aggregate currently requires exactly one $group stage".into(),
-        ));
-    };
-    if stage.len() != 1 || !stage.contains_key("$group") {
-        return Err(QueryError::Invalid(
-            "aggregate stage must contain only $group".into(),
+            "aggregate requires at least one stage".into(),
         ));
     }
-    let Some(definition) = stage.get("$group") else {
-        return Err(QueryError::Invalid(
-            "aggregate stage must contain $group".into(),
-        ));
-    };
+
+    let mut matches = Vec::new();
+    let mut group = None;
+    for (index, stage) in stages.iter().enumerate() {
+        if stage.len() != 1 {
+            return Err(QueryError::Invalid(format!(
+                "aggregate stage {index} must contain one operator"
+            )));
+        }
+        let (operator, value) = stage.iter().next().expect("one aggregate operator");
+        match operator.as_str() {
+            "$match" if group.is_none() => {
+                let filter = value.as_object().ok_or_else(|| {
+                    QueryError::Invalid(format!("aggregate stage {index}.$match must be an object"))
+                })?;
+                validation::validate_filter(filter, &format!("aggregate[{index}].$match"))?;
+                matches.push(filter.clone());
+            }
+            "$group" if group.is_none() => group = Some(parse_group(value)?),
+            "$match" => {
+                return Err(QueryError::Invalid(format!(
+                    "aggregate stage {index}.$match must precede $group"
+                )));
+            }
+            "$group" => {
+                return Err(QueryError::Invalid(
+                    "aggregate supports only one $group stage".into(),
+                ));
+            }
+            _ => {
+                return Err(QueryError::Invalid(format!(
+                    "unsupported aggregate stage {operator}"
+                )));
+            }
+        }
+    }
+
+    let group =
+        group.ok_or_else(|| QueryError::Invalid("aggregate requires a $group stage".into()))?;
+    Ok(AggregationPlan { matches, group })
+}
+
+fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
     let definition = definition
         .as_object()
         .ok_or_else(|| QueryError::Invalid("$group must be an object".into()))?;
