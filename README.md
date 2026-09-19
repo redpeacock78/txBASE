@@ -144,6 +144,8 @@ Usage:
 
 Normal DBF saves record and apply an existing sidecar's target through the WAL; a stale or invalid sidecar is rejected and `index rebuild` remains the explicit repair path.
 
+The path-aware planner can intersect candidates from multiple valid single-field indexes for direct equality filters.
+
 `pack` removes logically deleted records and renumbers the remaining physical records.
 
 `recall` restores one logically deleted record by its physical record number.

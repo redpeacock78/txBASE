@@ -112,6 +112,8 @@ A delta with the wrong base must be rejected.
 
 `src/dbf/tests/persistence.rs::recovery_replays_the_dbf_and_index_target_from_one_wal` covers the DBF-replaced/index-not-yet-replaced boundary with a durable `TXDI` target.
 
+`src/query/tests.rs::uses_a_valid_equality_index_and_preserves_scan_results` covers single-index equality, equality intersection, empty intersections, range, ordered traversal, and table-scan equivalence.
+
 ### Compatibility tests
 
 Fixtures should come from independent readers or writers when possible.

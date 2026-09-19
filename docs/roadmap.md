@@ -30,7 +30,7 @@ The repository currently provides:
 - Startup recovery, stale-snapshot rejection, and an Ubuntu/macOS/Windows CI gate.
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
-- A rebuildable external scalar-key index sidecar with equality and range candidate lookup, single-field ordered traversal, path-aware planning, and DBF/memo freshness checks.
+- A rebuildable external scalar-key index sidecar with equality and range candidate lookup, single-field ordered traversal, equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 
 The baseline intentionally does not include multi-key ordered-sort planner behavior, cursors, multi-record transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
 
@@ -62,9 +62,9 @@ It provides table discovery, named table loading, schema output, and per-table v
 
 It does not yet provide shared locks, relationships, cross-table index coordination, or cross-table transactions.
 
-The index sidecar foundation is implemented for scalar keys, exact equality and range candidate lookup, single-field ordered traversal, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
+The index sidecar foundation is implemented for scalar keys, exact equality and range candidate lookup, single-field ordered traversal, equality candidate intersection, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support multi-key ordered planning, multi-index selection, or cross-table atomic commits.
+It does not yet support multi-key ordered planning, selectivity-aware index choice, compound indexes, or cross-table atomic commits.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
@@ -82,7 +82,7 @@ The current record scan remains the reference execution path while the query mod
 - Field-to-field comparisons such as `$field` expressions.
 - Joins.
 - Constraints.
-- Range, ordered-sort, and multi-index query planning.
+- Range, ordered-sort, selectivity-aware, and compound-index query planning.
 
 Joins should begin as local bounded operations.
 
@@ -202,4 +202,4 @@ The number of files is not a quality metric by itself.
 - Automatic CJK conversion when the declared encoding is ambiguous.
 - Planner-backed indexes, joins, aggregation, MVCC, XBF, object-storage, or distributed code without a contract and end-to-end test.
 
-The next index slice is intentionally local: multi-key ordered planning or multi-index selection, after their contracts are written.
+The next index slice is intentionally local: multi-key ordered planning or selectivity-aware index choice, after their contracts are written.

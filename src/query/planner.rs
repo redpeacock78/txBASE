@@ -17,6 +17,10 @@ pub enum QueryPlan {
         name: String,
         field: String,
     },
+    IndexIntersection {
+        names: Vec<String>,
+        fields: Vec<String>,
+    },
     OrderedIndex {
         name: String,
         field: String,
@@ -34,6 +38,7 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
     let Ok(index_file) = IndexFile::load(dbf_path) else {
         return table_scan();
     };
+    let mut equality_indexes = Vec::new();
     for (field, condition) in &request.filter {
         let Some(value) = equality_value(condition) else {
             continue;
@@ -41,11 +46,32 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
         let Ok(Some((name, records))) = index_file.lookup_eq_for_field(field, value) else {
             continue;
         };
-        return PlannedAccess {
-            plan: QueryPlan::EqualityIndex {
-                name,
+        equality_indexes.push((name, field.clone(), records));
+    }
+    if let Some((name, field, first_records)) = equality_indexes.first() {
+        let mut records = first_records.clone();
+        for (_, _, candidates) in equality_indexes.iter().skip(1) {
+            records.retain(|record| candidates.binary_search(record).is_ok());
+        }
+        let plan = if equality_indexes.len() == 1 {
+            QueryPlan::EqualityIndex {
+                name: name.clone(),
                 field: field.clone(),
-            },
+            }
+        } else {
+            QueryPlan::IndexIntersection {
+                names: equality_indexes
+                    .iter()
+                    .map(|(name, _, _)| name.clone())
+                    .collect(),
+                fields: equality_indexes
+                    .iter()
+                    .map(|(_, field, _)| field.clone())
+                    .collect(),
+            }
+        };
+        return PlannedAccess {
+            plan,
             records: Some(records),
             ordered: false,
         };

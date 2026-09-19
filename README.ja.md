@@ -106,6 +106,8 @@ txbase recall path/to/users.dbf 2
 
 `index rebuild`は明示的な修復手段です。
 
+path-aware plannerは、複数のsingle-field indexが有効なdirect equality filterであれば候補recordをintersectionできます。
+
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピーします。
 
 ```bash
@@ -168,7 +170,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 当面はDBF、memo、WAL、query、HTTPのcontractをfixtureとfailure testで固めます。
 
-secondary index sidecarの自動更新と単純なequality、range、single-field ordered plannerは実装済みです。multi-key ordered planner、join、aggregation、cursor、multi-record transaction、CJK encoding、XBFはroadmapで検討します。
+secondary index sidecarの自動更新と単純なequality、equality intersection、range、single-field ordered plannerは実装済みです。multi-key ordered planner、join、aggregation、cursor、multi-record transaction、CJK encoding、XBFはroadmapで検討します。
 
 ## License
 

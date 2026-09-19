@@ -289,6 +289,32 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
         execute_query(&table, &request).unwrap()
     );
 
+    let intersection_request = parse(br#"{"filter":{"NAME":"Alice","AGE":29}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &intersection_request).unwrap(),
+        QueryPlan::IndexIntersection {
+            names: vec!["by_age".into(), "by_name".into()],
+            fields: vec!["AGE".into(), "NAME".into()],
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &intersection_request).unwrap(),
+        execute_query(&table, &intersection_request).unwrap()
+    );
+
+    let empty_intersection_request = parse(br#"{"filter":{"NAME":"Alice","AGE":7}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &empty_intersection_request).unwrap(),
+        QueryPlan::IndexIntersection {
+            names: vec!["by_age".into(), "by_name".into()],
+            fields: vec!["AGE".into(), "NAME".into()],
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &empty_intersection_request).unwrap(),
+        execute_query(&table, &empty_intersection_request).unwrap()
+    );
+
     let range_request = parse(br#"{"filter":{"AGE":{"$gt":7,"$lt":31}}}"#).unwrap();
     assert_eq!(
         explain_query_at(&path, &range_request).unwrap(),

@@ -107,7 +107,7 @@ It also warns that low-selectivity operators such as `$ne` and `$nin` often do n
 
 txBASE keeps the record scan as the query executor reference path.
 
-The path-aware query entry point now attempts one external scalar-key equality, range, or one-field ordered traversal before applying the same filter, sort, projection, skip, and limit pipeline.
+The path-aware query entry point now attempts external scalar-key equality, range, or one-field ordered traversal before applying the same filter, sort, projection, skip, and limit pipeline.
 
 The planner reports `TableScan`, `EqualityIndex`, `RangeIndex`, or `OrderedIndex` through `explain_query_at`.
 
@@ -117,13 +117,21 @@ Connecting an index to query execution is therefore not just a parser change.
 
 It needs a key encoding, null and missing-field rules, duplicate ordering, update maintenance, recovery records, stale-index detection, and a planner policy.
 
-The current planner only considers direct top-level equality, single-bound-per-side range predicates, and one-field sort requests.
+The current planner considers direct top-level equality, single-bound-per-side range predicates, and one-field sort requests.
+
+Multiple valid single-field equality indexes may be intersected by record number before the normal filter pipeline.
 
 It preserves the table scan for multi-key sort, logical, and nested-path planning.
 
+MongoDB's current guidance recommends a compound index for queries that repeatedly search multiple fields.
+
+The txBASE intersection is a local candidate-reduction feature and does not claim MongoDB planner compatibility or replace a future compound-index contract.
+
 MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a future multi-key planner must define index field order instead of treating every index as an interchangeable lookup table.
 
-txBASE currently makes no selectivity estimate and chooses at most one validated external scalar index.
+txBASE currently makes no selectivity estimate and does not build compound indexes.
+
+The equality intersection is a bounded candidate prefilter, not a covered query or a claim of end-to-end speedup.
 
 The roadmap keeps index design separate from the query syntax so a query document does not imply an implementation strategy.
 
@@ -165,7 +173,7 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 
 The roadmap may later cover the following in separate contracts:
 
-1. Multi-key ordered and multi-index planning with explicit missing, null, and collation rules.
+1. Multi-key ordered and selectivity-aware planning with explicit missing, null, and collation rules.
 2. A catalog for multiple tables and schema metadata.
 3. Joins and aggregation with bounded memory behavior.
 4. Cursors or streaming responses with stable snapshot rules.

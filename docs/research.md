@@ -20,7 +20,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | SQLite test breadth and quality | [Testing and quality](testing-quality.md) | Current test map plus reference |
 | HTTP methods, PATCH, and QUERY | [HTTP semantics](http-semantics.md) | Current routes plus protocol reference |
 | Multi-table DBF discovery and schema lookup | [Catalog](catalog.md) | Current boundary plus future relational work |
-| External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, equality, range, and single-field ordered planner plus future multi-key planner |
+| External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, equality, range, equality intersection, and single-field ordered planner plus future multi-key planner |
 | CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Future |
 
 ## Research method
@@ -52,6 +52,7 @@ The README organization follows the section shape of [texenv's README](https://g
 - [Query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [Find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
+- [MongoDB compound indexes](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/)
 - [BSON comparison order](https://www.mongodb.com/docs/manual/reference/bson-type-comparison-order/)
 - [Compound-index sort order](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
 - [Equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
