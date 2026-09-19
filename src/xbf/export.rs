@@ -1,6 +1,7 @@
 use super::conversion::{civil_from_days, days_from_civil};
 use super::{XbfError, XbfField, XbfTable, XbfType, XbfValue};
 use crate::dbf::DbfTable;
+use serde::Serialize;
 use serde_json::{Map, Number, Value, json};
 use std::collections::BTreeSet;
 use std::fs;
@@ -19,6 +20,98 @@ struct ExportField {
     length: u8,
     decimal_count: u8,
     flags: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct XbfExportIssue {
+    pub record: Option<usize>,
+    pub field: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct XbfExportReport {
+    pub representable: bool,
+    pub requires_schema_sidecar: bool,
+    pub issues: Vec<XbfExportIssue>,
+}
+
+pub fn dbf_export_report(table: &XbfTable) -> XbfExportReport {
+    let mut issues = Vec::new();
+    let mut names = BTreeSet::new();
+    let mut descriptors = Vec::with_capacity(table.fields.len());
+    let shape_valid = table.records.iter().enumerate().all(|(index, record)| {
+        if record.values.len() == table.fields.len() {
+            true
+        } else {
+            issues.push(XbfExportIssue {
+                record: Some(index + 1),
+                field: None,
+                message: "XBF record value count does not match schema".into(),
+            });
+            false
+        }
+    });
+
+    for (field_index, field) in table.fields.iter().enumerate() {
+        if !names.insert(field.name.clone()) {
+            issues.push(XbfExportIssue {
+                record: None,
+                field: Some(field.name.clone()),
+                message: "field name is duplicated".into(),
+            });
+        }
+        let values = if shape_valid {
+            table
+                .records
+                .iter()
+                .map(|record| &record.values[field_index])
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        match descriptor(field, &values, true) {
+            Ok(descriptor) => descriptors.push(descriptor),
+            Err(error) => {
+                issues.push(XbfExportIssue {
+                    record: None,
+                    field: Some(field.name.clone()),
+                    message: error.to_string(),
+                });
+            }
+        }
+        for (record_index, record) in table.records.iter().enumerate() {
+            let Some(value) = record.values.get(field_index) else {
+                continue;
+            };
+            if let Err(error) = value_to_dbf(field, value) {
+                issues.push(XbfExportIssue {
+                    record: Some(record_index + 1),
+                    field: Some(field.name.clone()),
+                    message: error.to_string(),
+                });
+            }
+        }
+    }
+
+    if shape_valid && descriptors.len() == table.fields.len() {
+        if let Err(error) = empty_dbf(&table.fields, &descriptors) {
+            issues.push(XbfExportIssue {
+                record: None,
+                field: None,
+                message: error.to_string(),
+            });
+        }
+    }
+
+    XbfExportReport {
+        representable: issues.is_empty(),
+        requires_schema_sidecar: table
+            .fields
+            .iter()
+            .any(|field| field.primary_key || field.unique || !field.nullable),
+        issues,
+    }
 }
 
 pub fn to_dbf(table: &XbfTable) -> Result<DbfTable, XbfError> {

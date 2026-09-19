@@ -165,7 +165,10 @@ impl From<std::io::Error> for XbfError {
 
 pub use codec::{decode, decode_with_limits, encode, encode_with_limits};
 pub use conversion::from_dbf;
-pub use export::{save_dbf_with_schema, to_dbf, to_dbf_with_schema};
+pub use export::{
+    XbfExportIssue, XbfExportReport, dbf_export_report, save_dbf_with_schema, to_dbf,
+    to_dbf_with_schema,
+};
 pub use persistence::{read_path, read_path_with_limits, write_path, write_path_with_limits};
 pub use wal::{recover_path, save_with_wal};
 
@@ -176,6 +179,10 @@ impl XbfTable {
 
     pub fn to_dbf(&self) -> Result<crate::dbf::DbfTable, XbfError> {
         export::to_dbf(self)
+    }
+
+    pub fn dbf_export_report(&self) -> export::XbfExportReport {
+        export::dbf_export_report(self)
     }
 
     pub fn to_dbf_with_schema(

@@ -266,6 +266,13 @@ DBF values are representable and returns their sidecar metadata separately.
 The returned `DbfTable` can then use its existing `save_to` or `save_with_wal`
 path.
 
+`XbfTable::dbf_export_report` checks the same base DBF representability boundary
+without writing files. It reports every field or physical record with a known
+conversion problem, whether the table needs a schema sidecar, and a boolean
+`representable` result. The report does not claim that a direct `to_dbf` call
+will preserve constraints; use the schema-aware export path when
+`requires_schema_sidecar` is true.
+
 `save_dbf_with_schema` is the file-level convenience path. The CLI exposes it
 as `xbf export XBF DBF --schema`.
 
@@ -295,7 +302,6 @@ advertised as a complete supported format, the repository still needs:
 - Malformed header, section, checksum, directory, UTF-8, and payload corpora.
 - Round-trip tests for DBF to XBF and representability failures for XBF to DBF.
 - Crash and recovery tests for the snapshot and `.xwl` generation boundary.
-- Broader XBF-to-DBF representability reporting and a multi-file atomic export
-  recovery contract.
+- A multi-file atomic export recovery contract.
 
 Until those gates exist, XBF remains a draft and is not advertised as a supported format.

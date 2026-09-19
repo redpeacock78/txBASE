@@ -151,6 +151,8 @@ txbase xbf export path/to/users.xbf path/to/users.dbf --schema
 
 `xbf import`はDBF tableをbounded XBF snapshotへ変換します。
 `xbf export`は表現可能なXBF subsetだけをDBFへ変換し、unsupported typeやvalueはerrorにします。
+`XbfTable::dbf_export_report`はfileを書かずに表現可能性を調べ、field/record単位の問題とschema
+sidecarが必要かどうかを返します。
 libraryの`XbfTable::to_dbf_with_schema`は、表現可能な`primary`、`unique`、`not_null`のsidecar JSONを返します。
 `XbfTable::save_dbf_with_schema`とCLIの`xbf export --schema`は、そのmetadataを`.txschema.json` sidecarへ書きます。
 

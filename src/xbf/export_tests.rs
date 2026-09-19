@@ -174,3 +174,52 @@ fn rejects_nonrepresentable_xbf_dbf_export_types() {
 
     assert!(super::to_dbf(&table).is_err());
 }
+
+#[test]
+fn reports_all_nonrepresentable_xbf_fields_and_values() {
+    let table = XbfTable {
+        generation: 0,
+        fields: vec![
+            XbfField {
+                name: "DOC".into(),
+                ty: XbfType::Json,
+                nullable: false,
+                primary_key: false,
+                unique: false,
+            },
+            XbfField {
+                name: "UUID".into(),
+                ty: XbfType::Uuid,
+                nullable: false,
+                primary_key: false,
+                unique: false,
+            },
+        ],
+        records: vec![XbfRecord {
+            deleted: false,
+            values: vec![XbfValue::Json(json!({"ok": true})), XbfValue::Uuid([1; 16])],
+        }],
+    };
+
+    let report = super::dbf_export_report(&table);
+
+    assert!(!report.representable);
+    assert!(!report.requires_schema_sidecar);
+    assert!(report.issues.iter().any(|issue| {
+        issue.field.as_deref() == Some("DOC")
+            && issue.message.contains("no lossless representation")
+    }));
+    assert!(report.issues.iter().any(|issue| {
+        issue.field.as_deref() == Some("UUID")
+            && issue.message.contains("no lossless representation")
+    }));
+}
+
+#[test]
+fn report_marks_constraint_sidecar_requirement() {
+    let report = super::dbf_export_report(&constraint_table());
+
+    assert!(report.representable);
+    assert!(report.requires_schema_sidecar);
+    assert!(report.issues.is_empty());
+}
