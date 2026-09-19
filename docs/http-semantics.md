@@ -60,6 +60,18 @@ Unknown fields, malformed JSON, unsupported update operators, and invalid field 
 
 The physical record number is not reused by the current mutation layer.
 
+Successful `GET /records` and `GET /records/{id}` responses expose a strong `ETag` for the
+current table representation. `POST /records`, `PUT /records/{id}`, `PATCH /records/{id}`,
+`DELETE /records/{id}`, and `POST /transaction` accept an optional `If-Match` header. A strong
+current tag, or `*` when the target exists, permits the mutation; a supplied weak, malformed, or
+non-matching condition returns `412 Precondition Failed` without changing the table. An omitted
+header preserves the existing behavior. A comma
+separated list succeeds when any strong tag matches. Successful mutations return the new `ETag`.
+
+The validator is opaque and is not an authenticity or authorization token. It is derived from the
+current in-memory DBF bytes and resolved active JSON values, so memo-backed values participate in
+the representation identity.
+
 ## 3. PATCH
 
 [RFC 5789](https://www.rfc-editor.org/rfc/rfc5789.html) defines `PATCH` as applying a patch document to a resource.
@@ -74,7 +86,10 @@ For collision-sensitive patches, the RFC recommends conditional requests such as
 
 txBASE currently accepts `application/json` plain field patches and the typed `$set`, `$unset`, and `$inc` subset described in [the query model](query-model.md).
 
-It does not yet implement ETags, `If-Match`, JSON Patch, or JSON Merge Patch media types.
+txBASE implements a strong table representation tag and optional `If-Match` protection for the
+state-changing routes described above.
+
+It does not yet implement `If-None-Match`, JSON Patch, or JSON Merge Patch media types.
 
 The MongoDB-shaped update document is an application format inside the JSON body.
 
@@ -145,7 +160,7 @@ Clients must not infer exactly-once effects from a successful TCP exchange alone
 
 The following require explicit contracts before implementation:
 
-- `ETag`, `If-Match`, and `If-None-Match` behavior.
+- `If-None-Match` behavior.
 - `Content-Location` and cache-key rules for QUERY bodies.
 - HTTP streaming and backpressure.
 - CORS and authentication policy.

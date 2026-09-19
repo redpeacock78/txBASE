@@ -7,6 +7,7 @@ use std::path::Path;
 use tiny_http::{Header, Method, Request, Response, Server};
 
 mod catalog;
+mod etag;
 mod explain;
 mod range;
 mod transaction;
@@ -52,7 +53,7 @@ fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
     } else if matches!(request.method(), Method::Patch) {
         update_response(&mut request, &path, table, dbf_path, false)
     } else if matches!(request.method(), Method::Delete) {
-        delete_response(&path, table, dbf_path)
+        delete_response(&request, &path, table, dbf_path)
     } else {
         json_response(
             405,
@@ -71,13 +72,16 @@ fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
 
 fn get_response(path: &str, table: &DbfTable) -> HttpResponse {
     if path == "/records" {
-        return json_response(200, Value::Array(table.active_json()), true);
+        return etag::with_current(
+            json_response(200, Value::Array(table.active_json()), true),
+            table,
+        );
     }
     let Ok(id) = record_id(path) else {
         return json_response(404, error("not_found", "resource not found"), false);
     };
     match table.active_record(id) {
-        Some(record) => json_response(200, record_json(record), true),
+        Some(record) => etag::with_current(json_response(200, record_json(record), true), table),
         None => json_response(404, error("not_found", "record not found"), false),
     }
 }
@@ -146,6 +150,9 @@ fn post_response(
     if path != "/records" {
         return json_response(404, error("not_found", "resource not found"), false);
     }
+    if let Err(response) = etag::require_if_match(request, table, true) {
+        return response;
+    }
     let values = match read_json_object(request, "POST", false) {
         Ok(values) => values,
         Err(response) => return response,
@@ -170,8 +177,11 @@ fn post_response(
             false,
         );
     };
-    json_response(201, record_json(record), false)
-        .with_header(header("Location", &format!("/records/{id}")))
+    etag::with_current(
+        json_response(201, record_json(record), false)
+            .with_header(header("Location", &format!("/records/{id}"))),
+        table,
+    )
 }
 
 fn update_response(
@@ -184,6 +194,12 @@ fn update_response(
     let Ok(id) = record_id(path) else {
         return json_response(404, error("not_found", "resource not found"), false);
     };
+    if table.active_record(id).is_none() {
+        return json_response(404, error("not_found", "record not found"), false);
+    }
+    if let Err(response) = etag::require_if_match(request, table, true) {
+        return response;
+    }
     let values = match read_json_object(request, if replace { "PUT" } else { "PATCH" }, false) {
         Ok(values) => values,
         Err(response) => return response,
@@ -210,7 +226,7 @@ fn update_response(
         return response;
     }
     match table.active_record(id) {
-        Some(record) => json_response(200, record_json(record), false),
+        Some(record) => etag::with_current(json_response(200, record_json(record), false), table),
         None => json_response(
             500,
             error("storage_error", "updated record is unavailable"),
@@ -219,10 +235,21 @@ fn update_response(
     }
 }
 
-fn delete_response(path: &str, table: &mut DbfTable, dbf_path: &Path) -> HttpResponse {
+fn delete_response(
+    request: &Request,
+    path: &str,
+    table: &mut DbfTable,
+    dbf_path: &Path,
+) -> HttpResponse {
     let Ok(id) = record_id(path) else {
         return json_response(404, error("not_found", "resource not found"), false);
     };
+    if table.active_record(id).is_none() {
+        return json_response(404, error("not_found", "record not found"), false);
+    }
+    if let Err(response) = etag::require_if_match(request, table, true) {
+        return response;
+    }
     let operation = OperationIr {
         method: OperationMethod::Delete,
         path: path.to_owned(),
@@ -235,7 +262,10 @@ fn delete_response(path: &str, table: &mut DbfTable, dbf_path: &Path) -> HttpRes
     if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
         return response;
     }
-    Response::from_string(String::new()).with_status_code(204)
+    etag::with_current(
+        Response::from_string(String::new()).with_status_code(204),
+        table,
+    )
 }
 
 fn persist_mutation(
@@ -393,3 +423,6 @@ fn header(name: &str, value: &str) -> Header {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod etag_tests;

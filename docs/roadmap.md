@@ -32,6 +32,7 @@ The repository currently provides:
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
+- Strong table representation ETags on successful reads and optional If-Match protection for single-table mutations and transactions.
 - A bounded aggregation pipeline with zero or more `$match` stages before one `$group` stage using `$count`, integer `$sum`, numeric `$avg`, `$min`, and `$max`, plus final `$sort` and `$limit` stages over group output.
 - A bounded local `inner`, `left`, `semi`, or `anti` equality join plus a bounded `cross` join over two catalog tables with qualified filtering and projection.
 - A read-only catalog HTTP server exposing table schemas and the bounded local join.

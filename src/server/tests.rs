@@ -83,8 +83,12 @@ fn mutation_endpoints_persist_and_delete_records() {
         StatusCode(200)
     );
 
+    let delete = TestRequest::new()
+        .with_method(Method::Delete)
+        .with_path("/records/3")
+        .into();
     assert_eq!(
-        delete_response("/records/3", &mut table, &path).status_code(),
+        delete_response(&delete, "/records/3", &mut table, &path).status_code(),
         StatusCode(204)
     );
     let persisted = DbfTable::from_path(&path).unwrap();

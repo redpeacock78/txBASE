@@ -1,4 +1,4 @@
-use super::{HttpResponse, dbf_error_response, error, json_response, read_json_body};
+use super::{HttpResponse, dbf_error_response, error, etag, json_response, read_json_body};
 use crate::dbf::DbfTable;
 use crate::xbase::OperationIr;
 use serde::Deserialize;
@@ -17,6 +17,9 @@ pub(super) fn response(
     table: &mut DbfTable,
     dbf_path: &Path,
 ) -> HttpResponse {
+    if let Err(response) = etag::require_if_match(request, table, true) {
+        return response;
+    }
     let body = match read_json_body(request, "POST /transaction", false) {
         Ok(body) => body,
         Err(response) => return response,
@@ -56,12 +59,15 @@ pub(super) fn response(
         return dbf_error_response(dbf_error);
     }
     *table = working;
-    json_response(
-        200,
-        json!({
-            "committed": true,
-            "operations": transaction.operations.len(),
-        }),
-        false,
+    etag::with_current(
+        json_response(
+            200,
+            json!({
+                "committed": true,
+                "operations": transaction.operations.len(),
+            }),
+            false,
+        ),
+        table,
     )
 }
