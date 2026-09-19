@@ -18,6 +18,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | MongoDB predicates and query planning | [Query model](query-model.md) | Current subset plus reference |
 | Firestore and Realtime Database design | [Firebase model](firebase-model.md) | Reference |
 | SQLite test breadth and quality | [Testing and quality](testing-quality.md) | Current test map plus reference |
+| Contract-to-test traceability | [Quality contract matrix](quality-matrix.md) | Current evidence map |
 | HTTP methods, PATCH, and QUERY | [HTTP semantics](http-semantics.md) | Current routes plus protocol reference |
 | Relational schema constraints over DBF | [Schema metadata](schema-metadata.md) | Current local subset plus future relational work |
 | Native XBF storage format | [XBF v1 draft](xbf.md) | Future format contract, not implemented |
@@ -33,7 +34,7 @@ Implementation behavior is checked against the current source and tests before i
 
 Design notes are labeled future when they are not implemented.
 
-The research pass for this index was refreshed on 2026-09-19.
+The research pass for this index was refreshed on 2026-09-20.
 
 The README organization follows the section shape of [texenv's README](https://github.com/redpeacock78/texenv/blob/master/README.md), while the content is specific to txBASE.
 

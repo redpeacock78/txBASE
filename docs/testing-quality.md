@@ -50,6 +50,9 @@ Its [requirements page](https://sqlite.org/requirements.html) turns testable sta
 
 For txBASE, the practical adaptation is a small contract table linking each format or protocol rule to a fixture, a failure test, and the command that reproduces it.
 
+The current repository-local table is [Quality contract matrix](quality-matrix.md).
+It is intentionally a traceability aid, not a coverage score.
+
 ## 3. What the current repository tests
 
 The current Rust test layout is already split by ownership:
@@ -172,6 +175,8 @@ The order below keeps the feedback loop short:
 6. Add differential checks only after a reference query evaluator exists.
 
 No coverage percentage is a substitute for these contracts.
+
+The matrix should be updated in the same change as a new format, query, persistence, or HTTP boundary.
 
 ## Primary references
 

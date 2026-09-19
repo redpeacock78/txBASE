@@ -258,6 +258,7 @@ Files are split when ownership or maintenance becomes clearer; a crate split sho
 - [MongoDB query model and txBASE query behavior](docs/query-model.md)
 - [Firebase data-model and synchronization lessons](docs/firebase-model.md)
 - [SQLite testing and quality model](docs/testing-quality.md)
+- [Quality contract matrix](docs/quality-matrix.md)
 - [HTTP method semantics and QUERY](docs/http-semantics.md)
 - [Schema metadata and local constraints](docs/schema-metadata.md)
 - [XBF v1 format draft](docs/xbf.md)

@@ -194,6 +194,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 - [MongoDB query model](docs/query-model.md)
 - [Firebase data model](docs/firebase-model.md)
 - [SQLite testingとquality](docs/testing-quality.md)
+- [Quality contract matrix](docs/quality-matrix.md)
 - [HTTP semanticsとQUERY](docs/http-semantics.md)
 - [Schema metadataとlocal constraint](docs/schema-metadata.md)
 - [XBF v1 format draft](docs/xbf.md)
