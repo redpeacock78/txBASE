@@ -123,7 +123,7 @@ fn append_domain_histogram(histogram: &mut Vec<HistogramBucket>, entries: &[Inde
         .map(|entry| entry.records().len())
         .sum::<usize>();
     let target_records = total_records.div_ceil(HISTOGRAM_BUCKET_LIMIT).max(1);
-    let mut current = None;
+    let mut current: Option<HistogramBucket> = None;
     for (position, entry) in entries.iter().enumerate() {
         if let Some(bucket) = current.as_mut() {
             bucket.upper = entry.key().clone();
