@@ -153,7 +153,8 @@ The same caution applies to EUC-JP, GBK, GB18030, Big5, and Korean encodings.
 
 The current override slice covers both explicit invocation and sidecar selection for the four
 declared-driver codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP.
-Collation and additional external fixtures remain future work.
+Pinned byte fixtures cover the four declared CJK drivers and round-trip their multibyte record
+values. Collation and broader upstream external fixtures remain future work.
 
 ## 5. Persistence and recovery
 

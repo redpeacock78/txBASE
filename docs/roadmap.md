@@ -149,7 +149,7 @@ The phase must preserve DBF byte widths and reject ambiguous or unrepresentable 
 - CP949 and EUC-KR.
 - Explicit encoding overrides.
 - Collation.
-- Additional external fixtures.
+- Additional upstream external fixtures.
 
 Every encoding needs a declared name, byte-width rule, round-trip fixture, invalid-byte behavior, and comparison policy.
 
@@ -161,7 +161,9 @@ Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP; none of the latter four claims a DB
 mapping.
 Schema output exposes declared and effective names plus the interpretation source.
 Strict Shift_JIS accepts ASCII, half-width Katakana, and JIS X 0208, while CP932 extensions are
-replaced on read or rejected on write. Collation and broader external fixtures remain future work.
+replaced on read or rejected on write. Pinned byte fixtures cover the four declared CJK drivers
+and round-trip their multibyte record values. Collation and broader upstream external fixtures
+remain future work.
 
 An override must be visible in schema or command output so a reader can reproduce the same interpretation.
 
