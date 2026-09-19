@@ -38,6 +38,10 @@ Accepted labels are `windows-31j` or `cp932`, `gbk` or `cp936`, `euc-kr` or `cp9
 
 txBASE normalizes the label and reports the effective name in `schema` output as `encoding_override`.
 
+The path-oriented commands also accept `--encoding NAME` for a per-invocation override.
+That value takes precedence over the sidecar value, is used for reads and writes during that
+invocation, and is not persisted to the DBF header or metadata sidecar.
+
 Unknown root or field properties are rejected.
 
 An unknown field name, unsupported format, or unsupported version is rejected when the table is loaded.
@@ -55,6 +59,9 @@ The current version accepts the following field properties:
 The sidecar's `encoding` property is not a field constraint.
 
 It selects the codec used for character reads and writes before the record enters the JSON layer.
+
+The same four codecs can be selected temporarily by the public
+`DbfTable::from_path_with_encoding` API or the CLI `--encoding` option.
 
 It does not add strict Shift_JIS, EUC-JP, collation, or an automatic conversion policy.
 

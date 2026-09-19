@@ -99,9 +99,18 @@ WALをsyncしてからDBFまたはmemo sidecarを置き換えます。
 
 schemaとverifyはDBFを読み取り、schemaとrecord boundaryを確認します。
 
+DBF headerのlanguage-driver byteが信頼できない場合は、read、schema、verify、pack、recall、serverで`--encoding NAME`を指定できます。
+
+対応するaliasは`windows-31j`/`cp932`、`gbk`/`cp936`、`euc-kr`/`cp949`、`big5`/`cp950`です。
+
+invocation単位のoverrideは`*.txschema.json`より優先され、保存されません。
+
+effectiveな値はschema outputの`encoding_override`で確認できます。
+
 ```bash
 txbase schema path/to/users.dbf
 txbase verify path/to/users.dbf
+txbase schema path/to/users.dbf --encoding cp932
 txbase catalog path/to/database
 txbase verify-catalog path/to/database
 txbase index build path/to/users.dbf NAME AGE

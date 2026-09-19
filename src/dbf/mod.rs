@@ -43,14 +43,14 @@ mod wal;
 #[cfg(test)]
 mod writer_tests;
 
+use codec::{
+    canonical_encoding_name, decode_field_with_encoding, decode_record_field_with_encoding,
+    encode_character_with_encoding, encode_field_with_encoding, encode_null_flags, encoding_name,
+    flag_is_set, hex, null_flag_layout, parse_fields, read_u16, read_u32, system_field_index,
+    text_with_encoding, update_null_flags, value_text,
+};
 #[cfg(test)]
 use codec::{decode_field, encode_field, text};
-use codec::{
-    decode_field_with_encoding, decode_record_field_with_encoding, encode_character_with_encoding,
-    encode_field_with_encoding, encode_null_flags, encoding_name, flag_is_set, hex,
-    null_flag_layout, parse_fields, read_u16, read_u32, system_field_index, text_with_encoding,
-    update_null_flags, value_text,
-};
 use lock::TableLock;
 use memo::{
     binary_value, empty_memo_value, encode_memo_pointer, find_memo_path, is_sidecar_field,

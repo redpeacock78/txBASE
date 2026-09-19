@@ -237,7 +237,9 @@ fn persist_mutation(
     match table.save_with_operation(dbf_path, operation) {
         Ok(()) => Ok(()),
         Err(dbf_error) => {
-            *table = DbfTable::from_path(dbf_path).unwrap_or(original);
+            let encoding = original.effective_encoding_override().map(str::to_owned);
+            *table = DbfTable::from_path_with_encoding(dbf_path, encoding.as_deref())
+                .unwrap_or(original);
             Err(json_response(
                 500,
                 error("storage_error", &dbf_error.to_string()),

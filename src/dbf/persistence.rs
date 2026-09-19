@@ -10,7 +10,7 @@ impl DbfTable {
         }
         let path = path.as_ref();
         let _lock = TableLock::acquire(path)?;
-        let _ = Self::recover_wal(path)?;
+        let _ = Self::recover_wal_with_encoding(path, self.encoding_override.as_deref())?;
         self.ensure_source_current(path)?;
         save_bytes_to(path, &self.bytes, "txbase.tmp")?;
         let _ = crate::index::refresh_if_present(path, self);
@@ -69,7 +69,7 @@ impl DbfTable {
         operation: Option<&OperationIr>,
     ) -> Result<(), DbfError> {
         let _lock = TableLock::acquire(path)?;
-        let _ = Self::recover_wal(path)?;
+        let _ = Self::recover_wal_with_encoding(path, self.encoding_override.as_deref())?;
         self.bind_schema_if_present(path)?;
         self.ensure_source_current(path)?;
         let mut prepared = self.clone();

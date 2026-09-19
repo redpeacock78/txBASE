@@ -115,6 +115,12 @@ The normalized selection is visible as `encoding_override` in `schema` output.
 This override is applied before character decoding and encoding; it does not change the DBF header
 language-driver byte.
 
+The path-oriented read, schema, verify, pack, recall, and server commands also accept
+`--encoding NAME` for the same four codecs.
+The invocation override takes precedence over the sidecar override, is not written to the DBF
+header or metadata sidecar, and remains visible as the effective `encoding_override` in schema
+output.
+
 Unknown drivers retain the existing UTF-8 or lossy fallback behavior.
 
 Writes reject characters that the selected code page cannot represent.
@@ -133,9 +139,8 @@ Shift_JIS and CP932 are not interchangeable labels.
 
 The same caution applies to EUC-JP, GBK, GB18030, Big5, and Korean encodings.
 
-The roadmap still proposes explicit user encoding overrides, strict Shift_JIS versus CP932
-selection, EUC-JP import or export, collation, and additional external fixtures.
-The current override slice covers only the four declared-driver codecs above.
+The current override slice covers both explicit invocation and sidecar selection for the four
+declared-driver codecs above.
 Strict Shift_JIS versus CP932 selection, EUC-JP import or export, collation, and additional external
 fixtures remain future work.
 

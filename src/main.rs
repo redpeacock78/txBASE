@@ -32,13 +32,17 @@ fn run() -> Result<(), Box<dyn Error>> {
     if first == "--serve" {
         let path = PathBuf::from(args.next().ok_or("--serve requires a DBF path")?);
         let mut bind = String::from("127.0.0.1:8080");
+        let mut encoding = None;
         while let Some(option) = args.next() {
-            if option != "--bind" {
-                return Err(format!("unknown option: {option}").into());
+            match option.as_str() {
+                "--bind" => bind = args.next().ok_or("--bind requires an address")?,
+                "--encoding" => {
+                    encoding = Some(args.next().ok_or("--encoding requires a name")?);
+                }
+                _ => return Err(format!("unknown option: {option}").into()),
             }
-            bind = args.next().ok_or("--bind requires an address")?;
         }
-        let table = DbfTable::from_path(&path)?;
+        let table = DbfTable::from_path_with_encoding(&path, encoding.as_deref())?;
         return server::serve(table, &path, &bind).map_err(Into::into);
     }
 
@@ -47,10 +51,8 @@ fn run() -> Result<(), Box<dyn Error>> {
             args.next()
                 .ok_or_else(|| format!("{first} requires a DBF path"))?,
         );
-        if let Some(extra) = args.next() {
-            return Err(format!("unexpected argument: {extra}").into());
-        }
-        let table = DbfTable::from_path(&path)?;
+        let encoding = parse_encoding_option(&mut args)?;
+        let table = DbfTable::from_path_with_encoding(&path, encoding.as_deref())?;
         table.verify()?;
         let output = if first == "schema" {
             table.schema_json()
@@ -150,10 +152,8 @@ fn run() -> Result<(), Box<dyn Error>> {
             args.next()
                 .ok_or_else(|| "pack requires a DBF path".to_owned())?,
         );
-        if let Some(extra) = args.next() {
-            return Err(format!("unexpected argument: {extra}").into());
-        }
-        let mut table = DbfTable::from_path(&path)?;
+        let encoding = parse_encoding_option(&mut args)?;
+        let mut table = DbfTable::from_path_with_encoding(&path, encoding.as_deref())?;
         table.pack()?;
         table.save_with_wal(&path)?;
         println!("pack: {}", path.display());
@@ -171,10 +171,8 @@ fn run() -> Result<(), Box<dyn Error>> {
         let id = raw_id
             .parse::<usize>()
             .map_err(|_| format!("invalid record number: {raw_id}"))?;
-        if let Some(extra) = args.next() {
-            return Err(format!("unexpected argument: {extra}").into());
-        }
-        let mut table = DbfTable::from_path(&path)?;
+        let encoding = parse_encoding_option(&mut args)?;
+        let mut table = DbfTable::from_path_with_encoding(&path, encoding.as_deref())?;
         table.recall_record(id)?;
         table.save_with_wal(&path)?;
         println!("recall: {} record {}", path.display(), id);
@@ -206,11 +204,9 @@ fn run() -> Result<(), Box<dyn Error>> {
     if first.starts_with('-') {
         return Err(format!("unknown option: {first}").into());
     }
-    if let Some(extra) = args.next() {
-        return Err(format!("unexpected argument: {extra}").into());
-    }
+    let encoding = parse_encoding_option(&mut args)?;
 
-    let table = DbfTable::from_path(first)?;
+    let table = DbfTable::from_path_with_encoding(first, encoding.as_deref())?;
     let stdout = io::stdout();
     let mut output = stdout.lock();
     serde_json::to_writer_pretty(&mut output, &table.active_json())?;
@@ -221,8 +217,24 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage:\n  txbase FILE\n  txbase schema FILE\n  txbase verify FILE\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase index build FILE FIELD...\n  txbase index build-compound FILE NAME FIELD[:1|-1] FIELD[:1|-1]...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE\n  txbase recall FILE RECORD\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. Schema, catalog, verification, and index commands inspect DBF files. Backup and restore copy a DBF with its sibling memo sidecar. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
+        "Usage:\n  txbase FILE [--encoding NAME]\n  txbase schema FILE [--encoding NAME]\n  txbase verify FILE [--encoding NAME]\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase index build FILE FIELD...\n  txbase index build-compound FILE NAME FIELD[:1|-1] FIELD[:1|-1]...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE [--encoding NAME]\n  txbase recall FILE RECORD [--encoding NAME]\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS] [--encoding NAME]\n\nReads active DBF records as JSON. NAME accepts the supported CJK aliases and takes precedence over a schema sidecar override for that invocation. Schema, catalog, verification, and index commands inspect DBF files. Backup and restore copy a DBF with its sibling memo sidecar. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
     );
+}
+
+fn parse_encoding_option(
+    args: &mut impl Iterator<Item = String>,
+) -> Result<Option<String>, Box<dyn Error>> {
+    let Some(option) = args.next() else {
+        return Ok(None);
+    };
+    if option != "--encoding" {
+        return Err(format!("unexpected argument: {option}").into());
+    }
+    let name = args.next().ok_or("--encoding requires a name")?;
+    if let Some(extra) = args.next() {
+        return Err(format!("unexpected argument: {extra}").into());
+    }
+    Ok(Some(name))
 }
 
 fn parse_compound_field(specification: &str) -> Result<(String, i8), Box<dyn Error>> {

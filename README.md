@@ -139,20 +139,20 @@ The command-line interface is:
 
 ```text
 Usage:
-  txbase FILE
-  txbase schema FILE
-  txbase verify FILE
+  txbase FILE [--encoding NAME]
+  txbase schema FILE [--encoding NAME]
+  txbase verify FILE [--encoding NAME]
   txbase catalog DIRECTORY
   txbase verify-catalog DIRECTORY
   txbase index build FILE FIELD...
   txbase index build-compound FILE NAME FIELD[:1|-1] FIELD[:1|-1]...
   txbase index verify FILE
   txbase index rebuild FILE
-  txbase pack FILE
-  txbase recall FILE RECORD
+  txbase pack FILE [--encoding NAME]
+  txbase recall FILE RECORD [--encoding NAME]
   txbase backup SOURCE DEST
   txbase restore SOURCE DEST
-  txbase --serve FILE [--bind ADDRESS]
+  txbase --serve FILE [--bind ADDRESS] [--encoding NAME]
 ```
 
 `schema` prints the parsed header and field descriptors.
@@ -184,6 +184,13 @@ It can also use a per-field-direction compound index for a matching multi-key so
 `recall` restores one logically deleted record by its physical record number.
 
 `backup` and `restore` validate the source first, then copy the DBF and its detected memo sidecar.
+
+When a DBF language-driver byte is missing or untrusted, the read, schema, verify, pack, recall,
+and server commands accept `--encoding NAME` for the four supported CJK codecs.
+The supported aliases are `windows-31j`/`cp932`, `gbk`/`cp936`, `euc-kr`/`cp949`, and
+`big5`/`cp950`.
+The invocation override takes precedence over `*.txschema.json`, is not persisted, and is visible
+as the effective `encoding_override` in schema output.
 
 The DBF codec recognizes the Visual FoxPro CJK driver IDs for Windows-31J/CP932, GBK/CP936,
 EUC-KR/CP949, and Big5/CP950.

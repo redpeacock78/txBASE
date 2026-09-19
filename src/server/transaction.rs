@@ -50,7 +50,9 @@ pub(super) fn response(
         }
     }
     if let Err(dbf_error) = working.save_with_wal(dbf_path) {
-        *table = DbfTable::from_path(dbf_path).unwrap_or(original);
+        let encoding = original.effective_encoding_override().map(str::to_owned);
+        *table =
+            DbfTable::from_path_with_encoding(dbf_path, encoding.as_deref()).unwrap_or(original);
         return dbf_error_response(dbf_error);
     }
     *table = working;

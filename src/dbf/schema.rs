@@ -2,6 +2,10 @@ use super::{DbfError, DbfTable, encoding_name};
 use serde_json::{Value, json};
 
 impl DbfTable {
+    pub(crate) fn effective_encoding_override(&self) -> Option<&str> {
+        self.encoding_override.as_deref()
+    }
+
     pub fn schema_json(&self) -> Value {
         json!({
             "format": "dbf",

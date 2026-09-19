@@ -13,12 +13,17 @@ use std::fs;
 use std::path::Path;
 
 impl DbfTable {
-    pub(super) fn load_path(path: &Path) -> Result<Self, DbfError> {
+    pub(super) fn load_path_with_encoding(
+        path: &Path,
+        requested_encoding: Option<&str>,
+    ) -> Result<Self, DbfError> {
         let dbf = fs::read(path)?;
         let schema = read_schema_metadata(path)?;
-        let encoding_override = schema
-            .as_ref()
-            .and_then(|(metadata, _)| metadata.encoding());
+        let encoding_override = requested_encoding.or_else(|| {
+            schema
+                .as_ref()
+                .and_then(|(metadata, _)| metadata.encoding())
+        });
         let mut table = Self::from_bytes_with_encoding(&dbf, encoding_override)?;
         if let Some((metadata, _)) = &schema {
             metadata.validate_fields(&table.fields)?;
@@ -68,7 +73,10 @@ impl DbfTable {
         Ok(())
     }
 
-    pub(super) fn recover_wal(path: &Path) -> Result<bool, DbfError> {
+    pub(super) fn recover_wal_with_encoding(
+        path: &Path,
+        encoding_override: Option<&str>,
+    ) -> Result<bool, DbfError> {
         let wal_path = path.with_extension("txbase.wal");
         if !wal_path.exists() {
             return Ok(false);
@@ -93,7 +101,7 @@ impl DbfTable {
             });
         if let Some(snapshot) = snapshot {
             let snapshot = snapshot?;
-            Self::from_bytes(&snapshot.dbf)?;
+            Self::from_bytes_with_encoding(&snapshot.dbf, encoding_override)?;
             if let Some(memo) = &snapshot.memo {
                 let memo_path = find_memo_path(path)
                     .unwrap_or_else(|| path.with_extension(memo.format.extension()));
@@ -118,7 +126,7 @@ impl DbfTable {
             return Ok(false);
         };
         let operation = operation?;
-        let mut table = Self::load_path(path)?;
+        let mut table = Self::load_path_with_encoding(path, encoding_override)?;
         table.apply_operation(&operation)?;
         let memo_snapshot = table.apply_memo_updates(path)?;
         let full_payload = match &memo_snapshot {

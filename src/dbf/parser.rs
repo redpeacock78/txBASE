@@ -2,10 +2,18 @@ use super::*;
 
 impl DbfTable {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, DbfError> {
+        Self::from_path_with_encoding(path, None)
+    }
+
+    pub fn from_path_with_encoding(
+        path: impl AsRef<Path>,
+        encoding: Option<&str>,
+    ) -> Result<Self, DbfError> {
         let path = path.as_ref();
+        let encoding = normalize_encoding_override(encoding)?;
         let _lock = TableLock::acquire(path)?;
-        let recovered = Self::recover_wal(path)?;
-        let table = Self::load_path(path)?;
+        let recovered = Self::recover_wal_with_encoding(path, encoding.as_deref())?;
+        let table = Self::load_path_with_encoding(path, encoding.as_deref())?;
         if recovered {
             let _ = crate::index::refresh_if_present(path, &table);
         }
@@ -214,4 +222,14 @@ impl DbfTable {
             source: None,
         })
     }
+}
+
+fn normalize_encoding_override(encoding: Option<&str>) -> Result<Option<String>, DbfError> {
+    encoding
+        .map(|name| {
+            canonical_encoding_name(name)
+                .map(str::to_owned)
+                .ok_or_else(|| DbfError::Invalid(format!("unsupported encoding override: {name}")))
+        })
+        .transpose()
 }
