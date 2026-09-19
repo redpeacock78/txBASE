@@ -1,3 +1,4 @@
+use super::schema_metadata::schema_metadata_path;
 use super::{
     ACTIVE_RECORD, DbfError, DbfTable, EOF_MARKER, find_memo_path, sync_parent_directory,
     write_record_count,
@@ -23,20 +24,34 @@ pub fn copy_table_files(
     let dbf_bytes = fs::read(source)?;
     let source_memo = find_memo_path(source);
     let memo_bytes = source_memo.as_ref().map(fs::read).transpose()?;
+    let source_schema = schema_metadata_path(source);
+    let schema_bytes = match fs::read(&source_schema) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
     let destination_memo = source_memo.as_ref().and_then(|path| {
         path.extension()
             .map(|extension| destination.with_extension(extension))
     });
+    let destination_schema = schema_metadata_path(destination);
 
     let dbf_temp = write_temp(destination, &dbf_bytes, "dbf")?;
     let memo_temp = match (&destination_memo, &memo_bytes) {
         (Some(path), Some(bytes)) => Some(write_temp(path, bytes, "memo")?),
         _ => None,
     };
+    let schema_temp = schema_bytes
+        .as_ref()
+        .map(|bytes| write_temp(&destination_schema, bytes, "schema"))
+        .transpose()?;
 
     if let Err(error) = replace_file(&dbf_temp, destination) {
         let _ = fs::remove_file(&dbf_temp);
         if let Some(path) = memo_temp {
+            let _ = fs::remove_file(path);
+        }
+        if let Some(path) = schema_temp {
             let _ = fs::remove_file(path);
         }
         return Err(error.into());
@@ -46,11 +61,24 @@ pub fn copy_table_files(
     if let (Some(temp), Some(path)) = (memo_temp, destination_memo.as_ref()) {
         replace_file(&temp, path)?;
     }
+    if let Some(temp) = schema_temp {
+        replace_file(&temp, &destination_schema)?;
+    } else {
+        remove_file_if_exists(&destination_schema)?;
+    }
     sync_parent_directory(destination)?;
     if let Some(path) = destination_memo.as_ref() {
         sync_parent_directory(path)?;
     }
     Ok(())
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<(), std::io::Error> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 impl DbfTable {
@@ -63,6 +91,9 @@ impl DbfTable {
         };
         if !record.deleted {
             return Err(DbfError::Invalid("record is not deleted".into()));
+        }
+        if let Some(schema) = &self.schema {
+            schema.validate_candidate(&record.values, &self.records, Some(index))?;
         }
         let offset = self.record_offset(index)?;
         let mut bytes = self.bytes.clone();

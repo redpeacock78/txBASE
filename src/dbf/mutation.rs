@@ -41,6 +41,9 @@ impl DbfTable {
             };
             auto_increment_updates.push((descriptor_offset, following));
         }
+        if let Some(schema) = &self.schema {
+            schema.validate_candidate(&values, &self.records, None)?;
+        }
         let number = self
             .records
             .len()
@@ -115,6 +118,9 @@ impl DbfTable {
         let changed_fields = values.keys().cloned().collect::<BTreeSet<_>>();
         let mut values = self.normalize_values(&values)?;
         self.preserve_auto_increment_fields(index, &mut values, &changed_fields)?;
+        if let Some(schema) = &self.schema {
+            schema.validate_candidate(&values, &self.records, Some(index))?;
+        }
         let (storage_values, memo_updates) = self.prepare_existing_storage(index, &values, None)?;
         self.write_existing_record(index, &values, &storage_values)?;
         self.memo_updates = memo_updates;
@@ -130,6 +136,9 @@ impl DbfTable {
         let (values, changed_fields) = expand_update(&self.records[index].values, patch)?;
         let mut values = self.normalize_values(&values)?;
         self.preserve_auto_increment_fields(index, &mut values, &changed_fields)?;
+        if let Some(schema) = &self.schema {
+            schema.validate_candidate(&values, &self.records, Some(index))?;
+        }
         let (storage_values, memo_updates) =
             self.prepare_existing_storage(index, &values, Some(&changed_fields))?;
         self.write_existing_record(index, &values, &storage_values)?;

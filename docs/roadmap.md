@@ -35,9 +35,10 @@ The repository currently provides:
 - A bounded one-stage aggregation path with `$group`, `$count`, and integer `$sum` after filtering.
 - A bounded local `inner` or `left` equality join over two catalog tables with qualified filtering and projection.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.
+- An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 
-The baseline intentionally does not include a full cost-based index model, sorted-query cursors, streaming, multiple or planned joins, cross-table transactions, multi-stage aggregation, constraints, XBF, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, sorted-query cursors, streaming, multiple or planned joins, cross-table transactions, multi-stage aggregation, composite or cross-table constraints, XBF, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -108,6 +109,10 @@ Distributed joins and distributed transactions remain later features.
 Aggregation must define missing, null, numeric overflow, and memory-limit behavior before it is added to the HTTP API.
 
 The planner must explain when it uses an index and when it scans.
+
+The first constraint slice is an optional schema sidecar.
+It enforces one-field `primary`, `unique`, and `not_null` properties on active records and mutation candidates without changing legacy DBF bytes.
+Composite keys, `CHECK`, `FOREIGN KEY`, `DEFAULT`, and schema migration remain future work.
 
 ## 5. Phase 3: legacy international compatibility
 

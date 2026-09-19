@@ -1,3 +1,4 @@
+use super::schema_metadata::schema_metadata_bytes;
 use super::*;
 
 impl DbfTable {
@@ -42,6 +43,11 @@ impl DbfTable {
                 ));
             }
         }
+        if schema_metadata_bytes(path)? != source.schema {
+            return Err(DbfError::Invalid(
+                "schema metadata changed since the table was loaded".into(),
+            ));
+        }
         Ok(())
     }
 
@@ -64,6 +70,7 @@ impl DbfTable {
     ) -> Result<(), DbfError> {
         let _lock = TableLock::acquire(path)?;
         let _ = Self::recover_wal(path)?;
+        self.bind_schema_if_present(path)?;
         self.ensure_source_current(path)?;
         let mut prepared = self.clone();
         let memo_snapshot = prepared.apply_memo_updates(path)?;
@@ -113,6 +120,7 @@ impl DbfTable {
             path: path.to_path_buf(),
             dbf: prepared.bytes.clone(),
             memo: prepared.memo.as_ref().map(|memo| memo.bytes.clone()),
+            schema: schema_metadata_bytes(path)?,
         });
         *self = prepared;
         Ok(())

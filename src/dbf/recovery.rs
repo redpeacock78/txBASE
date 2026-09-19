@@ -1,3 +1,4 @@
+use super::schema_metadata::read_schema_metadata;
 use super::wal::{
     decode_operation_payload, decode_wal_payload, delta_payload, memo_snapshot_payload,
     snapshot_payload,
@@ -15,6 +16,11 @@ impl DbfTable {
     pub(super) fn load_path(path: &Path) -> Result<Self, DbfError> {
         let dbf = fs::read(path)?;
         let mut table = Self::from_bytes(&dbf)?;
+        let schema = read_schema_metadata(path)?;
+        if let Some((metadata, _)) = &schema {
+            metadata.validate_fields(&table.fields)?;
+            table.schema = Some(metadata.clone());
+        }
         if table.has_sidecar_fields() {
             if let Some(memo_path) = find_memo_path(path) {
                 let memo = MemoFile::open(&memo_path, table.header.version)?;
@@ -22,12 +28,36 @@ impl DbfTable {
                 table.memo = Some(memo);
             }
         }
+        if let Some(metadata) = &table.schema {
+            metadata.validate_records(&table.records)?;
+        }
         table.source = Some(PersistedState {
             path: path.to_path_buf(),
             dbf,
             memo: table.memo.as_ref().map(|memo| memo.bytes.clone()),
+            schema: schema.map(|(_, bytes)| bytes),
         });
         Ok(table)
+    }
+
+    pub(super) fn bind_schema_if_present(&mut self, path: &Path) -> Result<(), DbfError> {
+        if self.source.is_some() || self.schema.is_some() {
+            return Ok(());
+        }
+        let Some((metadata, _)) = read_schema_metadata(path)? else {
+            return Ok(());
+        };
+        metadata.validate_fields(&self.fields)?;
+        if self.has_sidecar_fields() {
+            if let Some(memo_path) = find_memo_path(path) {
+                let memo = MemoFile::open(&memo_path, self.header.version)?;
+                self.resolve_memos(&memo)?;
+                self.memo = Some(memo);
+            }
+        }
+        metadata.validate_records(&self.records)?;
+        self.schema = Some(metadata);
+        Ok(())
     }
 
     pub(super) fn recover_wal(path: &Path) -> Result<bool, DbfError> {

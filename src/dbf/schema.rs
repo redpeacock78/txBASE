@@ -9,6 +9,10 @@ impl DbfTable {
             "last_update": self.header.last_update,
             "language_driver": self.header.language_driver,
             "encoding": encoding_name(self.header.language_driver),
+            "schema_metadata": self
+                .schema
+                .as_ref()
+                .map_or(Value::Null, |metadata| metadata.json()),
             "header_length": self.header.header_length,
             "record_length": self.header.record_length,
             "record_count": self.header.record_count,

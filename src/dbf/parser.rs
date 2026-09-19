@@ -195,6 +195,7 @@ impl DbfTable {
             stored_values,
             bytes: bytes.to_vec(),
             memo: None,
+            schema: None,
             memo_updates: BTreeMap::new(),
             source: None,
         })

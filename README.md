@@ -189,6 +189,11 @@ The DBF codec recognizes the Visual FoxPro CJK driver IDs for Windows-31J/CP932,
 EUC-KR/CP949, and Big5/CP950.
 Malformed reads use U+FFFD and writes reject unmappable or over-width values.
 
+An optional `users.txschema.json` sidecar adds one-field `primary`, `unique`, and `not_null`
+constraints without changing legacy DBF bytes.
+Loaded active records and every insert, replace, patch, and recall are checked against it;
+`CHECK`, foreign keys, defaults, and composite keys remain future work.
+
 The implementation currently favors a readable DBF file plus separate WAL and memo sidecars.
 
 ## Install
@@ -254,6 +259,7 @@ Files are split when ownership or maintenance becomes clearer; a crate split sho
 - [Firebase data-model and synchronization lessons](docs/firebase-model.md)
 - [SQLite testing and quality model](docs/testing-quality.md)
 - [HTTP method semantics and QUERY](docs/http-semantics.md)
+- [Schema metadata and local constraints](docs/schema-metadata.md)
 - [Roadmap and explicit non-goals](docs/roadmap.md)
 - [Research index and source policy](docs/research.md)
 

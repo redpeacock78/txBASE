@@ -19,6 +19,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | Firestore and Realtime Database design | [Firebase model](firebase-model.md) | Reference |
 | SQLite test breadth and quality | [Testing and quality](testing-quality.md) | Current test map plus reference |
 | HTTP methods, PATCH, and QUERY | [HTTP semantics](http-semantics.md) | Current routes plus protocol reference |
+| Relational schema constraints over DBF | [Schema metadata](schema-metadata.md) | Current local subset plus future relational work |
 | Multi-table DBF discovery and bounded local equality join | [Catalog](catalog.md) and [Query model](query-model.md) | Current boundary plus future relational work |
 | External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, equality, histogram-estimated range ordering, ordered-prefix traversal, mixed-direction compound-prefix sorting, equality-prefix candidate choice, uniform-statistics-ordered equality intersection, and future full cost model |
 | CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Future |
@@ -88,6 +89,8 @@ The README organization follows the section shape of [texenv's README](https://g
 - [SQLite quality management](https://sqlite.org/qmplan.html)
 - [SQLite TH3](https://sqlite.org/th3.html)
 - [SQLite limits](https://sqlite.org/limits.html)
+- [SQLite `CREATE TABLE` constraints](https://sqlite.org/lang_createtable.html)
+- [SQLite foreign-key support](https://www.sqlite.org/foreignkeys.html)
 
 ### HTTP
 

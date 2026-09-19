@@ -34,6 +34,9 @@ mod recovery;
 #[cfg(test)]
 mod recovery_fault_tests;
 mod schema;
+mod schema_metadata;
+#[cfg(test)]
+mod schema_metadata_tests;
 #[cfg(test)]
 mod tests;
 mod wal;
@@ -50,6 +53,7 @@ use memo::{
     binary_value, empty_memo_value, encode_memo_pointer, find_memo_path, is_sidecar_field,
     memo_index, sidecar_update, storage_value_without_sidecar,
 };
+use schema_metadata::SchemaMetadata;
 #[cfg(test)]
 use wal::{
     ByteDelta, DELTA_MAGIC, MEMO_SNAPSHOT_MAGIC, OPERATION_MAGIC, SNAPSHOT_MAGIC, apply_byte_delta,
@@ -220,6 +224,7 @@ struct PersistedState {
     path: PathBuf,
     dbf: Vec<u8>,
     memo: Option<Vec<u8>>,
+    schema: Option<Vec<u8>>,
 }
 
 type MemoUpdates = BTreeMap<(usize, String), MemoUpdate>;
@@ -233,6 +238,7 @@ pub struct DbfTable {
     stored_values: Vec<Map<String, Value>>,
     bytes: Vec<u8>,
     memo: Option<MemoFile>,
+    schema: Option<SchemaMetadata>,
     memo_updates: MemoUpdates,
     source: Option<PersistedState>,
 }

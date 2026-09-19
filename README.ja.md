@@ -137,6 +137,10 @@ backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピ�
 DBF codecはVisual FoxProのCJK driver IDであるWindows-31J/CP932、GBK/CP936、EUC-KR/CP949、Big5/CP950に対応します。
 malformed readはU+FFFDにし、unmappableまたはbyte width超過のwriteは拒否します。
 
+optionalな`users.txschema.json` sidecarは、legacy DBF byteを変更せずに一つのfieldへ`primary`、`unique`、`not_null`を設定します。
+load済みのactive recordとinsert、replace、patch、recallをconstraintで検証します。
+`CHECK`、foreign key、default、composite keyは未実装です。
+
 ```bash
 txbase backup path/to/users.dbf backups/users.dbf
 txbase restore backups/users.dbf path/to/users.dbf
@@ -190,6 +194,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 - [Firebase data model](docs/firebase-model.md)
 - [SQLite testingとquality](docs/testing-quality.md)
 - [HTTP semanticsとQUERY](docs/http-semantics.md)
+- [Schema metadataとlocal constraint](docs/schema-metadata.md)
 - [Roadmapと明示的なnon-goal](docs/roadmap.md)
 - [Research index](docs/research.md)
 
@@ -198,7 +203,8 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 当面はDBF、memo、WAL、query、HTTPのcontractをfixtureとfailure testで固めます。
 
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
-full cost model、collation-aware planning、sorted query cursor、streaming、複数stageのaggregation、join、cross-table transaction、CJK encoding、XBFはroadmapで検討します。
+一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
+full cost model、collation-aware planning、sorted query cursor、streaming、複数stageのaggregation、cross-table constraint、CJK encodingの拡張、XBFはroadmapで検討します。
 
 ## License
 
