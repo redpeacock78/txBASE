@@ -260,6 +260,36 @@ fn recovers_a_generation_checked_full_snapshot_wal() {
 }
 
 #[test]
+fn reading_a_snapshot_recovers_a_pending_wal() {
+    let path = snapshot_test_path("automatic-recovery");
+    let wal_path = path.with_extension("xwl");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let base = fixture();
+    let mut target = fixture();
+    target.generation = base.generation + 1;
+    write_path(&path, &base).unwrap();
+
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(
+        &super::wal::encode_record(
+            base.generation,
+            target.generation,
+            &encode(&target).unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    assert_eq!(read_path(&path).unwrap(), target);
+    assert!(!wal_path.exists());
+
+    fs::remove_file(&path).unwrap();
+}
+
+#[test]
 fn rejects_a_generation_mismatched_xbf_wal() {
     let path = snapshot_test_path("mismatch");
     let wal_path = path.with_extension("xwl");

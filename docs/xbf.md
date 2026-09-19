@@ -12,6 +12,8 @@ The codec validates the draft header, section checksums, schema, directory, type
 records, constraints, and configured size limits.
 The full-snapshot `.xwl` path records base and target generations and rejects a
 generation mismatch during recovery.
+`read_path` and `read_path_with_limits` recover a pending `.xwl` before decoding,
+so normal snapshot loads and CLI commands do not observe an older generation.
 The bounded `to_dbf` helper exports representable tables to an in-memory DBF
 table; it does not claim full DBF schema or type compatibility.
 `to_dbf_with_schema` additionally returns a `txbase-schema` JSON value that
@@ -225,6 +227,8 @@ The WAL record, including its XBF-specific header, must fit the transaction laye
 `write_path` can still persist a larger snapshot within the ordinary XBF file limit, but `save_with_wal` rejects an oversized WAL record before creating the `.xwl` file.
 
 A recovery procedure must reject a log that targets a different base generation.
+The normal read boundary runs that procedure automatically and applies the same
+configured XBF limits when validating the pending snapshot.
 
 The first XBF implementation may use full-snapshot WAL records.
 

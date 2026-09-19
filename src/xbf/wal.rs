@@ -1,6 +1,6 @@
 use super::checksum::crc32c;
-use super::persistence::{read_path, write_encoded_path};
-use super::{XbfError, XbfTable, decode, encode};
+use super::persistence::{read_path_without_recovery_with_limits, write_encoded_path};
+use super::{XbfError, XbfLimits, XbfTable, decode_with_limits, encode};
 use crate::transaction::{FileWal, MAX_WAL_RECORD_SIZE, Wal};
 use std::fs;
 use std::path::Path;
@@ -34,6 +34,13 @@ pub fn save_with_wal(path: impl AsRef<Path>, table: &XbfTable) -> Result<(), Xbf
 }
 
 pub fn recover_path(path: impl AsRef<Path>) -> Result<bool, XbfError> {
+    recover_path_with_limits(path, &XbfLimits::default())
+}
+
+pub(super) fn recover_path_with_limits(
+    path: impl AsRef<Path>,
+    limits: &XbfLimits,
+) -> Result<bool, XbfError> {
     let path = path.as_ref();
     let wal_path = wal_path(path);
     if !wal_path.exists() {
@@ -46,13 +53,13 @@ pub fn recover_path(path: impl AsRef<Path>) -> Result<bool, XbfError> {
         remove_wal(&wal_path)?;
         return Ok(false);
     }
-    let current_generation = current_generation(path)?;
+    let current_generation = current_generation(path, limits)?;
     let mut pending = None;
     for (_, payload) in wal.records() {
         pending = Some(decode_record(payload)?);
     }
     let (base_generation, target_generation, snapshot) = pending.expect("non-empty WAL");
-    let table = decode(&snapshot)?;
+    let table = decode_with_limits(&snapshot, limits)?;
     if table.generation != target_generation {
         return Err(XbfError::Invalid(
             "XBF WAL target generation does not match its snapshot".into(),
@@ -141,8 +148,8 @@ pub(super) fn validate_record_size(length: usize) -> Result<(), XbfError> {
     Ok(())
 }
 
-fn current_generation(path: &Path) -> Result<u64, XbfError> {
-    match read_path(path) {
+fn current_generation(path: &Path, limits: &XbfLimits) -> Result<u64, XbfError> {
+    match read_path_without_recovery_with_limits(path, limits) {
         Ok(table) => Ok(table.generation),
         Err(XbfError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
         Err(error) => Err(error),

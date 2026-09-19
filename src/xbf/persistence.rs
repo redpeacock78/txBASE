@@ -11,6 +11,15 @@ pub fn read_path_with_limits(
     path: impl AsRef<Path>,
     limits: &XbfLimits,
 ) -> Result<XbfTable, XbfError> {
+    let path = path.as_ref();
+    super::wal::recover_path_with_limits(path, limits)?;
+    read_path_without_recovery_with_limits(path, limits)
+}
+
+pub(super) fn read_path_without_recovery_with_limits(
+    path: &Path,
+    limits: &XbfLimits,
+) -> Result<XbfTable, XbfError> {
     let bytes = fs::read(path)?;
     decode_with_limits(&bytes, limits)
 }
