@@ -89,7 +89,7 @@ fn mutation_endpoints_persist_and_delete_records() {
         StatusCode(200)
     );
 
-    let mut delete = TestRequest::new()
+    let delete = TestRequest::new()
         .with_method(Method::Delete)
         .with_path("/records/3")
         .into();
@@ -325,7 +325,7 @@ fn catalog_server_mutates_named_tables_with_single_table_semantics() {
         43
     );
 
-    let delete = TestRequest::new()
+    let mut delete = TestRequest::new()
         .with_method(Method::Delete)
         .with_path("/left/records/3")
         .into();
