@@ -44,6 +44,7 @@ They do not by themselves provide transaction isolation, deduplication, or a ret
 | `GET /records/{id}` | One-based physical DBF record number | One active record or `404` |
 | `QUERY /records` | `Content-Type: application/json` and a query document | Filtered JSON result with `Accept-Query`; paged queries return `records` and `cursor` |
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |
+| `POST /transaction` | JSON object containing a non-empty `operations` array | `200` after one-table atomic snapshot commit |
 | `PUT /records/{id}` | JSON object replacing fields | Resulting record |
 | `PATCH /records/{id}` | Plain field object or supported update document | Resulting record |
 | `DELETE /records/{id}` | No JSON body | `204 No Content` |
@@ -123,6 +124,11 @@ HTTP idempotence does not make the DBF write path crash-safe.
 The current mutation path records a durable `TXOP` intent before its state payload, syncs the WAL, and then replaces the DBF or memo sidecar.
 
 Startup recovery replays a supported intent when no state payload exists.
+
+`POST /transaction` applies all operations to a private table copy and persists one snapshot/WAL
+commit. If validation or any operation fails, the copy is discarded and the current DBF is not
+changed. The current boundary is one DBF table; it does not provide cross-table atomicity,
+independent transaction IDs, or MVCC visibility.
 
 The table lock serializes save paths, and a stale independently loaded table is rejected.
 

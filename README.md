@@ -80,6 +80,17 @@ curl -i -X PATCH \
 curl -i -X DELETE http://127.0.0.1:8080/records/3
 ```
 
+Multiple record mutations can be committed to one DBF table through one snapshot/WAL boundary:
+
+```bash
+curl -i -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"operations":[{"method":"POST","path":"/records","body":{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}},{"method":"PATCH","path":"/records/3","body":{"$inc":{"AGE":1}}}]}' \
+  http://127.0.0.1:8080/transaction
+```
+
+The batch is single-table and all operations run on a private copy before one commit. Cross-table atomicity and MVCC visibility are not provided.
+
 `POST` creates a record, `PUT` replaces one, `PATCH` applies a partial update, and `DELETE` sets the DBF deletion marker.
 
 `PATCH` also accepts the typed `$set`, `$unset`, and `$inc` operators.
@@ -238,7 +249,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, sorted-query cursors, streaming, joins, aggregation, stronger multi-record transactions, CJK encodings, and an XBF native format.
+Later phases may add a full cost-based index choice, sorted-query cursors, streaming, joins, aggregation, cross-table transactions, CJK encodings, and an XBF native format.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

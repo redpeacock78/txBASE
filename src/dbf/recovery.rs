@@ -101,7 +101,7 @@ impl DbfTable {
         Ok(true)
     }
 
-    fn apply_operation(&mut self, operation: &OperationIr) -> Result<(), DbfError> {
+    pub(crate) fn apply_operation(&mut self, operation: &OperationIr) -> Result<(), DbfError> {
         match operation.method {
             OperationMethod::Post => {
                 if operation.path != "/records" {

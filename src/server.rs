@@ -7,6 +7,7 @@ use std::path::Path;
 use tiny_http::{Header, Method, Request, Response, Server};
 
 mod range;
+mod transaction;
 
 const MAX_BODY: usize = 1024 * 1024;
 type HttpResponse = Response<Cursor<Vec<u8>>>;
@@ -31,7 +32,11 @@ fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
     } else if is_query {
         query_response_at(&mut request, &path, table, dbf_path)
     } else if matches!(request.method(), Method::Post) {
-        post_response(&mut request, &path, table, dbf_path)
+        if path == "/transaction" {
+            transaction::response(&mut request, table, dbf_path)
+        } else {
+            post_response(&mut request, &path, table, dbf_path)
+        }
     } else if matches!(request.method(), Method::Put) {
         update_response(&mut request, &path, table, dbf_path, true)
     } else if matches!(request.method(), Method::Patch) {

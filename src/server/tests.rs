@@ -87,6 +87,62 @@ fn mutation_endpoints_persist_and_delete_records() {
 }
 
 #[test]
+fn transaction_endpoint_commits_multiple_mutations_once() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-server-transaction-{}.dbf",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&path);
+    fs::write(&path, fixture()).unwrap();
+    let mut table = DbfTable::from_path(&path).unwrap();
+    let mut request = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{
+            "operations": [
+                {"method":"POST","path":"/records","body":{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}},
+                {"method":"PATCH","path":"/records/3","body":{"$inc":{"AGE":1}}}
+            ]
+        }"#,
+    );
+
+    let response = super::transaction::response(&mut request, &mut table, &path);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let persisted = DbfTable::from_path(&path).unwrap();
+    assert_eq!(persisted.active_record(3).unwrap().values["AGE"], 43);
+    assert!(!path.with_extension("txbase.wal").exists());
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn transaction_endpoint_discards_all_mutations_when_one_fails() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-server-transaction-rollback-{}.dbf",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&path);
+    fs::write(&path, fixture()).unwrap();
+    let before = fs::read(&path).unwrap();
+    let mut table = DbfTable::from_path(&path).unwrap();
+    let mut request = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{
+            "operations": [
+                {"method":"POST","path":"/records","body":{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}},
+                {"method":"PATCH","path":"/records/999","body":{"NAME":"never committed"}}
+            ]
+        }"#,
+    );
+
+    let response = super::transaction::response(&mut request, &mut table, &path);
+    assert_eq!(response.status_code(), StatusCode(404));
+    assert!(table.active_record(3).is_none());
+    assert_eq!(fs::read(&path).unwrap(), before);
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn query_endpoint_enforces_json_boundary_and_executes() {
     let table = DbfTable::from_bytes(&fixture()).unwrap();
 

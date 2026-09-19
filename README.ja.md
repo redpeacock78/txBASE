@@ -70,6 +70,11 @@ HTTP境界の詳細は[HTTP method semantics](docs/http-semantics.md)を参照�
 
 `DELETE`はDBFのdeletion markerを設定します。
 
+複数のrecord mutationは`POST /transaction`で一つのDBFに対してまとめてcommitできます。
+全operationをprivate copyに適用してから、一回のsnapshot/WAL boundaryで保存します。
+operationが失敗した場合はcopyを破棄し、元のDBFを変更しません。
+cross-table atomicityとMVCC visibilityは未実装です。
+
 path-loaded mutationは、可能なら`TXDP` byte-range deltaを使います。
 
 それ以外の場合は`TXDB`または`TXDM` snapshotを使います。
@@ -177,7 +182,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 当面はDBF、memo、WAL、query、HTTPのcontractをfixtureとfailure testで固めます。
 
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
-full cost model、collation-aware planning、sorted query cursor、streaming、join、aggregation、multi-record transaction、CJK encoding、XBFはroadmapで検討します。
+full cost model、collation-aware planning、sorted query cursor、streaming、join、aggregation、cross-table transaction、CJK encoding、XBFはroadmapで検討します。
 
 ## License
 

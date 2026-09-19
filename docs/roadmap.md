@@ -31,9 +31,10 @@ The repository currently provides:
 - Startup recovery, stale-snapshot rejection, and an Ubuntu/macOS/Windows CI gate.
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
+- A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 
-The baseline intentionally does not include a full cost-based index model, sorted-query cursors, streaming, multi-record transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, sorted-query cursors, streaming, cross-table transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -45,7 +46,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
 - Incremental streaming query execution and keyset cursors for sorted results.
-- Multi-record transactions.
+- Cross-table or independently visible multi-record transactions.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
 
@@ -76,6 +77,10 @@ matching records before slicing.
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 
 A multi-record transaction is not complete until commit, rollback, crash recovery, and visibility rules are tested together.
+
+The current transaction slice covers one DBF table: a non-empty operation batch runs on a private
+copy, commits through one snapshot/WAL persistence path, and discards the copy on operation
+failure. Cross-table coordination, transaction IDs, and MVCC visibility remain future work.
 
 ## 4. Phase 2: expand the query model
 
