@@ -21,10 +21,10 @@ pub(super) fn encode(
 
 pub(crate) fn canonical_encoding_name(name: &str) -> Option<&'static str> {
     match name.to_ascii_lowercase().as_str() {
-        "windows-31j" | "cp932" => Some("Windows-31J/CP932"),
-        "gbk" | "cp936" => Some("GBK/CP936"),
-        "euc-kr" | "cp949" => Some("EUC-KR/CP949"),
-        "big5" | "cp950" => Some("Big5/CP950"),
+        "windows-31j" | "cp932" | "windows-31j/cp932" => Some("Windows-31J/CP932"),
+        "gbk" | "cp936" | "gbk/cp936" => Some("GBK/CP936"),
+        "euc-kr" | "cp949" | "euc-kr/cp949" => Some("EUC-KR/CP949"),
+        "big5" | "cp950" | "big5/cp950" => Some("Big5/CP950"),
         _ => None,
     }
 }
