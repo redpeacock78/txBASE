@@ -223,3 +223,58 @@ fn report_marks_constraint_sidecar_requirement() {
     assert!(report.requires_schema_sidecar);
     assert!(report.issues.is_empty());
 }
+
+#[test]
+fn report_keeps_all_record_shape_issues() {
+    let table = XbfTable {
+        generation: 0,
+        fields: vec![XbfField {
+            name: "ID".into(),
+            ty: XbfType::Signed64,
+            nullable: true,
+            primary_key: false,
+            unique: false,
+        }],
+        records: vec![
+            XbfRecord {
+                deleted: false,
+                values: Vec::new(),
+            },
+            XbfRecord {
+                deleted: false,
+                values: vec![XbfValue::Signed64(1), XbfValue::Signed64(2)],
+            },
+        ],
+    };
+
+    let report = super::dbf_export_report(&table);
+
+    assert!(!report.representable);
+    assert_eq!(
+        report
+            .issues
+            .iter()
+            .filter_map(|issue| issue.record)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+}
+
+#[test]
+fn report_catches_constraint_violations() {
+    let mut table = constraint_table();
+    table.records.push(XbfRecord {
+        deleted: false,
+        values: vec![XbfValue::Signed64(1), XbfValue::String("Bob".into())],
+    });
+
+    let report = super::dbf_export_report(&table);
+
+    assert!(!report.representable);
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|issue| issue.message.contains("duplicate values"))
+    );
+}

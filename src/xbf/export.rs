@@ -40,18 +40,17 @@ pub fn dbf_export_report(table: &XbfTable) -> XbfExportReport {
     let mut issues = Vec::new();
     let mut names = BTreeSet::new();
     let mut descriptors = Vec::with_capacity(table.fields.len());
-    let shape_valid = table.records.iter().enumerate().all(|(index, record)| {
-        if record.values.len() == table.fields.len() {
-            true
-        } else {
+    let mut shape_valid = true;
+    for (index, record) in table.records.iter().enumerate() {
+        if record.values.len() != table.fields.len() {
+            shape_valid = false;
             issues.push(XbfExportIssue {
                 record: Some(index + 1),
                 field: None,
                 message: "XBF record value count does not match schema".into(),
             });
-            false
         }
-    });
+    }
 
     for (field_index, field) in table.fields.iter().enumerate() {
         if !names.insert(field.name.clone()) {
@@ -96,6 +95,13 @@ pub fn dbf_export_report(table: &XbfTable) -> XbfExportReport {
 
     if shape_valid && descriptors.len() == table.fields.len() {
         if let Err(error) = empty_dbf(&table.fields, &descriptors) {
+            issues.push(XbfExportIssue {
+                record: None,
+                field: None,
+                message: error.to_string(),
+            });
+        }
+        if let Err(error) = super::schema::validate_constraints(&table.fields, &table.records) {
             issues.push(XbfExportIssue {
                 record: None,
                 field: None,
