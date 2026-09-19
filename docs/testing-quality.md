@@ -44,6 +44,12 @@ It should not be copied as a superficial percentage target for txBASE.
 
 Coverage numbers without format fixtures, crash tests, and malformed-input tests would leave the important storage risks unmeasured.
 
+SQLite's [quality-management plan](https://sqlite.org/qmplan.html) treats requirements, test coverage, release checklists, and fault-injection evidence as related quality controls rather than as one percentage.
+
+Its [requirements page](https://sqlite.org/requirements.html) turns testable statements of documented behavior into stable, traceable requirement identifiers.
+
+For txBASE, the practical adaptation is a small contract table linking each format or protocol rule to a fixture, a failure test, and the command that reproduces it.
+
 ## 3. What the current repository tests
 
 The current Rust test layout is already split by ownership:
@@ -96,6 +102,7 @@ Place failures at each boundary:
 3. After sync but before DBF replacement.
 4. After DBF replacement but before sidecar replacement.
 5. After all replacements but before cleanup.
+6. After index refresh but before WAL cleanup.
 
 Recovery should be idempotent.
 
@@ -152,4 +159,6 @@ No coverage percentage is a substitute for these contracts.
 
 - [How SQLite Is Tested](https://sqlite.org/testing.html)
 - [SQLite TH3](https://sqlite.org/th3.html)
+- [SQLite quality management](https://sqlite.org/qmplan.html)
+- [SQLite requirements](https://sqlite.org/requirements.html)
 - [SQLite limits](https://sqlite.org/limits.html)

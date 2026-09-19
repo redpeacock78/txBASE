@@ -78,7 +78,7 @@ It is not the definition of HTTP `PATCH`.
 
 ## 4. QUERY
 
-[RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html) defines the HTTP `QUERY` method for safe, idempotent requests whose query semantics are carried in request content.
+[RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html), published as an IETF Standards Track RFC in June 2026, defines the HTTP `QUERY` method for safe, idempotent requests whose query semantics are carried in request content.
 
 The request content type identifies the query syntax.
 
@@ -94,6 +94,10 @@ The RFC defines the following useful failure boundaries:
 | No acceptable response representation | `406 Not Acceptable` |
 
 `Accept-Query` advertises supported query media types in the response.
+
+It is a Structured Fields list, not an unstructured comma-separated string.
+
+RFC 10008 also defines optional `Location` and `Content-Location` uses for stored queries and query results, but txBASE does not currently create those resources or return those fields.
 
 txBASE advertises `Accept-Query: "application/json"` and accepts only the JSON query document.
 

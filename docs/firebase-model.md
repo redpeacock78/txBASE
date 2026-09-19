@@ -34,6 +34,12 @@ A transaction callback must be safe to execute more than once.
 
 External side effects must not be hidden inside a retryable callback.
 
+Firestore also documents [transaction contention and serializable isolation](https://firebase.google.com/docs/firestore/transaction-data-contention).
+
+The guarantee is about the committed database state, not about running a callback exactly once.
+
+The client library may retry a transaction, and a finite amount of contention can still produce an aborted transaction.
+
 Firestore also documents [write-time aggregation](https://firebase.google.com/docs/firestore/solutions/aggregation), where an application updates a summary document as source documents change.
 
 That approach trades read cost for write complexity and requires a repair strategy when a summary becomes stale.
@@ -70,6 +76,10 @@ Realtime Database security rules separate several concerns:
 | `.indexOn` | Declare query-relevant indexes for a path |
 
 The [security documentation](https://firebase.google.com/docs/database/security) describes server-side enforcement and the default-deny posture.
+
+The Realtime Database `.indexOn` rule is an index declaration for a query path, not an authorization grant.
+
+Firestore similarly separates database operations from security-rule evaluation, including the `getAfter()` checks used to validate a post-commit view of atomic writes.
 
 Validation rules are not a replacement for a storage format constraint.
 
@@ -140,6 +150,7 @@ Each would need failure behavior, recovery behavior, and tests for concurrent ch
 
 - [Firestore data model](https://firebase.google.com/docs/firestore/data-model)
 - [Firestore transactions and batched writes](https://firebase.google.com/docs/firestore/manage-data/transactions)
+- [Firestore transaction contention and serializable isolation](https://firebase.google.com/docs/firestore/transaction-data-contention)
 - [Firestore write-time aggregation](https://firebase.google.com/docs/firestore/solutions/aggregation)
 - [Realtime Database save data](https://firebase.google.com/docs/database/admin/save-data)
 - [Realtime Database web read and write](https://firebase.google.com/docs/database/web/read-and-write)

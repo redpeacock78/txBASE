@@ -163,7 +163,7 @@ Deleted memo blocks can therefore remain as reclaimable orphan space until a sid
 
 The following are not implemented by the current DBF layer:
 
-- Planner-backed secondary index selection and production-scale index maintenance.
+- Production-scale secondary-index maintenance, binary range seeks, and multi-index planning.
 - OLE semantics and arbitrary external memo formats.
 - Complete Visual FoxPro expression or command compatibility.
 - Automatic merge and retry for concurrent writers.

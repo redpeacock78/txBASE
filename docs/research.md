@@ -52,6 +52,9 @@ The README organization follows the section shape of [texenv's README](https://g
 - [Query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [Find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
+- [BSON comparison order](https://www.mongodb.com/docs/manual/reference/bson-type-comparison-order/)
+- [Compound-index sort order](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
+- [Equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
 - [Update operators](https://www.mongodb.com/docs/manual/reference/mql/update/)
 - [Atomicity and transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/)
 
@@ -59,6 +62,7 @@ The README organization follows the section shape of [texenv's README](https://g
 
 - [Firestore data model](https://firebase.google.com/docs/firestore/data-model)
 - [Firestore transactions and batched writes](https://firebase.google.com/docs/firestore/manage-data/transactions)
+- [Firestore transaction contention and serializable isolation](https://firebase.google.com/docs/firestore/transaction-data-contention)
 - [Firestore write-time aggregation](https://firebase.google.com/docs/firestore/solutions/aggregation)
 - [Realtime Database save data](https://firebase.google.com/docs/database/admin/save-data)
 - [Realtime Database security](https://firebase.google.com/docs/database/security)
@@ -69,6 +73,7 @@ The README organization follows the section shape of [texenv's README](https://g
 - [How SQLite Is Tested](https://sqlite.org/testing.html)
 - [SQLite query planning](https://sqlite.org/queryplanner.html)
 - [SQLite requirements](https://sqlite.org/requirements.html)
+- [SQLite quality management](https://sqlite.org/qmplan.html)
 - [SQLite TH3](https://sqlite.org/th3.html)
 - [SQLite limits](https://sqlite.org/limits.html)
 

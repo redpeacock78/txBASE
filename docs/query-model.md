@@ -85,6 +85,12 @@ That separation is useful for txBASE because query validation, result shaping, a
 
 MongoDB's [comparison predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/) documents operators such as `$eq`, `$gt`, `$gte`, `$lt`, `$lte`, `$ne`, `$in`, and `$nin`.
 
+MongoDB's [BSON comparison order](https://www.mongodb.com/docs/manual/reference/bson-type-comparison-order/) and the [`$gt` type-bracketing rules](https://www.mongodb.com/docs/manual/reference/operator/query/gt/) are important boundaries.
+
+MongoDB compares BSON values with BSON-specific type and array rules, while txBASE compares decoded JSON values with its own explicit scalar rules.
+
+The shared operator names therefore do not imply shared results for mixed types, missing fields, arrays, or documents.
+
 MongoDB's [logical predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/) documents `$and`, `$or`, `$nor`, and `$not`.
 
 MongoDB's [array predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/) covers operators such as `$all`, `$elemMatch`, and `$size` that txBASE does not currently implement.
@@ -114,6 +120,10 @@ It needs a key encoding, null and missing-field rules, duplicate ordering, updat
 The current planner only considers direct top-level equality, single-bound-per-side range predicates, and one-field sort requests.
 
 It preserves the table scan for multi-key sort, logical, and nested-path planning.
+
+MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a future multi-key planner must define index field order instead of treating every index as an interchangeable lookup table.
+
+txBASE currently makes no selectivity estimate and chooses at most one validated external scalar index.
 
 The roadmap keeps index design separate from the query syntax so a query document does not imply an implementation strategy.
 
@@ -155,7 +165,7 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 
 The roadmap may later cover the following in separate contracts:
 
-1. Range, ordered-sort, and multi-index planning with explicit missing, null, and collation rules.
+1. Multi-key ordered and multi-index planning with explicit missing, null, and collation rules.
 2. A catalog for multiple tables and schema metadata.
 3. Joins and aggregation with bounded memory behavior.
 4. Cursors or streaming responses with stable snapshot rules.
@@ -172,6 +182,10 @@ Until those contracts exist, the record scan is the simpler and more honest exec
 - [MongoDB array predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [MongoDB query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
+- [MongoDB BSON comparison order](https://www.mongodb.com/docs/manual/reference/bson-type-comparison-order/)
+- [MongoDB `$gt` type bracketing](https://www.mongodb.com/docs/manual/reference/operator/query/gt/)
+- [MongoDB compound-index sort order](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
+- [MongoDB equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
 - [SQLite query planning](https://www.sqlite.org/queryplanner.html)
 - [MongoDB update operators](https://www.mongodb.com/docs/manual/reference/mql/update/)
 - [MongoDB atomicity and transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/)
