@@ -131,7 +131,7 @@ fn encode_strict_shift_jis_character(character: char) -> Option<Vec<u8>> {
     }
     let expected = shift_jis_pair_from_euc(&euc)?;
     let (shift_jis, _, shift_jis_errors) = SHIFT_JIS.encode(&character);
-    if shift_jis_errors || shift_jis.as_slice() != expected.as_slice() {
+    if shift_jis_errors || shift_jis.as_ref() != expected.as_slice() {
         return None;
     }
     Some(shift_jis.into_owned())
