@@ -32,9 +32,11 @@ The current sidecar is versioned independently from DBF:
 }
 ```
 
-The optional root `encoding` property is an explicit override for the four currently supported multibyte codecs.
+The optional root `encoding` property is an explicit override for the four declared multibyte codecs
+plus EUC-JP and GB18030.
 
-Accepted labels are `windows-31j` or `cp932`, `gbk` or `cp936`, `euc-kr` or `cp949`, and `big5` or `cp950`.
+Accepted labels are `windows-31j` or `cp932`, `gbk` or `cp936`, `euc-kr` or `cp949`, `big5` or
+`cp950`, `euc-jp`, and `gb18030`.
 
 txBASE normalizes the label and reports the effective name in `schema` output as `encoding_override`.
 
@@ -60,10 +62,10 @@ The sidecar's `encoding` property is not a field constraint.
 
 It selects the codec used for character reads and writes before the record enters the JSON layer.
 
-The same four codecs can be selected temporarily by the public
+The same six codecs can be selected temporarily by the public
 `DbfTable::from_path_with_encoding` API or the CLI `--encoding` option.
 
-It does not add strict Shift_JIS, EUC-JP, collation, or an automatic conversion policy.
+It does not add strict Shift_JIS, collation, or an automatic conversion policy.
 
 Constraint checks run before the in-memory record is changed.
 

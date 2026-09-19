@@ -1,4 +1,4 @@
-use encoding_rs::{BIG5, EUC_KR, Encoding, GBK, SHIFT_JIS};
+use encoding_rs::{BIG5, EUC_JP, EUC_KR, Encoding, GB18030, GBK, SHIFT_JIS};
 
 pub(super) fn decode(
     bytes: &[u8],
@@ -23,7 +23,9 @@ pub(crate) fn canonical_encoding_name(name: &str) -> Option<&'static str> {
     match name.to_ascii_lowercase().as_str() {
         "windows-31j" | "cp932" | "windows-31j/cp932" => Some("Windows-31J/CP932"),
         "gbk" | "cp936" | "gbk/cp936" => Some("GBK/CP936"),
+        "gb18030" => Some("GB18030"),
         "euc-kr" | "cp949" | "euc-kr/cp949" => Some("EUC-KR/CP949"),
+        "euc-jp" => Some("EUC-JP"),
         "big5" | "cp950" | "big5/cp950" => Some("Big5/CP950"),
         _ => None,
     }
@@ -44,6 +46,8 @@ fn encoding(language_driver: u8, encoding_override: Option<&str>) -> Option<&'st
         return Some(match canonical_encoding_name(encoding_override)? {
             "Big5/CP950" => BIG5,
             "EUC-KR/CP949" => EUC_KR,
+            "EUC-JP" => EUC_JP,
+            "GB18030" => GB18030,
             "GBK/CP936" => GBK,
             "Windows-31J/CP932" => SHIFT_JIS,
             _ => return None,

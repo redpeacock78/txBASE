@@ -189,9 +189,10 @@ It can also use a per-field-direction compound index for a matching multi-key so
 `backup` and `restore` validate the source first, then copy the DBF and its detected memo sidecar.
 
 When a DBF language-driver byte is missing or untrusted, the read, schema, verify, pack, recall,
-and server commands accept `--encoding NAME` for the four supported CJK codecs.
+and server commands accept `--encoding NAME` for the four declared CJK codecs plus explicit-only
+EUC-JP and GB18030 overrides.
 The supported aliases are `windows-31j`/`cp932`, `gbk`/`cp936`, `euc-kr`/`cp949`, and
-`big5`/`cp950`.
+`big5`/`cp950`, `euc-jp`, and `gb18030`.
 The invocation override takes precedence over `*.txschema.json`, is not persisted, and is visible
 as the effective `encoding_override` in schema output.
 

@@ -255,7 +255,7 @@ fn rejects_an_encoding_override_outside_the_declared_slice() {
     fs::write(&path, fixture()).unwrap();
     fs::write(
         path.with_extension("txschema.json"),
-        encoding_metadata("euc-jp"),
+        encoding_metadata("shift_jis"),
     )
     .unwrap();
 

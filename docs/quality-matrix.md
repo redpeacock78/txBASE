@@ -31,7 +31,7 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 | --- | --- | --- | --- | --- |
 | DBF-001 | Declared headers, descriptors, record lengths, and deletion markers are bounds-checked. | `src/dbf/parser.rs`; `tests/corpus/dbf/` | `src/dbf/malformed_tests.rs::rejects_malformed_dbf_corpus` and format tests | Current |
 | DBF-002 | Supported dBASE III, dBASE IV, and Visual FoxPro fixtures round-trip through the declared field boundary. | `tests/fixtures/external-*.dbf.hex`; `src/dbf/compatibility_tests.rs` | `reads_and_writes_a_pinned_external_*_fixture` | Current |
-| DBF-003 | Declared CJK drivers and sidecar or per-invocation encoding overrides use byte-width validation, replacement reads, and rejecting writes. | `src/dbf/codec_cjk.rs`; `src/dbf/cjk_tests.rs`; `src/dbf/schema_metadata_tests.rs` | `decodes_and_encodes_declared_cjk_drivers`; `applies_a_supported_encoding_override_to_reads_and_writes`; `applies_a_path_encoding_override_without_persisting_it` | Current |
+| DBF-003 | Declared CJK drivers plus explicit EUC-JP and GB18030 overrides use byte-width validation, replacement reads, and rejecting writes. | `src/dbf/codec_cjk.rs`; `src/dbf/cjk_tests.rs`; `src/dbf/schema_metadata_tests.rs` | `decodes_and_encodes_declared_cjk_drivers`; `explicit_euc_jp_and_gb18030_overrides_round_trip`; `applies_a_supported_encoding_override_to_reads_and_writes`; `applies_a_path_encoding_override_without_persisting_it` | Current |
 | MEM-001 | DBT and FPT pointers, block sizes, terminators, and malformed sidecars are handled within the selected memo format. | `src/dbf/memo_file.rs`; `src/dbf/memo_value.rs`; `tests/corpus/memo/` | `src/dbf/tests/memo.rs`, `memo_foxpro.rs`, and `malformed_memo_tests.rs` | Current |
 | MUT-001 | Record mutations preserve the in-memory model, reject unknown or ambiguous writes, and keep opaque fields intact. | `src/dbf/mutation.rs`; `src/dbf/mutation_model_tests.rs` | `generated_mutation_sequence_matches_reference_model` and mutation tests | Current |
 | WAL-001 | Complete WAL records are validated; torn final records are truncated or discarded without a panic. | `src/transaction.rs`; `src/dbf/wal.rs`; `tests/corpus/wal/` | `transaction::malformed_tests::rejects_malformed_wal_corpus`; `file_wal_reopens_and_truncates_a_torn_tail` | Current |
@@ -55,7 +55,7 @@ The following topics have documentation or design notes but do not have a curren
 - public streaming or backpressure APIs;
 - a full cost-based planner, multiple or planned joins, and multi-stage aggregation;
 - cross-table transactions, transaction IDs, and MVCC visibility;
-- strict Shift_JIS versus CP932 selection, EUC-JP, GB18030, collation, and broader external fixtures;
+- strict Shift_JIS versus CP932 selection, collation, and broader external fixtures;
 - XBF bytes, DBF/XBF conversion, object-storage manifests, WASM hosting, and distributed replication.
 
 Before one of these becomes current, add its public contract, malformed-input behavior, crash or retry behavior, fixture or deterministic test, and a row here.

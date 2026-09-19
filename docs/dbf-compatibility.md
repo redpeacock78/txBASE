@@ -110,13 +110,14 @@ The existing fixed-field width check remains a byte-width check, so a multibyte 
 not fit is rejected rather than truncated.
 
 An optional `encoding` property in the `*.txschema.json` sidecar can explicitly select one of the
-same four codecs using `windows-31j`/`cp932`, `gbk`/`cp936`, `euc-kr`/`cp949`, or `big5`/`cp950`.
+four declared codecs or the explicit-only `EUC-JP` and `GB18030` codecs using
+`windows-31j`/`cp932`, `gbk`/`cp936`, `euc-kr`/`cp949`, `big5`/`cp950`, `euc-jp`, or `gb18030`.
 The normalized selection is visible as `encoding_override` in `schema` output.
 This override is applied before character decoding and encoding; it does not change the DBF header
 language-driver byte.
 
 The path-oriented read, schema, verify, pack, recall, and server commands also accept
-`--encoding NAME` for the same four codecs.
+`--encoding NAME` for the same six explicit codecs.
 The invocation override takes precedence over the sidecar override, is not written to the DBF
 header or metadata sidecar, and remains visible as the effective `encoding_override` in schema
 output.
@@ -140,9 +141,9 @@ Shift_JIS and CP932 are not interchangeable labels.
 The same caution applies to EUC-JP, GBK, GB18030, Big5, and Korean encodings.
 
 The current override slice covers both explicit invocation and sidecar selection for the four
-declared-driver codecs above.
-Strict Shift_JIS versus CP932 selection, EUC-JP import or export, collation, and additional external
-fixtures remain future work.
+declared-driver codecs plus EUC-JP and GB18030.
+Strict Shift_JIS versus CP932 selection, collation, and additional external fixtures remain future
+work.
 
 ## 5. Persistence and recovery
 

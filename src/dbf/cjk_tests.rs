@@ -40,6 +40,28 @@ fn decodes_and_encodes_declared_cjk_drivers() {
 }
 
 #[test]
+fn explicit_euc_jp_and_gb18030_overrides_round_trip() {
+    for (encoding, canonical, value) in
+        [("euc-jp", "EUC-JP", "日本"), ("gb18030", "GB18030", "中文")]
+    {
+        let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some(encoding)).unwrap();
+        assert_eq!(table.schema_json()["encoding_override"], canonical);
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": value})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        let reloaded =
+            DbfTable::from_bytes_with_encoding(&table.to_bytes(), Some(encoding)).unwrap();
+        assert_eq!(reloaded.active_record(1).unwrap().values["NAME"], value);
+    }
+}
+
+#[test]
 fn rejects_unrepresentable_or_overwide_cjk_values() {
     let mut bytes = fixture();
     bytes[29] = 0x7b;

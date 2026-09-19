@@ -37,7 +37,7 @@ The repository currently provides:
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement.
-- Explicit sidecar and per-invocation overrides for those four CJK codecs, with normalized schema output.
+- Explicit sidecar and per-invocation overrides for those four CJK codecs plus EUC-JP and GB18030, with normalized schema output.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 
 The baseline intentionally does not include a full cost-based index model, streaming, multiple or planned joins, cross-table transactions, multi-stage aggregation, composite or cross-table constraints, XBF, object-storage commits, or distributed replication.
@@ -141,8 +141,9 @@ Every encoding needs a declared name, byte-width rule, round-trip fixture, inval
 The first declared-driver slice covers the four Visual FoxPro CJK IDs listed in the DBF
 compatibility document.
 It uses replacement characters for malformed reads and rejects unmappable or over-width writes.
-The sidecar and path-oriented CLI now provide explicit overrides for those same four codecs.
-Strict Shift_JIS selection, EUC-JP, collation, and broader external fixtures remain future work.
+The sidecar and path-oriented CLI now provide explicit overrides for those four codecs plus EUC-JP
+and GB18030; the latter two do not claim a DBF language-driver mapping.
+Strict Shift_JIS selection, collation, and broader external fixtures remain future work.
 
 An override must be visible in schema or command output so a reader can reproduce the same interpretation.
 
