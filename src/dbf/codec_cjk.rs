@@ -11,7 +11,7 @@ pub(super) fn encode(text: &str, language_driver: u8) -> Option<(Vec<u8>, bool)>
     Some((bytes.into_owned(), had_errors))
 }
 
-pub(super) fn encoding_name(language_driver: u8) -> Option<&'static str> {
+pub(crate) fn encoding_name(language_driver: u8) -> Option<&'static str> {
     Some(match language_driver {
         0x78 => "Big5/CP950",
         0x79 => "EUC-KR/CP949",
