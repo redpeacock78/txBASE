@@ -300,7 +300,8 @@ CI runs these checks on Ubuntu, macOS, and Windows.
 ```text
 src/dbf/            DBF parsing, codecs, memo sidecars, maintenance, mutation, WAL, and tests
 src/catalog.rs      Direct-child DBF discovery, table lookup, and catalog verification
-src/catalog/transaction.rs Catalog lock, journal, and named-table transaction commit/recovery
+src/catalog/journal.rs Catalog lock, journal, and crash recovery
+src/catalog/transaction.rs Named-table transaction preparation and commit
 src/index.rs        External scalar and compound-key index sidecar lifecycle
 src/query.rs        JSON query execution and filter evaluation
 src/query/          planner, ordering, validation, bounded join, and query-specific tests

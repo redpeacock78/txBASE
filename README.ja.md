@@ -229,7 +229,8 @@ cargo test --all-targets --all-features
 ```text
 src/dbf/            DBF parser、codec、memo sidecar、maintenance、mutation、WAL、test
 src/catalog.rs      directory直下のDBF発見、table lookup、catalog verify
-src/catalog/transaction.rs catalog lock、journal、named-table transactionのcommit/recovery
+src/catalog/journal.rs catalog lock、journal、crash recovery
+src/catalog/transaction.rs named-table transactionの準備とcommit
 src/index.rs        scalar keyのexternal index sidecar lifecycle
 src/query.rs        JSON queryの実行とvalidation
 src/query_path.rs   dotted pathとprojectionのhelper
