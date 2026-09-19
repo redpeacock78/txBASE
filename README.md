@@ -90,8 +90,9 @@ same bounded read-only join through `QUERY /join`:
 txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 ```
 
-`QUERY /{table}/records` accepts the same query document as the single-table route. Catalog
-table routes are read-only; cross-table writes and transactions remain future work.
+`QUERY /{table}/records` and `QUERY /{table}/explain` accept the same query document as the
+single-table routes. Catalog table routes are read-only; cross-table writes and transactions
+remain future work.
 
 The single-table server also exposes `QUERY /explain`, which returns the selected table-scan or
 index plan for the same query document.

@@ -256,6 +256,21 @@ fn catalog_server_reads_named_tables_through_record_routes() {
     let response = super::catalog::table_query_response(&mut query, "/left/records", &catalog);
     assert_eq!(response.status_code(), StatusCode(200));
 
+    let mut explain = TestRequest::new()
+        .with_method("QUERY".parse().unwrap())
+        .with_path("/left/explain")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_body(r#"{"filter":{"AGE":7}}"#)
+        .into();
+    let response = super::catalog::table_explain_response(&mut explain, "/left/explain", &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let mut explain_body = String::new();
+    response
+        .into_reader()
+        .read_to_string(&mut explain_body)
+        .unwrap();
+    assert!(explain_body.contains("table_scan"));
+
     let missing = TestRequest::new()
         .with_method(Method::Get)
         .with_path("/missing/records")

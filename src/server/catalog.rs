@@ -30,6 +30,8 @@ fn handle_request(mut request: Request, catalog: &Catalog) {
         table_response(&request, &path, catalog)
     } else if request.method().as_str() == "QUERY" && path == "/join" {
         join_response(&mut request, catalog)
+    } else if request.method().as_str() == "QUERY" && table_explain_route(&path).is_some() {
+        table_explain_response(&mut request, &path, catalog)
     } else if request.method().as_str() == "QUERY" && record_route(&path).is_some() {
         table_query_response(&mut request, &path, catalog)
     } else {
@@ -95,6 +97,27 @@ pub(super) fn table_query_response(
     query_response_at(request, &local_path, &table, dbf_path)
 }
 
+pub(super) fn table_explain_response(
+    request: &mut Request,
+    path: &str,
+    catalog: &Catalog,
+) -> HttpResponse {
+    let Some(name) = table_explain_route(path) else {
+        return json_response(404, error("not_found", "resource not found"), false);
+    };
+    let Some(dbf_path) = catalog.table_path(name) else {
+        return json_response(404, error("not_found", "table not found"), false);
+    };
+    if let Err(catalog_error) = catalog.open_table(name) {
+        return json_response(
+            500,
+            error("catalog_error", &catalog_error.to_string()),
+            false,
+        );
+    }
+    super::explain::response(request, dbf_path)
+}
+
 fn record_route(path: &str) -> Option<(&str, String)> {
     let segments = path.strip_prefix('/')?.split('/').collect::<Vec<_>>();
     match segments.as_slice() {
@@ -102,6 +125,14 @@ fn record_route(path: &str) -> Option<(&str, String)> {
         [table, "records", record] if !table.is_empty() && !record.is_empty() => {
             Some((table, format!("/records/{record}")))
         }
+        _ => None,
+    }
+}
+
+fn table_explain_route(path: &str) -> Option<&str> {
+    let segments = path.strip_prefix('/')?.split('/').collect::<Vec<_>>();
+    match segments.as_slice() {
+        [table, "explain"] if !table.is_empty() => Some(table),
         _ => None,
     }
 }

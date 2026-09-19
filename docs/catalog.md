@@ -68,7 +68,8 @@ txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 `GET` or `HEAD /catalog` returns the discovered table schemas. `GET` or `HEAD /{table}/records`
 and `/{table}/records/{id}` reuse the single-table record response semantics, including the
 current representation `ETag`. `QUERY /{table}/records` accepts the same JSON query document as
-the single-table route. `QUERY /join` accepts the same JSON join document as
+the single-table route, and `QUERY /{table}/explain` returns the same selected plan as the
+single-table `QUERY /explain`. `QUERY /join` accepts the same JSON join document as
 `query::join::parse`, returns a JSON array, and retains the 100,000-row join bound.
 
 These catalog table routes are read-only. The catalog is discovered once at server startup, while
