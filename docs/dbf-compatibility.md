@@ -109,6 +109,12 @@ Writes reject unmappable characters before DBF bytes are changed.
 The existing fixed-field width check remains a byte-width check, so a multibyte value that does
 not fit is rejected rather than truncated.
 
+An optional `encoding` property in the `*.txschema.json` sidecar can explicitly select one of the
+same four codecs using `windows-31j`/`cp932`, `gbk`/`cp936`, `euc-kr`/`cp949`, or `big5`/`cp950`.
+The normalized selection is visible as `encoding_override` in `schema` output.
+This override is applied before character decoding and encoding; it does not change the DBF header
+language-driver byte.
+
 Unknown drivers retain the existing UTF-8 or lossy fallback behavior.
 
 Writes reject characters that the selected code page cannot represent.
@@ -129,7 +135,9 @@ The same caution applies to EUC-JP, GBK, GB18030, Big5, and Korean encodings.
 
 The roadmap still proposes explicit user encoding overrides, strict Shift_JIS versus CP932
 selection, EUC-JP import or export, collation, and additional external fixtures.
-Those are not implied by the declared-driver slice above.
+The current override slice covers only the four declared-driver codecs above.
+Strict Shift_JIS versus CP932 selection, EUC-JP import or export, collation, and additional external
+fixtures remain future work.
 
 ## 5. Persistence and recovery
 

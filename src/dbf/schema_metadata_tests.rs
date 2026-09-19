@@ -43,6 +43,16 @@ fn metadata() -> Vec<u8> {
     .unwrap()
 }
 
+fn encoding_metadata(name: &str) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "encoding": name,
+        "fields": {}
+    }))
+    .unwrap()
+}
+
 #[test]
 fn loads_schema_metadata_and_enforces_local_constraints() {
     let path = temporary_path();
@@ -166,6 +176,59 @@ fn rejects_a_schema_sidecar_changed_after_load() {
         error
             .to_string()
             .contains("schema metadata changed since the table was loaded")
+    );
+
+    cleanup(&path);
+}
+
+#[test]
+fn applies_a_supported_encoding_override_to_reads_and_writes() {
+    let path = temporary_path();
+    cleanup(&path);
+    let mut bytes = fixture();
+    bytes[29] = 0x00;
+    fs::write(&path, bytes).unwrap();
+    fs::write(
+        path.with_extension("txschema.json"),
+        encoding_metadata("gbk"),
+    )
+    .unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    assert_eq!(table.schema_json()["encoding_override"], "GBK/CP936");
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "中文"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    table.save_with_wal(&path).unwrap();
+
+    let reloaded = DbfTable::from_path(&path).unwrap();
+    assert_eq!(reloaded.active_record(1).unwrap().values["NAME"], "中文");
+
+    cleanup(&path);
+}
+
+#[test]
+fn rejects_an_encoding_override_outside_the_declared_slice() {
+    let path = temporary_path();
+    cleanup(&path);
+    fs::write(&path, fixture()).unwrap();
+    fs::write(
+        path.with_extension("txschema.json"),
+        encoding_metadata("euc-jp"),
+    )
+    .unwrap();
+
+    let error = DbfTable::from_path(&path).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported schema encoding override")
     );
 
     cleanup(&path);

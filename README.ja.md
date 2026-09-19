@@ -138,6 +138,7 @@ DBF codecはVisual FoxProのCJK driver IDであるWindows-31J/CP932、GBK/CP936�
 malformed readはU+FFFDにし、unmappableまたはbyte width超過のwriteは拒否します。
 
 optionalな`users.txschema.json` sidecarは、legacy DBF byteを変更せずに一つのfieldへ`primary`、`unique`、`not_null`を設定します。
+同じsidecarで対応済みのCJK codecを明示的に選択できます。
 load済みのactive recordとinsert、replace、patch、recallをconstraintで検証します。
 `CHECK`、foreign key、default、composite keyは未実装です。
 

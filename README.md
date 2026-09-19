@@ -190,7 +190,7 @@ EUC-KR/CP949, and Big5/CP950.
 Malformed reads use U+FFFD and writes reject unmappable or over-width values.
 
 An optional `users.txschema.json` sidecar adds one-field `primary`, `unique`, and `not_null`
-constraints without changing legacy DBF bytes.
+constraints and can explicitly select one of the supported CJK codecs without changing legacy DBF bytes.
 Loaded active records and every insert, replace, patch, and recall are checked against it;
 `CHECK`, foreign keys, defaults, and composite keys remain future work.
 

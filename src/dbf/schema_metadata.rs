@@ -1,3 +1,4 @@
+use super::codec::canonical_encoding_name;
 use super::{DbfError, DbfRecord, FieldDescriptor};
 use crate::json_order::compare_scalar_values;
 use serde::{Deserialize, Serialize};
@@ -16,6 +17,8 @@ pub(super) struct SchemaMetadata {
     format: String,
     version: u8,
     #[serde(default)]
+    encoding: Option<String>,
+    #[serde(default)]
     fields: BTreeMap<String, FieldMetadata>,
 }
 
@@ -32,7 +35,7 @@ struct FieldMetadata {
 
 impl SchemaMetadata {
     pub(super) fn from_bytes(bytes: &[u8]) -> Result<Self, DbfError> {
-        let metadata = serde_json::from_slice::<Self>(bytes)
+        let mut metadata = serde_json::from_slice::<Self>(bytes)
             .map_err(|error| DbfError::Invalid(format!("invalid schema metadata JSON: {error}")))?;
         if metadata.format != SCHEMA_FORMAT {
             return Err(DbfError::Invalid(format!(
@@ -45,6 +48,12 @@ impl SchemaMetadata {
                 "unsupported schema metadata version: {}",
                 metadata.version
             )));
+        }
+        if let Some(encoding) = metadata.encoding.as_deref() {
+            let canonical = canonical_encoding_name(encoding).ok_or_else(|| {
+                DbfError::Invalid(format!("unsupported schema encoding override: {encoding}"))
+            })?;
+            metadata.encoding = Some(canonical.to_owned());
         }
         Ok(metadata)
     }
@@ -92,8 +101,13 @@ impl SchemaMetadata {
         json!({
             "format": self.format,
             "version": self.version,
+            "encoding": self.encoding,
             "fields": self.fields,
         })
+    }
+
+    pub(super) fn encoding(&self) -> Option<&str> {
+        self.encoding.as_deref()
     }
 }
 

@@ -8,12 +8,13 @@ use super::fields::flag_is_set;
 use super::temporal::{currency_text, foxpro_datetime_text};
 use serde_json::{Number, Value};
 
-pub fn decode_record_field(
+pub fn decode_record_field_with_encoding(
     field: &FieldDescriptor,
     bytes: &[u8],
     language_driver: u8,
     null_flags: Option<&[u8]>,
     flag_bits: Option<NullFlagBits>,
+    encoding_override: Option<&str>,
 ) -> Value {
     let is_null = flag_bits
         .and_then(|bits| bits.nullable)
@@ -34,7 +35,7 @@ pub fn decode_record_field(
     if field.is_binary() {
         Value::String(hex(data))
     } else {
-        Value::String(text(data, language_driver))
+        Value::String(text_with_encoding(data, language_driver, encoding_override))
     }
 }
 
@@ -44,8 +45,22 @@ pub fn decode_field(
     language_driver: u8,
     memo_format: Option<MemoFormat>,
 ) -> Value {
+    decode_field_with_encoding(field_type, bytes, language_driver, memo_format, None)
+}
+
+pub fn decode_field_with_encoding(
+    field_type: u8,
+    bytes: &[u8],
+    language_driver: u8,
+    memo_format: Option<MemoFormat>,
+    encoding_override: Option<&str>,
+) -> Value {
     match field_type.to_ascii_uppercase() {
-        b'C' => Value::String(text(bytes, language_driver)),
+        b'C' => Value::String(text_with_encoding(
+            bytes,
+            language_driver,
+            encoding_override,
+        )),
         b'D' if bytes.iter().all(|byte| matches!(*byte, b' ' | 0)) => Value::Null,
         b'T' if memo_format == Some(MemoFormat::FoxPro) && bytes.len() >= 8 => {
             let day = u32::from_le_bytes(bytes[..4].try_into().unwrap());
@@ -98,17 +113,29 @@ pub fn decode_field(
             }
         }
         b'@' | b'T' => Value::String(hex(bytes)),
-        _ => Value::String(text(bytes, language_driver)),
+        _ => Value::String(text_with_encoding(
+            bytes,
+            language_driver,
+            encoding_override,
+        )),
     }
 }
 
 pub fn text(bytes: &[u8], language_driver: u8) -> String {
+    text_with_encoding(bytes, language_driver, None)
+}
+
+pub fn text_with_encoding(
+    bytes: &[u8],
+    language_driver: u8,
+    encoding_override: Option<&str>,
+) -> String {
     let end = bytes
         .iter()
         .rposition(|byte| !matches!(byte, b' ' | b'\0'))
         .map_or(0, |index| index + 1);
     let bytes = &bytes[..end];
-    if let Some(text) = decode_cjk(bytes, language_driver) {
+    if let Some(text) = decode_cjk(bytes, language_driver, encoding_override) {
         return text;
     }
     match language_driver {

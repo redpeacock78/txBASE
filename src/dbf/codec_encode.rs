@@ -3,7 +3,7 @@ use super::super::codepages::{
     CP1254_UPPER, CP1255_UPPER, CP1256_UPPER, encode_codepage, encode_windows_1252,
 };
 use super::super::{DbfError, FieldDescriptor, binary_value};
-use super::cjk::{encode as encode_cjk, encoding_name};
+use super::cjk::{canonical_encoding_name, encode as encode_cjk, encoding_name};
 use super::temporal::{currency_i64, foxpro_datetime_bytes};
 use serde_json::Value;
 
@@ -12,14 +12,23 @@ pub fn encode_field(
     value: &Value,
     language_driver: u8,
 ) -> Result<Vec<u8>, DbfError> {
+    encode_field_with_encoding(field, value, language_driver, None)
+}
+
+pub fn encode_field_with_encoding(
+    field: &FieldDescriptor,
+    value: &Value,
+    language_driver: u8,
+    encoding_override: Option<&str>,
+) -> Result<Vec<u8>, DbfError> {
     let length = usize::from(field.length);
     match field.field_type.to_ascii_uppercase() {
-        b'Q' | b'V' => encode_variable_field(value, field, language_driver),
+        b'Q' | b'V' => encode_variable_field(value, field, language_driver, encoding_override),
         b'C' => {
             let bytes = if field.is_binary() {
                 binary_value(value, field)?
             } else {
-                encode_character(value, field, language_driver)?
+                encode_character_with_encoding(value, field, language_driver, encoding_override)?
             };
             if bytes.len() > length {
                 return Err(DbfError::Invalid(format!(
@@ -166,6 +175,7 @@ pub fn encode_variable_field(
     value: &Value,
     field: &FieldDescriptor,
     language_driver: u8,
+    encoding_override: Option<&str>,
 ) -> Result<Vec<u8>, DbfError> {
     let length = usize::from(field.length);
     if length == 0 {
@@ -181,7 +191,7 @@ pub fn encode_variable_field(
     let data = if field.is_binary() {
         binary_value(value, field)?
     } else {
-        encode_character(value, field, language_driver)?
+        encode_character_with_encoding(value, field, language_driver, encoding_override)?
     };
     let max_length = length - 1;
     if data.len() > max_length {
@@ -201,43 +211,52 @@ pub fn encode_variable_field(
     Ok(output)
 }
 
-pub fn encode_character(
+pub fn encode_character_with_encoding(
     value: &Value,
     field: &FieldDescriptor,
     language_driver: u8,
+    encoding_override: Option<&str>,
 ) -> Result<Vec<u8>, DbfError> {
     let text = value_text(value, field)?;
-    let encoded = match language_driver {
-        0x01 => encode_codepage(&text, CP437_UPPER),
-        0x02 => encode_codepage(&text, CP850_UPPER),
-        0x1f | 0x22 | 0x23 | 0x40 | 0x64 | 0x87 => encode_codepage(&text, CP852_UPPER),
-        0x26 | 0x65 => encode_codepage(&text, CP866_UPPER),
-        0xc8 => encode_codepage(&text, CP1250_UPPER),
-        0xc9 => encode_codepage(&text, CP1251_UPPER),
-        0xca => encode_codepage(&text, CP1254_UPPER),
-        0xcb => encode_codepage(&text, CP1253_UPPER),
-        0x7d => encode_codepage(&text, CP1255_UPPER),
-        0x7e => encode_codepage(&text, CP1256_UPPER),
-        0x03 | 0x57 => encode_windows_1252(&text),
-        0x78..=0x7b => encode_cjk(&text, language_driver)
-            .and_then(|(bytes, had_errors)| (!had_errors).then_some(bytes)),
-        _ => Some(text.into_bytes()),
+    let encoded = if encoding_override.is_some() {
+        encode_cjk(&text, language_driver, encoding_override)
+            .and_then(|(bytes, had_errors)| (!had_errors).then_some(bytes))
+    } else {
+        match language_driver {
+            0x01 => encode_codepage(&text, CP437_UPPER),
+            0x02 => encode_codepage(&text, CP850_UPPER),
+            0x1f | 0x22 | 0x23 | 0x40 | 0x64 | 0x87 => encode_codepage(&text, CP852_UPPER),
+            0x26 | 0x65 => encode_codepage(&text, CP866_UPPER),
+            0xc8 => encode_codepage(&text, CP1250_UPPER),
+            0xc9 => encode_codepage(&text, CP1251_UPPER),
+            0xca => encode_codepage(&text, CP1254_UPPER),
+            0xcb => encode_codepage(&text, CP1253_UPPER),
+            0x7d => encode_codepage(&text, CP1255_UPPER),
+            0x7e => encode_codepage(&text, CP1256_UPPER),
+            0x03 | 0x57 => encode_windows_1252(&text),
+            0x78..=0x7b => encode_cjk(&text, language_driver, None)
+                .and_then(|(bytes, had_errors)| (!had_errors).then_some(bytes)),
+            _ => Some(text.into_bytes()),
+        }
     };
     encoded.ok_or_else(|| {
-        let code_page = encoding_name(language_driver).unwrap_or(match language_driver {
-            0x01 => "CP437",
-            0x02 => "CP850",
-            0x1f | 0x22 | 0x23 | 0x40 | 0x64 | 0x87 => "CP852",
-            0x26 | 0x65 => "CP866",
-            0xc8 => "Windows-1250",
-            0xc9 => "Windows-1251",
-            0xca => "Windows-1254",
-            0xcb => "Windows-1253",
-            0x7d => "Windows-1255",
-            0x7e => "Windows-1256",
-            0x03 | 0x57 => "Windows-1252",
-            _ => "the declared code page",
-        });
+        let code_page = encoding_override
+            .and_then(canonical_encoding_name)
+            .or_else(|| encoding_name(language_driver))
+            .unwrap_or(match language_driver {
+                0x01 => "CP437",
+                0x02 => "CP850",
+                0x1f | 0x22 | 0x23 | 0x40 | 0x64 | 0x87 => "CP852",
+                0x26 | 0x65 => "CP866",
+                0xc8 => "Windows-1250",
+                0xc9 => "Windows-1251",
+                0xca => "Windows-1254",
+                0xcb => "Windows-1253",
+                0x7d => "Windows-1255",
+                0x7e => "Windows-1256",
+                0x03 | 0x57 => "Windows-1252",
+                _ => "the declared code page",
+            });
         DbfError::Invalid(format!(
             "value for {} contains a character outside {code_page}",
             field.name

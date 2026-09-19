@@ -9,6 +9,7 @@ impl DbfTable {
             "last_update": self.header.last_update,
             "language_driver": self.header.language_driver,
             "encoding": encoding_name(self.header.language_driver),
+            "encoding_override": self.encoding_override,
             "schema_metadata": self
                 .schema
                 .as_ref()

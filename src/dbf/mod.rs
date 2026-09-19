@@ -44,9 +44,10 @@ mod wal;
 mod writer_tests;
 
 use codec::{
-    decode_field, decode_record_field, encode_character, encode_field, encode_null_flags,
+    decode_field, decode_field_with_encoding, decode_record_field_with_encoding,
+    encode_character_with_encoding, encode_field, encode_field_with_encoding, encode_null_flags,
     encoding_name, flag_is_set, hex, null_flag_layout, parse_fields, read_u16, read_u32,
-    system_field_index, text, update_null_flags, value_text,
+    system_field_index, text, text_with_encoding, update_null_flags, value_text,
 };
 use lock::TableLock;
 use memo::{
@@ -239,6 +240,7 @@ pub struct DbfTable {
     bytes: Vec<u8>,
     memo: Option<MemoFile>,
     schema: Option<SchemaMetadata>,
+    encoding_override: Option<String>,
     memo_updates: MemoUpdates,
     source: Option<PersistedState>,
 }

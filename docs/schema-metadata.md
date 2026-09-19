@@ -32,6 +32,12 @@ The current sidecar is versioned independently from DBF:
 }
 ```
 
+The optional root `encoding` property is an explicit override for the four currently supported multibyte codecs.
+
+Accepted labels are `windows-31j` or `cp932`, `gbk` or `cp936`, `euc-kr` or `cp949`, and `big5` or `cp950`.
+
+txBASE normalizes the label and reports the effective name in `schema` output as `encoding_override`.
+
 Unknown root or field properties are rejected.
 
 An unknown field name, unsupported format, or unsupported version is rejected when the table is loaded.
@@ -45,6 +51,12 @@ The current version accepts the following field properties:
 | `primary` | Implies `unique` and `not_null`; only one single-field primary key is accepted |
 | `unique` | Rejects a non-null value already used by another active record |
 | `not_null` | Rejects JSON `null` on insert, replace, patch, or recall |
+
+The sidecar's `encoding` property is not a field constraint.
+
+It selects the codec used for character reads and writes before the record enters the JSON layer.
+
+It does not add strict Shift_JIS, EUC-JP, collation, or an automatic conversion policy.
 
 Constraint checks run before the in-memory record is changed.
 
@@ -82,6 +94,7 @@ The sidecar does not yet implement:
 - `DEFAULT` expressions or generated values.
 - Collations or type declarations independent of DBF field descriptors.
 - A schema migration or metadata-edit command.
+- Automatic selection between a DBF language driver and an override.
 
 These need an expression grammar, cross-table visibility, migration and recovery rules before they can be added safely.
 

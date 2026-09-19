@@ -15,8 +15,11 @@ use std::path::Path;
 impl DbfTable {
     pub(super) fn load_path(path: &Path) -> Result<Self, DbfError> {
         let dbf = fs::read(path)?;
-        let mut table = Self::from_bytes(&dbf)?;
         let schema = read_schema_metadata(path)?;
+        let encoding_override = schema
+            .as_ref()
+            .and_then(|(metadata, _)| metadata.encoding());
+        let mut table = Self::from_bytes_with_encoding(&dbf, encoding_override)?;
         if let Some((metadata, _)) = &schema {
             metadata.validate_fields(&table.fields)?;
             table.schema = Some(metadata.clone());
@@ -57,6 +60,11 @@ impl DbfTable {
         }
         metadata.validate_records(&self.records)?;
         self.schema = Some(metadata);
+        self.encoding_override = self
+            .schema
+            .as_ref()
+            .and_then(|schema| schema.encoding())
+            .map(ToOwned::to_owned);
         Ok(())
     }
 

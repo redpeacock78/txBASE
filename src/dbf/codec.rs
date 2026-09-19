@@ -9,9 +9,14 @@ mod fields;
 #[path = "codec_temporal.rs"]
 mod temporal;
 
-pub(super) use cjk::encoding_name;
-pub(super) use decode::{decode_field, decode_record_field, hex, text};
-pub(super) use encode::{encode_character, encode_field, value_text};
+pub(super) use cjk::{canonical_encoding_name, encoding_name};
+pub(super) use decode::{
+    decode_field, decode_field_with_encoding, decode_record_field_with_encoding, hex, text,
+    text_with_encoding,
+};
+pub(super) use encode::{
+    encode_character_with_encoding, encode_field, encode_field_with_encoding, value_text,
+};
 pub(super) use fields::{
     encode_null_flags, flag_is_set, null_flag_layout, parse_fields, read_u16, read_u32,
     system_field_index, update_null_flags,

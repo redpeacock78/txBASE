@@ -97,10 +97,11 @@ impl DbfTable {
                     if value.is_empty() {
                         encode_memo_pointer(&field, 0, memo.format)?
                     } else {
-                        let bytes = encode_character(
+                        let bytes = encode_character_with_encoding(
                             &Value::String(value),
                             &field,
                             self.header.language_driver,
+                            self.encoding_override.as_deref(),
                         )?;
                         let block = memo.append_text(&bytes)?;
                         encode_memo_pointer(&field, block, memo.format)?
@@ -129,11 +130,12 @@ impl DbfTable {
             target.copy_from_slice(&pointer);
             self.stored_values[index].insert(
                 field.name,
-                decode_field(
+                decode_field_with_encoding(
                     field.field_type,
                     target,
                     self.header.language_driver,
                     Some(memo.format),
+                    self.encoding_override.as_deref(),
                 ),
             );
         }

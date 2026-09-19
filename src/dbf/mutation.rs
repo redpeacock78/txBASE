@@ -201,10 +201,11 @@ impl DbfTable {
                 }
                 record.extend_from_slice(flags);
             } else {
-                record.extend(encode_field(
+                record.extend(encode_field_with_encoding(
                     field,
                     storage_values.get(&field.name).unwrap_or(&Value::Null),
                     self.header.language_driver,
+                    self.encoding_override.as_deref(),
                 )?);
             }
         }
@@ -268,10 +269,11 @@ impl DbfTable {
                 continue;
             }
             changed_fields.insert(field.name.clone());
-            let encoded = encode_field(
+            let encoded = encode_field_with_encoding(
                 field,
                 storage_values.get(&field.name).unwrap_or(&Value::Null),
                 self.header.language_driver,
+                self.encoding_override.as_deref(),
             )?;
             let start = offset
                 .checked_add(field.offset)

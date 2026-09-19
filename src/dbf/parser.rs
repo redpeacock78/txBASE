@@ -47,7 +47,11 @@ impl DbfTable {
                 let value = if field.is_binary() {
                     Value::String(hex(&data))
                 } else {
-                    Value::String(text(&data, self.header.language_driver))
+                    Value::String(text_with_encoding(
+                        &data,
+                        self.header.language_driver,
+                        self.encoding_override.as_deref(),
+                    ))
                 };
                 self.records[index].values.insert(field.name.clone(), value);
             }
@@ -56,6 +60,13 @@ impl DbfTable {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, DbfError> {
+        Self::from_bytes_with_encoding(bytes, None)
+    }
+
+    pub(super) fn from_bytes_with_encoding(
+        bytes: &[u8],
+        encoding_override: Option<&str>,
+    ) -> Result<Self, DbfError> {
         if bytes.len() < CLASSIC_HEADER_SIZE {
             return Err(DbfError::Invalid("header is truncated".into()));
         }
@@ -161,21 +172,23 @@ impl DbfTable {
                 let value = if is_null {
                     Value::Null
                 } else if variable_fields && field.is_variable() {
-                    decode_record_field(
+                    decode_record_field_with_encoding(
                         field,
                         &record[start..end],
                         header.language_driver,
                         null_flags,
                         flag_layout[field_index],
+                        encoding_override,
                     )
                 } else if field.field_type.eq_ignore_ascii_case(&b'C') && field.is_binary() {
                     Value::String(hex(&record[start..end]))
                 } else {
-                    decode_field(
+                    decode_field_with_encoding(
                         field.field_type,
                         &record[start..end],
                         header.language_driver,
                         memo_format,
+                        encoding_override,
                     )
                 };
                 values.insert(field.name.clone(), value);
@@ -196,6 +209,7 @@ impl DbfTable {
             bytes: bytes.to_vec(),
             memo: None,
             schema: None,
+            encoding_override: encoding_override.map(ToOwned::to_owned),
             memo_updates: BTreeMap::new(),
             source: None,
         })
