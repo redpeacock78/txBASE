@@ -25,7 +25,10 @@ pub fn write_path_with_limits(
     limits: &XbfLimits,
 ) -> Result<(), XbfError> {
     let bytes = encode_with_limits(table, limits)?;
-    let path = path.as_ref();
+    write_encoded_path(path.as_ref(), &bytes)
+}
+
+pub(super) fn write_encoded_path(path: &Path, bytes: &[u8]) -> Result<(), XbfError> {
     let temporary_path = temporary_path(path);
     let mut file = fs::File::create(&temporary_path)?;
     file.write_all(&bytes)?;

@@ -9,7 +9,9 @@ The repository now contains a bounded v1 codec at
 `txbase::xbf::{read_path, write_path}`.
 The codec validates the draft header, section checksums, schema, directory, typed
 records, constraints, and configured size limits.
-DBF conversion and `.xwl` recovery are still outside the supported-format boundary.
+The full-snapshot `.xwl` path records base and target generations and rejects a
+generation mismatch during recovery.
+DBF conversion remains outside the supported-format boundary.
 
 The codec is intentionally kept in the format layer. It does not add a second
 query or HTTP implementation.
@@ -209,6 +211,9 @@ The codec exposes explicit limits for file, section, record, field-name, and val
 
 The optional `.xwl` log may contain the existing txBASE operation IR and snapshot records, but its record format must name the XBF generation it was based on.
 
+The current library provides `save_with_wal` and `recover_path` for a full-snapshot record.
+Recovery validates the embedded snapshot before applying it, accepts an already-installed target generation idempotently, and rejects a different current generation.
+
 A recovery procedure must reject a log that targets a different base generation.
 
 The first XBF implementation may use full-snapshot WAL records.
@@ -243,7 +248,7 @@ This prevents XBF from becoming a second unrelated database implementation.
 
 ## 11. Implementation gates
 
-The draft codec and snapshot writer currently have a deterministic fixture
+The draft codec, snapshot writer, and generation-checked full-snapshot WAL currently have a deterministic fixture
 covering every non-reserved v1 type, corruption checks, constraint checks,
 explicit size limits, and a sync-and-reload path round trip. Before XBF is
 advertised as a complete supported format, the repository still needs:
@@ -251,6 +256,6 @@ advertised as a complete supported format, the repository still needs:
 - Malformed header, section, checksum, directory, UTF-8, and payload corpora.
 - Round-trip tests for DBF to XBF and representability failures for XBF to DBF.
 - Crash and recovery tests for the snapshot and `.xwl` generation boundary.
-- An `.xwl` format that names its base generation and a recovery procedure that rejects mismatches.
+- DBF/XBF conversion and representability reporting for both directions.
 
 Until those gates exist, XBF remains a draft and is not advertised as a supported format.

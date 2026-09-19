@@ -1,7 +1,8 @@
 use super::{
     XbfField, XbfLimits, XbfRecord, XbfTable, XbfType, XbfValue, decode, decode_with_limits,
-    encode, encode_with_limits, read_path, write_path,
+    encode, encode_with_limits, read_path, recover_path, write_path,
 };
+use crate::transaction::{FileWal, Wal};
 use std::fs;
 use std::path::PathBuf;
 
@@ -230,6 +231,62 @@ fn writes_and_reads_a_durable_snapshot_path() {
     assert_eq!(read_path(&path).unwrap(), table);
 
     fs::remove_file(&path).unwrap();
+}
+
+#[test]
+fn recovers_a_generation_checked_full_snapshot_wal() {
+    let path = snapshot_test_path();
+    let wal_path = path.with_extension("xwl");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let base = fixture();
+    let mut target = fixture();
+    target.generation = base.generation + 1;
+    write_path(&path, &base).unwrap();
+
+    let snapshot = encode(&target).unwrap();
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(&super::wal::encode_record(base.generation, target.generation, &snapshot).unwrap())
+        .unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    assert!(recover_path(&path).unwrap());
+    assert_eq!(read_path(&path).unwrap(), target);
+    assert!(!wal_path.exists());
+    assert!(!recover_path(&path).unwrap());
+
+    fs::remove_file(&path).unwrap();
+}
+
+#[test]
+fn rejects_a_generation_mismatched_xbf_wal() {
+    let path = snapshot_test_path();
+    let wal_path = path.with_extension("xwl");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let base = fixture();
+    let mut target = fixture();
+    target.generation = base.generation + 1;
+    write_path(&path, &base).unwrap();
+
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(
+        &super::wal::encode_record(
+            base.generation - 1,
+            target.generation,
+            &encode(&target).unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    assert!(recover_path(&path).is_err());
+    assert!(wal_path.exists());
+    fs::remove_file(&path).unwrap();
+    fs::remove_file(&wal_path).unwrap();
 }
 
 fn snapshot_test_path() -> PathBuf {

@@ -39,7 +39,7 @@ The repository currently provides:
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus EUC-JP and GB18030, with normalized schema output.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
-- A bounded XBF v1 codec and durable snapshot path with explicit size limits and section checksums; XBF WAL, recovery, and DBF conversion remain future.
+- A bounded XBF v1 codec, durable snapshot path, and generation-checked full-snapshot WAL recovery with explicit size limits and section checksums; DBF conversion remains future.
 
 The baseline intentionally does not include a full cost-based index model, streaming, multiple or planned joins, cross-table transactions, multi-stage aggregation, composite or cross-table constraints, XBF, object-storage commits, or distributed replication.
 
@@ -153,7 +153,7 @@ An override must be visible in schema or command output so a reader can reproduc
 
 XBF is a separately versioned native format, not a silent DBF extension.
 
-The v1 wire contract is drafted in [XBF v1 format draft](xbf.md). A bounded codec and durable snapshot path exist for that draft, but XBF WAL, recovery, and DBF conversion are not current supported features.
+The v1 wire contract is drafted in [XBF v1 format draft](xbf.md). A bounded codec, durable snapshot path, and generation-checked full-snapshot WAL recovery exist for that draft, but DBF conversion is not a current supported feature.
 
 The proposed magic is `TXBF`.
 

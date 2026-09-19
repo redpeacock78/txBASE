@@ -3,6 +3,7 @@ mod codec;
 mod persistence;
 mod schema;
 mod values;
+mod wal;
 
 #[cfg(test)]
 mod tests;
@@ -160,6 +161,7 @@ impl From<std::io::Error> for XbfError {
 
 pub use codec::{decode, decode_with_limits, encode, encode_with_limits};
 pub use persistence::{read_path, read_path_with_limits, write_path, write_path_with_limits};
+pub use wal::{recover_path, save_with_wal};
 
 impl XbfTable {
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self, XbfError> {
@@ -183,5 +185,9 @@ impl XbfTable {
         limits: &XbfLimits,
     ) -> Result<(), XbfError> {
         write_path_with_limits(path, self, limits)
+    }
+
+    pub fn save_with_wal(&self, path: impl AsRef<std::path::Path>) -> Result<(), XbfError> {
+        save_with_wal(path, self)
     }
 }

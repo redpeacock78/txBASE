@@ -221,7 +221,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
 一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
 full cost model、collation-aware planning、streaming、複数stageのaggregation、cross-table constraint、CJK encodingの拡張、XBF実装はroadmapで検討します。
-XBFのwire contractは[XBF v1 format draft](docs/xbf.md)に記載しています。draftのcodecとdurable snapshot pathは提供しますが、XBF WAL、recovery、DBF/XBF変換はroadmap上の未対応範囲です。
+XBFのwire contractは[XBF v1 format draft](docs/xbf.md)に記載しています。draftのcodec、durable snapshot path、generation付きfull-snapshot WAL recoveryは提供しますが、DBF/XBF変換はroadmap上の未対応範囲です。
 
 ## License
 
