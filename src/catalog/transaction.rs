@@ -135,9 +135,7 @@ pub(crate) fn commit(root: &Path, changes: Vec<FileChange>) -> Result<(), Catalo
         Ok::<(), CatalogError>(())
     })();
 
-    if result.is_err() {
-        return result;
-    }
+    result?;
     let _ = fs::remove_dir_all(&journal);
     sync_directory(root)?;
     Ok(())
@@ -190,9 +188,9 @@ fn open_lock(root: &Path, exclusive: bool) -> Result<File, CatalogError> {
         .write(true)
         .open(root.join(CATALOG_LOCK))?;
     if exclusive {
-        file.lock_exclusive()?;
+        fs2::FileExt::lock_exclusive(&file)?;
     } else {
-        file.lock_shared()?;
+        fs2::FileExt::lock_shared(&file)?;
     }
     Ok(file)
 }
