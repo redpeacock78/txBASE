@@ -19,7 +19,9 @@ mod validation;
 use ordering::{compare_records, sort_ordered_prefix};
 pub use pagination::QueryPage;
 pub use planner::QueryPlan;
-pub(crate) use predicate::{matches_condition, matches_filter};
+#[cfg(test)]
+pub(crate) use predicate::matches_condition;
+pub(crate) use predicate::matches_filter;
 pub use stream::{QueryStream, stream_query};
 
 #[cfg(test)]
