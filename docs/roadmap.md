@@ -33,7 +33,7 @@ The repository currently provides:
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - A bounded aggregation pipeline with zero or more `$match` stages before one `$group` stage using `$count`, integer `$sum`, `$min`, and `$max`.
-- A bounded local `inner`, `left`, `semi`, or `anti` equality join over two catalog tables with qualified filtering and projection.
+- A bounded local `inner`, `left`, `semi`, or `anti` equality join plus a bounded `cross` join over two catalog tables with qualified filtering and projection.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - A borrowed query stream for incremental filter and projection over an in-memory table snapshot.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.

@@ -157,11 +157,13 @@ between two catalog tables:
 ```
 
 `join.parse` validates this JSON and `join::execute` loads the named tables from a `Catalog`.
-The current join types are `inner`, `left`, `semi`, and `anti`.
+The current join types are `inner`, `left`, `semi`, `anti`, and `cross`.
 The result is a flat JSON object whose keys are qualified as `table.field`.
 An unmatched left row is retained without right-table fields.
 `semi` emits one left row when at least one right row matches, while `anti` emits one left row
 when no right row matches; neither type emits right-table fields.
+`cross` accepts an empty `on` object and emits every left/right pair.
+Its candidate pair count is capped at 100,000 before filtering.
 Missing and explicit `null` join keys do not match.
 
 The implementation builds one in-memory equality map for the right table and rejects a result

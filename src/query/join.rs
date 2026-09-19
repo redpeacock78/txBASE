@@ -17,6 +17,7 @@ pub enum JoinType {
     Left,
     Semi,
     Anti,
+    Cross,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -106,9 +107,32 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
     let (local_fields, foreign_fields) = join_fields(request)?;
     let left = catalog.open_table(&request.from)?;
     let right = catalog.open_table(&request.join.table)?;
+    let left_records = left.active_records().collect::<Vec<_>>();
+    let right_records = right.active_records().collect::<Vec<_>>();
+
+    if let JoinType::Cross = &request.join.kind {
+        let pair_count = left_records
+            .len()
+            .checked_mul(right_records.len())
+            .ok_or_else(|| {
+                JoinError::Invalid("cross join candidate pair count overflows".into())
+            })?;
+        if pair_count > MAX_JOIN_ROWS {
+            return Err(JoinError::Invalid(format!(
+                "cross join candidate pairs exceed {MAX_JOIN_ROWS}"
+            )));
+        }
+        let mut output = Vec::new();
+        for left_record in &left_records {
+            for right_record in &right_records {
+                emit(&mut output, request, *left_record, Some(*right_record))?;
+            }
+        }
+        return Ok(output);
+    }
 
     let mut right_by_key = BTreeMap::<String, Vec<&DbfRecord>>::new();
-    for record in right.active_records() {
+    for record in right_records {
         let Some(key) = encoded_key(&record.values, &foreign_fields)? else {
             continue;
         };
@@ -116,7 +140,7 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
     }
 
     let mut output = Vec::new();
-    for left_record in left.active_records() {
+    for left_record in left_records {
         let matches =
             encoded_key(&left_record.values, &local_fields)?.and_then(|key| right_by_key.get(&key));
         let had_matches = matches.is_some_and(|records| !records.is_empty());
@@ -141,6 +165,7 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
             JoinType::Semi if had_matches => emit(&mut output, request, left_record, None)?,
             JoinType::Anti if !had_matches => emit(&mut output, request, left_record, None)?,
             JoinType::Semi | JoinType::Anti => {}
+            JoinType::Cross => unreachable!("cross joins return before key lookup"),
         }
     }
     Ok(output)
@@ -163,6 +188,14 @@ fn validate(request: &JoinRequest) -> Result<(), JoinError> {
 }
 
 fn join_fields(request: &JoinRequest) -> Result<(Vec<String>, Vec<String>), JoinError> {
+    if let JoinType::Cross = &request.join.kind {
+        if !request.join.on.is_empty() {
+            return Err(JoinError::Invalid(
+                "cross joins do not accept join.on conditions".into(),
+            ));
+        }
+        return Ok((Vec::new(), Vec::new()));
+    }
     if request.join.on.is_empty() {
         return Err(JoinError::Invalid(
             "join.on requires at least one equality condition".into(),

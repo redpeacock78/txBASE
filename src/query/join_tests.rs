@@ -144,6 +144,48 @@ fn semi_and_anti_join_emit_only_matching_or_unmatched_left_rows() {
 }
 
 #[test]
+fn cross_join_emits_bounded_cartesian_rows() {
+    let root = catalog_with_posts();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let request = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "cross",
+            "table": "posts",
+            "on": {}
+          },
+          "projection": {"users.NAME": 1, "posts.NAME": 1}
+        }"#,
+    )
+    .unwrap();
+
+    let rows = execute(&catalog, &request).unwrap();
+    assert_eq!(rows.len(), 3);
+    assert!(
+        rows.iter()
+            .all(|row| row.get("users.NAME") == Some(&json!("Alice")))
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn cross_join_rejects_equality_conditions() {
+    let error = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "cross",
+            "table": "posts",
+            "on": {"users.ID": {"$eq": {"$field": "posts.ID"}}}
+          }
+        }"#,
+    )
+    .unwrap_err();
+    assert!(matches!(error, JoinError::Invalid(message) if message.contains("do not accept")));
+}
+
+#[test]
 fn join_accepts_multiple_equality_conditions() {
     let request = parse(
         br#"{
