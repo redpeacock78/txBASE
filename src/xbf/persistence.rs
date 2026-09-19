@@ -31,7 +31,7 @@ pub fn write_path_with_limits(
 pub(super) fn write_encoded_path(path: &Path, bytes: &[u8]) -> Result<(), XbfError> {
     let temporary_path = temporary_path(path);
     let mut file = fs::File::create(&temporary_path)?;
-    file.write_all(&bytes)?;
+    file.write_all(bytes)?;
     file.sync_all()?;
     replace_snapshot(&temporary_path, path)?;
     sync_parent_directory(path)?;
