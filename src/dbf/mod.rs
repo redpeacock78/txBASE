@@ -57,6 +57,10 @@ use wal::{delta_payload, memo_snapshot_payload, operation_payload, snapshot_payl
 
 pub use maintenance::copy_table_files;
 
+pub(crate) fn memo_sidecar_path(path: &Path) -> Option<PathBuf> {
+    find_memo_path(path)
+}
+
 const CLASSIC_HEADER_SIZE: usize = 32;
 const CLASSIC_DESCRIPTOR_SIZE: usize = 32;
 const LEVEL7_HEADER_SIZE: usize = 68;

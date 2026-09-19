@@ -30,6 +30,7 @@ The repository currently provides:
 - Startup recovery, stale-snapshot rejection, and an Ubuntu/macOS/Windows CI gate.
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
+- A rebuildable external scalar-key index sidecar with equality lookup and DBF/memo freshness checks.
 
 The baseline intentionally does not include secondary indexes, cursors, multi-record transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
 
@@ -41,7 +42,7 @@ This phase keeps the database local and makes its operational boundary useful be
 
 - Schema introspection.
 - A multi-table catalog boundary.
-- Secondary indexes.
+- Secondary-index maintenance and query planning.
 - Cursor or streaming query execution.
 - Multi-record transactions.
 - `PACK` and `RECALL` maintenance operations.
@@ -59,11 +60,15 @@ The catalog currently derives table identity from direct-child DBF filenames and
 
 It provides table discovery, named table loading, schema output, and per-table verification.
 
-It does not yet provide shared locks, relationships, indexes, or cross-table transactions.
+It does not yet provide shared locks, relationships, automatic index maintenance, or cross-table transactions.
+
+The index sidecar foundation is implemented for scalar keys, exact equality lookup, stale detection, and explicit rebuild.
+
+It does not yet maintain itself during DBF mutation or participate in query planning.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
-An index is not complete until insert, update, logical delete, recovery, stale-index detection, and rebuild behavior are specified.
+An index is not complete until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, and planner use are specified and tested together.
 
 A multi-record transaction is not complete until commit, rollback, crash recovery, and visibility rules are tested together.
 
@@ -197,4 +202,4 @@ The number of files is not a quality metric by itself.
 - Automatic CJK conversion when the declared encoding is ambiguous.
 - Speculative indexes, joins, aggregation, MVCC, XBF, object-storage, or distributed code without a contract and end-to-end test.
 
-The next implementation slice is intentionally local: an index contract and rebuild path before query planning.
+The next implementation slice is intentionally local: automatic index maintenance across persistence and recovery before planner use.

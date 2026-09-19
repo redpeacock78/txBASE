@@ -95,6 +95,9 @@ txbase schema path/to/users.dbf
 txbase verify path/to/users.dbf
 txbase catalog path/to/database
 txbase verify-catalog path/to/database
+txbase index build path/to/users.dbf NAME AGE
+txbase index verify path/to/users.dbf
+txbase index rebuild path/to/users.dbf
 txbase pack path/to/users.dbf
 txbase recall path/to/users.dbf 2
 ```
@@ -115,6 +118,9 @@ Usage:
   txbase verify FILE
   txbase catalog DIRECTORY
   txbase verify-catalog DIRECTORY
+  txbase index build FILE FIELD...
+  txbase index verify FILE
+  txbase index rebuild FILE
   txbase pack FILE
   txbase recall FILE RECORD
   txbase backup SOURCE DEST
@@ -129,6 +135,12 @@ Usage:
 `catalog` discovers direct-child DBF tables and prints each table schema.
 
 `verify-catalog` verifies every discovered table.
+
+`index build` creates an external scalar-key sidecar.
+
+`index verify` rejects a sidecar whose DBF or memo source is stale.
+
+`index rebuild` regenerates entries after a table mutation.
 
 `pack` removes logically deleted records and renumbers the remaining physical records.
 
@@ -177,6 +189,7 @@ CI runs these checks on Ubuntu, macOS, and Windows.
 ```text
 src/dbf/            DBF parsing, codecs, memo sidecars, maintenance, mutation, WAL, and tests
 src/catalog.rs      Direct-child DBF discovery, table lookup, and catalog verification
+src/index.rs        External scalar-key index sidecar lifecycle
 src/query.rs        JSON query execution and validation
 src/query_path.rs   Dotted-path traversal and projection helpers
 src/server.rs       HTTP routing, QUERY validation, and DBF mutations
@@ -194,6 +207,7 @@ Files are split when ownership or maintenance becomes clearer; a crate split sho
 
 - [DBF and dBASE compatibility](docs/dbf-compatibility.md)
 - [Multi-table catalog](docs/catalog.md)
+- [Secondary-index sidecar](docs/indexes.md)
 - [MongoDB query model and txBASE query behavior](docs/query-model.md)
 - [Firebase data-model and synchronization lessons](docs/firebase-model.md)
 - [SQLite testing and quality model](docs/testing-quality.md)
@@ -207,7 +221,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add secondary indexes, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
+Later phases may add automatic secondary-index maintenance and planner use, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

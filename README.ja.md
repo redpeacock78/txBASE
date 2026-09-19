@@ -81,6 +81,9 @@ txbase schema path/to/users.dbf
 txbase verify path/to/users.dbf
 txbase catalog path/to/database
 txbase verify-catalog path/to/database
+txbase index build path/to/users.dbf NAME AGE
+txbase index verify path/to/users.dbf
+txbase index rebuild path/to/users.dbf
 txbase pack path/to/users.dbf
 txbase recall path/to/users.dbf 2
 ```
@@ -92,6 +95,12 @@ txbase recall path/to/users.dbf 2
 `catalog`はdirectory直下のDBF tableを発見し、各tableのschemaを表示します。
 
 `verify-catalog`は発見したすべてのtableをverifyします。
+
+`index build`はscalar keyのexternal sidecarを作成します。
+
+`index verify`はDBFまたはmemo sidecarが変更されたindexをstaleとして拒否します。
+
+`index rebuild`はtable mutation後にindex entryを再生成します。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピーします。
 
@@ -125,6 +134,7 @@ cargo test --all-targets --all-features
 ```text
 src/dbf/            DBF parser、codec、memo sidecar、maintenance、mutation、WAL、test
 src/catalog.rs      directory直下のDBF発見、table lookup、catalog verify
+src/index.rs        scalar keyのexternal index sidecar lifecycle
 src/query.rs        JSON queryの実行とvalidation
 src/query_path.rs   dotted pathとprojectionのhelper
 src/server.rs       HTTP routing、QUERY validation、DBF mutation
@@ -142,6 +152,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 - [DBFとdBASE compatibility](docs/dbf-compatibility.md)
 - [Multi-table catalog](docs/catalog.md)
+- [Secondary-index sidecar](docs/indexes.md)
 - [MongoDB query model](docs/query-model.md)
 - [Firebase data model](docs/firebase-model.md)
 - [SQLite testingとquality](docs/testing-quality.md)
@@ -153,7 +164,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 当面はDBF、memo、WAL、query、HTTPのcontractをfixtureとfailure testで固めます。
 
-secondary index、join、aggregation、cursor、multi-record transaction、CJK encoding、XBFはroadmapで検討します。
+secondary indexの自動更新とquery planner、join、aggregation、cursor、multi-record transaction、CJK encoding、XBFはroadmapで検討します。
 
 ## License
 

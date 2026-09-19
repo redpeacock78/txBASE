@@ -1,5 +1,6 @@
 pub mod catalog;
 pub mod dbf;
+pub mod index;
 pub mod query;
 pub mod server;
 pub mod storage;

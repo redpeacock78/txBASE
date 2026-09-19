@@ -2,7 +2,13 @@ use std::env;
 use std::error::Error;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use txbase::{catalog::Catalog, dbf::DbfTable, dbf::copy_table_files, server};
+use txbase::{
+    catalog::Catalog,
+    dbf::DbfTable,
+    dbf::copy_table_files,
+    index::{IndexDefinition, IndexFile},
+    server,
+};
 
 fn main() {
     if let Err(error) = run() {
@@ -69,6 +75,49 @@ fn run() -> Result<(), Box<dyn Error>> {
             println!("{}", serde_json::json!({"valid": true}));
         } else {
             println!("{}", serde_json::to_string_pretty(&catalog.schema_json()?)?);
+        }
+        return Ok(());
+    }
+
+    if first == "index" {
+        let operation = args
+            .next()
+            .ok_or_else(|| "index requires build, verify, or rebuild".to_owned())?;
+        let path = PathBuf::from(
+            args.next()
+                .ok_or_else(|| format!("index {operation} requires a DBF path"))?,
+        );
+        match operation.as_str() {
+            "build" => {
+                let definitions = args.map(IndexDefinition::for_field).collect::<Vec<_>>();
+                if definitions.is_empty() {
+                    return Err("index build requires at least one field".into());
+                }
+                let index = IndexFile::build(&path, definitions)?;
+                index.save(&path)?;
+                println!("{}", serde_json::to_string_pretty(&index.schema_json())?);
+            }
+            "verify" => {
+                if let Some(extra) = args.next() {
+                    return Err(format!("unexpected argument: {extra}").into());
+                }
+                let index = IndexFile::load(&path)?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "valid": true,
+                        "schema": index.schema_json(),
+                    }))?
+                );
+            }
+            "rebuild" => {
+                if let Some(extra) = args.next() {
+                    return Err(format!("unexpected argument: {extra}").into());
+                }
+                let index = IndexFile::rebuild(&path)?;
+                println!("{}", serde_json::to_string_pretty(&index.schema_json())?);
+            }
+            _ => return Err(format!("unknown index operation: {operation}").into()),
         }
         return Ok(());
     }
@@ -149,6 +198,6 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage:\n  txbase FILE\n  txbase schema FILE\n  txbase verify FILE\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase pack FILE\n  txbase recall FILE RECORD\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. Schema, catalog, and verification inspect DBF files. Backup and restore copy a DBF with its sibling memo sidecar. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
+        "Usage:\n  txbase FILE\n  txbase schema FILE\n  txbase verify FILE\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase index build FILE FIELD...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE\n  txbase recall FILE RECORD\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. Schema, catalog, verification, and index commands inspect DBF files. Backup and restore copy a DBF with its sibling memo sidecar. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
     );
 }

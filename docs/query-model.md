@@ -99,9 +99,11 @@ The [MongoDB query optimization guide](https://www.mongodb.com/docs/manual/core/
 
 It also warns that low-selectivity operators such as `$ne` and `$nin` often do not benefit from an index in the same way as selective equality predicates.
 
-txBASE currently performs a record scan and has no secondary index.
+txBASE currently uses the record scan as the query executor reference path.
 
-Adding an index is therefore not just a parser change.
+The repository now has a rebuildable external scalar-key sidecar in [`docs/indexes.md`](indexes.md), but the query executor does not consume it automatically.
+
+Connecting an index to query execution is therefore not just a parser change.
 
 It needs a key encoding, null and missing-field rules, duplicate ordering, update maintenance, recovery records, stale-index detection, and a planner policy.
 
