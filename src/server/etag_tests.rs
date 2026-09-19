@@ -45,6 +45,34 @@ fn patch_request(tag: &str) -> Request {
         .into()
 }
 
+fn post_request(tag: &str) -> Request {
+    TestRequest::new()
+        .with_method(Method::Post)
+        .with_path("/records")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-Match", tag))
+        .with_body(r#"{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}"#)
+        .into()
+}
+
+fn put_request(tag: &str) -> Request {
+    TestRequest::new()
+        .with_method(Method::Put)
+        .with_path("/records/3")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-Match", tag))
+        .with_body(r#"{"ID":3,"NAME":"Caroline","AGE":43,"ACTIVE":true}"#)
+        .into()
+}
+
+fn delete_request(tag: &str) -> Request {
+    TestRequest::new()
+        .with_method(Method::Delete)
+        .with_path("/records/3")
+        .with_header(header("If-Match", tag))
+        .into()
+}
+
 fn transaction_request(tag: &str) -> Request {
     TestRequest::new()
         .with_method(Method::Post)
@@ -87,6 +115,36 @@ fn mutation_etag_prevents_lost_update() {
     assert_eq!(response.status_code(), StatusCode(200));
     assert_ne!(header_value(&response, "ETag"), current);
     assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
+
+    cleanup(&path);
+}
+
+#[test]
+fn post_put_and_delete_honor_current_etag() {
+    let path = test_path("all-mutations");
+    let mut table = prepare(&path);
+    let request = get_request("/records", None);
+    let current = header_value(&get_response(&request, "/records", &table), "ETag");
+
+    let mut post = post_request(&current);
+    let response = post_response(&mut post, "/records", &mut table, &path);
+    assert_eq!(response.status_code(), StatusCode(201));
+    let current = header_value(&response, "ETag");
+
+    let mut put = put_request(&current);
+    let response = update_response(&mut put, "/records/3", &mut table, &path, true);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let current = header_value(&response, "ETag");
+
+    let stale_delete = delete_request("\"stale\"");
+    let response = delete_response(&stale_delete, "/records/3", &mut table, &path);
+    assert_eq!(response.status_code(), StatusCode(412));
+    assert!(table.active_record(3).is_some());
+
+    let delete = delete_request(&current);
+    let response = delete_response(&delete, "/records/3", &mut table, &path);
+    assert_eq!(response.status_code(), StatusCode(204));
+    assert!(table.active_record(3).is_none());
 
     cleanup(&path);
 }
