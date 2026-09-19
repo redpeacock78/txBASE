@@ -3,7 +3,10 @@ use crate::index::{IndexDefinition, IndexFile};
 use crate::xbase::{OperationIr, OperationMethod};
 use std::fs;
 use std::io::Read;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tiny_http::{Method, StatusCode, TestRequest};
+
+static NEXT_CATALOG_ID: AtomicUsize = AtomicUsize::new(0);
 
 fn fixture() -> Vec<u8> {
     include_str!("../../tests/fixtures/users.dbf.hex")
@@ -13,7 +16,9 @@ fn fixture() -> Vec<u8> {
 }
 
 fn temporary_catalog() -> std::path::PathBuf {
-    let path = std::env::temp_dir().join(format!("txbase-server-catalog-{}", std::process::id()));
+    let id = NEXT_CATALOG_ID.fetch_add(1, Ordering::Relaxed);
+    let path =
+        std::env::temp_dir().join(format!("txbase-server-catalog-{}-{id}", std::process::id()));
     let _ = fs::remove_dir_all(&path);
     fs::create_dir(&path).unwrap();
     path
