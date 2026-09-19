@@ -8,6 +8,7 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
 mod aggregation;
+mod aggregation_plan;
 pub mod join;
 mod ordering;
 mod pagination;
