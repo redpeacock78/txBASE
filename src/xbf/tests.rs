@@ -138,6 +138,85 @@ fn converts_a_dbf_fixture_to_xbf_without_dropping_records() {
 }
 
 #[test]
+fn exports_a_representable_xbf_table_to_dbf() {
+    let table = XbfTable {
+        generation: 3,
+        fields: vec![
+            XbfField {
+                name: "ID".into(),
+                ty: XbfType::Signed64,
+                nullable: false,
+                primary_key: false,
+                unique: false,
+            },
+            XbfField {
+                name: "NAME".into(),
+                ty: XbfType::String,
+                nullable: false,
+                primary_key: false,
+                unique: false,
+            },
+            XbfField {
+                name: "ACTIVE".into(),
+                ty: XbfType::Boolean,
+                nullable: false,
+                primary_key: false,
+                unique: false,
+            },
+        ],
+        records: vec![
+            XbfRecord {
+                deleted: false,
+                values: vec![
+                    XbfValue::Signed64(1),
+                    XbfValue::String("Alice".into()),
+                    XbfValue::Boolean(true),
+                ],
+            },
+            XbfRecord {
+                deleted: true,
+                values: vec![
+                    XbfValue::Signed64(2),
+                    XbfValue::String("Bob".into()),
+                    XbfValue::Boolean(false),
+                ],
+            },
+        ],
+    };
+
+    let dbf = super::to_dbf(&table).unwrap();
+    let round_trip = crate::dbf::DbfTable::from_bytes(&dbf.to_bytes()).unwrap();
+
+    assert_eq!(round_trip.records().len(), 2);
+    assert_eq!(
+        round_trip.records()[0].values["NAME"],
+        serde_json::json!("Alice")
+    );
+    assert!(!round_trip.records()[0].deleted);
+    assert!(round_trip.records()[1].deleted);
+}
+
+#[test]
+fn rejects_nonrepresentable_xbf_dbf_export_types() {
+    let table = XbfTable {
+        generation: 0,
+        fields: vec![XbfField {
+            name: "DOC".into(),
+            ty: XbfType::Json,
+            nullable: false,
+            primary_key: false,
+            unique: false,
+        }],
+        records: vec![XbfRecord {
+            deleted: false,
+            values: vec![XbfValue::Json(serde_json::json!({"ok": true}))],
+        }],
+    };
+
+    assert!(super::to_dbf(&table).is_err());
+}
+
+#[test]
 fn round_trips_a_fixture_with_every_v1_value_type() {
     let table = fixture();
     let bytes = encode(&table).unwrap();

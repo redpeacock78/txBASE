@@ -261,7 +261,7 @@ fn invalid(field: &FieldDescriptor, message: &str) -> XbfError {
     XbfError::Invalid(format!("DBF field {}: {message}", field.name))
 }
 
-fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+pub(super) fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     let adjusted_year = year - i64::from(month <= 2);
     let era = if adjusted_year >= 0 {
         adjusted_year
@@ -275,7 +275,7 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     era * 146_097 + day_of_era - 719_468
 }
 
-fn civil_from_days(days: i64) -> (i64, i64, i64) {
+pub(super) fn civil_from_days(days: i64) -> (i64, i64, i64) {
     let shifted = days + 719_468;
     let era = if shifted >= 0 {
         shifted

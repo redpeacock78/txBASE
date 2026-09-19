@@ -1,6 +1,7 @@
 mod checksum;
 mod codec;
 mod conversion;
+mod export;
 mod persistence;
 mod schema;
 mod values;
@@ -162,12 +163,17 @@ impl From<std::io::Error> for XbfError {
 
 pub use codec::{decode, decode_with_limits, encode, encode_with_limits};
 pub use conversion::from_dbf;
+pub use export::to_dbf;
 pub use persistence::{read_path, read_path_with_limits, write_path, write_path_with_limits};
 pub use wal::{recover_path, save_with_wal};
 
 impl XbfTable {
     pub fn from_dbf(table: &crate::dbf::DbfTable) -> Result<Self, XbfError> {
         conversion::from_dbf(table)
+    }
+
+    pub fn to_dbf(&self) -> Result<crate::dbf::DbfTable, XbfError> {
+        export::to_dbf(self)
     }
 
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self, XbfError> {

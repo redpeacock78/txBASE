@@ -12,7 +12,8 @@ The codec validates the draft header, section checksums, schema, directory, type
 records, constraints, and configured size limits.
 The full-snapshot `.xwl` path records base and target generations and rejects a
 generation mismatch during recovery.
-XBF-to-DBF export remains outside the supported-format boundary.
+The bounded `to_dbf` helper exports representable tables to an in-memory DBF
+table; it does not claim full DBF schema or type compatibility.
 
 The codec is intentionally kept in the format layer. It does not add a second
 query or HTTP implementation.
@@ -246,8 +247,17 @@ This helper does not write an XBF file by itself; pass its result to
 
 Legacy bytes are decoded before becoming XBF UTF-8 text.
 
-`XBF -> DBF` remains future work and must first report every value or schema
-property that cannot be represented by the selected DBF target.
+The current `XBF -> DBF` boundary supports an in-memory classic DBF table with
+`C`, binary `C`, `N`, `L`, `D`, and Visual FoxPro `T` fields.
+It rejects UUID and JSON values, non-ASCII or over-wide field names, values over
+the DBF field limits, unsigned integers above the exact numeric range, primary
+or unique constraints, and NULL text or binary values.
+The returned `DbfTable` can then use its existing `save_to` or `save_with_wal`
+path.
+
+The export does not persist XBF generation, primary/unique metadata, or a
+separate representability report; broader schema-preserving export remains
+future work.
 
 Examples include variable-length UTF-8 text, timestamps, UUIDs, unsupported nullability, and characters outside the selected code page.
 
@@ -271,6 +281,6 @@ advertised as a complete supported format, the repository still needs:
 - Malformed header, section, checksum, directory, UTF-8, and payload corpora.
 - Round-trip tests for DBF to XBF and representability failures for XBF to DBF.
 - Crash and recovery tests for the snapshot and `.xwl` generation boundary.
-- XBF-to-DBF conversion and representability reporting for the reverse direction.
+- Broader XBF-to-DBF representability reporting and schema-preserving export.
 
 Until those gates exist, XBF remains a draft and is not advertised as a supported format.

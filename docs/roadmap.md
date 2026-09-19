@@ -39,9 +39,9 @@ The repository currently provides:
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus EUC-JP and GB18030, with normalized schema output.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
-- A bounded XBF v1 codec, DBF-to-XBF conversion helper, durable snapshot path, and generation-checked full-snapshot WAL recovery with explicit size limits and section checksums; XBF-to-DBF export remains future.
+- A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory XBF-to-DBF export, durable snapshot path, and generation-checked full-snapshot WAL recovery with explicit size limits and section checksums; schema-preserving export remains future.
 
-The baseline intentionally does not include a full cost-based index model, streaming, multiple or planned joins, cross-table transactions, multi-stage aggregation, composite or cross-table constraints, XBF-to-DBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, streaming, multiple or planned joins, cross-table transactions, multi-stage aggregation, composite or cross-table constraints, schema-preserving XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -153,7 +153,7 @@ An override must be visible in schema or command output so a reader can reproduc
 
 XBF is a separately versioned native format, not a silent DBF extension.
 
-The v1 wire contract is drafted in [XBF v1 format draft](xbf.md). A bounded codec, DBF-to-XBF conversion helper, durable snapshot path, and generation-checked full-snapshot WAL recovery exist for that draft. XBF-to-DBF export is not a current supported feature.
+The v1 wire contract is drafted in [XBF v1 format draft](xbf.md). A bounded codec, DBF-to-XBF conversion helper, bounded in-memory XBF-to-DBF export, durable snapshot path, and generation-checked full-snapshot WAL recovery exist for that draft. Schema-preserving export is not a current supported feature.
 
 The proposed magic is `TXBF`.
 

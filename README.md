@@ -285,7 +285,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming, planned and multiple joins, multi-stage aggregation, cross-table transactions, additional CJK encodings, and XBF-to-DBF export.
+Later phases may add a full cost-based index choice, streaming, planned and multiple joins, multi-stage aggregation, cross-table transactions, additional CJK encodings, and schema-preserving XBF export.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

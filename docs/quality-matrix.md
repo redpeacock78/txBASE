@@ -41,6 +41,7 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 | XBF-002 | The XBF snapshot path encodes before writing, syncs the snapshot bytes, replaces the target, and syncs the parent directory before returning. | `src/xbf/persistence.rs` | `writes_and_reads_a_durable_snapshot_path` | Boundary |
 | XBF-003 | The full-snapshot XBF WAL names its base and target generations, applies a pending snapshot idempotently, and rejects a different current generation. | `src/xbf/wal.rs` | `recovers_a_generation_checked_full_snapshot_wal`; `rejects_a_generation_mismatched_xbf_wal` | Boundary |
 | XBF-004 | Loaded DBF records convert to bounded XBF values without dropping physical order, deletion flags, or DBF-distinguishable nulls; unsupported values fail explicitly. | `src/xbf/conversion.rs`; `src/xbf/tests.rs` | `converts_a_dbf_fixture_to_xbf_without_dropping_records` | Boundary |
+| XBF-005 | A representable XBF table exports to an in-memory DBF table with deletion state preserved; unsupported types and unrepresentable constraints or values fail explicitly. | `src/xbf/export.rs`; `src/xbf/tests.rs` | `exports_a_representable_xbf_table_to_dbf`; `rejects_nonrepresentable_xbf_dbf_export_types` | Boundary |
 | IDX-001 | External scalar and compound indexes are rebuildable, freshness-checked, and refreshed after supported mutations. | `src/index.rs`; `src/index/`; `src/index_tests.rs` | `mutation_refreshes_the_sidecar_after_save`; `direct_dbf_change_leaves_the_sidecar_stale_until_rebuild` | Current |
 | IDX-002 | Index candidates preserve table-scan results for equality, range, ordered-prefix, compound, and equality-intersection plans. | `src/query/planner.rs`; `src/query/planner_tests.rs`; `src/query/planner_compound_tests.rs` | Planner tests named `uses_*` and `orders_*` | Current |
 | QRY-001 | Query parsing validates the documented filter, path, projection, sort, and update boundaries without claiming MongoDB compatibility. | `src/query/validation.rs`; `src/query/tests.rs` | `parses_query_shape`; `rejects_unknown_query_fields`; `rejects_unknown_and_mixed_projection_operators` | Current |
@@ -60,7 +61,7 @@ The following topics have documentation or design notes but do not have a curren
 - a full cost-based planner, multiple or planned joins, and multi-stage aggregation;
 - cross-table transactions, transaction IDs, and MVCC visibility;
 - strict Shift_JIS versus CP932 selection, collation, and broader external fixtures;
-- XBF-to-DBF conversion and representability reporting, object-storage manifests, WASM hosting, and distributed replication.
+- Schema-preserving XBF-to-DBF representability reporting, object-storage manifests, WASM hosting, and distributed replication.
 
 Before one of these becomes current, add its public contract, malformed-input behavior, crash or retry behavior, fixture or deterministic test, and a row here.
 
