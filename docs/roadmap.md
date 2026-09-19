@@ -108,9 +108,9 @@ The current record scan remains the reference execution path while the query mod
 - Full range, histogram-based, and mixed-direction compound cost planning.
 
 The first join slice is local and bounded.
-It implements one equality condition and uses an in-memory right-side map.
-Future join work must define planner selection, streaming, multiple conditions, and null or missing
-field semantics before adding broader query surfaces.
+It implements one or more equality conditions and uses an in-memory right-side map.
+Future join work must define planner selection, streaming, multiple joins, and broader null or
+missing field semantics before adding broader query surfaces.
 
 Distributed joins and distributed transactions remain later features.
 

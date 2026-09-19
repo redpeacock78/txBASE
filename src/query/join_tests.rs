@@ -105,8 +105,8 @@ fn left_join_keeps_unmatched_left_record_and_inner_join_drops_it() {
 }
 
 #[test]
-fn join_rejects_more_than_one_condition() {
-    let error = parse(
+fn join_accepts_multiple_equality_conditions() {
+    let request = parse(
         br#"{
           "from": "users",
           "join": {
@@ -119,6 +119,29 @@ fn join_rejects_more_than_one_condition() {
           }
         }"#,
     )
+    .unwrap();
+    let root = catalog_with_posts();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let rows = execute(&catalog, &request).unwrap();
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["users.NAME"], "Alice");
+    assert_eq!(rows[0]["posts.NAME"], "Alice");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn join_rejects_an_empty_condition_set() {
+    let error = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "inner",
+            "table": "posts",
+            "on": {}
+          }
+        }"#,
+    )
     .unwrap_err();
-    assert!(matches!(error, JoinError::Invalid(message) if message.contains("exactly one")));
+    assert!(matches!(error, JoinError::Invalid(message) if message.contains("at least one")));
 }

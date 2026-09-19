@@ -121,8 +121,8 @@ is not accepted by this first txBASE slice.
 ## 3. Bounded local join
 
 The library exposes one bounded local join through `txbase::query::join`.
-It accepts the relation shape from the roadmap and supports one equality condition between two
-catalog tables:
+It accepts the relation shape from the roadmap and supports one or more equality conditions
+between two catalog tables:
 
 ```json
 {
@@ -159,7 +159,7 @@ larger than 100,000 rows.
 This is a bounded nested execution boundary, not a cost-based planner or a streaming executor.
 The HTTP server does not expose cross-table joins yet.
 The join accepts the existing filter and projection rules, but not sort, pagination, aggregation,
-multiple join conditions, self-join aliases, or cross-table transactions.
+multiple joins, self-join aliases, or cross-table transactions.
 
 MongoDB's [`$lookup` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/)
 is the reference vocabulary.

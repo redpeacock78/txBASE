@@ -101,13 +101,13 @@ pub fn parse(body: &[u8]) -> Result<JoinRequest, JoinError> {
 
 pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, JoinError> {
     validate(request)?;
-    let (local_field, foreign_field) = join_fields(request)?;
+    let (local_fields, foreign_fields) = join_fields(request)?;
     let left = catalog.open_table(&request.from)?;
     let right = catalog.open_table(&request.join.table)?;
 
     let mut right_by_key = BTreeMap::<String, Vec<&DbfRecord>>::new();
     for record in right.active_records() {
-        let Some(key) = encoded_key(&record.values, &foreign_field)? else {
+        let Some(key) = encoded_key(&record.values, &foreign_fields)? else {
             continue;
         };
         right_by_key.entry(key).or_default().push(record);
@@ -116,7 +116,7 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
     let mut output = Vec::new();
     for left_record in left.active_records() {
         let matches =
-            encoded_key(&left_record.values, &local_field)?.and_then(|key| right_by_key.get(&key));
+            encoded_key(&left_record.values, &local_fields)?.and_then(|key| right_by_key.get(&key));
         let had_matches = matches.is_some_and(|records| !records.is_empty());
         if let Some(matches) = matches {
             for right_record in matches {
@@ -146,20 +146,23 @@ fn validate(request: &JoinRequest) -> Result<(), JoinError> {
     validate_projection(&request.projection)
 }
 
-fn join_fields(request: &JoinRequest) -> Result<(String, String), JoinError> {
-    if request.join.on.len() != 1 {
+fn join_fields(request: &JoinRequest) -> Result<(Vec<String>, Vec<String>), JoinError> {
+    if request.join.on.is_empty() {
         return Err(JoinError::Invalid(
-            "join.on requires exactly one equality condition".into(),
+            "join.on requires at least one equality condition".into(),
         ));
     }
-    let (local, condition) = request.join.on.iter().next().expect("one join condition");
-    let local_field = qualified_field(local, &request.from, "join.on field")?;
-    let foreign_field = qualified_field(
-        &condition.equality.field,
-        &request.join.table,
-        "join.on.$eq.$field",
-    )?;
-    Ok((local_field, foreign_field))
+    let mut local_fields = Vec::with_capacity(request.join.on.len());
+    let mut foreign_fields = Vec::with_capacity(request.join.on.len());
+    for (local, condition) in &request.join.on {
+        local_fields.push(qualified_field(local, &request.from, "join.on field")?);
+        foreign_fields.push(qualified_field(
+            &condition.equality.field,
+            &request.join.table,
+            "join.on.$eq.$field",
+        )?);
+    }
+    Ok((local_fields, foreign_fields))
 }
 
 fn qualified_field(value: &str, table: &str, path: &str) -> Result<String, JoinError> {
@@ -191,14 +194,21 @@ fn validate_projection(projection: &BTreeMap<String, i8>) -> Result<(), JoinErro
     Ok(())
 }
 
-fn encoded_key(values: &Map<String, Value>, field: &str) -> Result<Option<String>, JoinError> {
-    let Some(value) = field_value(values, field) else {
-        return Ok(None);
-    };
-    if value.is_null() {
-        return Ok(None);
+fn encoded_key(
+    values: &Map<String, Value>,
+    fields: &[String],
+) -> Result<Option<String>, JoinError> {
+    let mut key = Vec::with_capacity(fields.len());
+    for field in fields {
+        let Some(value) = field_value(values, field) else {
+            return Ok(None);
+        };
+        if value.is_null() {
+            return Ok(None);
+        }
+        key.push(value);
     }
-    serde_json::to_string(&value)
+    serde_json::to_string(&key)
         .map(Some)
         .map_err(|error| JoinError::Invalid(format!("join key encoding failed: {error}")))
 }

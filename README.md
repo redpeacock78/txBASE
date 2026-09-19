@@ -77,7 +77,7 @@ or resumable result boundary; backpressure and stable long-lived snapshot rules 
 
 The library also exposes one bounded local `inner` or `left` equality join over two catalog tables.
 It accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,
-and is capped at 100,000 output rows.
+supports multiple equality conditions, and is capped at 100,000 output rows.
 This join is not exposed by the single-table HTTP server yet.
 
 `QUERY` follows the HTTP QUERY boundary defined by [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html), including `Accept-Query: "application/json"`.
