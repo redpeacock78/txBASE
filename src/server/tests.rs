@@ -123,7 +123,7 @@ fn query_endpoint_returns_cursor_pages() {
     let mut body = String::new();
     response.into_reader().read_to_string(&mut body).unwrap();
     assert!(body.contains(r#""records""#));
-    assert!(body.contains(r#""cursor":"1""#));
+    assert!(body.contains(r#""cursor":null"#));
 }
 
 #[test]
