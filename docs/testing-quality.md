@@ -114,6 +114,8 @@ A delta with the wrong base must be rejected.
 
 `src/query/tests.rs::uses_a_valid_equality_index_and_preserves_scan_results` covers single-index equality, equality intersection, empty intersections, range, ordered traversal, and table-scan equivalence.
 
+`src/query/tests.rs::orders_equality_intersection_by_candidate_cardinality` covers the local smallest-candidate-first heuristic and compares its result with the table scan.
+
 ### Compatibility tests
 
 Fixtures should come from independent readers or writers when possible.

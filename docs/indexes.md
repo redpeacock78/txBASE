@@ -116,13 +116,15 @@ It depends on the file system honoring the file and directory sync operations us
 
 ## Current boundary
 
-The sidecar currently supports build, exact equality lookup, range candidate lookup, single-field ordered traversal, equality candidate intersection across multiple single-field indexes, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
+The sidecar currently supports build, exact equality lookup, range candidate lookup, single-field ordered traversal, equality candidate intersection across multiple single-field indexes, candidate-count ordering for that intersection, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
 Direct DBF edits, unsupported sidecar definitions, and refresh I/O failures leave the sidecar stale; `index rebuild` is the explicit repair path.
 
 The path-aware query executor uses equality, equality intersection, range, or single-field ordered sidecar traversal when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
+
+For equality intersection, it uses the exact candidate-list length as a bounded local ordering heuristic; it does not maintain collection statistics or estimate selectivity.
 
 The path-less `QueryExecutor` implementation remains a table-scan reference path.
 

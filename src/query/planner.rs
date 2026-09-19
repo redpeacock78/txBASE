@@ -48,6 +48,8 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
         };
         equality_indexes.push((name, field.clone(), records));
     }
+    // ponytail: order by exact candidate count; add statistics only with a real cost model.
+    equality_indexes.sort_by_key(|(_, _, records)| records.len());
     if let Some((name, field, first_records)) = equality_indexes.first() {
         let mut records = first_records.clone();
         for (_, _, candidates) in equality_indexes.iter().skip(1) {

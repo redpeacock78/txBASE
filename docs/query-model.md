@@ -121,6 +121,10 @@ The current planner considers direct top-level equality, single-bound-per-side r
 
 Multiple valid single-field equality indexes may be intersected by record number before the normal filter pipeline.
 
+The planner processes those candidate lists from the smallest exact list to the largest, which limits repeated membership checks when predicates have different cardinalities.
+
+This is a local candidate-ordering heuristic, not MongoDB-style statistics, histograms, or a cost-based planner.
+
 It preserves the table scan for multi-key sort, logical, and nested-path planning.
 
 MongoDB's current guidance recommends a compound index for queries that repeatedly search multiple fields.
@@ -129,7 +133,7 @@ The txBASE intersection is a local candidate-reduction feature and does not clai
 
 MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a future multi-key planner must define index field order instead of treating every index as an interchangeable lookup table.
 
-txBASE currently makes no selectivity estimate and does not build compound indexes.
+txBASE currently has no collection statistics or selectivity estimate and does not build compound indexes.
 
 The equality intersection is a bounded candidate prefilter, not a covered query or a claim of end-to-end speedup.
 

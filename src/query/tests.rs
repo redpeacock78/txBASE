@@ -375,3 +375,55 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
     let _ = fs::remove_file(lock);
     let _ = fs::remove_file(wal);
 }
+
+#[test]
+fn orders_equality_intersection_by_candidate_cardinality() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-query-planner-selectivity-{}.dbf",
+        std::process::id()
+    ));
+    let sidecar = crate::index::sidecar_path(&path);
+    let lock = path.with_extension("txbase.lock");
+    let wal = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&sidecar);
+    let _ = fs::remove_file(&lock);
+    let _ = fs::remove_file(&wal);
+
+    let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    bytes[176..178].copy_from_slice(b"07");
+    bytes[179] = b' ';
+    let table = DbfTable::from_bytes(&bytes).unwrap();
+    fs::write(&path, bytes).unwrap();
+    IndexFile::build(
+        &path,
+        vec![
+            IndexDefinition::named("by_name", "NAME"),
+            IndexDefinition::named("by_age", "AGE"),
+        ],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let request = parse(br#"{"filter":{"AGE":7,"NAME":"Alice"}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &request).unwrap(),
+        QueryPlan::IndexIntersection {
+            names: vec!["by_name".into(), "by_age".into()],
+            fields: vec!["NAME".into(), "AGE".into()],
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &request).unwrap(),
+        execute_query(&table, &request).unwrap()
+    );
+
+    fs::remove_file(&sidecar).unwrap();
+    fs::remove_file(path).unwrap();
+    let _ = fs::remove_file(lock);
+    let _ = fs::remove_file(wal);
+}

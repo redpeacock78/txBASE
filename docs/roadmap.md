@@ -62,9 +62,9 @@ It provides table discovery, named table loading, schema output, and per-table v
 
 It does not yet provide shared locks, relationships, cross-table index coordination, or cross-table transactions.
 
-The index sidecar foundation is implemented for scalar keys, exact equality and range candidate lookup, single-field ordered traversal, equality candidate intersection, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
+The index sidecar foundation is implemented for scalar keys, exact equality and range candidate lookup, single-field ordered traversal, equality candidate intersection ordered by exact candidate cardinality, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support multi-key ordered planning, selectivity-aware index choice, compound indexes, or cross-table atomic commits.
+It does not yet support multi-key ordered planning, collection-statistics-based selectivity choice, compound indexes, or cross-table atomic commits.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
