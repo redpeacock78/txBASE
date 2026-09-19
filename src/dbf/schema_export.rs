@@ -32,7 +32,9 @@ pub(crate) fn commit_schema_export(
     write_file(&stage_path(&directory, SCHEMA_TARGET), schema_bytes)?;
     let flags = capture_bases(path, &directory)?;
     write_journal(path, flags)?;
-    recover_schema_export_locked(path).map(|_| ())
+    recover_schema_export_locked(path)?;
+    let _ = crate::index::refresh_if_present(path, table);
+    Ok(())
 }
 
 pub(super) fn recover_schema_export_locked(path: &Path) -> Result<bool, DbfError> {
