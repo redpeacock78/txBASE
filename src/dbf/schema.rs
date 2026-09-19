@@ -7,13 +7,27 @@ impl DbfTable {
     }
 
     pub fn schema_json(&self) -> Value {
+        let declared_encoding = encoding_name(self.header.language_driver);
+        let effective_encoding = self.encoding_override.as_deref().or(declared_encoding);
+        let encoding_source = if self.encoding_override.is_some() {
+            "explicit-override"
+        } else if declared_encoding.is_some() {
+            "language-driver"
+        } else {
+            "fallback"
+        };
         json!({
             "format": "dbf",
             "version": self.header.version,
             "last_update": self.header.last_update,
             "language_driver": self.header.language_driver,
-            "encoding": encoding_name(self.header.language_driver),
+            "encoding": declared_encoding,
             "encoding_override": self.encoding_override,
+            "encoding_metadata": {
+                "declared": declared_encoding,
+                "effective": effective_encoding,
+                "source": encoding_source,
+            },
             "schema_metadata": self
                 .schema
                 .as_ref()

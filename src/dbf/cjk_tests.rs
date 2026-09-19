@@ -19,6 +19,18 @@ fn decodes_and_encodes_declared_cjk_drivers() {
         bytes[29] = language_driver;
         let mut table = DbfTable::from_bytes(&bytes).unwrap();
         assert!(table.schema_json()["encoding"].is_string());
+        assert_eq!(
+            table.schema_json()["encoding_metadata"]["declared"],
+            table.schema_json()["encoding"]
+        );
+        assert_eq!(
+            table.schema_json()["encoding_metadata"]["effective"],
+            table.schema_json()["encoding"]
+        );
+        assert_eq!(
+            table.schema_json()["encoding_metadata"]["source"],
+            "language-driver"
+        );
         table
             .patch_record(
                 1,
@@ -44,6 +56,14 @@ fn explicit_euc_jp_and_gb18030_overrides_round_trip() {
     for (canonical, value) in [("EUC-JP", "日本"), ("GB18030", "中文")] {
         let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some(canonical)).unwrap();
         assert_eq!(table.schema_json()["encoding_override"], canonical);
+        assert_eq!(
+            table.schema_json()["encoding_metadata"],
+            serde_json::json!({
+                "declared": null,
+                "effective": canonical,
+                "source": "explicit-override",
+            })
+        );
         table
             .patch_record(
                 1,

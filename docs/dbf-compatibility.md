@@ -104,6 +104,10 @@ The current CJK slice also decodes and encodes the Visual FoxPro driver IDs docu
 | `0x78` | Traditional Chinese Windows | Big5/CP950 |
 
 The `encoding` member in `schema` output identifies these four codecs.
+The `encoding_metadata` member exposes `declared`, `effective`, and `source` values so a reader
+can reproduce the interpretation.
+`source` is `language-driver`, `explicit-override`, or `fallback`; sidecar and invocation
+overrides intentionally share the `explicit-override` value.
 The codec treats malformed byte sequences as U+FFFD on read.
 Writes reject unmappable characters before DBF bytes are changed.
 The existing fixed-field width check remains a byte-width check, so a multibyte value that does
@@ -113,6 +117,7 @@ An optional `encoding` property in the `*.txschema.json` sidecar can explicitly 
 four declared codecs or the explicit-only `EUC-JP` and `GB18030` codecs using
 `windows-31j`/`cp932`, `gbk`/`cp936`, `euc-kr`/`cp949`, `big5`/`cp950`, `euc-jp`, or `gb18030`.
 The normalized selection is visible as `encoding_override` in `schema` output.
+It is also visible as the `effective` member of `encoding_metadata`.
 This override is applied before character decoding and encoding; it does not change the DBF header
 language-driver byte.
 

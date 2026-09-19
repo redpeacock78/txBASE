@@ -39,6 +39,9 @@ Accepted labels are `windows-31j` or `cp932`, `gbk` or `cp936`, `euc-kr` or `cp9
 `cp950`, `euc-jp`, and `gb18030`.
 
 txBASE normalizes the label and reports the effective name in `schema` output as `encoding_override`.
+The same effective name is available in `encoding_metadata.effective`.
+That object also reports the DBF declaration and whether interpretation came from the language
+driver, an explicit override, or the existing fallback.
 
 The path-oriented commands also accept `--encoding NAME` for a per-invocation override.
 That value takes precedence over the sidecar value, is used for reads and writes during that

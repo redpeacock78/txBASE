@@ -196,6 +196,10 @@ fn applies_a_supported_encoding_override_to_reads_and_writes() {
 
     let mut table = DbfTable::from_path(&path).unwrap();
     assert_eq!(table.schema_json()["encoding_override"], "GBK/CP936");
+    assert_eq!(
+        table.schema_json()["encoding_metadata"]["source"],
+        "explicit-override"
+    );
     table
         .patch_record(
             1,
@@ -226,6 +230,10 @@ fn applies_a_path_encoding_override_without_persisting_it() {
 
     let mut table = DbfTable::from_path_with_encoding(&path, Some("gbk")).unwrap();
     assert_eq!(table.schema_json()["encoding_override"], "GBK/CP936");
+    assert_eq!(
+        table.schema_json()["encoding_metadata"]["source"],
+        "explicit-override"
+    );
     assert_eq!(
         table.schema_json()["schema_metadata"]["encoding"],
         "Big5/CP950"

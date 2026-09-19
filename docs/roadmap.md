@@ -143,6 +143,7 @@ compatibility document.
 It uses replacement characters for malformed reads and rejects unmappable or over-width writes.
 The sidecar and path-oriented CLI now provide explicit overrides for those four codecs plus EUC-JP
 and GB18030; the latter two do not claim a DBF language-driver mapping.
+Schema output exposes declared and effective names plus the interpretation source.
 Strict Shift_JIS selection, collation, and broader external fixtures remain future work.
 
 An override must be visible in schema or command output so a reader can reproduce the same interpretation.
