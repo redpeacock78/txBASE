@@ -1,3 +1,4 @@
+use super::Collation;
 use crate::dbf::DbfRecord;
 use crate::query_path::field_value;
 use indexmap::IndexMap;
@@ -10,13 +11,23 @@ pub(super) fn compare_records(
     right: &DbfRecord,
     sort: &IndexMap<String, i8>,
 ) -> Ordering {
-    compare_records_from(left, right, sort, 0)
+    compare_records_with_collation(left, right, sort, None)
+}
+
+pub(super) fn compare_records_with_collation(
+    left: &DbfRecord,
+    right: &DbfRecord,
+    sort: &IndexMap<String, i8>,
+    collation: Option<Collation>,
+) -> Ordering {
+    compare_records_from(left, right, sort, 0, collation)
 }
 
 pub(super) fn sort_ordered_prefix(
     records: &mut [&DbfRecord],
     sort: &IndexMap<String, i8>,
     prefix_len: usize,
+    collation: Option<Collation>,
 ) {
     let Some((primary_field, _)) = prefix_len
         .checked_sub(1)
@@ -28,13 +39,14 @@ pub(super) fn sort_ordered_prefix(
     while start < records.len() {
         let mut end = start + 1;
         while end < records.len()
-            && compare_sort_field(records[start], records[end], primary_field).is_eq()
+            && compare_sort_field(records[start], records[end], primary_field, collation).is_eq()
         {
             end += 1;
         }
         if end - start > 1 {
-            records[start..end]
-                .sort_by(|left, right| compare_records_from(left, right, sort, prefix_len));
+            records[start..end].sort_by(|left, right| {
+                compare_records_from(left, right, sort, prefix_len, collation)
+            });
         }
         start = end;
     }
@@ -53,11 +65,13 @@ fn compare_records_from(
     right: &DbfRecord,
     sort: &IndexMap<String, i8>,
     skip: usize,
+    collation: Option<Collation>,
 ) -> Ordering {
     for (field, direction) in sort.iter().skip(skip) {
         let left_value = field_value(&left.values, field);
         let right_value = field_value(&right.values, field);
-        let ordering = compare_for_sort(left_value.as_ref(), right_value.as_ref());
+        let ordering =
+            compare_for_sort_with_collation(left_value.as_ref(), right_value.as_ref(), collation);
         if ordering != Ordering::Equal {
             return if *direction == 1 {
                 ordering
@@ -69,20 +83,35 @@ fn compare_records_from(
     left.number.cmp(&right.number)
 }
 
-fn compare_sort_field(left: &DbfRecord, right: &DbfRecord, field: &str) -> Ordering {
-    compare_for_sort(
+fn compare_sort_field(
+    left: &DbfRecord,
+    right: &DbfRecord,
+    field: &str,
+    collation: Option<Collation>,
+) -> Ordering {
+    compare_for_sort_with_collation(
         field_value(&left.values, field).as_ref(),
         field_value(&right.values, field).as_ref(),
+        collation,
     )
 }
 
 pub(super) fn compare_for_sort(left: Option<&Value>, right: Option<&Value>) -> Ordering {
+    compare_for_sort_with_collation(left, right, None)
+}
+
+pub(super) fn compare_for_sort_with_collation(
+    left: Option<&Value>,
+    right: Option<&Value>,
+    collation: Option<Collation>,
+) -> Ordering {
     match (left, right) {
-        (Some(left), Some(right)) => compare_values(left, right).unwrap_or_else(|| {
-            type_rank(left)
-                .cmp(&type_rank(right))
-                .then_with(|| left.to_string().cmp(&right.to_string()))
-        }),
+        (Some(left), Some(right)) => compare_values_with_collation(left, right, collation)
+            .unwrap_or_else(|| {
+                type_rank(left)
+                    .cmp(&type_rank(right))
+                    .then_with(|| left.to_string().cmp(&right.to_string()))
+            }),
         (None, None) => Ordering::Equal,
         (None, Some(_)) => Ordering::Less,
         (Some(_), None) => Ordering::Greater,
@@ -91,6 +120,21 @@ pub(super) fn compare_for_sort(left: Option<&Value>, right: Option<&Value>) -> O
 
 fn json_text<T: Serialize>(value: &T) -> String {
     serde_json::to_string(value).unwrap_or_default()
+}
+
+fn compare_values_with_collation(
+    left: &Value,
+    right: &Value,
+    collation: Option<Collation>,
+) -> Option<Ordering> {
+    match (left, right) {
+        (Value::String(left), Value::String(right))
+            if matches!(collation, Some(Collation::UnicodeLowercase)) =>
+        {
+            Some(left.to_lowercase().cmp(&right.to_lowercase()))
+        }
+        _ => compare_values(left, right),
+    }
 }
 
 fn type_rank(value: &Value) -> u8 {

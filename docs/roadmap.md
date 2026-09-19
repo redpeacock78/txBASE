@@ -37,6 +37,7 @@ The repository currently provides:
 - A bounded local `inner`, `left`, `semi`, or `anti` equality join plus a bounded `cross` join over two catalog tables with qualified filtering and projection.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
+- A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement.
@@ -77,7 +78,7 @@ It does not yet provide relationships, cross-table index coordination, transacti
 
 The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact equality and range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support a full cost model, collation-aware planning, transaction IDs, or MVCC visibility.
+It does not yet support a full cost model, collation-aware index keys, transaction IDs, or MVCC visibility.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
@@ -162,8 +163,9 @@ mapping.
 Schema output exposes declared and effective names plus the interpretation source.
 Strict Shift_JIS accepts ASCII, half-width Katakana, and JIS X 0208, while CP932 extensions are
 replaced on read or rejected on write. Pinned byte fixtures cover the four declared CJK drivers
-and round-trip their multibyte record values. Collation and broader upstream external fixtures
-remain future work.
+and round-trip their multibyte record values. The query layer now has a bounded
+`unicode-lowercase` sort collation; locale-aware CJK collation and broader upstream external
+fixtures remain future work.
 
 An override must be visible in schema or command output so a reader can reproduce the same interpretation.
 

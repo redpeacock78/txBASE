@@ -118,6 +118,17 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
         execute_query(&table, &sort_request).unwrap()
     );
 
+    let collated_sort_request =
+        parse(br#"{"sort":{"NAME":1},"collation":"unicode-lowercase"}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &collated_sort_request).unwrap(),
+        QueryPlan::TableScan
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &collated_sort_request).unwrap(),
+        execute_query(&table, &collated_sort_request).unwrap()
+    );
+
     fs::remove_file(&sidecar).unwrap();
     assert_eq!(
         explain_query_at(&path, &request).unwrap(),

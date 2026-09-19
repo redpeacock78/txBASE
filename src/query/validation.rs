@@ -4,6 +4,11 @@ use serde_json::{Map, Value};
 pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
     aggregation::validate(request)?;
     pagination::validate(request)?;
+    if request.collation.is_some() && request.sort.is_empty() {
+        return Err(QueryError::Invalid(
+            "collation requires a non-empty sort".into(),
+        ));
+    }
     for (field, direction) in &request.sort {
         if !matches!(direction, -1 | 1) {
             return Err(QueryError::Invalid(format!(

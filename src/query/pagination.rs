@@ -1,4 +1,6 @@
-use super::{QueryError, QueryRequest, matches_filter, ordering::compare_for_sort};
+use super::{
+    Collation, QueryError, QueryRequest, matches_filter, ordering::compare_for_sort_with_collation,
+};
 use crate::dbf::{DbfRecord, DbfTable};
 use crate::query_path::{field_value, project};
 use indexmap::IndexMap;
@@ -15,6 +17,8 @@ struct SortedCursor {
     version: u8,
     record: usize,
     keys: Vec<SortedCursorKey>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    collation: Option<Collation>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -55,7 +59,11 @@ pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
         if request.sort.is_empty() {
             cursor_position(cursor)?;
         } else {
-            validate_sorted_cursor(&parse_sorted_cursor(cursor)?, &request.sort)?;
+            validate_sorted_cursor(
+                &parse_sorted_cursor(cursor)?,
+                &request.sort,
+                request.collation,
+            )?;
         }
     }
     Ok(())
@@ -175,8 +183,10 @@ pub(super) fn apply_sorted<'a>(
         .map(parse_sorted_cursor)
         .transpose()?;
     if let Some(cursor) = cursor.as_ref() {
-        validate_sorted_cursor(cursor, &request.sort)?;
-        records.retain(|record| compare_record_to_cursor(record, cursor, &request.sort).is_gt());
+        validate_sorted_cursor(cursor, &request.sort, request.collation)?;
+        records.retain(|record| {
+            compare_record_to_cursor(record, cursor, &request.sort, request.collation).is_gt()
+        });
     }
     if let Some(limit) = request.limit {
         records.truncate(limit.try_into().unwrap_or(usize::MAX));
@@ -192,7 +202,7 @@ pub(super) fn apply_sorted<'a>(
     let next_cursor = if has_more {
         records
             .last()
-            .map(|record| encode_sorted_cursor(record, &request.sort))
+            .map(|record| encode_sorted_cursor(record, &request.sort, request.collation))
             .transpose()?
     } else {
         None
@@ -208,6 +218,7 @@ fn parse_sorted_cursor(cursor: &str) -> Result<SortedCursor, QueryError> {
 fn validate_sorted_cursor(
     cursor: &SortedCursor,
     sort: &IndexMap<String, i8>,
+    collation: Option<Collation>,
 ) -> Result<(), QueryError> {
     if cursor.version != SORTED_CURSOR_VERSION {
         return Err(QueryError::Invalid(format!(
@@ -218,6 +229,11 @@ fn validate_sorted_cursor(
     if cursor.keys.len() != sort.len() {
         return Err(QueryError::Invalid(
             "sorted cursor does not match the sort definition".into(),
+        ));
+    }
+    if cursor.collation != collation {
+        return Err(QueryError::Invalid(
+            "sorted cursor does not match the collation".into(),
         ));
     }
     for ((field, direction), key) in sort.iter().zip(&cursor.keys) {
@@ -238,6 +254,7 @@ fn validate_sorted_cursor(
 fn encode_sorted_cursor(
     record: &DbfRecord,
     sort: &IndexMap<String, i8>,
+    collation: Option<Collation>,
 ) -> Result<String, QueryError> {
     let keys = sort
         .iter()
@@ -255,6 +272,7 @@ fn encode_sorted_cursor(
         version: SORTED_CURSOR_VERSION,
         record: record.number,
         keys,
+        collation,
     })
     .map_err(|error| QueryError::Invalid(format!("sorted cursor encoding failed: {error}")))
 }
@@ -263,11 +281,12 @@ fn compare_record_to_cursor(
     record: &DbfRecord,
     cursor: &SortedCursor,
     sort: &IndexMap<String, i8>,
+    collation: Option<Collation>,
 ) -> Ordering {
     for ((field, direction), key) in sort.iter().zip(&cursor.keys) {
         let value = field_value(&record.values, field);
         let cursor_value = key.present.then_some(&key.value);
-        let ordering = compare_for_sort(value.as_ref(), cursor_value);
+        let ordering = compare_for_sort_with_collation(value.as_ref(), cursor_value, collation);
         if !ordering.is_eq() {
             return if *direction == 1 {
                 ordering

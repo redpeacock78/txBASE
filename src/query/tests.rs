@@ -218,6 +218,41 @@ fn preserves_multi_key_sort_order() {
 }
 
 #[test]
+fn supports_unicode_lowercase_collation_for_sort_keys() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: serde_json::json!({"NAME": "apple"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: serde_json::json!({"NAME": "Banana"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let sort = IndexMap::from([(String::from("NAME"), 1)]);
+
+    assert_eq!(compare_records(&first, &second, &sort), Ordering::Greater);
+    assert_eq!(
+        compare_records_with_collation(&first, &second, &sort, Some(Collation::UnicodeLowercase)),
+        Ordering::Less
+    );
+}
+
+#[test]
+fn validates_the_bounded_collation_contract() {
+    let request = parse(br#"{"sort":{"NAME":1},"collation":"unicode-lowercase"}"#).unwrap();
+    assert_eq!(request.collation, Some(Collation::UnicodeLowercase));
+    assert!(parse(br#"{"collation":"unicode-lowercase"}"#).is_err());
+    assert!(parse(br#"{"sort":{"NAME":1},"collation":"locale-aware"}"#).is_err());
+}
+
+#[test]
 fn executes_logical_and_membership_predicates() {
     let table = table_with_two_active_records();
     let request = parse(br#"{"filter":{"$and":[{"AGE":{"$in":[29]}},{"ACTIVE":true}]}}"#).unwrap();

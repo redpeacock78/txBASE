@@ -154,7 +154,8 @@ The same caution applies to EUC-JP, GBK, GB18030, Big5, and Korean encodings.
 The current override slice covers both explicit invocation and sidecar selection for the four
 declared-driver codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP.
 Pinned byte fixtures cover the four declared CJK drivers and round-trip their multibyte record
-values. Collation and broader upstream external fixtures remain future work.
+values. Query sorting has a bounded Unicode-lowercase mode; locale-aware CJK collation and
+broader upstream external fixtures remain future work.
 
 ## 5. Persistence and recovery
 
@@ -208,7 +209,7 @@ The following are not implemented by the current DBF layer:
 - OLE semantics and arbitrary external memo formats.
 - Complete Visual FoxPro expression or command compatibility.
 - Automatic merge and retry for concurrent writers.
-- Full collation support for CJK and locale-specific ordering.
+- Locale-aware CJK collation and full locale-specific ordering.
 
 These items require a contract, external fixtures, failure tests, and a clear ownership boundary before code is added.
 

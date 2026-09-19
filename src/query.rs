@@ -17,7 +17,9 @@ mod predicate;
 mod stream;
 mod validation;
 
-use ordering::{compare_records, sort_ordered_prefix};
+#[cfg(test)]
+use ordering::compare_records;
+use ordering::{compare_records_with_collation, sort_ordered_prefix};
 pub use pagination::QueryPage;
 pub use planner::QueryPlan;
 #[cfg(test)]
@@ -35,6 +37,12 @@ pub const SUPPORTED_FILTER_OPERATORS: &[&str] = &[
     "$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin", "$and", "$or", "$not", "$expr",
 ];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Collation {
+    UnicodeLowercase,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct QueryRequest {
@@ -49,6 +57,7 @@ pub struct QueryRequest {
     pub page_size: Option<u64>,
     pub cursor: Option<String>,
     pub aggregate: Option<Vec<Map<String, Value>>>,
+    pub collation: Option<Collation>,
 }
 
 #[derive(Debug)]
@@ -150,9 +159,16 @@ fn execute_query_with_records(
     }
 
     if ordered_prefix == 0 {
-        records.sort_by(|left, right| compare_records(left, right, &request.sort));
+        records.sort_by(|left, right| {
+            compare_records_with_collation(left, right, &request.sort, request.collation)
+        });
     } else if ordered_prefix < request.sort.len() {
-        sort_ordered_prefix(&mut records, &request.sort, ordered_prefix);
+        sort_ordered_prefix(
+            &mut records,
+            &request.sort,
+            ordered_prefix,
+            request.collation,
+        );
     }
 
     let (records, next_cursor) = if pagination::is_sorted_page(request) {

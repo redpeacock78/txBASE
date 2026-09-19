@@ -52,6 +52,7 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 | QRY-002 | Bounded `$expr` comparisons and malformed JSON query corpora fail safely and do not become index lookups. | `src/query/field_expression_tests.rs`; `src/query/malformed_tests.rs` | `compares_two_fields_with_expr`; `rejects_malformed_json_query_corpus` | Boundary |
 | QRY-003 | Physical cursors stop after the requested page and look-ahead record; sorted cursors enforce a matching keyset definition; bounded aggregation stages including group-output projection and local inner/left/semi/anti/cross joins enforce explicit bounds. | `src/query/pagination.rs`; `src/query/aggregation.rs`; `src/query/aggregation_plan.rs`; `src/query/join.rs` | `cursor_tests.rs`, `aggregation_tests.rs`, and `join_tests.rs` | Boundary |
 | QRY-004 | Borrowed and owned-snapshot query streams apply filter, projection, skip, and limit incrementally and reject blocking or resumable controls. | `src/query/stream.rs`; `src/query/stream_tests.rs` | `streams_filtered_projected_records_with_bounded_controls`; `snapshot_stream_is_independent_of_later_table_mutations`; `streaming_rejects_blocking_and_resume_controls` | Boundary |
+| QRY-005 | The documented Unicode-lowercase sort collation changes string ordering, binds sorted cursors to the same collation, and avoids incompatible index ordering. | `src/query/ordering.rs`; `src/query/pagination.rs`; `src/query/planner.rs`; `src/query/tests.rs`; `src/query/cursor_tests.rs` | `supports_unicode_lowercase_collation_for_sort_keys`; `sorted_cursor_keeps_collation_in_its_boundary`; planner collation fallback | Boundary |
 | CAT-001 | A catalog discovers only direct-child DBF files and reports table-specific load or verification failures. | `src/catalog.rs`; `docs/catalog.md` | `cargo test --all-targets --all-features` catalog and join cases | Current |
 | CAT-002 | The catalog server exposes discovered schemas and bounded read-only joins while keeping cross-table mutation in the explicit transaction route. | `src/server/catalog.rs`; `docs/catalog.md`; `docs/http-semantics.md` | `catalog_server_query_join_executes_and_exposes_schema` | Boundary |
 | CAT-003 | The catalog server exposes named-table GET, HEAD, QUERY, POST, PUT, PATCH, and DELETE routes while reusing single-table record, ETag, query, and mutation semantics. | `src/server/catalog.rs`; `src/server/records.rs`; `docs/catalog.md`; `docs/http-semantics.md` | `catalog_server_reads_named_tables_through_record_routes`; `catalog_server_mutates_named_tables_with_single_table_semantics` | Boundary |
@@ -72,7 +73,7 @@ The following topics have documentation or design notes but do not have a curren
 - backpressure and stable snapshot rules for long-lived streams;
 - a full cost-based planner, multiple or planned joins, and aggregation stages beyond bounded `$match`, `$group`, and group-output `$project`;
 - transaction IDs and MVCC visibility;
-- collation and broader upstream external fixtures;
+- locale-aware CJK collation and broader upstream external fixtures;
 - Strict multi-file reader atomicity for schema-preserving XBF-to-DBF export, object-storage manifests, WASM hosting, and distributed replication.
 
 Before one of these becomes current, add its public contract, malformed-input behavior, crash or retry behavior, fixture or deterministic test, and a row here.

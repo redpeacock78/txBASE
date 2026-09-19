@@ -43,9 +43,10 @@ pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
         || request.skip.is_some()
         || request.page_size.is_some()
         || request.cursor.is_some()
+        || request.collation.is_some()
     {
         return Err(QueryError::Invalid(
-            "aggregate cannot be combined with sort, projection, skip, limit, page_size, or cursor"
+            "aggregate cannot be combined with sort, projection, skip, limit, page_size, cursor, or collation"
                 .into(),
         ));
     }

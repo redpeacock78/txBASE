@@ -47,6 +47,10 @@ pub(super) struct PlannedAccess {
 }
 
 pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
+    // ponytail: custom collation uses a table scan; add collation-aware index keys only if needed.
+    if request.collation.is_some() {
+        return table_scan();
+    }
     let Ok(index_file) = IndexFile::load(dbf_path) else {
         return table_scan();
     };

@@ -19,6 +19,7 @@ The current document shape is:
   },
   "sort": {"AGE": 1},
   "projection": {"NAME": 1, "AGE": 1},
+  "collation": "unicode-lowercase",
   "skip": 0,
   "limit": 100,
   "page_size": 25,
@@ -56,6 +57,13 @@ Unknown keys are rejected rather than ignored.
 `filter` defaults to a match-all filter.
 
 `sort` uses `1` for ascending and `-1` for descending order.
+
+The optional `collation` currently accepts only `"unicode-lowercase"` and applies Unicode
+lowercasing to string sort keys before comparison. Omitting it keeps the existing Unicode
+codepoint ordering. It affects sorting only; filters and index lookup retain their existing
+comparison rules. It requires a non-empty top-level `sort`, is not available with aggregation,
+and custom-collation plans deliberately use a table scan. Sorted cursors encode the collation and
+reject a token from a different sort contract.
 
 `projection` uses inclusion or exclusion values of `1` and `0`.
 
