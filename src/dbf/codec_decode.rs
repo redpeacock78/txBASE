@@ -39,6 +39,7 @@ pub fn decode_record_field_with_encoding(
     }
 }
 
+#[cfg(test)]
 pub fn decode_field(
     field_type: u8,
     bytes: &[u8],

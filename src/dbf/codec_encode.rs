@@ -7,6 +7,7 @@ use super::cjk::{canonical_encoding_name, encode as encode_cjk, encoding_name};
 use super::temporal::{currency_i64, foxpro_datetime_bytes};
 use serde_json::Value;
 
+#[cfg(test)]
 pub fn encode_field(
     field: &FieldDescriptor,
     value: &Value,
