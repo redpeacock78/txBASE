@@ -19,9 +19,14 @@ table; it does not claim full DBF schema or type compatibility.
 `to_dbf_with_schema` additionally returns a `txbase-schema` JSON value that
 preserves representable `primary`, `unique`, and `not_null` constraints for a
 caller-managed sidecar.
-`save_dbf_with_schema` stages that DBF and sidecar, validates them through the
-existing DBF copy boundary, and writes `*.txschema.json` beside the destination.
-It does not claim one atomic WAL commit across the DBF and sidecar.
+`save_dbf_with_schema` stages that DBF and sidecar, validates them, and commits
+the desired DBF, schema, and memo-sidecar state through a durable `TXSE`
+journal. The journal records exact base bytes, applies the DBF and schema with
+per-file sync-and-replace, removes stale memo variants, and lets normal DBF
+reads resume an interrupted export. Recovery rejects a target changed by
+another writer instead of overwriting it. This is a crash-recovery and
+conflict-detection boundary; it does not claim that external legacy readers
+observe all files as one physically atomic snapshot.
 
 The codec is intentionally kept in the format layer. It does not add a second
 query or HTTP implementation.
@@ -280,12 +285,18 @@ will preserve constraints; use the schema-aware export path when
 `save_dbf_with_schema` is the file-level convenience path. The CLI exposes it
 as `xbf export XBF DBF --schema`.
 
+The file-level path writes a journal beside the destination and removes it only
+after all desired targets are applied. The journal covers the DBF, schema
+sidecar, and both DBT/FPT case variants, so a stale memo sidecar is removed as
+part of the export. A normal `DbfTable::from_path` call recovers a pending
+journal before loading records.
+
 The CLI also exposes `xbf report XBF`, which prints the representability report
 without writing a DBF or schema sidecar.
 
 The in-memory conversion does not persist XBF generation or write the sidecar
-itself. The file-level helper writes the two files through the existing DBF
-copy path; a multi-file recovery contract remains future work.
+itself. The file-level helper owns the journal and recovery boundary; callers
+do not need to coordinate a second sidecar transaction.
 
 Examples include variable-length UTF-8 text, timestamps, UUIDs, unsupported nullability, and characters outside the selected code page.
 
@@ -308,7 +319,10 @@ advertised as a complete supported format, the repository still needs:
 
 - Malformed header, section, checksum, directory, UTF-8, and payload corpora.
 - Round-trip tests for DBF to XBF and representability failures for XBF to DBF.
-- Crash and recovery tests for the snapshot and `.xwl` generation boundary.
-- A multi-file atomic export recovery contract.
+- Crash and recovery tests for the snapshot, `.xwl` generation boundary, and
+  `TXSE` schema-export journal.
+- A strict externally visible atomic snapshot contract for legacy readers; the
+  current `TXSE` protocol deliberately provides recoverability and conflict
+  detection rather than multi-file reader atomicity.
 
 Until those gates exist, XBF remains a draft and is not advertised as a supported format.

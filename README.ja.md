@@ -156,7 +156,9 @@ txbase xbf report path/to/users.xbf
 `XbfTable::dbf_export_report`はfileを書かずに表現可能性を調べ、field/record単位の問題とschema
 sidecarが必要かどうかを返します。
 libraryの`XbfTable::to_dbf_with_schema`は、表現可能な`primary`、`unique`、`not_null`のsidecar JSONを返します。
-`XbfTable::save_dbf_with_schema`とCLIの`xbf export --schema`は、そのmetadataを`.txschema.json` sidecarへ書きます。
+`XbfTable::save_dbf_with_schema`とCLIの`xbf export --schema`は、DBF、`.txschema.json`、memo sidecarの状態を
+recoverableな`TXSE` export boundaryでjournal化します。途中で停止した場合は次のDBF readで復旧し、別writerが変更したtargetは上書きしません。
+外部のlegacy readerに対する複数fileの物理的atomic snapshotまでは保証しません。
 
 `catalog`はdirectory直下のDBF tableを発見し、各tableのschemaを表示します。
 
@@ -257,7 +259,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
 一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
 full cost model、collation-aware planning、backpressure付きのstreaming、追加のaggregation stage、cross-table constraint、CJK encodingの拡張はroadmapで検討します。
-XBFのwire contractは[XBF v1 format draft](docs/xbf.md)に記載しています。draftのcodec、DBFからXBFへの変換、限定されたXBFからDBFへのexport、schema sidecar付きfile export、durable snapshot path、generation付きfull-snapshot WAL recoveryを提供します。DBFとsidecarを一つのWALでcommitするmulti-file atomic protocolは未対応です。
+XBFのwire contractは[XBF v1 format draft](docs/xbf.md)に記載しています。draftのcodec、DBFからXBFへの変換、限定されたXBFからDBFへのexport、schema sidecar付きjournal export、durable snapshot path、generation付きfull-snapshot WAL recoveryを提供します。strictな複数file reader atomicityとobject-storage commitは未対応です。
 
 ## License
 

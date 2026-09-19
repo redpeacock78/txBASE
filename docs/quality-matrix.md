@@ -43,6 +43,7 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 | XBF-004 | Loaded DBF records convert to bounded XBF values without dropping physical order, deletion flags, or DBF-distinguishable nulls; unsupported values fail explicitly. | `src/xbf/conversion.rs`; `src/xbf/export_tests.rs` | `converts_a_dbf_fixture_to_xbf_without_dropping_records` | Boundary |
 | XBF-005 | A representable XBF table exports to an in-memory DBF table with deletion state preserved; direct export rejects unsupported types and constraints, while schema-aware export returns and can persist representable constraint metadata. | `src/xbf/export.rs`; `src/xbf/export_tests.rs` | `exports_a_representable_xbf_table_to_dbf`; `exports_xbf_constraints_as_schema_metadata`; `saves_xbf_dbf_and_schema_sidecar`; `rejects_nonrepresentable_xbf_dbf_export_types` | Boundary |
 | XBF-006 | XBF-to-DBF representability can be inspected without writing files, including all discovered field/record issues and schema-sidecar requirement. | `src/xbf/export.rs`; `src/xbf/export_tests.rs`; `docs/xbf.md` | `reports_all_nonrepresentable_xbf_fields_and_values`; `report_marks_constraint_sidecar_requirement` | Boundary |
+| XBF-007 | Schema-preserving XBF-to-DBF file export uses a durable `TXSE` journal, exact target base bytes, per-file sync-and-replace, memo-sidecar cleanup, DBF-read recovery after partial replacement, and conflict rejection for externally changed targets. | `src/dbf/schema_export.rs`; `src/dbf/parser.rs`; `src/dbf/schema_export_tests.rs` | `schema_export_commits_dbf_and_schema_together`; `schema_export_read_recovers_after_dbf_replacement` | Boundary |
 | IDX-001 | External scalar and compound indexes are rebuildable, freshness-checked, and refreshed after supported mutations. | `src/index.rs`; `src/index/`; `src/index_tests.rs` | `mutation_refreshes_the_sidecar_after_save`; `direct_dbf_change_leaves_the_sidecar_stale_until_rebuild` | Current |
 | IDX-002 | Index candidates preserve table-scan results for equality, range, ordered-prefix, compound, and equality-intersection plans. | `src/query/planner.rs`; `src/query/planner_tests.rs`; `src/query/planner_compound_tests.rs` | Planner tests named `uses_*` and `orders_*` | Current |
 | IDX-003 | The selected table-scan or index plan is available as a tagged JSON explanation without changing query execution. | `src/query/planner.rs`; `src/server/explain.rs`; `docs/query-model.md` | `explain_endpoint_reports_scan_and_index_plans` | Boundary |
@@ -65,7 +66,7 @@ The following topics have documentation or design notes but do not have a curren
 - a full cost-based planner, multiple or planned joins, and aggregation stages beyond bounded `$match`, `$group`, and group-output `$project`;
 - cross-table transactions, transaction IDs, and MVCC visibility;
 - strict Shift_JIS versus CP932 selection, collation, and broader external fixtures;
-- Multi-file schema-preserving XBF-to-DBF atomic export, object-storage manifests, WASM hosting, and distributed replication.
+- Strict multi-file reader atomicity for schema-preserving XBF-to-DBF export, object-storage manifests, WASM hosting, and distributed replication.
 
 Before one of these becomes current, add its public contract, malformed-input behavior, crash or retry behavior, fixture or deterministic test, and a row here.
 

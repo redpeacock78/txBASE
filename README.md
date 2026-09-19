@@ -214,7 +214,10 @@ representable XBF subset to a DBF file and reports unsupported types or values a
 field/record issues plus whether a schema sidecar is required.
 The library API `XbfTable::to_dbf_with_schema` additionally returns sidecar JSON for representable
 `primary`, `unique`, and `not_null` constraints. `XbfTable::save_dbf_with_schema` and CLI
-`xbf export --schema` write that metadata to the sibling `.txschema.json` sidecar.
+`xbf export --schema` journal the DBF, sibling `.txschema.json`, and memo-sidecar state through a
+recoverable `TXSE` export boundary. A later DBF read resumes an interrupted replacement and rejects
+targets changed by another writer; it does not promise one physically atomic snapshot to external
+legacy readers.
 
 `backup` and `restore` validate the source first, then copy the DBF and its detected memo sidecar.
 
@@ -319,7 +322,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming backpressure, planned and multiple joins, additional aggregation stages, cross-table transactions, additional CJK encodings, and a multi-file atomic commit protocol for XBF export.
+Later phases may add a full cost-based index choice, streaming backpressure, planned and multiple joins, additional aggregation stages, cross-table transactions, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 
