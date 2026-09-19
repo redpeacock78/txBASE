@@ -13,8 +13,9 @@ impl DbfTable {
         let encoding = normalize_encoding_override(encoding)?;
         let _lock = TableLock::acquire(path)?;
         let recovered = Self::recover_wal_with_encoding(path, encoding.as_deref())?;
+        let export_recovered = super::schema_export::recover_schema_export_locked(path)?;
         let table = Self::load_path_with_encoding(path, encoding.as_deref())?;
-        if recovered {
+        if recovered || export_recovered {
             let _ = crate::index::refresh_if_present(path, &table);
         }
         Ok(table)

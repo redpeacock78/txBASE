@@ -34,6 +34,9 @@ mod recovery;
 #[cfg(test)]
 mod recovery_fault_tests;
 mod schema;
+mod schema_export;
+#[cfg(test)]
+mod schema_export_tests;
 mod schema_metadata;
 #[cfg(test)]
 mod schema_metadata_tests;
@@ -65,6 +68,8 @@ use wal::{
 use wal::{delta_payload, memo_snapshot_payload, operation_payload, snapshot_payload};
 
 pub use maintenance::copy_table_files;
+
+pub(crate) use schema_export::commit_schema_export;
 
 pub(crate) fn memo_sidecar_path(path: &Path) -> Option<PathBuf> {
     find_memo_path(path)
