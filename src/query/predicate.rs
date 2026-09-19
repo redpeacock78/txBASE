@@ -3,7 +3,7 @@ use crate::query_path::field_value;
 use serde_json::{Map, Value};
 use std::cmp::Ordering;
 
-pub(super) fn matches_filter(
+pub(crate) fn matches_filter(
     values: &Map<String, Value>,
     filter: &Map<String, Value>,
 ) -> Result<bool, QueryError> {
@@ -97,7 +97,7 @@ fn resolve_expression_operand(values: &Map<String, Value>, operand: &Value) -> O
         .flatten()
 }
 
-pub(super) fn matches_condition(
+pub(crate) fn matches_condition(
     actual: Option<&Value>,
     condition: &Value,
 ) -> Result<bool, QueryError> {

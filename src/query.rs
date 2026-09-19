@@ -16,11 +16,16 @@ mod predicate;
 mod stream;
 mod validation;
 
-use ordering::{compare_records, compare_values, sort_ordered_prefix};
+use ordering::{compare_records, sort_ordered_prefix};
 pub use pagination::QueryPage;
 pub use planner::QueryPlan;
 pub(crate) use predicate::{matches_condition, matches_filter};
 pub use stream::{QueryStream, stream_query};
+
+#[cfg(test)]
+use crate::query_path::field_value;
+#[cfg(test)]
+use std::cmp::Ordering;
 
 pub const JSON_QUERY_MEDIA_TYPE: &str = "application/json";
 pub const SUPPORTED_FILTER_OPERATORS: &[&str] = &[
