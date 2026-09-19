@@ -1,3 +1,5 @@
+#[path = "codec_cjk.rs"]
+mod cjk;
 #[path = "codec_decode.rs"]
 mod decode;
 #[path = "codec_encode.rs"]
@@ -7,6 +9,7 @@ mod fields;
 #[path = "codec_temporal.rs"]
 mod temporal;
 
+pub(super) use cjk::encoding_name;
 pub(super) use decode::{decode_field, decode_record_field, hex, text};
 pub(super) use encode::{encode_character, encode_field, value_text};
 pub(super) use fields::{

@@ -8,6 +8,8 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
+mod cjk_tests;
 mod codec;
 mod codepages;
 #[cfg(test)]
@@ -40,8 +42,8 @@ mod writer_tests;
 
 use codec::{
     decode_field, decode_record_field, encode_character, encode_field, encode_null_flags,
-    flag_is_set, hex, null_flag_layout, parse_fields, read_u16, read_u32, system_field_index, text,
-    update_null_flags, value_text,
+    encoding_name, flag_is_set, hex, null_flag_layout, parse_fields, read_u16, read_u32,
+    system_field_index, text, update_null_flags, value_text,
 };
 use lock::TableLock;
 use memo::{

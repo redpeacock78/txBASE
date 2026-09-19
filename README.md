@@ -185,6 +185,10 @@ It can also use a per-field-direction compound index for a matching multi-key so
 
 `backup` and `restore` validate the source first, then copy the DBF and its detected memo sidecar.
 
+The DBF codec recognizes the Visual FoxPro CJK driver IDs for Windows-31J/CP932, GBK/CP936,
+EUC-KR/CP949, and Big5/CP950.
+Malformed reads use U+FFFD and writes reject unmappable or over-width values.
+
 The implementation currently favors a readable DBF file plus separate WAL and memo sidecars.
 
 ## Install

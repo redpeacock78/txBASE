@@ -3,6 +3,7 @@ use super::super::codepages::{
     CP1254_UPPER, CP1255_UPPER, CP1256_UPPER, decode_codepage, decode_windows_1252,
 };
 use super::super::{FieldDescriptor, MemoFormat, NullFlagBits};
+use super::cjk::decode as decode_cjk;
 use super::fields::flag_is_set;
 use super::temporal::{currency_text, foxpro_datetime_text};
 use serde_json::{Number, Value};
@@ -107,6 +108,9 @@ pub fn text(bytes: &[u8], language_driver: u8) -> String {
         .rposition(|byte| !matches!(byte, b' ' | b'\0'))
         .map_or(0, |index| index + 1);
     let bytes = &bytes[..end];
+    if let Some(text) = decode_cjk(bytes, language_driver) {
+        return text;
+    }
     match language_driver {
         0x01 => decode_codepage(bytes, CP437_UPPER),
         0x02 => decode_codepage(bytes, CP850_UPPER),

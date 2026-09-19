@@ -34,6 +34,7 @@ The repository currently provides:
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - A bounded one-stage aggregation path with `$group`, `$count`, and integer `$sum` after filtering.
 - A bounded local `inner` or `left` equality join over two catalog tables with qualified filtering and projection.
+- Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 
 The baseline intentionally does not include a full cost-based index model, sorted-query cursors, streaming, multiple or planned joins, cross-table transactions, multi-stage aggregation, constraints, XBF, object-storage commits, or distributed replication.
@@ -127,6 +128,12 @@ The phase must preserve DBF byte widths and reject ambiguous or unrepresentable 
 - Additional external fixtures.
 
 Every encoding needs a declared name, byte-width rule, round-trip fixture, invalid-byte behavior, and comparison policy.
+
+The first declared-driver slice covers the four Visual FoxPro CJK IDs listed in the DBF
+compatibility document.
+It uses replacement characters for malformed reads and rejects unmappable or over-width writes.
+Explicit overrides, strict Shift_JIS selection, EUC-JP, collation, and broader external fixtures
+remain future work.
 
 An override must be visible in schema or command output so a reader can reproduce the same interpretation.
 

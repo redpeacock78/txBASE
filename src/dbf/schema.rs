@@ -1,4 +1,4 @@
-use super::{DbfError, DbfTable};
+use super::{DbfError, DbfTable, encoding_name};
 use serde_json::{Value, json};
 
 impl DbfTable {
@@ -8,6 +8,7 @@ impl DbfTable {
             "version": self.header.version,
             "last_update": self.header.last_update,
             "language_driver": self.header.language_driver,
+            "encoding": encoding_name(self.header.language_driver),
             "header_length": self.header.header_length,
             "record_length": self.header.record_length,
             "record_count": self.header.record_count,

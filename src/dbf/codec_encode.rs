@@ -3,6 +3,7 @@ use super::super::codepages::{
     CP1254_UPPER, CP1255_UPPER, CP1256_UPPER, encode_codepage, encode_windows_1252,
 };
 use super::super::{DbfError, FieldDescriptor, binary_value};
+use super::cjk::{encode as encode_cjk, encoding_name};
 use super::temporal::{currency_i64, foxpro_datetime_bytes};
 use serde_json::Value;
 
@@ -218,10 +219,12 @@ pub fn encode_character(
         0x7d => encode_codepage(&text, CP1255_UPPER),
         0x7e => encode_codepage(&text, CP1256_UPPER),
         0x03 | 0x57 => encode_windows_1252(&text),
+        0x78..=0x7b => encode_cjk(&text, language_driver)
+            .and_then(|(bytes, had_errors)| (!had_errors).then_some(bytes)),
         _ => Some(text.into_bytes()),
     };
     encoded.ok_or_else(|| {
-        let code_page = match language_driver {
+        let code_page = encoding_name(language_driver).unwrap_or(match language_driver {
             0x01 => "CP437",
             0x02 => "CP850",
             0x1f | 0x22 | 0x23 | 0x40 | 0x64 | 0x87 => "CP852",
@@ -234,7 +237,7 @@ pub fn encode_character(
             0x7e => "Windows-1256",
             0x03 | 0x57 => "Windows-1252",
             _ => "the declared code page",
-        };
+        });
         DbfError::Invalid(format!(
             "value for {} contains a character outside {code_page}",
             field.name

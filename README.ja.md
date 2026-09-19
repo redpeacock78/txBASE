@@ -134,6 +134,9 @@ catalog joinは`txbase::query::join::parse`と`execute`から使います。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピーします。
 
+DBF codecはVisual FoxProのCJK driver IDであるWindows-31J/CP932、GBK/CP936、EUC-KR/CP949、Big5/CP950に対応します。
+malformed readはU+FFFDにし、unmappableまたはbyte width超過のwriteは拒否します。
+
 ```bash
 txbase backup path/to/users.dbf backups/users.dbf
 txbase restore backups/users.dbf path/to/users.dbf

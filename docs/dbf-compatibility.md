@@ -93,6 +93,22 @@ The language-driver byte declares how character bytes should be interpreted.
 
 txBASE currently supports the code pages implemented in `src/dbf/codepages.rs`, including CP437, CP850, CP852, CP866, Windows-1250, Windows-1251, Windows-1252, Windows-1253, Windows-1254, Windows-1255, and Windows-1256 mappings used by the supported driver IDs.
 
+The current CJK slice also decodes and encodes the Visual FoxPro driver IDs documented by
+[Code Pages Supported by Visual FoxPro](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm):
+
+| Driver ID | Declared platform | Effective codec |
+| --- | --- | --- |
+| `0x7b` | Japanese Windows | Windows-31J/CP932 through `encoding_rs::SHIFT_JIS` |
+| `0x7a` | Simplified Chinese Windows | GBK/CP936 |
+| `0x79` | Korean Windows | EUC-KR/CP949 |
+| `0x78` | Traditional Chinese Windows | Big5/CP950 |
+
+The `encoding` member in `schema` output identifies these four codecs.
+The codec treats malformed byte sequences as U+FFFD on read.
+Writes reject unmappable characters before DBF bytes are changed.
+The existing fixed-field width check remains a byte-width check, so a multibyte value that does
+not fit is rejected rather than truncated.
+
 Unknown drivers retain the existing UTF-8 or lossy fallback behavior.
 
 Writes reject characters that the selected code page cannot represent.
@@ -111,9 +127,9 @@ Shift_JIS and CP932 are not interchangeable labels.
 
 The same caution applies to EUC-JP, GBK, GB18030, Big5, and Korean encodings.
 
-The roadmap proposes explicit encoding metadata and strict rejection rather than silent multibyte truncation.
-
-No new CJK codec is implied by this document.
+The roadmap still proposes explicit user encoding overrides, strict Shift_JIS versus CP932
+selection, EUC-JP import or export, collation, and additional external fixtures.
+Those are not implied by the declared-driver slice above.
 
 ## 5. Persistence and recovery
 
@@ -179,3 +195,4 @@ These items require a contract, external fixtures, failure tests, and a clear ow
 - [Visual FoxPro memo file structure](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm)
 - [Visual FoxPro auto-increment fields](https://www.vfphelp.com/vfp9/html/bd6eff0c-2ce5-43b7-ab29-f5360cd2f90e.htm)
 - [Visual FoxPro code pages](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)
+- [`encoding_rs` encoding and error behavior](https://docs.rs/encoding_rs/latest/encoding_rs/struct.Encoding.html)
