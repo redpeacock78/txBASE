@@ -316,6 +316,10 @@ fn transaction_error(error: TransactionError) -> DbfError {
     DbfError::Invalid(format!("WAL error: {error}"))
 }
 
+fn index_error(error: crate::index::IndexError) -> DbfError {
+    DbfError::Invalid(format!("index sidecar error: {error}"))
+}
+
 fn write_record_count(bytes: &mut [u8], count: u32) -> Result<(), DbfError> {
     let header = bytes
         .get_mut(4..8)

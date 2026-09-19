@@ -164,6 +164,9 @@ The sidecar currently supports build, exact equality lookup, range candidate loo
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
+Mutation persistence validates an existing sidecar before replacing the DBF; a stale or malformed
+sidecar therefore leaves the DBF unchanged and reports an index error.
+
 Schema-preserving XBF-to-DBF export also refreshes an existing sidecar after its
 `TXSE` journal applies the new DBF state; the XBF input does not provide an
 index to copy.

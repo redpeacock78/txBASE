@@ -103,6 +103,41 @@ fn rejects_stale_memo_sidecar_before_save() {
 }
 
 #[test]
+fn rejects_an_invalid_index_before_saving_the_dbf() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-invalid-index-save-{}.dbf",
+        std::process::id()
+    ));
+    let index_path = path.with_extension("txidx");
+    let wal_path = path.with_extension("txbase.wal");
+    let lock_path = path.with_extension("txbase.lock");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&index_path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&lock_path);
+
+    let original = fixture();
+    fs::write(&path, &original).unwrap();
+    fs::write(&index_path, b"{}").unwrap();
+    let mut table = DbfTable::from_path(&path).unwrap();
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"AGE": 31}).as_object().unwrap().clone(),
+        )
+        .unwrap();
+
+    let error = table.save_with_wal(&path).unwrap_err();
+    assert!(error.to_string().contains("index sidecar error"));
+    assert_eq!(fs::read(&path).unwrap(), original);
+    assert!(!wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(index_path).unwrap();
+    fs::remove_file(lock_path).unwrap();
+}
+
+#[test]
 fn recovers_latest_snapshot_from_wal_before_reading() {
     let path = std::env::temp_dir().join(format!("txbase-dbf-recovery-{}.dbf", std::process::id()));
     let wal_path = path.with_extension("txbase.wal");
@@ -307,6 +342,11 @@ fn replays_operation_intent_when_state_payload_is_missing() {
     let _ = fs::remove_file(&wal_path);
     let _ = fs::remove_file(&lock_path);
     fs::write(&path, fixture()).unwrap();
+    let index_path = path.with_extension("txidx");
+    IndexFile::build(&path, vec![IndexDefinition::for_field("AGE")])
+        .unwrap()
+        .save(&path)
+        .unwrap();
 
     let operation = OperationIr {
         method: OperationMethod::Patch,
@@ -320,9 +360,17 @@ fn replays_operation_intent_when_state_payload_is_missing() {
 
     let recovered = DbfTable::from_path(&path).unwrap();
     assert_eq!(recovered.active_record(1).unwrap().values["AGE"], 30);
+    assert_eq!(
+        IndexFile::load(&path)
+            .unwrap()
+            .lookup_eq("AGE", &serde_json::json!(30))
+            .unwrap(),
+        vec![1]
+    );
     assert!(!wal_path.exists());
 
     fs::remove_file(path).unwrap();
+    fs::remove_file(index_path).unwrap();
     fs::remove_file(lock_path).unwrap();
 }
 

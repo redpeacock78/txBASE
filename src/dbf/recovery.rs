@@ -109,7 +109,8 @@ impl DbfTable {
             }
             save_bytes_to(path, &snapshot.dbf, "txbase.tmp")?;
             if let Some(index_payload) = &index_payload {
-                let _ = crate::index::apply_snapshot_payload(path, index_payload);
+                crate::index::apply_snapshot_payload(path, index_payload)
+                    .map_err(super::index_error)?;
             }
             finish_recovery(wal, &wal_path);
             return Ok(true);
@@ -135,14 +136,29 @@ impl DbfTable {
         };
         let payload = delta_payload(&table, path, memo_snapshot.as_ref(), full_payload.len())?
             .unwrap_or(full_payload);
+        let index_payload = crate::index::pending_snapshot_payload(
+            path,
+            &table,
+            &table.bytes,
+            memo_snapshot.as_ref().map(|memo| memo.bytes.as_slice()),
+        )
+        .map_err(super::index_error)?;
         wal.append(&payload).map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
+        if let Some(index_payload) = &index_payload {
+            wal.append(index_payload).map_err(transaction_error)?;
+            wal.sync().map_err(transaction_error)?;
+        }
         if let Some(memo) = &memo_snapshot {
             let memo_path = find_memo_path(path)
                 .unwrap_or_else(|| path.with_extension(memo.format.extension()));
             save_bytes_to(&memo_path, &memo.bytes, "txbase.memo.tmp")?;
         }
         save_bytes_to(path, &table.bytes, "txbase.tmp")?;
+        if let Some(index_payload) = &index_payload {
+            crate::index::apply_snapshot_payload(path, index_payload)
+                .map_err(super::index_error)?;
+        }
         finish_recovery(wal, &wal_path);
         Ok(true)
     }

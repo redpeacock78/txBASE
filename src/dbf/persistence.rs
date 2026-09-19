@@ -12,8 +12,12 @@ impl DbfTable {
         let _lock = TableLock::acquire(path)?;
         let _ = Self::recover_wal_with_encoding(path, self.encoding_override.as_deref())?;
         self.ensure_source_current(path)?;
+        let index_payload = crate::index::pending_snapshot_payload(path, self, &self.bytes, None)
+            .map_err(index_error)?;
         save_bytes_to(path, &self.bytes, "txbase.tmp")?;
-        let _ = crate::index::refresh_if_present(path, self);
+        if let Some(index_payload) = &index_payload {
+            crate::index::apply_snapshot_payload(path, index_payload).map_err(index_error)?;
+        }
         Ok(())
     }
 
@@ -74,8 +78,6 @@ impl DbfTable {
         self.ensure_source_current(path)?;
         let mut prepared = self.clone();
         let memo_snapshot = prepared.apply_memo_updates(path)?;
-        let wal_path = path.with_extension("txbase.wal");
-        let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
         let full_payload = match &memo_snapshot {
             Some(memo) => memo_snapshot_payload(&prepared.bytes, memo)?,
             None => snapshot_payload(&prepared.bytes),
@@ -88,8 +90,9 @@ impl DbfTable {
             &prepared.bytes,
             memo_snapshot.as_ref().map(|memo| memo.bytes.as_slice()),
         )
-        .ok()
-        .flatten();
+        .map_err(index_error)?;
+        let wal_path = path.with_extension("txbase.wal");
+        let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
         if let Some(operation) = operation {
             wal.append(&operation_payload(operation)?)
                 .map_err(transaction_error)?;
@@ -112,10 +115,10 @@ impl DbfTable {
         } else {
             crate::index::refresh_if_present(path, &prepared)
         };
-        if index_result.is_ok() && wal.clear().is_ok() {
-            drop(wal);
-            let _ = fs::remove_file(wal_path);
-        }
+        index_result.map_err(index_error)?;
+        wal.clear().map_err(transaction_error)?;
+        drop(wal);
+        fs::remove_file(wal_path)?;
         prepared.source = Some(PersistedState {
             path: path.to_path_buf(),
             dbf: prepared.bytes.clone(),
