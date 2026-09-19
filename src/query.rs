@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
+mod aggregation;
 mod ordering;
 mod pagination;
 mod planner;
@@ -35,6 +36,7 @@ pub struct QueryRequest {
     pub skip: Option<u64>,
     pub page_size: Option<u64>,
     pub cursor: Option<String>,
+    pub aggregate: Option<Vec<Map<String, Value>>>,
 }
 
 #[derive(Debug)]
@@ -117,6 +119,13 @@ fn execute_query_with_records(
         if matches_filter(&record.values, &request.filter)? {
             records.push(record);
         }
+    }
+
+    if let Some(stages) = request.aggregate.as_deref() {
+        return Ok(QueryPage {
+            records: aggregation::execute(&records, stages)?,
+            next_cursor: None,
+        });
     }
 
     if ordered_prefix == 0 {
@@ -330,3 +339,6 @@ mod field_expression_tests;
 
 #[cfg(test)]
 mod cursor_tests;
+
+#[cfg(test)]
+mod aggregation_tests;

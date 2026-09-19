@@ -61,7 +61,46 @@ snapshot stable while paging.
 The page API bounds the response size but the current executor still materializes matching
 records before slicing the page. True incremental streaming and backpressure are separate work.
 
-## 2. Current predicate vocabulary
+## 2. Bounded aggregation
+
+The query document can contain one blocking `$group` stage after `filter`:
+
+```json
+{
+  "filter": {"ACTIVE": true},
+  "aggregate": [
+    {
+      "$group": {
+        "_id": "$COUNTRY",
+        "count": {"$count": {}},
+        "total_age": {"$sum": "$AGE"}
+      }
+    }
+  ]
+}
+```
+
+The current aggregation boundary accepts only one `$group` stage.
+`_id` is either `null` or one dotted field reference.
+The supported accumulators are `$count: {}` and `$sum: "$FIELD"`.
+The filter runs before grouping, and the result is a JSON array of documents containing `_id`
+and the named accumulator fields.
+
+A missing group field becomes `null`, so missing and explicit `null` values share a group.
+Missing, `null`, and nonnumeric `$sum` inputs contribute zero.
+Fractional numbers are rejected because this slice preserves integer sums exactly.
+An integer sum that cannot be represented as a JSON signed or unsigned integer is rejected.
+The executor rejects more than 10,000 groups and rejects combining aggregation with sort,
+projection, skip, limit, or cursor pagination.
+Group output order is not part of the contract, although the current implementation emits a
+deterministic key order.
+
+MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as
+`$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).
+Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
+is not accepted by this first txBASE slice.
+
+## 3. Current predicate vocabulary
 
 | Family | Operators | Current rule |
 | --- | --- | --- |
@@ -82,7 +121,7 @@ These choices are tested in `src/query/tests.rs` and `src/query/malformed_tests.
 
 They are txBASE behavior and should not be described as MongoDB compatibility.
 
-## 3. Paths, arrays, and projection
+## 4. Paths, arrays, and projection
 
 Dotted paths traverse nested JSON objects and arrays.
 
@@ -96,7 +135,7 @@ Projection validates its shape before applying selected fields.
 
 The current implementation does not promise every MongoDB projection rule, positional projection, `$elemMatch` projection, or aggregation expression.
 
-## 4. What MongoDB specifies
+## 5. What MongoDB specifies
 
 The [MongoDB query predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/) groups predicates into comparison, logical, array, element, evaluation, bitwise, geospatial, and miscellaneous families.
 
@@ -139,7 +178,7 @@ MongoDB also has a broad [miscellaneous predicate family](https://www.mongodb.co
 
 Those operators need explicit encoding, resource, and error contracts before they belong in a file-native DBF query engine.
 
-## 5. Indexes and selectivity
+## 6. Indexes and selectivity
 
 The [MongoDB query optimization guide](https://www.mongodb.com/docs/manual/core/query-optimization/) explains why predicate selectivity and index key order affect the amount of data examined.
 
@@ -193,7 +232,7 @@ The equality intersection is a bounded candidate prefilter, not a covered query 
 
 The roadmap keeps index design separate from the query syntax so a query document does not imply an implementation strategy.
 
-## 6. Mutation operators
+## 7. Mutation operators
 
 `PATCH` accepts either a plain field object or a typed update document.
 
@@ -217,7 +256,7 @@ MongoDB has a much larger [update operator reference](https://www.mongodb.com/do
 
 txBASE rejects unsupported operators instead of silently treating them as field names.
 
-## 7. Not a MongoDB wire protocol
+## 8. Not a MongoDB wire protocol
 
 txBASE does not implement BSON, the MongoDB wire protocol, JavaScript expressions, MongoDB collation, aggregation pipelines, MongoDB indexes, or the complete update operator set.
 
@@ -227,7 +266,7 @@ The [MongoDB atomicity and transactions guide](https://www.mongodb.com/docs/manu
 
 No multi-record atomicity should be inferred from `$inc` or from the current HTTP `PATCH` route.
 
-## 8. Next query work
+## 9. Next query work
 
 The roadmap may later cover the following in separate contracts:
 

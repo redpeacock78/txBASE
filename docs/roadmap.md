@@ -32,9 +32,10 @@ The repository currently provides:
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
+- A bounded one-stage aggregation path with `$group`, `$count`, and integer `$sum` after filtering.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 
-The baseline intentionally does not include a full cost-based index model, sorted-query cursors, streaming, cross-table transactions, aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, sorted-query cursors, streaming, cross-table transactions, multi-stage aggregation, joins, constraints, XBF, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -88,7 +89,7 @@ The current record scan remains the reference execution path while the query mod
 
 ### Candidate scope
 
-- Aggregation.
+- Multi-stage aggregation and accumulator expressions.
 - Full expression evaluation beyond the bounded `$expr` comparison form.
 - Joins.
 - Constraints.

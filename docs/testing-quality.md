@@ -62,7 +62,7 @@ The current Rust test layout is already split by ownership:
 | Persistence | `src/dbf/tests/persistence.rs`, `recovery_fault_tests.rs`, `src/dbf/recovery.rs` |
 | Maintenance | `src/dbf/tests/maintenance.rs`, `src/dbf/schema.rs`, `src/dbf/maintenance.rs` |
 | Malformed input | `src/dbf/malformed_tests.rs`, `src/dbf/parser_fuzz_tests.rs`, `src/query/malformed_tests.rs`, `src/transaction/malformed_tests.rs` |
-| Query and HTTP | `src/query/tests.rs`, `src/query/cursor_tests.rs`, `src/server/tests.rs`, `src/server/range.rs` |
+| Query and HTTP | `src/query/tests.rs`, `src/query/cursor_tests.rs`, `src/query/aggregation_tests.rs`, `src/server/tests.rs`, `src/server/range.rs` |
 | Transactions | `src/transaction/tests.rs`, `src/transaction/malformed_tests.rs`, `src/server/tests.rs` |
 
 The repository also keeps external-format fixtures under `tests/fixtures/` and malformed corpora under `tests/corpus/`.

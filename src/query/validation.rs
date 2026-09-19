@@ -1,7 +1,8 @@
-use super::{QueryError, QueryRequest, pagination};
+use super::{QueryError, QueryRequest, aggregation, pagination};
 use serde_json::{Map, Value};
 
 pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
+    aggregation::validate(request)?;
     pagination::validate(request)?;
     for (field, direction) in &request.sort {
         if !matches!(direction, -1 | 1) {

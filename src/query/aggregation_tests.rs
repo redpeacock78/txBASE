@@ -1,0 +1,56 @@
+use super::*;
+use serde_json::json;
+
+fn table_with_two_active_records() -> DbfTable {
+    let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    bytes[179] = b' ';
+    DbfTable::from_bytes(&bytes).unwrap()
+}
+
+#[test]
+fn groups_filtered_records_with_count_and_integer_sum() {
+    let table = table_with_two_active_records();
+    let request = parse(
+        br#"{
+            "filter": {"AGE": {"$gte": 0}},
+            "aggregate": [{"$group": {
+                "_id": null,
+                "count": {"$count": {}},
+                "total_age": {"$sum": "$AGE"}
+            }}]
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        execute_query(&table, &request).unwrap(),
+        vec![json!({"_id": null, "count": 2, "total_age": 36})]
+    );
+}
+
+#[test]
+fn missing_group_fields_share_the_null_group() {
+    let table = table_with_two_active_records();
+    let request =
+        parse(br#"{"aggregate":[{"$group":{"_id":"$MISSING","count":{"$count":{}}}}]}"#).unwrap();
+
+    assert_eq!(
+        execute_query(&table, &request).unwrap(),
+        vec![json!({"_id": null, "count": 2})]
+    );
+}
+
+#[test]
+fn rejects_unsupported_aggregation_combinations() {
+    for body in [
+        br#"{"aggregate":[]}"#.as_slice(),
+        br#"{"sort":{"AGE":1},"aggregate":[{"$group":{"_id":null}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$count":"total"}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":"AGE"}}}]}"#.as_slice(),
+    ] {
+        assert!(parse(body).is_err(), "expected rejection for {body:?}");
+    }
+}

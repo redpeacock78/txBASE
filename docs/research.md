@@ -61,6 +61,8 @@ The README organization follows the section shape of [texenv's README](https://g
 - [Update operators](https://www.mongodb.com/docs/manual/reference/mql/update/)
 - [Atomicity and transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/)
 - [MongoDB cursors](https://www.mongodb.com/docs/manual/core/cursors/)
+- [MongoDB `$group` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
+- [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 
 ### Firebase
 

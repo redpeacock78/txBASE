@@ -58,9 +58,11 @@ curl -i -X QUERY \
   http://127.0.0.1:8080/records
 ```
 
-The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `page_size`, and `cursor` with `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$and`, `$or`, `$not`, and bounded `$expr` field comparisons.
+The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `page_size`, `cursor`, and a bounded one-stage `aggregate` group with `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$and`, `$or`, `$not`, and bounded `$expr` field comparisons.
 
 `page_size` enables a physical-record cursor response. The next request sends the returned `cursor` with the same `page_size`; this mode does not yet combine with `sort` or `skip` and is capped at 1,000 records.
+
+`aggregate` currently accepts one `$group` stage with `$count` and integer `$sum`; it cannot be combined with sort, projection, pagination, or limit controls.
 
 `QUERY` follows the HTTP QUERY boundary defined by [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html), including `Accept-Query: "application/json"`.
 

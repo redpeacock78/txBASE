@@ -48,11 +48,14 @@ curl -i -X QUERY \
   http://127.0.0.1:8080/records
 ```
 
-現在のqueryは`filter`、`sort`、`projection`、`skip`、`limit`、`page_size`、`cursor`を提供します。
+現在のqueryは`filter`、`sort`、`projection`、`skip`、`limit`、`page_size`、`cursor`、限定された一段の`aggregate`を提供します。
 
 `page_size`を指定すると、physical record順のページを`records`と`cursor`で返します。
 次のページでは同じ`page_size`と返却された`cursor`を送ります。
 このモードでは現時点で`sort`と`skip`を併用できず、最大1,000件です。
+
+`aggregate`は一つの`$group` stageに限定し、`$count`と整数`$sum`を使えます。
+`sort`、`projection`、pagination、`limit`との併用はできません。
 
 `$expr`による同一record内のfield比較も、二つのscalar operandに限定して提供します。
 
@@ -182,7 +185,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 当面はDBF、memo、WAL、query、HTTPのcontractをfixtureとfailure testで固めます。
 
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
-full cost model、collation-aware planning、sorted query cursor、streaming、join、aggregation、cross-table transaction、CJK encoding、XBFはroadmapで検討します。
+full cost model、collation-aware planning、sorted query cursor、streaming、複数stageのaggregation、join、cross-table transaction、CJK encoding、XBFはroadmapで検討します。
 
 ## License
 
