@@ -2,6 +2,28 @@ use super::schema_metadata::schema_metadata_bytes;
 use super::*;
 
 impl DbfTable {
+    pub(crate) fn prepare_snapshot(&mut self, path: &Path) -> Result<PreparedSnapshot, DbfError> {
+        self.bind_schema_if_present(path)?;
+        self.ensure_source_current(path)?;
+        let memo = self.apply_memo_updates(path)?.map(|memo| {
+            let memo_path = find_memo_path(path)
+                .unwrap_or_else(|| path.with_extension(memo.format.extension()));
+            (memo_path, memo.bytes)
+        });
+        let index_payload = crate::index::pending_snapshot_payload(
+            path,
+            self,
+            &self.bytes,
+            memo.as_ref().map(|(_, bytes)| bytes.as_slice()),
+        )
+        .map_err(index_error)?;
+        Ok(PreparedSnapshot {
+            dbf: self.bytes.clone(),
+            memo,
+            index_payload,
+        })
+    }
+
     pub fn save_to(&self, path: impl AsRef<Path>) -> Result<(), DbfError> {
         if !self.memo_updates.is_empty() {
             return Err(DbfError::Invalid(

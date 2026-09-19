@@ -36,7 +36,7 @@ cargo run -- --serve-catalog path/to/database
 
 `GET /catalog`でschema、`GET`/`HEAD /{table}/records[/{id}]`でnamed tableを読み取れます。
 `POST /{table}/records`と`PUT`/`PATCH`/`DELETE /{table}/records/{id}`は、single-table serverと同じWAL/ETag semanticsで一つのDBFを更新します。
-`QUERY /{table}/records`と`QUERY /{table}/explain`はsingle-table serverと同じquery documentを受け付け、`QUERY /join`はbounded joinを返します。cross-table atomic write、transaction ID、MVCC visibilityは未実装です。
+`QUERY /{table}/records`と`QUERY /{table}/explain`はsingle-table serverと同じquery documentを受け付け、`QUERY /join`はbounded joinを返します。catalog serverの`POST /transaction`はnamed-table mutationをcatalog journalで複数DBFへatomicにcommitします。transaction IDとMVCC visibilityは未実装です。
 
 single-table serverの`QUERY /explain`は、同じquery documentに対するtable scanまたはindex
 planを構造化JSONで返します。
@@ -86,7 +86,7 @@ resultは最大100,000行です。
 `semi`と`anti`は右側の列を返さず、右側のmatch有無で左側の行を一度だけ返します。
 `cross`は空の`on`を要求し、候補pair数を100,000以下に制限します。
 single-table HTTP serverからは利用できませんが、`--serve-catalog DIRECTORY`のcatalog serverでは
-read-onlyな`QUERY /join`として利用できます。cross-table writeとtransactionは未実装です。
+read-onlyな`QUERY /join`として利用できます。cross-table mutationは`POST /transaction`でatomicにcommitできます。
 
 `$expr`による同一record内のfield比較も、二つのscalar operandに限定して提供します。
 
@@ -184,7 +184,7 @@ recoverableな`TXSE` export boundaryでjournal化します。途中で停止し�
 path-aware plannerは、複数のsingle-field indexが有効なdirect equality filterであれば候補recordをintersectionできます。
 
 catalog joinは`txbase::query::join::parse`と`execute`から使います。
-複数join、cost-based planner、backpressure付きのstreaming、cross-table transactionは未実装です。
+複数join、cost-based planner、backpressure付きのstreaming、transaction ID、MVCC visibilityは未実装です。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt`、`.txschema.json`、有効な`.txidx` sidecarもコピーします。
 sourceのindexがstaleまたは壊れている場合は拒否し、sourceにindexがなければdestinationの古いindexを削除します。
@@ -229,6 +229,7 @@ cargo test --all-targets --all-features
 ```text
 src/dbf/            DBF parser、codec、memo sidecar、maintenance、mutation、WAL、test
 src/catalog.rs      directory直下のDBF発見、table lookup、catalog verify
+src/catalog/transaction.rs catalog lock、journal、named-table transactionのcommit/recovery
 src/index.rs        scalar keyのexternal index sidecar lifecycle
 src/query.rs        JSON queryの実行とvalidation
 src/query_path.rs   dotted pathとprojectionのhelper
@@ -236,6 +237,7 @@ src/server.rs       HTTP routing、QUERY validation、共通HTTP response
 src/server/records.rs DBF recordのGET/POST/PUT/PATCH/DELETEとmutation persistence
 src/server/etag.rs  HTTP representation validatorとconditional request
 src/server/catalog.rs catalog schema、named-table HTTP surface、bounded join
+src/server/catalog_transaction.rs catalog cross-table transaction HTTP surface
 src/server/explain.rs query plan explanation HTTP surface
 src/transaction.rs  fileまたはmemory WALとsnapshot transaction
 src/xbf/            bounded XBF v1 codec、DBF変換、永続化、WAL、test

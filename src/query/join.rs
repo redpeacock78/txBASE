@@ -105,8 +105,7 @@ pub fn parse(body: &[u8]) -> Result<JoinRequest, JoinError> {
 pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, JoinError> {
     validate(request)?;
     let (local_fields, foreign_fields) = join_fields(request)?;
-    let left = catalog.open_table(&request.from)?;
-    let right = catalog.open_table(&request.join.table)?;
+    let (left, right) = catalog.open_tables(&request.from, &request.join.table)?;
     let left_records = left.active_records().collect::<Vec<_>>();
     let right_records = right.active_records().collect::<Vec<_>>();
 

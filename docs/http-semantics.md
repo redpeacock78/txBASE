@@ -52,6 +52,7 @@ They do not by themselves provide transaction isolation, deduplication, or a ret
 | `QUERY /join` (catalog server) | `Content-Type: application/json` and a bounded join document | Joined JSON result with `Accept-Query` |
 | `POST /{table}/records` (catalog server) | JSON object with known fields | `201 Created`, table-qualified `Location` |
 | `PUT`/`PATCH`/`DELETE /{table}/records/{id}` (catalog server) | Same body and precondition rules as single-table routes | Independent named-table mutation |
+| `POST /transaction` (catalog server) | JSON object containing named-table mutation operations | `200` after catalog-journal commit across all named tables |
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |
 | `POST /transaction` | JSON object containing a non-empty `operations` array | `200` after one-table atomic snapshot commit |
 | `PUT /records/{id}` | JSON object replacing fields | Resulting record |
@@ -160,6 +161,12 @@ Startup recovery replays a supported intent when no state payload exists.
 commit. If validation or any operation fails, the copy is discarded and the current DBF is not
 changed. The current boundary is one DBF table; it does not provide cross-table atomicity,
 independent transaction IDs, or MVCC visibility.
+
+The catalog server's `POST /transaction` accepts `/table/records` and
+`/table/records/{id}` mutation paths. It prepares every affected table under one catalog lock,
+commits the DBF and changed sidecars through a directory journal, and rolls back an incomplete
+prepare on the next catalog read. It provides cross-table atomic commit and crash recovery, but
+does not provide independent transaction IDs or MVCC visibility.
 
 The table lock serializes save paths, and a stale independently loaded table is rejected.
 

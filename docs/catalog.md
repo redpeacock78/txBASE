@@ -4,7 +4,7 @@ The catalog boundary maps one database directory to the DBF tables stored direct
 
 This is the first multi-table slice in the roadmap.
 
-It does not add cross-table atomic mutations, indexes, or a second storage format.
+It does not add relationships, cross-table indexes, or a second storage format.
 
 ## Filesystem contract
 
@@ -57,7 +57,7 @@ catalog.verify()?;
 
 The bounded local join boundary is separate from catalog discovery.
 Call `txbase::query::join::execute` with a `Catalog` and a validated join document to read two
-named tables without adding a manifest or cross-table write lock.
+named tables without adding a persistent relationship manifest.
 
 The optional catalog server exposes that boundary over HTTP:
 
@@ -74,7 +74,9 @@ single-table `QUERY /explain`. `QUERY /join` accepts the same JSON join document
 
 `POST /{table}/records` and `PUT`/`PATCH`/`DELETE /{table}/records/{id}` reuse the single-table
 mutation, WAL, ETag, validation, and constraint behavior. Each request commits only its named
-DBF; the catalog does not provide cross-table atomicity, transaction IDs, or MVCC visibility.
+DBF. `POST /transaction` accepts named-table mutation paths and commits all affected DBFs under
+one catalog journal; an incomplete prepare is rolled back on the next catalog read. The catalog
+does not provide transaction IDs or MVCC visibility.
 The catalog is discovered once at server startup, while each request loads the named table through
 the existing recovery path. Named-table mutations do not add or remove tables.
 
@@ -121,14 +123,14 @@ The catalog currently provides discovery, lookup, schema introspection, verifica
 input boundary used by the bounded local join, and an optional HTTP surface for independent
 named-table reads and mutations.
 
-It does not provide a cross-table transaction.
+It provides a cross-table atomic transaction boundary for named record mutations.
 
-It does not provide a shared lock across tables.
+The catalog lock serializes catalog reads and writes, while per-table locks continue to protect
+direct DBF persistence.
 
 It does not infer relationships from field names.
 
 The local join supports `inner`, `left`, `semi`, and `anti` equality joins plus a bounded
 `cross` join, with a hard result bound.
-It does not provide a cost-based planner, streaming backpressure, multiple joins, or cross-table writes.
-Cross-table transactions still require separate contracts for visibility, failure recovery, and
-malformed input.
+It does not provide a cost-based planner, streaming backpressure, multiple joins, transaction
+IDs, or MVCC visibility.

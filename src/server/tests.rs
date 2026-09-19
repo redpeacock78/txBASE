@@ -344,6 +344,81 @@ fn catalog_server_mutates_named_tables_with_single_table_semantics() {
 }
 
 #[test]
+fn catalog_server_transaction_commits_multiple_named_tables() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.dbf"), fixture()).unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+    let mut request = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{
+            "operations": [
+                {"method":"POST","path":"/users/records","body":{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}},
+                {"method":"PATCH","path":"/posts/records/1","body":{"$inc":{"AGE":1}}}
+            ]
+        }"#,
+    );
+
+    let response = super::catalog_transaction::response(&mut request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert!(
+        catalog
+            .open_table("users")
+            .unwrap()
+            .active_record(3)
+            .is_some()
+    );
+    assert_eq!(
+        catalog
+            .open_table("posts")
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["AGE"],
+        30
+    );
+    assert!(!root.join(".txbase.catalog.txn").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn catalog_server_transaction_rolls_back_when_a_named_operation_fails() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.dbf"), fixture()).unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+    let mut request = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{
+            "operations": [
+                {"method":"POST","path":"/users/records","body":{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}},
+                {"method":"PATCH","path":"/posts/records/999","body":{"NAME":"never committed"}}
+            ]
+        }"#,
+    );
+
+    let response = super::catalog_transaction::response(&mut request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(422));
+    assert!(
+        catalog
+            .open_table("users")
+            .unwrap()
+            .active_record(3)
+            .is_none()
+    );
+    assert!(
+        catalog
+            .open_table("posts")
+            .unwrap()
+            .active_record(1)
+            .is_some()
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn explain_endpoint_reports_scan_and_index_plans() {
     let path =
         std::env::temp_dir().join(format!("txbase-server-explain-{}.dbf", std::process::id()));

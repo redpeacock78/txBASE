@@ -252,6 +252,12 @@ pub struct DbfTable {
     source: Option<PersistedState>,
 }
 
+pub(crate) struct PreparedSnapshot {
+    pub(crate) dbf: Vec<u8>,
+    pub(crate) memo: Option<(PathBuf, Vec<u8>)>,
+    pub(crate) index_payload: Option<Vec<u8>>,
+}
+
 fn memo_format_for_version(version: u8) -> Option<MemoFormat> {
     match version {
         0x83 => Some(MemoFormat::Dbase3),

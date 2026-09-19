@@ -44,7 +44,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, multiple or planned joins, cross-table transactions, aggregation stages beyond bounded `$match`, `$group`, `$project`, final `$sort`, and final `$limit`, composite or cross-table constraints, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, multiple or planned joins, transaction IDs or MVCC visibility, aggregation stages beyond bounded `$match`, `$group`, `$project`, final `$sort`, and final `$limit`, composite or cross-table constraints, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -56,7 +56,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
 - An asynchronous backpressure protocol for long-lived streams.
-- Cross-table or independently visible multi-record transactions.
+- Transaction IDs and independently visible multi-record snapshots.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
 
@@ -73,11 +73,11 @@ The catalog currently derives table identity from direct-child DBF filenames and
 It provides table discovery, named table loading, schema output, per-table verification, and
 independent named-table HTTP mutations that reuse the single-table persistence boundary.
 
-It does not yet provide shared locks, relationships, cross-table index coordination, or cross-table transactions.
+It does not yet provide relationships, cross-table index coordination, transaction IDs, or MVCC visibility.
 
 The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact equality and range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support a full cost model, collation-aware planning, or cross-table atomic commits.
+It does not yet support a full cost model, collation-aware planning, transaction IDs, or MVCC visibility.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
@@ -96,9 +96,11 @@ An index is not complete for the broader roadmap until insert, update, logical d
 
 A multi-record transaction is not complete until commit, rollback, crash recovery, and visibility rules are tested together.
 
-The current transaction slice covers one DBF table: a non-empty operation batch runs on a private
-copy, commits through one snapshot/WAL persistence path, and discards the copy on operation
-failure. Cross-table coordination, transaction IDs, and MVCC visibility remain future work.
+The single-table transaction slice covers one DBF table through one snapshot/WAL persistence path.
+The catalog transaction slice prepares named operations across multiple DBFs under a catalog
+lock, commits DBF and changed-sidecar images through a directory journal, and recovers an
+incomplete prepare before the next catalog read. Transaction IDs and MVCC visibility remain
+future work.
 
 ## 4. Phase 2: expand the query model
 

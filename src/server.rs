@@ -6,6 +6,7 @@ use std::path::Path;
 use tiny_http::{Header, Method, Request, Response, Server};
 
 mod catalog;
+mod catalog_transaction;
 mod etag;
 mod explain;
 mod range;

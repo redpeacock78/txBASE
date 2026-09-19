@@ -35,6 +35,8 @@ fn handle_request(mut request: Request, catalog: &Catalog) {
             table_explain_response(&mut request, &path, catalog)
         } else if request.method().as_str() == "QUERY" && record_route(&path).is_some() {
             table_query_response(&mut request, &path, catalog)
+        } else if request.method() == Method::Post && path == "/transaction" {
+            super::catalog_transaction::response(&mut request, catalog)
         } else if matches!(
             request.method(),
             Method::Post | Method::Put | Method::Patch | Method::Delete
@@ -64,7 +66,17 @@ pub(super) fn table_response(request: &Request, path: &str, catalog: &Catalog) -
     if catalog.table_path(name).is_none() {
         return json_response(404, error("not_found", "table not found"), false);
     }
-    let table = match catalog.open_table(name) {
+    let _lock = match catalog.acquire_read_lock() {
+        Ok(lock) => lock,
+        Err(catalog_error) => {
+            return json_response(
+                500,
+                error("catalog_error", &catalog_error.to_string()),
+                false,
+            );
+        }
+    };
+    let table = match catalog.open_table_unlocked(name) {
         Ok(table) => table,
         Err(catalog_error) => {
             return json_response(
@@ -91,7 +103,17 @@ pub(super) fn table_query_response(
     let Some(dbf_path) = catalog.table_path(name) else {
         return json_response(404, error("not_found", "table not found"), false);
     };
-    let table = match catalog.open_table(name) {
+    let _lock = match catalog.acquire_read_lock() {
+        Ok(lock) => lock,
+        Err(catalog_error) => {
+            return json_response(
+                500,
+                error("catalog_error", &catalog_error.to_string()),
+                false,
+            );
+        }
+    };
+    let table = match catalog.open_table_unlocked(name) {
         Ok(table) => table,
         Err(catalog_error) => {
             return json_response(
@@ -115,7 +137,17 @@ pub(super) fn table_mutation_response(
     let Some(dbf_path) = catalog.table_path(name) else {
         return json_response(404, error("not_found", "table not found"), false);
     };
-    let mut table = match catalog.open_table(name) {
+    let _lock = match catalog.acquire_write_lock() {
+        Ok(lock) => lock,
+        Err(catalog_error) => {
+            return json_response(
+                500,
+                error("catalog_error", &catalog_error.to_string()),
+                false,
+            );
+        }
+    };
+    let mut table = match catalog.open_table_unlocked(name) {
         Ok(table) => table,
         Err(catalog_error) => {
             return json_response(
@@ -153,7 +185,17 @@ pub(super) fn table_explain_response(
     let Some(dbf_path) = catalog.table_path(name) else {
         return json_response(404, error("not_found", "table not found"), false);
     };
-    if let Err(catalog_error) = catalog.open_table(name) {
+    let _lock = match catalog.acquire_read_lock() {
+        Ok(lock) => lock,
+        Err(catalog_error) => {
+            return json_response(
+                500,
+                error("catalog_error", &catalog_error.to_string()),
+                false,
+            );
+        }
+    };
+    if let Err(catalog_error) = catalog.open_table_unlocked(name) {
         return json_response(
             500,
             error("catalog_error", &catalog_error.to_string()),

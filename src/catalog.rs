@@ -6,6 +6,8 @@ use std::fmt::{self, Display, Formatter};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod transaction;
+
 #[derive(Debug)]
 pub enum CatalogError {
     Io(std::io::Error),
@@ -36,6 +38,30 @@ impl Error for CatalogError {
 impl From<std::io::Error> for CatalogError {
     fn from(error: std::io::Error) -> Self {
         Self::Io(error)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum CatalogTransactionError {
+    Invalid(String),
+    Catalog(CatalogError),
+}
+
+impl Display for CatalogTransactionError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Invalid(message) => write!(formatter, "invalid catalog transaction: {message}"),
+            Self::Catalog(error) => write!(formatter, "catalog transaction error: {error}"),
+        }
+    }
+}
+
+impl Error for CatalogTransactionError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Invalid(_) => None,
+            Self::Catalog(error) => Some(error),
+        }
     }
 }
 
@@ -75,6 +101,7 @@ impl Catalog {
                 root.display()
             )));
         }
+        let _lock = transaction::read_lock(&root)?;
 
         let mut tables = BTreeMap::new();
         for entry in fs::read_dir(&root)? {
@@ -144,6 +171,11 @@ impl Catalog {
     }
 
     pub fn open_table(&self, name: &str) -> Result<DbfTable, CatalogError> {
+        let _lock = transaction::read_lock(&self.root)?;
+        self.open_table_unlocked(name)
+    }
+
+    pub(crate) fn open_table_unlocked(&self, name: &str) -> Result<DbfTable, CatalogError> {
         let table = self
             .tables
             .get(name)
@@ -155,9 +187,14 @@ impl Catalog {
     }
 
     pub fn schema_json(&self) -> Result<Value, CatalogError> {
+        let _lock = transaction::read_lock(&self.root)?;
+        self.schema_json_unlocked()
+    }
+
+    fn schema_json_unlocked(&self) -> Result<Value, CatalogError> {
         let mut tables = Vec::with_capacity(self.tables.len());
         for entry in self.tables() {
-            let table = self.open_table(entry.name())?;
+            let table = self.open_table_unlocked(entry.name())?;
             tables.push(json!({
                 "name": entry.name(),
                 "file": entry.file_name(),
@@ -171,8 +208,13 @@ impl Catalog {
     }
 
     pub fn verify(&self) -> Result<(), CatalogError> {
+        let _lock = transaction::read_lock(&self.root)?;
+        self.verify_unlocked()
+    }
+
+    fn verify_unlocked(&self) -> Result<(), CatalogError> {
         for entry in self.tables() {
-            let table = self.open_table(entry.name())?;
+            let table = self.open_table_unlocked(entry.name())?;
             table.verify().map_err(|source| CatalogError::Table {
                 name: entry.name().to_owned(),
                 source,
@@ -180,11 +222,32 @@ impl Catalog {
         }
         Ok(())
     }
+
+    pub(crate) fn acquire_read_lock(&self) -> Result<transaction::CatalogReadLock, CatalogError> {
+        transaction::read_lock(&self.root)
+    }
+
+    pub(crate) fn acquire_write_lock(&self) -> Result<transaction::CatalogWriteLock, CatalogError> {
+        transaction::write_lock(&self.root)
+    }
+
+    pub(crate) fn open_tables(
+        &self,
+        left: &str,
+        right: &str,
+    ) -> Result<(DbfTable, DbfTable), CatalogError> {
+        let _lock = transaction::read_lock(&self.root)?;
+        Ok((
+            self.open_table_unlocked(left)?,
+            self.open_table_unlocked(right)?,
+        ))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::xbase::{OperationIr, OperationMethod};
     use std::fs;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -242,6 +305,94 @@ mod tests {
         assert_eq!(schema["tables"][0]["name"], "posts");
         assert_eq!(schema["tables"][1]["schema"]["format"], "dbf");
 
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn commits_named_operations_across_tables() {
+        let root = temporary_catalog();
+        fs::write(root.join("users.dbf"), fixture()).unwrap();
+        fs::write(root.join("posts.dbf"), fixture()).unwrap();
+        let catalog = Catalog::from_path(&root).unwrap();
+
+        catalog
+            .commit_operations(&[
+                OperationIr {
+                    method: OperationMethod::Post,
+                    path: "/users/records".into(),
+                    body: Some(json!({
+                        "ID": 3,
+                        "NAME": "Carol",
+                        "AGE": 42,
+                        "ACTIVE": true
+                    })),
+                },
+                OperationIr {
+                    method: OperationMethod::Patch,
+                    path: "/posts/records/1".into(),
+                    body: Some(json!({"$inc": {"AGE": 1}})),
+                },
+            ])
+            .unwrap();
+
+        assert!(
+            catalog
+                .open_table("users")
+                .unwrap()
+                .active_record(3)
+                .is_some()
+        );
+        assert_eq!(
+            catalog
+                .open_table("posts")
+                .unwrap()
+                .active_record(1)
+                .unwrap()
+                .values["AGE"],
+            30
+        );
+        assert!(!root.join(".txbase.catalog.txn").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_a_failed_named_transaction_without_persisting_earlier_tables() {
+        let root = temporary_catalog();
+        fs::write(root.join("users.dbf"), fixture()).unwrap();
+        fs::write(root.join("posts.dbf"), fixture()).unwrap();
+        let before_users = fs::read(root.join("users.dbf")).unwrap();
+        let before_posts = fs::read(root.join("posts.dbf")).unwrap();
+        let catalog = Catalog::from_path(&root).unwrap();
+
+        let error = catalog
+            .commit_operations(&[
+                OperationIr {
+                    method: OperationMethod::Post,
+                    path: "/users/records".into(),
+                    body: Some(json!({
+                        "ID": 3,
+                        "NAME": "Carol",
+                        "AGE": 42,
+                        "ACTIVE": true
+                    })),
+                },
+                OperationIr {
+                    method: OperationMethod::Patch,
+                    path: "/posts/records/999".into(),
+                    body: Some(json!({"NAME": "never committed"})),
+                },
+            ])
+            .unwrap_err();
+        assert!(matches!(error, CatalogTransactionError::Invalid(_)));
+        assert_eq!(fs::read(root.join("users.dbf")).unwrap(), before_users);
+        assert_eq!(fs::read(root.join("posts.dbf")).unwrap(), before_posts);
+        assert!(
+            catalog
+                .open_table("users")
+                .unwrap()
+                .active_record(3)
+                .is_none()
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

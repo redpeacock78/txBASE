@@ -93,7 +93,8 @@ txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 
 `QUERY /{table}/records` and `QUERY /{table}/explain` accept the same query document as the
 single-table routes. Named-table mutations reuse single-table WAL/ETag behavior and commit one
-DBF at a time; cross-table atomic writes and transactions remain future work.
+DBF at a time. Catalog `POST /transaction` commits named-table mutations atomically through a
+catalog journal; transaction IDs and MVCC remain future work.
 
 The single-table server also exposes `QUERY /explain`, which returns the selected table-scan or
 index plan for the same query document.
@@ -299,6 +300,7 @@ CI runs these checks on Ubuntu, macOS, and Windows.
 ```text
 src/dbf/            DBF parsing, codecs, memo sidecars, maintenance, mutation, WAL, and tests
 src/catalog.rs      Direct-child DBF discovery, table lookup, and catalog verification
+src/catalog/transaction.rs Catalog lock, journal, and named-table transaction commit/recovery
 src/index.rs        External scalar and compound-key index sidecar lifecycle
 src/query.rs        JSON query execution and filter evaluation
 src/query/          planner, ordering, validation, bounded join, and query-specific tests
@@ -307,6 +309,7 @@ src/server.rs       HTTP routing, QUERY validation, and shared HTTP responses
 src/server/records.rs DBF record routes and mutation persistence
 src/server/etag.rs  HTTP representation validators and conditional requests
 src/server/catalog.rs Catalog schema, named-table HTTP surface, and bounded join
+src/server/catalog_transaction.rs Catalog cross-table transaction HTTP surface
 src/server/explain.rs Query-plan explanation HTTP surface
 src/storage.rs      Range-based storage boundary
 src/transaction.rs  File or memory WAL and snapshot transactions
@@ -342,7 +345,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming backpressure, planned and multiple joins, additional aggregation stages, cross-table transactions, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
+Later phases may add a full cost-based index choice, streaming backpressure, planned and multiple joins, additional aggregation stages, transaction IDs, MVCC, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 
