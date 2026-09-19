@@ -110,6 +110,8 @@ An already-applied target must not be applied twice.
 
 A delta with the wrong base must be rejected.
 
+`src/dbf/tests/persistence.rs::recovery_replays_the_dbf_and_index_target_from_one_wal` covers the DBF-replaced/index-not-yet-replaced boundary with a durable `TXDI` target.
+
 ### Compatibility tests
 
 Fixtures should come from independent readers or writers when possible.
@@ -149,7 +151,7 @@ The order below keeps the feedback loop short:
 1. Add fixtures for every newly accepted DBF descriptor or sidecar variant.
 2. Add reference-model cases for multi-step mutation sequences.
 3. Extend malformed corpora and no-panic checks.
-4. Add deterministic recovery tests for every WAL record kind.
+4. Extend deterministic recovery tests for every WAL record kind and replacement boundary.
 5. Add bounded fuzz targets for parsers and query validation.
 6. Add differential checks only after a reference query evaluator exists.
 

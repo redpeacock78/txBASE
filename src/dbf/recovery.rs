@@ -40,6 +40,11 @@ impl DbfTable {
             finish_recovery(wal, &wal_path);
             return Ok(false);
         }
+        let index_payload = wal.records().iter().rev().find_map(|(_, payload)| {
+            crate::index::decode_snapshot_payload(payload)
+                .ok()
+                .flatten()
+        });
         let snapshot =
             wal.records().iter().rev().find_map(|(_, payload)| {
                 match decode_wal_payload(path, payload) {
@@ -57,6 +62,9 @@ impl DbfTable {
                 save_bytes_to(&memo_path, &memo.bytes, "txbase.memo.tmp")?;
             }
             save_bytes_to(path, &snapshot.dbf, "txbase.tmp")?;
+            if let Some(index_payload) = &index_payload {
+                let _ = crate::index::apply_snapshot_payload(path, index_payload);
+            }
             finish_recovery(wal, &wal_path);
             return Ok(true);
         }

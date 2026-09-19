@@ -86,6 +86,8 @@ Path-loaded mutations use a `TXDP` byte-range delta when it is smaller than a co
 
 The WAL is synced before DBF or memo sidecar replacement, and startup recovery replays a durable unfinished mutation.
 
+When an existing index sidecar is affected, its target is recorded in the same WAL and replayed after a crash before the WAL is cleared.
+
 ### Inspect and maintain
 
 Inspect a table without changing its DBF bytes:
@@ -140,7 +142,7 @@ Usage:
 
 `index verify` rejects a sidecar whose DBF or memo source is stale.
 
-Normal DBF saves and WAL recovery refresh an existing sidecar on a best-effort basis; `index rebuild` is the explicit repair path.
+Normal DBF saves record and apply an existing sidecar's target through the WAL; a stale or invalid sidecar is rejected and `index rebuild` remains the explicit repair path.
 
 `pack` removes logically deleted records and renumbers the remaining physical records.
 

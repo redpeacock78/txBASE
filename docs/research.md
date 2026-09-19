@@ -71,6 +71,9 @@ The README organization follows the section shape of [texenv's README](https://g
 ### SQLite
 
 - [How SQLite Is Tested](https://sqlite.org/testing.html)
+- [Atomic Commit In SQLite](https://sqlite.org/atomiccommit.html)
+- [Write-Ahead Logging](https://sqlite.org/wal.html)
+- [SQLite database file format](https://sqlite.org/fileformat.html)
 - [SQLite query planning](https://sqlite.org/queryplanner.html)
 - [SQLite requirements](https://sqlite.org/requirements.html)
 - [SQLite quality management](https://sqlite.org/qmplan.html)
@@ -82,6 +85,12 @@ The README organization follows the section shape of [texenv's README](https://g
 - [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
 - [RFC 5789: PATCH Method](https://www.rfc-editor.org/rfc/rfc5789.html)
 - [RFC 10008: The HTTP QUERY Method](https://www.rfc-editor.org/rfc/rfc10008.html)
+
+### File-system commit primitives
+
+- [POSIX `rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)
+- [POSIX `fsync()`](https://pubs.opengroup.org/onlinepubs/009695399/functions/fsync.html)
+- [POSIX file-system cache and directory durability rationale](https://pubs.opengroup.org/onlinepubs/9799919799/xrat/V4_xbd_chap01.html)
 
 ## Review rule
 

@@ -58,7 +58,7 @@ fn table_lock_serializes_file_handles() {
 
     drop(lock);
     probe.try_lock_exclusive().unwrap();
-    probe.unlock().unwrap();
+    fs2::FileExt::unlock(&probe).unwrap();
     fs::remove_file(lock_path).unwrap();
 }
 
@@ -190,6 +190,69 @@ fn recovery_refreshes_an_existing_index_sidecar() {
 
     fs::remove_file(path).unwrap();
     fs::remove_file(index_path).unwrap();
+}
+
+#[test]
+fn recovery_replays_the_dbf_and_index_target_from_one_wal() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-index-wal-bundle-{}.dbf",
+        std::process::id()
+    ));
+    let wal_path = path.with_extension("txbase.wal");
+    let index_path = path.with_extension("txidx");
+    let lock_path = path.with_extension("txbase.lock");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&index_path);
+    let _ = fs::remove_file(&lock_path);
+
+    let original = fixture();
+    fs::write(&path, &original).unwrap();
+    IndexFile::build(&path, vec![IndexDefinition::for_field("NAME")])
+        .unwrap()
+        .save(&path)
+        .unwrap();
+
+    let mut pending = DbfTable::from_bytes(&original).unwrap();
+    pending
+        .insert_record(
+            serde_json::json!({
+                "ID": 3,
+                "NAME": "Carol",
+                "AGE": 42,
+                "ACTIVE": true
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        )
+        .unwrap();
+    let index_payload =
+        crate::index::pending_snapshot_payload(&path, &pending, &pending.to_bytes(), None)
+            .unwrap()
+            .expect("existing index should produce a target payload");
+
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(&snapshot_payload(&pending.to_bytes())).unwrap();
+    wal.append(&index_payload).unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    fs::write(&path, pending.to_bytes()).unwrap();
+    let recovered = DbfTable::from_path(&path).unwrap();
+    assert_eq!(recovered.active_record(3).unwrap().values["NAME"], "Carol");
+    assert_eq!(
+        IndexFile::load(&path)
+            .unwrap()
+            .lookup_eq("NAME", &serde_json::json!("Carol"))
+            .unwrap(),
+        vec![3]
+    );
+    assert!(!wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(index_path).unwrap();
+    fs::remove_file(lock_path).unwrap();
 }
 
 #[test]

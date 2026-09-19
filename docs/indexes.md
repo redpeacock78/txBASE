@@ -78,9 +78,13 @@ A version 1 sidecar is not used for query planning until it has been rebuilt.
 
 `load` and `verify` recover the DBF first, then compare the stored source fingerprint.
 
-When a `.txidx` file already exists, normal DBF persistence and WAL recovery attempt to refresh it from the committed table state.
+When a `.txidx` file already exists, normal DBF persistence records its target contents in the same durable WAL as the DBF or memo target.
 
-This refresh is best effort: a refresh error does not make the DBF mutation fail, and the next `load` or `verify` rejects the stale or invalid sidecar.
+The target sidecar is replaced after the WAL state records are synced.
+
+If the replacement is interrupted, startup recovery replays the DBF or memo target and the index target before clearing the WAL.
+
+If target generation or application cannot be completed, the DBF remains the source of truth and the next `load` or `verify` rejects the stale or invalid sidecar.
 
 A DBF or memo change returns a stale-index error instead of returning potentially wrong record numbers.
 
@@ -94,17 +98,21 @@ Rebuild the index at the destination instead of treating a missing `.txidx` file
 
 ## Crash boundary
 
-The current contract treats the index as derived state rather than as a second source of truth.
+The current contract treats the index as derived state, but gives a valid existing sidecar a durable recovery target alongside the DBF or memo target.
 
-The DBF and memo state are recovered from the durable WAL payload first, and recovery then attempts to refresh an existing index sidecar.
+The WAL is synced before any target replacement.
 
-If an interruption leaves the sidecar stale, its source fingerprint and exact-entry validation reject it before query planning can use it.
+Recovery reapplies the target records idempotently and clears the WAL only after the DBF and memo writes have completed.
 
-The path-aware executor then falls back to a table scan, so a stale optional index does not change query results.
+An index target with a matching source fingerprint is then installed with the same synced temporary-file replacement used by normal index writes.
 
-This is crash-recoverable derived state, not one atomic filesystem rename across the DBF, memo, and index files.
+If a crash leaves an old or invalid sidecar visible, its source fingerprint and exact-entry validation reject it before query planning can use it.
 
-An atomic DBF/index contract still needs a durable target bundle or manifest, recovery rules for every replacement boundary, and fault-injection tests that prove the bundle is either usable or rejected.
+The path-aware executor falls back to a table scan, so a stale optional index does not change query results.
+
+This is a WAL-backed crash-atomic recovery contract for valid target records, not one filesystem rename across the DBF, memo, and index files.
+
+It depends on the file system honoring the file and directory sync operations used by the repository.
 
 ## Current boundary
 
@@ -124,6 +132,6 @@ It still materializes candidate record numbers and sorts them by physical DBF or
 
 `IndexFile::load` still validates the sidecar by rebuilding expected entries from the current DBF, so the binary-seek contract does not yet claim an end-to-end speedup.
 
-Multi-key ordered traversal, multi-index selection, and crash-atomic DBF/index commits require separate contracts.
+Multi-key ordered traversal, multi-index selection, and cross-table atomic commits require separate contracts.
 
-The equality, range, and single-field ordered planners are tested alongside mutation, recovery, stale-index, and rebuild behavior; broader index support still needs multi-key and crash-atomic contracts.
+The equality, range, and single-field ordered planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs multi-key and cross-table contracts.

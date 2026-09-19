@@ -62,9 +62,9 @@ It provides table discovery, named table loading, schema output, and per-table v
 
 It does not yet provide shared locks, relationships, cross-table index coordination, or cross-table transactions.
 
-The index sidecar foundation is implemented for scalar keys, exact equality and range candidate lookup, single-field ordered traversal, path-aware planning, stale detection, explicit rebuild, and best-effort refresh after normal persistence or WAL recovery.
+The index sidecar foundation is implemented for scalar keys, exact equality and range candidate lookup, single-field ordered traversal, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support multi-key ordered planning, multi-index selection, or crash-atomic DBF/index commits.
+It does not yet support multi-key ordered planning, multi-index selection, or cross-table atomic commits.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
@@ -202,4 +202,4 @@ The number of files is not a quality metric by itself.
 - Automatic CJK conversion when the declared encoding is ambiguous.
 - Planner-backed indexes, joins, aggregation, MVCC, XBF, object-storage, or distributed code without a contract and end-to-end test.
 
-The next index slice is intentionally local: a crash-atomic DBF/index commit contract.
+The next index slice is intentionally local: multi-key ordered planning or multi-index selection, after their contracts are written.

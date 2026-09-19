@@ -136,7 +136,7 @@ pub(crate) fn binary_value(value: &Value, field: &FieldDescriptor) -> Result<Vec
             let high = hex_digit(pair[0]);
             let low = hex_digit(pair[1]);
             match (high, low) {
-                (Some(high), Some(low)) => Ok(high << 4 | low),
+                (Some(high), Some(low)) => Ok((high << 4) | low),
                 _ => Err(DbfError::Invalid(format!(
                     "binary field {} contains a non-hexadecimal character",
                     field.name

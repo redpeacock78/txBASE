@@ -72,6 +72,8 @@ WALをsyncしてからDBFまたはmemo sidecarを置き換えます。
 
 起動時には未完了のmutationを復旧します。
 
+既存index sidecarがある場合、その更新先も同じWALに記録し、crash後にWALを消す前に再適用します。
+
 ### Inspectとmaintenance
 
 schemaとverifyはDBFを読み取り、schemaとrecord boundaryを確認します。
@@ -100,7 +102,9 @@ txbase recall path/to/users.dbf 2
 
 `index verify`はDBFまたはmemo sidecarが変更されたindexをstaleとして拒否します。
 
-通常のDBF保存とWAL recoveryは既存sidecarをbest effortで更新し、`index rebuild`は明示的な修復手段です。
+通常のDBF保存は既存sidecarの更新先をWAL経由で適用し、staleまたはinvalidなsidecarは拒否します。
+
+`index rebuild`は明示的な修復手段です。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt` sidecarもコピーします。
 

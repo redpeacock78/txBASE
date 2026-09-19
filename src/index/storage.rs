@@ -23,12 +23,33 @@ pub(super) fn source_fingerprint(path: &Path) -> Result<SourceFingerprint, Index
     Ok(SourceFingerprint { dbf, memo })
 }
 
+pub(super) fn source_fingerprint_for(
+    path: &Path,
+    dbf_bytes: &[u8],
+    memo_override: Option<&[u8]>,
+) -> Result<SourceFingerprint, IndexError> {
+    let dbf = fingerprint_bytes(dbf_bytes);
+    let memo = memo_sidecar_path(path)
+        .map(|path| {
+            memo_override
+                .map(fingerprint_bytes)
+                .map(Ok)
+                .unwrap_or_else(|| file_fingerprint(&path))
+        })
+        .transpose()?;
+    Ok(SourceFingerprint { dbf, memo })
+}
+
 fn file_fingerprint(path: &Path) -> Result<FileFingerprint, IndexError> {
     let bytes = fs::read(path)?;
-    Ok(FileFingerprint {
+    Ok(fingerprint_bytes(&bytes))
+}
+
+fn fingerprint_bytes(bytes: &[u8]) -> FileFingerprint {
+    FileFingerprint {
         length: bytes.len() as u64,
-        hash: fnv1a(&bytes),
-    })
+        hash: fnv1a(bytes),
+    }
 }
 
 fn fnv1a(bytes: &[u8]) -> u64 {

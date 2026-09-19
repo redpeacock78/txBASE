@@ -9,6 +9,7 @@ const INDEX_FORMAT: &str = "txbase-index";
 const INDEX_VERSION: u8 = 2;
 const INDEX_EXTENSION: &str = "txidx";
 
+mod commit;
 mod lookup;
 mod ordering;
 mod storage;
@@ -242,33 +243,9 @@ impl IndexFile {
     }
 }
 
-pub(crate) fn refresh_if_present(dbf_path: &Path, table: &DbfTable) -> Result<(), IndexError> {
-    let index_path = sidecar_path(dbf_path);
-    if !index_path.is_file() {
-        return Ok(());
-    }
-
-    let existing = storage::read_sidecar(&index_path)?;
-    let definitions = existing
-        .indexes
-        .iter()
-        .map(|index| index.definition.clone())
-        .collect::<Vec<_>>();
-    let indexes = validation::build_indexes(table, &definitions)?;
-    let source = storage::source_fingerprint(dbf_path)?;
-    if existing.source == source && existing.indexes == indexes {
-        return Ok(());
-    }
-
-    let refreshed = IndexFile {
-        format: INDEX_FORMAT.to_owned(),
-        version: INDEX_VERSION,
-        source,
-        indexes,
-    };
-    let bytes = serde_json::to_vec_pretty(&refreshed)?;
-    storage::write_atomic(&index_path, &bytes)
-}
+pub(crate) use commit::{
+    apply_snapshot_payload, decode_snapshot_payload, pending_snapshot_payload, refresh_if_present,
+};
 
 #[cfg(test)]
 #[path = "index_tests.rs"]

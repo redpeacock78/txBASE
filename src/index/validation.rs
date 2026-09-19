@@ -154,14 +154,14 @@ pub(super) fn build_indexes(
         entries.sort_by(|left, right| ordering::compare_keys(&left.key, &right.key));
         let mut merged = Vec::<IndexEntry>::with_capacity(entries.len());
         for mut entry in entries {
-            if let Some(previous) = merged.last_mut()
-                && ordering::compare_keys(&previous.key, &entry.key) == std::cmp::Ordering::Equal
-            {
-                previous.records.append(&mut entry.records);
-                previous.records.sort_unstable();
-            } else {
-                merged.push(entry);
+            if let Some(previous) = merged.last_mut() {
+                if ordering::compare_keys(&previous.key, &entry.key) == std::cmp::Ordering::Equal {
+                    previous.records.append(&mut entry.records);
+                    previous.records.sort_unstable();
+                    continue;
+                }
             }
+            merged.push(entry);
         }
         indexes.push(SecondaryIndex {
             definition: definition.clone(),

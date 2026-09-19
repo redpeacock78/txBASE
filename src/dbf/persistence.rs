@@ -75,6 +75,14 @@ impl DbfTable {
         };
         let payload = delta_payload(&prepared, path, memo_snapshot.as_ref(), full_payload.len())?
             .unwrap_or(full_payload);
+        let index_payload = crate::index::pending_snapshot_payload(
+            path,
+            &prepared,
+            &prepared.bytes,
+            memo_snapshot.as_ref().map(|memo| memo.bytes.as_slice()),
+        )
+        .ok()
+        .flatten();
         if let Some(operation) = operation {
             wal.append(&operation_payload(operation)?)
                 .map_err(transaction_error)?;
@@ -82,14 +90,22 @@ impl DbfTable {
         }
         wal.append(&payload).map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
+        if let Some(index_payload) = &index_payload {
+            wal.append(index_payload).map_err(transaction_error)?;
+            wal.sync().map_err(transaction_error)?;
+        }
         if let Some(memo) = &memo_snapshot {
             let memo_path = find_memo_path(path)
                 .unwrap_or_else(|| path.with_extension(memo.format.extension()));
             save_bytes_to(&memo_path, &memo.bytes, "txbase.memo.tmp")?;
         }
         save_bytes_to(path, &prepared.bytes, "txbase.tmp")?;
-        let _ = crate::index::refresh_if_present(path, &prepared);
-        if wal.clear().is_ok() {
+        let index_result = if let Some(index_payload) = &index_payload {
+            crate::index::apply_snapshot_payload(path, index_payload)
+        } else {
+            crate::index::refresh_if_present(path, &prepared)
+        };
+        if index_result.is_ok() && wal.clear().is_ok() {
             drop(wal);
             let _ = fs::remove_file(wal_path);
         }
