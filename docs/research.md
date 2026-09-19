@@ -1,330 +1,81 @@
-# Specification research and design decisions
+# Specification research index
 
-This document records the external specifications used to choose the first
-implementation boundary. It is a compatibility map, not a claim that txbase
-implements any of the referenced products in full.
+This directory records the specifications used to define txBASE's current boundary and future work.
 
-## DBF and dBASE
+The documents distinguish three statuses:
 
-The [dBASE DBF file structure](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)
-defines the byte-level facts that the parser must preserve:
+- **Current** means the behavior exists in this repository and is covered by code or tests.
+- **Reference** means an external product or protocol is being studied for a design lesson.
+- **Future** means a proposal that requires a separate contract before implementation.
 
-- The header stores the version byte, last-update date, record count, header length, record length, language-driver byte, and other flags in fixed offsets.
-- Multi-byte header values are little-endian.
-- Classic tables use 32-byte field descriptors; the dBASE Level 7 layout uses 48-byte descriptors and can carry field-property data after the descriptor terminator.
-- Field data is packed into each record without separators.
-- `0x20` marks an active record and `0x2a` marks a deleted record.
-- `0x1a` is the documented end-of-file marker.
-- Character data is code-page data, while date and numeric fields have textual encodings; memo and binary-like fields refer to blocks in a sidecar file.
+This repository does not claim compatibility merely because it uses a familiar name or JSON shape.
 
-The common field encodings are also part of the compatibility contract:
+## Topic documents
 
-| Type | On-disk representation | Initial txbase behavior |
+| Topic | Document | Status |
 | --- | --- | --- |
-| `C` | Space-padded character bytes | Code-page text normally; binary-flagged `C` is fixed-width lowercase hex without code-page conversion |
-| `D` | Eight bytes in `YYYYMMDD` form | String |
-| `T` | Eight bytes: little-endian Julian day and milliseconds since midnight | Visual FoxPro `T` is a second-precision ISO-8601 string; non-FoxPro timestamp values remain hex |
-| `N` and `F` | Right-justified numeric text | JSON number when finite and parseable |
-| `L` | Logical marker such as `T` or `F` | Boolean or JSON null for an unknown marker |
-| `I` and `+` | Four-byte integer representation | Little-endian signed integer; Level 7 `+` and Visual FoxPro `0x31` Integer AutoInc inserts use and advance their descriptor values when omitted |
-| `Y` | Eight-byte little-endian fixed-point currency | Four-decimal fixed-point string; writes validate the signed 64-bit scaled representation |
-| `V` and `Q` | Visual FoxPro `0x32` fixed slots with a trailing length byte selected by `_NullFlags` | `V` text and `Q` lowercase hex; nullable and variable-length bits are maintained on writes while `_NullFlags` remains hidden |
-| `W` | Four-byte pointer to a Visual FoxPro `.fpt` binary block | Lowercase hex payload; FPT writes append a type-0 binary block |
-| `M` | Text pointer to a memo block | Text from a sibling `.dbt` or `.fpt` sidecar; binary-flagged `M` is lowercase hex; pointer text otherwise |
-| `B`, `G`, and `P` | Text pointer to a binary block; Visual FoxPro `B` width 8 is a double and `P` is a picture | Hex payload from a sibling `.dbt` or `.fpt` sidecar when present; dBASE III/IV DBT and FPT writes append a binary block, with dBASE III's `0x1a1a` terminator reserved |
+| dBASE and Visual FoxPro file structure | [DBF compatibility](dbf-compatibility.md) | Current plus future encoding work |
+| MongoDB predicates and query planning | [Query model](query-model.md) | Current subset plus reference |
+| Firestore and Realtime Database design | [Firebase model](firebase-model.md) | Reference |
+| SQLite test breadth and quality | [Testing and quality](testing-quality.md) | Current test map plus reference |
+| HTTP methods, PATCH, and QUERY | [HTTP semantics](http-semantics.md) | Current routes plus protocol reference |
+| CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Future |
 
-The parser therefore reads the declared header and record boundaries, checks
-field names and widths, uses the language-driver byte for the supported
-code-page mappings, including Visual FoxPro's Windows-1250 (`0xc8`),
-Windows-1251 (`0xc9`), Windows-1254 (`0xca`), and Windows-1253 (`0xcb`)
-drivers, plus Windows-1255 (`0x7d`) and Windows-1256 (`0x7e`), and excludes
-records marked deleted from the JSON read path.
-Character writes reject values that the declared code-page mapping
-cannot represent. When a sibling `.dbt` or `.fpt` exists, `M` fields are
-resolved from their block pointers, while `B`/`G`/`P` payloads are exposed as hex
-text. Existing pointers are retained separately
-so non-memo DBF mutations do not rewrite them as text. Text changes append to
-the existing `.dbt` or `.fpt` sidecar, using the dBASE III terminator, the
-dBASE IV header-inclusive length, or the FPT length as appropriate, and update
-the DBF pointer in a WAL record; path-loaded changes use a `TXDP` byte-range
-delta when it is smaller, otherwise the complete `TXDM` snapshot remains the
-fallback. Startup recovery replaces both files from either form. dBASE III
-binary writes accept hex text and append a block
-terminated by the dBASE III `0x1a1a` marker; values that collide with that
-marker are rejected. dBASE IV binary writes accept hex text, honor the DBT
-header block size, and append a length-delimited binary block, while FPT writes
-append a type-0 binary block, including the Visual FoxPro `P` picture type.
-OLE semantics and other code-page conversion remain explicit future work.
+## Research method
 
-The reader uses the declared record count as its boundary and does not require
-the trailing `0x1a` when the declared records are complete. It still preserves
-the documented marker in fixtures, and a future strict-compatibility mode can
-report its absence without changing the normal read path.
+Primary specifications and vendor documentation are preferred.
 
-The sidecar rule is deliberate: WAL, MVCC metadata, indexes, and transaction
-state belong in separate files so a checkpointed DBF remains readable by older
-xBase tools.
+Implementation behavior is checked against the current source and tests before it is called current.
 
-Four-byte memo pointers in FoxPro `0xF5` and Visual FoxPro `0x30`–`0x32`
-tables use little-endian order; FPT block headers and lengths remain
-big-endian.
+Design notes are labeled future when they are not implemented.
 
-Visual FoxPro `Y` currency values are exposed as four-decimal fixed-point
-strings so the signed 64-bit scaled value is not rounded through `f64`.
+The research pass for this index was refreshed on 2026-09-19.
 
-Visual FoxPro `T` DateTime values use a little-endian Julian day and
-milliseconds-since-midnight pair. txbase exposes valid values as
-second-precision ISO-8601 strings and preserves non-FoxPro timestamp fields as
-hex.
+The README organization follows the section shape of [texenv's README](https://github.com/redpeacock78/texenv/blob/master/README.md), while the content is specific to txBASE.
 
-Visual FoxPro `0x30`–`0x32` nullable fields use `_NullFlags`. In `0x32`, `V`
-and `Q` fields additionally use fixed record slots whose final byte stores the
-actual length when the corresponding variable-length bit is set. The following
-nullable bit marks JSON null. `V` uses the declared code page, `Q` and
-binary-flagged `V` use hexadecimal text, and the hidden system field is
-regenerated only for affected inserts or updates.
+## Primary source groups
 
-Visual FoxPro `W` Blob fields are four-byte pointers to binary `.fpt` blocks and
-do not undergo code-page conversion. txbase exposes those blocks as lowercase
-hex and appends type-0 binary blocks on supported FPT writes.
+### dBASE and Visual FoxPro
 
-The binary flag on Visual FoxPro `C` and `M` fields also disables code-page
-translation. Binary `C` bytes remain in the DBF record; binary `M` bytes use the
-same FPT binary-block path as `P` and `W`.
+- [dBASE Level 7 file format](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)
+- [Visual FoxPro table file structure](https://techshelps.github.io/MSDN/FOXHELP/html/contable_file_structure_lp.dbfrp.htm)
+- [Visual FoxPro variable-length fields](https://vfphelp.com/help/html/465e7a94-51b7-4e0c-98f9-432864fe5bcc.htm)
+- [Visual FoxPro memo file structure](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm)
+- [Visual FoxPro auto-increment fields](https://www.vfphelp.com/vfp9/html/bd6eff0c-2ce5-43b7-ab29-f5360cd2f90e.htm)
+- [Visual FoxPro code pages](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)
 
-The mutation layer currently reuses the parsed header and field descriptors.
-It supports scalar JSON values for the field types already decoded by the
-reader, preserves physical record numbers, writes the deletion marker for
-logical deletes, assigns omitted Level 7 `+` and Visual FoxPro `0x31`
-Integer AutoInc values from their descriptor slots, preserves those read-only
-values on existing records, and
-replaces the DBF through a synced temporary file.
-The transaction module now supplies a length-prefixed `TXWL` file WAL and a
-snapshot transaction manager. Before an atomic DBF replacement, a path-loaded
-HTTP mutation first appends and syncs a versioned `TXOP` intent, then appends
-and syncs a `TXDP` byte-range delta when it is smaller than the full payload.
-Source-less or larger changes use a `TXDB` record for DBF-only changes, or a
-`TXDM` record containing the complete new DBF and memo snapshots. The WAL is
-synced before replacement, and `DbfTable::from_path` replays the latest delta
-or snapshot left by an interrupted mutation. If only the durable `TXOP` intent
-remains, it replays the supported mutation and writes a state payload before
-returning the loaded table.
+### MongoDB
 
-The transaction WAL stores a four-byte magic, a little-endian payload length,
-a monotonically increasing LSN, and the payload. Opening a WAL validates
-complete records and truncates only an incomplete final record. It does not
-interpret arbitrary payloads. The DBF integration recognizes `TXDP` deltas as
-well as `TXDB` and `TXDM` snapshots. A delta carries base/target lengths and
-hashes plus non-overlapping byte patches; recovery accepts an already-applied
-target so a retry is idempotent, and rejects a different base. This is still a
-byte-range optimization in the state record. HTTP mutations prepend a
-versioned `TXOP` intent record before the state payload; recovery replays the
-supported `POST`/`PUT`/`PATCH`/`DELETE` intent only when no state payload is
-present, and otherwise applies the committed `TXDB`/`TXDM`/`TXDP` state. Save
-paths now use an exclusive table lock, while broader multi-writer coordination
-and fine-grained operation semantics remain future work. A
-table loaded from a path records the DBF and memo bytes it read and refuses to
-save over an externally changed snapshot.
+- [Documents](https://www.mongodb.com/docs/manual/core/document/)
+- [Query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
+- [Find command](https://www.mongodb.com/docs/manual/reference/command/find/)
+- [Query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
+- [Update operators](https://www.mongodb.com/docs/manual/reference/mql/update/)
+- [Atomicity and transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/)
 
-## MongoDB query ideas
+### Firebase
 
-MongoDB documents are BSON documents with field-value pairs, nested documents,
-and arrays. The [document model](https://www.mongodb.com/docs/manual/core/document/)
-and [query predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
-show why a JSON query shape is useful: field predicates and logical operators
-are composable without introducing SQL syntax.
+- [Firestore data model](https://firebase.google.com/docs/firestore/data-model)
+- [Firestore transactions and batched writes](https://firebase.google.com/docs/firestore/manage-data/transactions)
+- [Firestore write-time aggregation](https://firebase.google.com/docs/firestore/solutions/aggregation)
+- [Realtime Database save data](https://firebase.google.com/docs/database/admin/save-data)
+- [Realtime Database security](https://firebase.google.com/docs/database/security)
+- [Realtime Database offline capabilities](https://firebase.google.com/docs/database/android/offline-capabilities)
 
-The first txbase vocabulary is intentionally smaller than MongoDB's current
-operator set:
+### SQLite
 
-| Area | Initial vocabulary | Status |
-| --- | --- | --- |
-| Field comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` | Executed for scalar and array values |
-| Membership | `$in`, `$nin` | Executed |
-| Boolean composition | `$and`, `$or`, `$not` | Executed |
-| Result shaping | `sort`, `projection`, `limit`, `skip` | Executed |
-
-The [comparison operator reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/)
-defines the comparison and membership family. txbase uses exact field names,
-JSON scalar comparison, explicit type ordering for sort, and deterministic
-DBF record order for sort ties. Dotted paths traverse nested JSON objects and
-arrays, with numeric segments selecting array indexes, nonnumeric segments
-visiting every array element, and exact field-name matches taking precedence;
-collation is not supported.
-
-The [logical operator reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)
-defines `$and` as requiring every clause, `$or` as requiring at least one
-clause, and `$not` as inverting a predicate. Those operators are not merely
-string names: the executor validates their JSON shape. An empty `$and` matches
-all records and an empty `$or` matches no records.
-
-MongoDB's sort contract uses `1` for ascending and `-1` for descending order.
-It permits multiple sort keys, does not promise a stable order for equal keys,
-and uses a BSON type ordering when values have different types. See the
-[sort reference](https://www.mongodb.com/docs/manual/reference/method/cursor.sort/).
-DBF record order is otherwise naturally reproducible, so txbase retains it as
-the deterministic tie breaker instead of inheriting MongoDB's unspecified tie
-order.
-
-MongoDB projection and update documents have independent semantics. The
-prototype validates projection values as `0` or `1`, rejects mixed
-inclusion and exclusion, and applies the selected fields. It does not enforce
-the full rules described by the
-[projection reference](https://www.mongodb.com/docs/manual/reference/mql/projection/).
-Update operators use a document of the form `{ "$set": { "field": value } }`.
-The [update reference](https://www.mongodb.com/docs/manual/reference/mql/update/)
-lists field operators such as `$set`, `$unset`, `$inc`, `$mul`, `$min`, and
-`$max`, as well as array operators. txbase currently selects the small typed
-subset `$set`, `$unset`, and `$inc`; it rejects the rest rather than silently
-treating an unsupported operator as a field name.
-
-MongoDB documents that a write is atomic at the single-document level and that
-multi-document writes can interleave unless a transaction is used. See
-[atomicity and transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/).
-That distinction is useful for txbase: `$inc` is an engine operation, while
-multi-record transaction guarantees belong to the transaction layer rather
-than to the JSON parser.
-
-The project does not target MongoDB wire compatibility, BSON, aggregation,
-JavaScript predicates, or the complete update-operator set.
-
-## Firebase design lessons
-
-Firebase exposes two different data models that should not be conflated.
-
-[Cloud Firestore](https://firebase.google.com/docs/firestore/data-model) uses
-documents in collections, with nested objects and subcollections. The
-[Realtime Database web guide](https://firebase.google.com/docs/database/web/read-and-write)
-uses references into a JSON tree, asynchronous listeners, immediate local
-events, and eventual synchronization with the server.
-
-The useful architectural lessons are:
-
-1. A stable path or document identity makes reads, writes, and subscriptions understandable.
-2. Local-first behavior must state what is provisional and what is server-committed.
-3. Synchronization and conflict policy are part of the data model, not a hidden transport detail.
-4. Authorization and validation must run at the server boundary.
-
-The client-first behavior needs a precise durability label. The Realtime
-Database web guide says writes produce local events before server persistence,
-and its web APIs do not persist offline data outside the current session. The
-[offline capabilities guide](https://firebase.google.com/docs/database/android/offline-capabilities)
-also states that offline transactions are queued but are not persisted across
-an app restart. Firestore's offline cache can answer queries locally and later
-synchronize local changes, with last-write-wins behavior for multiple local
-writes to the same document. These are client synchronization policies, not
-properties that a DBF file automatically provides.
-
-The [Realtime Database security model](https://firebase.google.com/docs/database/security)
-separates `.read`, `.write`, `.validate`, and `.indexOn` rules. txbase does
-not copy Firebase's rules language, authentication, listener protocol, or
-offline client cache. If an edge or client mode is added later, those four
-concerns need separate contracts instead of an implicit "Firebase mode".
-
-## SQLite testing and quality
-
-SQLite's [testing overview](https://www.sqlite.org/testing.html) describes
-four independently developed harnesses, large parameterized suites, out of
-memory and I/O fault injection, crash and power-loss tests, malformed-database
-tests, fuzzing, regression tests, and runtime assertions. SQLite also compares
-results with optimizations enabled and disabled, and uses differential testing
-through SQL Logic Test.
-
-SQLite's [TH3 coverage description](https://sqlite.org/th3.html) reports 100%
-branch coverage and 100% MC/DC for the covered core configuration. That is a
-quality target for a widely deployed database library, not a meaningful claim
-for this first prototype.
-
-The txbase quality path is staged:
-
-1. Keep parser tests for valid headers, field layouts, deleted records, truncated input, and invalid markers.
-2. Compare generated mutation sequences with an in-memory reference model; the DBF suite now covers this boundary.
-3. Keep expanding malformed-input corpora; DBF, memo, WAL, and JSON boundary cases are now checked, and a deterministic no-panic DBF parser smoke test covers generated binary inputs. Index cases wait for an index parser.
-4. Cover crash boundaries around WAL sync and checkpoint publication; DBF snapshot and byte-range delta recovery cover torn WAL tails, and a lone torn payload is discarded during startup.
-5. Pinned FoxPro DBF/FPT, dBASE III DBF, and dBASE IV DBF/DBT fixtures from independent readers now cover basic external records and memo-pointer compatibility; add more fixtures from independent xBase implementations.
-6. Keep expanding concurrency coverage with stress and fault-injection tests; stale-writer wave coverage is now present. Add fuzzing and differential checks once those components exist. CI already runs the core gate on Ubuntu, macOS, and Windows.
-
-The current CI gate is deliberately only `fmt`, `clippy`, and `cargo test`.
-
-## HTTP method semantics
-
-[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html) defines the shared
-HTTP semantics and the method token as case-sensitive. The initial API uses
-the standard meaning of each method rather than treating method names as
-arbitrary RPC verbs:
-
-| Method | txbase role | Boundary |
-| --- | --- | --- |
-| `GET` | Read a representation or record | Implemented for `/records` and `/records/{id}` |
-| `POST` | Create a physical DBF record | Implemented for JSON scalar fields |
-| `PUT` | Full replacement of an active record | Implemented; omitted fields become null |
-| `PATCH` | Partial modification of an active record | Implemented for JSON object bodies |
-| `DELETE` | Logical deletion | Implemented by writing the DBF deletion marker |
-| `QUERY` | Safe query with request content | JSON execution for `/records` |
-
-`PATCH` has its own method specification in
-[RFC 5789](https://www.rfc-editor.org/rfc/rfc5789.html). It is not safe by
-default, and an API has to define the accepted patch media type and conflict
-behavior. txbase therefore does not equate a MongoDB update document with
-the HTTP method itself.
-
-The mutation methods require `Content-Type: application/json`. `POST` returns
-`201` and a `Location` header, `PUT` and `PATCH` return the resulting record,
-and `DELETE` returns `204`. A successful mutation is serialized to temporary
-file(s), synced, and renamed over the configured DBF path and, for memo writes,
-its sidecar. Before replacement, a path-loaded mutation appends a `TXDP`
-byte-range delta when it is smaller than a complete `TXDB` or `TXDM` snapshot;
-otherwise it appends that snapshot. The WAL is synced before replacement. A
-subsequent `DbfTable::from_path` replays the delta or snapshot if the process
-stopped before replacement completed. HTTP mutation intents are recorded as
-`TXOP` before the state payload; if the state payload is missing, startup
-replays the supported intent and materializes one. Save paths use an exclusive
-table lock; a stale separately loaded writer is rejected rather than allowed
-to overwrite a newer save. Automatic merge/retry and broader concurrent-writer
-coordination remain outside the WAL.
-
-The [HTTP QUERY method is now RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html).
-It is safe and idempotent, carries query semantics in request content, and
-requires the server to reject a missing or inconsistent `Content-Type`. The
-RFC also defines `Accept-Query` as a structured response field for advertising
-supported query media types. A valid query can use `400` for missing media
-type, `415` for an unsupported media type, and `422` for content that is
-syntactically understood but cannot be processed.
-
-The server implements those boundary decisions for JSON and advertises
-`Accept-Query: "application/json"`. It supports one byte range on successful
-QUERY results with `Accept-Ranges`, `206`, and `Content-Range`; unknown or
-multiple range requests are ignored. It does not implement cache keys,
-`Location`, `Content-Location`, or CORS policy yet. In particular, a QUERY body
-belongs in any future cache key; treating it like a GET URI alone would be
-incorrect.
-
-## Sources
-
-- [dBASE DBF File Structure](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)
-- [Visual FoxPro Table File Structure](https://techshelps.github.io/MSDN/FOXHELP/html/contable_file_structure_lp.dbfrp.htm)
-- [Visual FoxPro Field Descriptor and Variable-Length Fields](https://vfphelp.com/help/html/465e7a94-51b7-4e0c-98f9-432864fe5bcc.htm)
-- [Visual FoxPro Blob Data Type](https://www.vfphelp.com/help/_5wn12pbhl.htm)
-- [Visual FoxPro Data Dictionary](https://techshelps.github.io/MSDN/BACKGRND/html/msdn_datadict.htm)
-- [Visual FoxPro Memo File Structure](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm)
-- [Visual FoxPro Autoincrementing Field Values](https://www.vfphelp.com/vfp9/html/bd6eff0c-2ce5-43b7-ab29-f5360cd2f90e.htm)
-- [Visual FoxPro Code Pages](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)
-- [libxbase dBASE III/IV Memo Implementation](https://sources.debian.org/src/libxbase/2.0.0-8.5/xbase/memo.cpp)
-- [go-foxpro-dbf pinned FoxPro test data](https://github.com/SebastiaanKlippert/go-foxpro-dbf/tree/3583ae3707e17f815695333443a457b5c7c6c7dc/testdata)
-- [Ruby dbf pinned dBASE IV test data](https://github.com/infused/dbf/tree/6b6547384439fd009815d20112b22c58eee83503/spec/fixtures)
-- [Go dbf pinned dBASE III test data](https://github.com/LindsayBradford/go-dbf/tree/133325662f853ba7e7ad4676f7633adbd7a41b27/testdata)
-- [MongoDB Documents](https://www.mongodb.com/docs/manual/core/document/)
-- [MongoDB Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
-- [MongoDB Logical Query Predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)
-- [MongoDB Sort Results](https://www.mongodb.com/docs/manual/reference/method/cursor.sort/)
-- [MongoDB Projection](https://www.mongodb.com/docs/manual/reference/mql/projection/)
-- [MongoDB Update Operators](https://www.mongodb.com/docs/manual/reference/mql/update/)
-- [MongoDB Atomicity and Transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/)
-- [Firebase Cloud Firestore Data Model](https://firebase.google.com/docs/firestore/data-model)
-- [Firebase Realtime Database Read and Write](https://firebase.google.com/docs/database/web/read-and-write)
-- [Firebase Realtime Database Security Rules](https://firebase.google.com/docs/database/security)
-- [How SQLite Is Tested](https://www.sqlite.org/testing.html)
+- [How SQLite Is Tested](https://sqlite.org/testing.html)
 - [SQLite TH3](https://sqlite.org/th3.html)
-- [RFC 9110, HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
-- [RFC 5789, PATCH Method](https://www.rfc-editor.org/rfc/rfc5789.html)
-- [RFC 10008, The HTTP QUERY Method](https://www.rfc-editor.org/rfc/rfc10008.html)
+- [SQLite limits](https://sqlite.org/limits.html)
+
+### HTTP
+
+- [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
+- [RFC 5789: PATCH Method](https://www.rfc-editor.org/rfc/rfc5789.html)
+- [RFC 10008: The HTTP QUERY Method](https://www.rfc-editor.org/rfc/rfc10008.html)
+
+## Review rule
+
+When a new feature crosses a format, query, transaction, or HTTP boundary, update the relevant topic document and add the smallest fixture or failure test that proves the new contract.
+
+Do not add a broad compatibility claim to the README without an implementation path and a reproducible check.

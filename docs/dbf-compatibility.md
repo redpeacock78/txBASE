@@ -1,0 +1,158 @@
+# DBF and dBASE compatibility
+
+This document separates the published file format from the subset currently implemented by txBASE.
+
+The goal is readable, recoverable DBF access first.
+
+It is not a claim of full dBASE or Visual FoxPro compatibility.
+
+## 1. Physical DBF structure
+
+The [dBASE Level 7 file format](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm) defines a header followed by field descriptors, records, and an optional end-of-file marker.
+
+The important header positions are:
+
+| Offset | Size | Meaning |
+| ---: | ---: | --- |
+| `0` | 1 | File version and memo-related flags |
+| `1..3` | 3 | Last-update date as year, month, and day bytes |
+| `4..7` | 4 | Record count, little-endian |
+| `8..9` | 2 | Header length, little-endian |
+| `10..11` | 2 | Record length, little-endian |
+| `28` | 1 | Production MDX flag |
+| `29` | 1 | Language-driver identifier |
+| `32..` | variable | Field descriptors |
+| descriptor end | 1 | Field-descriptor terminator |
+
+Classic descriptors are 32 bytes.
+
+dBASE Level 7 descriptors are 48 bytes and can carry extended properties after the descriptor terminator.
+
+The descriptor contains the field name, type, byte offset, width, decimal count, and type-specific flags.
+
+Level 7 auto-increment descriptors also carry an initial value and step information.
+
+The record area starts at the declared header length.
+
+Each physical record begins with a deletion flag byte, so a DBF record width includes that byte.
+
+The declared record count and record length are boundaries, not suggestions.
+
+A reader must reject truncated headers, descriptors, and records instead of reading beyond the declared structure.
+
+## 2. Memo and binary sidecars
+
+Memo fields store a block pointer in the DBF record and keep the payload in a sibling memo file.
+
+The dBASE format uses DBT sidecars, while Visual FoxPro commonly uses FPT sidecars.
+
+Block zero is a sidecar header in the formats supported by txBASE.
+
+The pointer byte order and block-header byte order are format-specific, so the implementation does not treat all memo files as one generic byte stream.
+
+The current write paths are:
+
+| Sidecar | Current txBASE behavior |
+| --- | --- |
+| dBASE III DBT | Text and binary blocks are appended with the format terminator rules; the `0x1a1a` binary terminator is reserved |
+| dBASE IV DBT | Text and binary blocks are appended using the block size declared by the sidecar header |
+| Visual FoxPro FPT | Text blocks and type-0 binary blocks are appended with FPT block headers |
+
+The [Visual FoxPro table file structure](https://techshelps.github.io/MSDN/FOXHELP/html/contable_file_structure_lp.dbfrp.htm) and [memo file structure](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm) document the FoxPro-specific structures.
+
+## 3. Field mapping in txBASE
+
+The parser reads the declared field descriptors and maps supported values to JSON.
+
+The following table is the compatibility boundary, not a general DBF type guide.
+
+| Field family | Current behavior |
+| --- | --- |
+| Character and text | Decoded through the supported language-driver mapping; writes reject unrepresentable characters |
+| Date | Converted to JSON date text when valid |
+| Numeric and logical | Converted to JSON numbers or booleans when valid |
+| Integer and double | Read and written through their fixed-width representations |
+| Visual FoxPro `B` with width 8 | Treated as a double |
+| Visual FoxPro `Y` | Exposed as a four-decimal fixed-point string to avoid `f64` rounding |
+| Visual FoxPro `T` | Exposed as a second-precision ISO-8601 string from the Julian-day and millisecond pair |
+| Visual FoxPro `V` and `Q` | Variable-length text or binary values use the fixed record slot and `_NullFlags` rules; `Q` is lowercase hex |
+| Visual FoxPro `W` | FPT binary block exposed as lowercase hex |
+| `M` | Text from DBT/FPT, or lowercase hex when the binary flag is set |
+| `B`, `G`, and `P` | Binary sidecar payloads exposed as lowercase hex; Visual FoxPro `P` is treated as a picture block |
+| Level 7 `+` and FoxPro `0x31` | Omitted insert values are assigned from the descriptor; existing values are read-only |
+
+Visual FoxPro nullable tables use `_NullFlags` internally.
+
+The field is hidden from the JSON document and regenerated only for affected inserts or updates.
+
+The [Visual FoxPro variable-length field description](https://vfphelp.com/help/html/465e7a94-51b7-4e0c-98f9-432864fe5bcc.htm) is the reference for the `V` and `Q` slot rules.
+
+## 4. Encoding and CJK boundaries
+
+The language-driver byte declares how character bytes should be interpreted.
+
+txBASE currently supports the code pages implemented in `src/dbf/codepages.rs`, including CP437, CP850, CP852, CP866, Windows-1250, Windows-1251, Windows-1252, Windows-1253, Windows-1254, Windows-1255, and Windows-1256 mappings used by the supported driver IDs.
+
+Unknown drivers retain the existing UTF-8 or lossy fallback behavior.
+
+Writes reject characters that the selected code page cannot represent.
+
+DBF field width is a byte width.
+
+A future CJK compatibility layer must therefore define all of the following together:
+
+1. The declared driver and any explicit override.
+2. The codec used for decoding and encoding.
+3. The byte-width rule for truncation and validation.
+4. The collation rule used by query and sort.
+5. The fixture that proves round-trip behavior.
+
+Shift_JIS and CP932 are not interchangeable labels.
+
+The same caution applies to EUC-JP, GBK, GB18030, Big5, and Korean encodings.
+
+The roadmap proposes explicit encoding metadata and strict rejection rather than silent multibyte truncation.
+
+No new CJK codec is implied by this document.
+
+## 5. Persistence and recovery
+
+DBF compatibility is coupled to the mutation boundary because a memo pointer and its sidecar payload must agree after a crash.
+
+txBASE uses these records in its WAL:
+
+| Record | Role |
+| --- | --- |
+| `TXOP` | Durable HTTP mutation intent |
+| `TXDP` | Byte-range delta when smaller than a full replacement |
+| `TXDB` | Complete DBF snapshot |
+| `TXDM` | Complete DBF and memo snapshot |
+
+The WAL is synced before the replacement of the DBF or memo sidecar.
+
+Startup recovery accepts an already-applied target, rejects a mismatched delta base, and replays a supported `TXOP` when no state payload exists.
+
+A stale path-loaded table is rejected when the DBF or memo bytes changed after the table was loaded.
+
+This is a recoverability contract for the current prototype, not a multi-writer replication protocol.
+
+## 6. Deliberate limits
+
+The following are not implemented by the current DBF layer:
+
+- Production and secondary index maintenance.
+- OLE semantics and arbitrary external memo formats.
+- Complete Visual FoxPro expression or command compatibility.
+- Automatic merge and retry for concurrent writers.
+- Full collation support for CJK and locale-specific ordering.
+
+These items require a contract, external fixtures, failure tests, and a clear ownership boundary before code is added.
+
+## Primary references
+
+- [dBASE Level 7 file format](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)
+- [Visual FoxPro table file structure](https://techshelps.github.io/MSDN/FOXHELP/html/contable_file_structure_lp.dbfrp.htm)
+- [Visual FoxPro field descriptors and variable-length fields](https://vfphelp.com/help/html/465e7a94-51b7-4e0c-98f9-432864fe5bcc.htm)
+- [Visual FoxPro memo file structure](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm)
+- [Visual FoxPro auto-increment fields](https://www.vfphelp.com/vfp9/html/bd6eff0c-2ce5-43b7-ab29-f5360cd2f90e.htm)
+- [Visual FoxPro code pages](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)
