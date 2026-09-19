@@ -41,3 +41,28 @@ fn streaming_rejects_blocking_and_resume_controls() {
         assert!(stream_query(&table, &request).is_err());
     }
 }
+
+#[test]
+fn snapshot_stream_is_independent_of_later_table_mutations() {
+    let mut table = table_with_two_active_records();
+    let request = parse(br#"{"projection":{"NAME":1}}"#).unwrap();
+    let stream = stream_query_snapshot(&table, &request).unwrap();
+
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "Changed"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        stream.collect::<Result<Vec<_>, _>>().unwrap(),
+        vec![
+            serde_json::json!({"NAME": "Alice"}),
+            serde_json::json!({"NAME": "Bob"})
+        ]
+    );
+}

@@ -78,6 +78,9 @@ materialize the matching record set.
 It rejects `sort`, `aggregate`, `page_size`, and `cursor` because those controls require a
 blocking or resumable result boundary.
 The iterator does not provide a long-lived snapshot or an asynchronous backpressure protocol.
+`query::stream_query_snapshot` is the stable-snapshot variant: it clones the loaded table before
+iteration, so later mutations of the source table do not change its records.
+It remains pull-based and does not provide an asynchronous backpressure protocol.
 
 ## 2. Bounded aggregation
 

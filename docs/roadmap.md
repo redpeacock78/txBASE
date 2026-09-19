@@ -35,14 +35,14 @@ The repository currently provides:
 - A bounded aggregation pipeline with zero or more `$match` stages before one `$group` stage using `$count`, integer `$sum`, `$min`, and `$max`.
 - A bounded local `inner`, `left`, `semi`, or `anti` equality join plus a bounded `cross` join over two catalog tables with qualified filtering and projection.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
-- A borrowed query stream for incremental filter and projection over an in-memory table snapshot.
+- Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus EUC-JP and GB18030, with normalized schema output.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory XBF-to-DBF export, durable snapshot path, and generation-checked full-snapshot WAL recovery with explicit size limits and section checksums; schema-preserving export remains future.
 
-The baseline intentionally does not include a full cost-based index model, streaming backpressure or long-lived snapshot rules, multiple or planned joins, cross-table transactions, aggregation stages beyond `$match` plus `$group`, composite or cross-table constraints, schema-preserving XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, multiple or planned joins, cross-table transactions, aggregation stages beyond `$match` plus `$group`, composite or cross-table constraints, schema-preserving XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -53,7 +53,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - Schema introspection.
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
-- Backpressure and stable-snapshot rules for long-lived streams.
+- An asynchronous backpressure protocol for long-lived streams.
 - Cross-table or independently visible multi-record transactions.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
@@ -85,7 +85,9 @@ page and one look-ahead record are found.
 Sorted pages materialize matching record references before applying the keyset boundary.
 The public `query::stream_query` iterator covers unsorted filter and projection without
 materializing matching records.
-It deliberately leaves backpressure and stable long-lived snapshot rules for a later contract.
+`query::stream_query_snapshot` owns a clone of the loaded table to keep records stable while the
+caller consumes the pull-based iterator.
+An asynchronous backpressure protocol remains a later contract.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 

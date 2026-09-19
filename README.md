@@ -70,8 +70,10 @@ tie-breaker.
 
 The library also exposes `query::stream_query`, a borrowed iterator that applies filter,
 projection, skip, and limit without materializing the matching record set.
-It deliberately rejects sort, aggregate, page-size, and cursor controls, which need a blocking
-or resumable result boundary; backpressure and stable long-lived snapshot rules remain future work.
+`query::stream_query_snapshot` provides the same pull-based iterator over an owned clone of the
+loaded table, so later mutations of the source table do not change the stream's records.
+Both APIs reject sort, aggregate, page-size, and cursor controls, which need a blocking or
+resumable result boundary; an asynchronous backpressure protocol remains future work.
 
 `aggregate` currently accepts one `$group` stage with `$count`, integer `$sum`, `$min`, and `$max`, optionally preceded by bounded `$match` stages; it cannot be combined with sort, projection, pagination, or limit controls.
 

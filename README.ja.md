@@ -58,7 +58,8 @@ physical cursor pageは、要求されたpageとlook-aheadのmatchを見つけ�
 sorted cursor pageは既存のsort comparatorを再利用します。
 libraryの`query::stream_query`は、matching record全体をmaterializeせずにfilter、projection、skip、limitを適用するborrowed iteratorです。
 sort、aggregate、page-size、cursorはblockingまたはresume boundaryを必要とするため拒否します。
-long-lived snapshotの安定性とbackpressureは未実装です。
+`query::stream_query_snapshot`はloaded tableのcloneを保持するため、元tableへの後続mutationから独立したpull-based iteratorです。
+非同期backpressure protocolは未実装です。
 
 `aggregate`は一つの`$group` stageと、その前に0個以上置けるboundedな`$match` stageを使えます。
 `$count`、整数`$sum`、および比較可能な値に対する`$min` / `$max`をサポートします。

@@ -22,7 +22,7 @@ pub use planner::QueryPlan;
 #[cfg(test)]
 pub(crate) use predicate::matches_condition;
 pub(crate) use predicate::matches_filter;
-pub use stream::{QueryStream, stream_query};
+pub use stream::{QuerySnapshotStream, QueryStream, stream_query, stream_query_snapshot};
 
 #[cfg(test)]
 use crate::query_path::field_value;
