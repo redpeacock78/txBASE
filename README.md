@@ -255,6 +255,7 @@ src/query_path.rs   Dotted-path traversal and projection helpers
 src/server.rs       HTTP routing, QUERY validation, and DBF mutations
 src/storage.rs      Range-based storage boundary
 src/transaction.rs  File or memory WAL and snapshot transactions
+src/xbf/            Bounded XBF v1 format codec and its tests
 src/xbase.rs        Shared operation IR boundary
 tests/fixtures/     External-format fixtures
 tests/corpus/       Malformed DBF, memo, WAL, and JSON inputs
@@ -284,7 +285,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming, planned and multiple joins, multi-stage aggregation, cross-table transactions, CJK encodings, and an XBF native format.
+Later phases may add a full cost-based index choice, streaming, planned and multiple joins, multi-stage aggregation, cross-table transactions, CJK encodings, durable XBF snapshots, and DBF/XBF conversion.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

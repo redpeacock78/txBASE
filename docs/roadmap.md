@@ -152,7 +152,7 @@ An override must be visible in schema or command output so a reader can reproduc
 
 XBF is a separately versioned native format, not a silent DBF extension.
 
-The v1 wire contract is drafted in [XBF v1 format draft](xbf.md); no XBF bytes are a current supported format yet.
+The v1 wire contract is drafted in [XBF v1 format draft](xbf.md). A bounded in-memory codec exists for that draft, but no durable XBF bytes are a current supported format yet.
 
 The proposed magic is `TXBF`.
 
@@ -236,6 +236,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Full cost-based planners, joins, aggregation, MVCC, XBF, object-storage, or distributed code without a contract and end-to-end test.
+- Full cost-based planners, joins, aggregation, MVCC, durable XBF, object-storage, or distributed code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions and equality-prefix candidate choice are implemented, while a full cost model and cross-table coordination remain future work.

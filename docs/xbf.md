@@ -4,7 +4,14 @@ XBF is the proposed native txBASE snapshot format.
 
 This document is a design contract, not a compatibility claim.
 
-The repository does not yet read or write `.xbf` files.
+The repository now contains a bounded in-memory v1 codec at
+`txbase::xbf::{encode, decode}`. It validates the draft header, section checksums,
+schema, directory, typed records, constraints, and configured size limits.
+Durable `.xbf` files, DBF conversion, and `.xwl` recovery are still outside the
+supported-format boundary.
+
+The codec is intentionally kept in the format layer. It does not add a second
+query or HTTP implementation.
 
 ## 1. Purpose and boundary
 
@@ -235,13 +242,14 @@ This prevents XBF from becoming a second unrelated database implementation.
 
 ## 11. Implementation gates
 
-Before XBF code is marked current, the repository needs:
+The draft codec currently has a deterministic in-memory fixture covering every
+non-reserved v1 type, corruption checks, constraint checks, and explicit size
+limits. Before XBF is advertised as a supported durable format, the repository
+still needs:
 
-- A v1 fixture with every non-reserved type.
 - Malformed header, section, checksum, directory, UTF-8, and payload corpora.
 - Round-trip tests for DBF to XBF and representability failures for XBF to DBF.
 - Crash and recovery tests for the snapshot and `.xwl` generation boundary.
-- A deterministic size-limit policy.
-- A CLI or library entry point that makes format selection explicit.
+- A durable snapshot writer and a CLI or library entry point that makes file-format selection explicit.
 
 Until those gates exist, XBF remains a draft and is not advertised as a supported format.

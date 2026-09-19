@@ -37,6 +37,7 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 | WAL-001 | Complete WAL records are validated; torn final records are truncated or discarded without a panic. | `src/transaction.rs`; `src/dbf/wal.rs`; `tests/corpus/wal/` | `transaction::malformed_tests::rejects_malformed_wal_corpus`; `file_wal_reopens_and_truncates_a_torn_tail` | Current |
 | WAL-002 | Snapshot, delta, mutation-intent, memo, and index recovery are idempotent across replacement boundaries. | `src/dbf/recovery.rs`; `src/dbf/persistence.rs` | `src/dbf/tests/persistence.rs` recovery cases and `recovery_fault_tests.rs` | Current |
 | WAL-003 | Independently loaded stale writers are rejected rather than silently overwriting newer DBF or memo bytes. | `src/dbf/persistence.rs`; `src/dbf/writer_tests.rs` | `rejects_a_stale_second_writer_without_overwriting_the_first_save` | Current |
+| XBF-001 | The draft XBF codec bounds allocations, validates header and section CRC-32C values, decodes all non-reserved v1 scalar types, preserves physical deletion flags, and enforces local uniqueness. | `src/xbf/`; `docs/xbf.md` | `src/xbf/tests.rs` fixture, corruption, size-limit, and constraint cases | Boundary |
 | IDX-001 | External scalar and compound indexes are rebuildable, freshness-checked, and refreshed after supported mutations. | `src/index.rs`; `src/index/`; `src/index_tests.rs` | `mutation_refreshes_the_sidecar_after_save`; `direct_dbf_change_leaves_the_sidecar_stale_until_rebuild` | Current |
 | IDX-002 | Index candidates preserve table-scan results for equality, range, ordered-prefix, compound, and equality-intersection plans. | `src/query/planner.rs`; `src/query/planner_tests.rs`; `src/query/planner_compound_tests.rs` | Planner tests named `uses_*` and `orders_*` | Current |
 | QRY-001 | Query parsing validates the documented filter, path, projection, sort, and update boundaries without claiming MongoDB compatibility. | `src/query/validation.rs`; `src/query/tests.rs` | `parses_query_shape`; `rejects_unknown_query_fields`; `rejects_unknown_and_mixed_projection_operators` | Current |
@@ -56,7 +57,7 @@ The following topics have documentation or design notes but do not have a curren
 - a full cost-based planner, multiple or planned joins, and multi-stage aggregation;
 - cross-table transactions, transaction IDs, and MVCC visibility;
 - strict Shift_JIS versus CP932 selection, collation, and broader external fixtures;
-- XBF bytes, DBF/XBF conversion, object-storage manifests, WASM hosting, and distributed replication.
+- Durable XBF snapshots, DBF/XBF conversion, object-storage manifests, WASM hosting, and distributed replication.
 
 Before one of these becomes current, add its public contract, malformed-input behavior, crash or retry behavior, fixture or deterministic test, and a row here.
 
