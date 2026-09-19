@@ -1,10 +1,56 @@
 use super::*;
 
-fn fixture() -> Vec<u8> {
-    include_str!("../../tests/fixtures/users.dbf.hex")
+fn decode_hex_fixture(input: &str) -> Vec<u8> {
+    input
         .split_whitespace()
         .map(|token| u8::from_str_radix(token, 16).unwrap())
         .collect()
+}
+
+fn fixture() -> Vec<u8> {
+    decode_hex_fixture(include_str!("../../tests/fixtures/users.dbf.hex"))
+}
+
+fn assert_external_cjk_fixture(input: &str, language_driver: u8, expected: &str) {
+    let bytes = decode_hex_fixture(input);
+    assert_eq!(bytes[29], language_driver);
+    let mut table = DbfTable::from_bytes(&bytes).unwrap();
+    assert_eq!(table.active_record(1).unwrap().values["NAME"], expected);
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": expected})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    let reloaded = DbfTable::from_bytes(&table.to_bytes()).unwrap();
+    assert_eq!(reloaded.active_record(1).unwrap().values["NAME"], expected);
+}
+
+#[test]
+fn reads_and_writes_pinned_cjk_driver_fixtures() {
+    assert_external_cjk_fixture(
+        include_str!("../../tests/fixtures/cjk-cp932.dbf.hex"),
+        0x7b,
+        "日本",
+    );
+    assert_external_cjk_fixture(
+        include_str!("../../tests/fixtures/cjk-gbk.dbf.hex"),
+        0x7a,
+        "中文",
+    );
+    assert_external_cjk_fixture(
+        include_str!("../../tests/fixtures/cjk-euc-kr.dbf.hex"),
+        0x79,
+        "한국",
+    );
+    assert_external_cjk_fixture(
+        include_str!("../../tests/fixtures/cjk-big5.dbf.hex"),
+        0x78,
+        "中文",
+    );
 }
 
 #[test]

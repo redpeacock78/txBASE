@@ -25,3 +25,9 @@ The source is pinned to commit
 133325662f853ba7e7ad4676f7633adbd7a41b27:
 https://github.com/LindsayBradford/go-dbf/tree/133325662f853ba7e7ad4676f7633adbd7a41b27/testdata
 and is distributed under the upstream Apache-2.0 license.
+
+The `cjk-cp932.dbf.hex`, `cjk-gbk.dbf.hex`, `cjk-euc-kr.dbf.hex`, and
+`cjk-big5.dbf.hex` files are pinned byte fixtures for the four Visual FoxPro
+CJK language-driver identifiers. They keep the encoded text in the DBF record
+area so the driver declaration, byte decoding, byte-width validation, and
+round-trip write remain independently reproducible.
