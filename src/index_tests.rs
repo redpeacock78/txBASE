@@ -49,6 +49,41 @@ fn builds_and_loads_an_external_scalar_index() {
 }
 
 #[test]
+fn builds_and_loads_a_compound_ordered_index() {
+    let path = temporary_dbf();
+    let mut bytes = fixture();
+    bytes[179] = b' ';
+    bytes[183..193].copy_from_slice(b"Alice     ");
+    fs::write(&path, bytes).unwrap();
+
+    IndexFile::build(
+        &path,
+        vec![IndexDefinition::named_fields(
+            "by_name_age",
+            vec!["NAME".into(), "AGE".into()],
+        )],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let loaded = IndexFile::load(&path).unwrap();
+    assert_eq!(
+        loaded.schema_json()["indexes"][0]["fields"],
+        json!(["NAME", "AGE"])
+    );
+    let (name, fields, records) = loaded
+        .lookup_ordered_for_fields(&["NAME", "AGE"], false)
+        .unwrap()
+        .unwrap();
+    assert_eq!(name, "by_name_age");
+    assert_eq!(fields, vec!["NAME", "AGE"]);
+    assert_eq!(records.len(), 2);
+
+    remove_table_files(&path);
+}
+
+#[test]
 fn mutation_refreshes_the_sidecar_after_save() {
     let path = temporary_dbf();
     IndexFile::build(&path, vec![IndexDefinition::for_field("NAME")])
@@ -161,6 +196,16 @@ fn non_scalar_fields_and_unknown_fields_are_rejected() {
         .lookup_eq("NAME", &json!(["not", "scalar"]))
         .unwrap_err();
     assert!(error.to_string().contains("scalar"));
+
+    let error = IndexFile::build(
+        &path,
+        vec![IndexDefinition::named_fields(
+            "duplicate",
+            vec!["NAME".into(), "NAME".into()],
+        )],
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("repeats field"));
 
     remove_table_files(&path);
 }

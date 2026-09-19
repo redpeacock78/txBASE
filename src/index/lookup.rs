@@ -22,11 +22,9 @@ impl IndexFile {
         field: &str,
         value: &Value,
     ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
-        let Some(index) = self
-            .indexes
-            .iter()
-            .find(|index| index.definition.field == field)
-        else {
+        let Some(index) = self.indexes.iter().find(|index| {
+            index.definition.fields.len() == 1 && index.definition.fields[0] == field
+        }) else {
             return Ok(None);
         };
         let key = IndexKey::from_value(Some(value))?;
@@ -50,11 +48,9 @@ impl IndexFile {
         if lower.is_none() && upper.is_none() {
             return Err(IndexError::Invalid("range must have a bound".into()));
         }
-        let Some(index) = self
-            .indexes
-            .iter()
-            .find(|index| index.definition.field == field)
-        else {
+        let Some(index) = self.indexes.iter().find(|index| {
+            index.definition.fields.len() == 1 && index.definition.fields[0] == field
+        }) else {
             return Ok(None);
         };
         let domain = lower
@@ -112,11 +108,9 @@ impl IndexFile {
         field: &str,
         descending: bool,
     ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
-        let Some(index) = self
-            .indexes
-            .iter()
-            .find(|index| index.definition.field == field)
-        else {
+        let Some(index) = self.indexes.iter().find(|index| {
+            index.definition.fields.len() == 1 && index.definition.fields[0] == field
+        }) else {
             return Ok(None);
         };
         let mut records = Vec::new();
@@ -130,6 +124,47 @@ impl IndexFile {
             }
         }
         Ok(Some((index.definition.name.clone(), records)))
+    }
+
+    pub(crate) fn lookup_ordered_for_fields(
+        &self,
+        fields: &[&str],
+        descending: bool,
+    ) -> Result<Option<(String, Vec<String>, Vec<usize>)>, IndexError> {
+        if fields.len() < 2 {
+            return Ok(None);
+        }
+        let Some(index) = self
+            .indexes
+            .iter()
+            .filter(|index| index.definition.fields.len() >= fields.len())
+            .filter(|index| {
+                index
+                    .definition
+                    .fields
+                    .iter()
+                    .zip(fields.iter())
+                    .all(|(indexed, requested)| indexed == *requested)
+            })
+            .max_by_key(|index| index.definition.fields.len())
+        else {
+            return Ok(None);
+        };
+        let mut records = Vec::new();
+        if descending {
+            for entry in index.entries.iter().rev() {
+                records.extend(entry.records.iter().copied());
+            }
+        } else {
+            for entry in &index.entries {
+                records.extend(entry.records.iter().copied());
+            }
+        }
+        Ok(Some((
+            index.definition.name.clone(),
+            index.definition.fields.clone(),
+            records,
+        )))
     }
 }
 

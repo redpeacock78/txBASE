@@ -14,6 +14,14 @@ pub(super) fn compare_keys(left: &IndexKey, right: &IndexKey) -> Ordering {
         (_, IndexKey::Null) => Ordering::Greater,
         (IndexKey::Scalar(left), IndexKey::Scalar(right)) => compare_scalar_values(left, right)
             .unwrap_or_else(|| scalar_type_rank(left).cmp(&scalar_type_rank(right))),
+        (IndexKey::Compound(left), IndexKey::Compound(right)) => left
+            .iter()
+            .zip(right)
+            .map(|(left, right)| compare_keys(left, right))
+            .find(|ordering| !ordering.is_eq())
+            .unwrap_or_else(|| left.len().cmp(&right.len())),
+        (IndexKey::Compound(_), _) => Ordering::Greater,
+        (_, IndexKey::Compound(_)) => Ordering::Less,
     }
 }
 
@@ -22,6 +30,7 @@ pub(super) fn key_domain(key: &IndexKey) -> u8 {
         IndexKey::Missing => 0,
         IndexKey::Null => 1,
         IndexKey::Scalar(value) => value_domain(value),
+        IndexKey::Compound(_) => 5,
     }
 }
 

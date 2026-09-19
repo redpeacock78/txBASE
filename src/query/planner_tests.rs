@@ -230,3 +230,78 @@ fn uses_an_ordered_index_prefix_for_multi_key_sort() {
     let _ = fs::remove_file(lock);
     let _ = fs::remove_file(wal);
 }
+
+#[test]
+fn uses_a_compound_index_for_multi_key_sort() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-query-planner-compound-{}.dbf",
+        std::process::id()
+    ));
+    let sidecar = crate::index::sidecar_path(&path);
+    let lock = path.with_extension("txbase.lock");
+    let wal = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&sidecar);
+    let _ = fs::remove_file(&lock);
+    let _ = fs::remove_file(&wal);
+
+    let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    bytes[179] = b' ';
+    bytes[183..193].copy_from_slice(b"Alice     ");
+    let table = DbfTable::from_bytes(&bytes).unwrap();
+    fs::write(&path, bytes).unwrap();
+    IndexFile::build(
+        &path,
+        vec![IndexDefinition::named_fields(
+            "by_name_age",
+            vec!["NAME".into(), "AGE".into()],
+        )],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let request = parse(br#"{"sort":{"NAME":1,"AGE":1}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &request).unwrap(),
+        QueryPlan::CompoundOrderedIndex {
+            name: "by_name_age".into(),
+            fields: vec!["NAME".into(), "AGE".into()],
+            direction: 1,
+        }
+    );
+    let indexed = execute_query_at(&table, &path, &request).unwrap();
+    assert_eq!(indexed, execute_query(&table, &request).unwrap());
+    assert_eq!(indexed[0]["AGE"], 7);
+
+    let descending = parse(br#"{"sort":{"NAME":-1,"AGE":-1}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &descending).unwrap(),
+        QueryPlan::CompoundOrderedIndex {
+            name: "by_name_age".into(),
+            fields: vec!["NAME".into(), "AGE".into()],
+            direction: -1,
+        }
+    );
+    let indexed = execute_query_at(&table, &path, &descending).unwrap();
+    assert_eq!(indexed, execute_query(&table, &descending).unwrap());
+    assert_eq!(indexed[0]["AGE"], 29);
+
+    let mixed = parse(br#"{"sort":{"NAME":1,"AGE":-1}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &mixed).unwrap(),
+        QueryPlan::TableScan
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &mixed).unwrap(),
+        execute_query(&table, &mixed).unwrap()
+    );
+
+    fs::remove_file(&sidecar).unwrap();
+    fs::remove_file(path).unwrap();
+    let _ = fs::remove_file(lock);
+    let _ = fs::remove_file(wal);
+}

@@ -82,7 +82,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     if first == "index" {
         let operation = args
             .next()
-            .ok_or_else(|| "index requires build, verify, or rebuild".to_owned())?;
+            .ok_or_else(|| "index requires build, build-compound, verify, or rebuild".to_owned())?;
         let path = PathBuf::from(
             args.next()
                 .ok_or_else(|| format!("index {operation} requires a DBF path"))?,
@@ -94,6 +94,19 @@ fn run() -> Result<(), Box<dyn Error>> {
                     return Err("index build requires at least one field".into());
                 }
                 let index = IndexFile::build(&path, definitions)?;
+                index.save(&path)?;
+                println!("{}", serde_json::to_string_pretty(&index.schema_json())?);
+            }
+            "build-compound" => {
+                let name = args
+                    .next()
+                    .ok_or_else(|| "index build-compound requires an index name".to_owned())?;
+                let fields = args.collect::<Vec<_>>();
+                if fields.len() < 2 {
+                    return Err("index build-compound requires at least two fields".into());
+                }
+                let index =
+                    IndexFile::build(&path, vec![IndexDefinition::named_fields(name, fields)])?;
                 index.save(&path)?;
                 println!("{}", serde_json::to_string_pretty(&index.schema_json())?);
             }
@@ -198,6 +211,6 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage:\n  txbase FILE\n  txbase schema FILE\n  txbase verify FILE\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase index build FILE FIELD...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE\n  txbase recall FILE RECORD\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. Schema, catalog, verification, and index commands inspect DBF files. Backup and restore copy a DBF with its sibling memo sidecar. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
+        "Usage:\n  txbase FILE\n  txbase schema FILE\n  txbase verify FILE\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase index build FILE FIELD...\n  txbase index build-compound FILE NAME FIELD FIELD...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE\n  txbase recall FILE RECORD\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS]\n\nReads active DBF records as JSON. Schema, catalog, verification, and index commands inspect DBF files. Backup and restore copy a DBF with its sibling memo sidecar. The server exposes GET /records, GET /records/{{id}}, executes QUERY /records, and persists JSON mutations."
     );
 }

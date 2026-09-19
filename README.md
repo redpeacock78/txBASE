@@ -98,6 +98,7 @@ txbase verify path/to/users.dbf
 txbase catalog path/to/database
 txbase verify-catalog path/to/database
 txbase index build path/to/users.dbf NAME AGE
+txbase index build-compound path/to/users.dbf by_name_age NAME AGE
 txbase index verify path/to/users.dbf
 txbase index rebuild path/to/users.dbf
 txbase pack path/to/users.dbf
@@ -121,6 +122,7 @@ Usage:
   txbase catalog DIRECTORY
   txbase verify-catalog DIRECTORY
   txbase index build FILE FIELD...
+  txbase index build-compound FILE NAME FIELD FIELD...
   txbase index verify FILE
   txbase index rebuild FILE
   txbase pack FILE
@@ -138,7 +140,9 @@ Usage:
 
 `verify-catalog` verifies every discovered table.
 
-`index build` creates an external scalar-key sidecar.
+`index build` creates one external scalar-key index per field.
+
+`index build-compound` creates one ascending compound-key index in the declared field order.
 
 `index verify` rejects a sidecar whose DBF or memo source is stale.
 
@@ -147,6 +151,8 @@ Normal DBF saves record and apply an existing sidecar's target through the WAL; 
 The path-aware planner can intersect candidates from multiple valid single-field indexes for direct equality filters.
 
 For multi-key sorts, it can use a single-field index for the first sort key and sort only equal-key groups by the remaining keys; this is not compound-index support.
+
+It can also use an ascending compound index for a matching multi-key sort, including the complete reverse direction; mixed sort directions remain a table-scan boundary.
 
 `pack` removes logically deleted records and renumbers the remaining physical records.
 
@@ -195,7 +201,7 @@ CI runs these checks on Ubuntu, macOS, and Windows.
 ```text
 src/dbf/            DBF parsing, codecs, memo sidecars, maintenance, mutation, WAL, and tests
 src/catalog.rs      Direct-child DBF discovery, table lookup, and catalog verification
-src/index.rs        External scalar-key index sidecar lifecycle
+src/index.rs        External scalar and compound-key index sidecar lifecycle
 src/query.rs        JSON query execution and filter evaluation
 src/query/          planner, ordering, validation, and query-specific tests
 src/query_path.rs   Dotted-path traversal and projection helpers
@@ -228,7 +234,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add compound-index-backed ordering, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
+Later phases may add collection-statistics-based index choice, joins, aggregation, cursors, stronger multi-record transactions, CJK encodings, and an XBF native format.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

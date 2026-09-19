@@ -1,5 +1,7 @@
 use crate::dbf::{DbfError, DbfTable};
-use serde::{Deserialize, Serialize};
+use serde::de::Error as DeError;
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Value, json};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
@@ -67,11 +69,61 @@ impl From<DbfError> for IndexError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexDefinition {
     name: String,
-    field: String,
+    fields: Vec<String>,
+}
+
+impl Serialize for IndexDefinition {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("IndexDefinition", 2)?;
+        state.serialize_field("name", &self.name)?;
+        if self.fields.len() == 1 {
+            state.serialize_field("field", &self.fields[0])?;
+        } else {
+            state.serialize_field("fields", &self.fields)?;
+        }
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for IndexDefinition {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Wire {
+            name: String,
+            #[serde(default)]
+            field: Option<String>,
+            #[serde(default)]
+            fields: Option<Vec<String>>,
+        }
+
+        let wire = Wire::deserialize(deserializer)?;
+        let fields = match (wire.field, wire.fields) {
+            (Some(_), Some(_)) => {
+                return Err(DeError::custom(
+                    "index definition has both field and fields",
+                ));
+            }
+            (Some(field), None) => vec![field],
+            (None, Some(fields)) => fields,
+            (None, None) => {
+                return Err(DeError::custom("index definition requires field or fields"));
+            }
+        };
+        Ok(Self {
+            name: wire.name,
+            fields,
+        })
+    }
 }
 
 impl IndexDefinition {
@@ -79,14 +131,21 @@ impl IndexDefinition {
         let field = field.into();
         Self {
             name: field.clone(),
-            field,
+            fields: vec![field],
         }
     }
 
     pub fn named(name: impl Into<String>, field: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            field: field.into(),
+            fields: vec![field.into()],
+        }
+    }
+
+    pub fn named_fields(name: impl Into<String>, fields: Vec<String>) -> Self {
+        Self {
+            name: name.into(),
+            fields,
         }
     }
 
@@ -95,7 +154,11 @@ impl IndexDefinition {
     }
 
     pub fn field(&self) -> &str {
-        &self.field
+        self.fields.first().map(String::as_str).unwrap_or_default()
+    }
+
+    pub fn fields(&self) -> &[String] {
+        &self.fields
     }
 }
 
@@ -105,6 +168,34 @@ pub enum IndexKey {
     Missing,
     Null,
     Scalar(Value),
+    Compound(Vec<Self>),
+}
+
+impl IndexKey {
+    pub(super) fn from_value(value: Option<&Value>) -> Result<Self, IndexError> {
+        let Some(value) = value else {
+            return Ok(Self::Missing);
+        };
+        match value {
+            Value::Null => Ok(Self::Null),
+            Value::Bool(_) | Value::Number(_) | Value::String(_) => Ok(Self::Scalar(value.clone())),
+            Value::Array(_) | Value::Object(_) => Err(IndexError::Invalid(
+                "only scalar values can be indexed".into(),
+            )),
+        }
+    }
+
+    pub(super) fn from_values(values: Vec<Option<&Value>>) -> Result<Self, IndexError> {
+        if values.len() == 1 {
+            return Self::from_value(values[0]);
+        }
+        Ok(Self::Compound(
+            values
+                .into_iter()
+                .map(Self::from_value)
+                .collect::<Result<_, _>>()?,
+        ))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -234,11 +325,21 @@ impl IndexFile {
             "format": self.format,
             "version": self.version,
             "source": self.source,
-            "indexes": self.indexes.iter().map(|index| json!({
-                "name": index.definition.name,
-                "field": index.definition.field,
-                "entry_count": index.entries.len(),
-            })).collect::<Vec<_>>(),
+            "indexes": self.indexes.iter().map(|index| {
+                if index.definition.fields.len() == 1 {
+                    json!({
+                        "name": index.definition.name,
+                        "field": index.definition.fields[0],
+                        "entry_count": index.entries.len(),
+                    })
+                } else {
+                    json!({
+                        "name": index.definition.name,
+                        "fields": index.definition.fields,
+                        "entry_count": index.entries.len(),
+                    })
+                }
+            }).collect::<Vec<_>>(),
         })
     }
 }

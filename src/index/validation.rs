@@ -24,21 +24,7 @@ pub(super) fn validate_shape(index_file: &IndexFile) -> Result<(), IndexError> {
 
     let mut names = BTreeSet::new();
     for index in &index_file.indexes {
-        if index.definition.name.trim().is_empty() {
-            return Err(IndexError::Invalid("index name is empty".into()));
-        }
-        if index.definition.field.trim().is_empty() {
-            return Err(IndexError::Invalid(format!(
-                "index {} has an empty field",
-                index.definition.name
-            )));
-        }
-        if !names.insert(&index.definition.name) {
-            return Err(IndexError::Invalid(format!(
-                "duplicate index name: {}",
-                index.definition.name
-            )));
-        }
+        validate_definition(&index.definition, None, &mut names)?;
 
         let mut previous_key = None;
         for entry in &index.entries {
@@ -48,14 +34,11 @@ pub(super) fn validate_shape(index_file: &IndexFile) -> Result<(), IndexError> {
                     index.definition.name
                 )));
             }
-            if matches!(
+            validate_key(
                 &entry.key,
-                IndexKey::Scalar(Value::Array(_)) | IndexKey::Scalar(Value::Object(_))
-            ) {
-                return Err(IndexError::Invalid(
-                    "only scalar values can be indexed".into(),
-                ));
-            }
+                index.definition.fields.len(),
+                &index.definition.name,
+            )?;
             let key = &entry.key;
             if previous_key.as_ref().is_some_and(|previous| {
                 ordering::compare_keys(previous, key) != std::cmp::Ordering::Less
@@ -111,35 +94,17 @@ pub(super) fn build_indexes(
     let mut names = BTreeSet::new();
     let mut indexes = Vec::with_capacity(definitions.len());
     for definition in definitions {
-        if definition.name.trim().is_empty() {
-            return Err(IndexError::Invalid("index name is empty".into()));
-        }
-        if definition.field.trim().is_empty() {
-            return Err(IndexError::Invalid(format!(
-                "index {} has an empty field",
-                definition.name
-            )));
-        }
-        if !names.insert(&definition.name) {
-            return Err(IndexError::Invalid(format!(
-                "duplicate index name: {}",
-                definition.name
-            )));
-        }
-        if !table.fields.iter().any(|field| {
-            field.name == definition.field
-                && field.flags & 0x01 == 0
-                && !field.name.eq_ignore_ascii_case("_NULLFLAGS")
-        }) {
-            return Err(IndexError::Invalid(format!(
-                "index field is not a user field: {}",
-                definition.field
-            )));
-        }
+        validate_definition(definition, Some(table), &mut names)?;
 
         let mut grouped = BTreeMap::<String, (IndexKey, Vec<usize>)>::new();
         for record in table.active_records() {
-            let key = IndexKey::from_value(record.values.get(&definition.field))?;
+            let key = IndexKey::from_values(
+                definition
+                    .fields
+                    .iter()
+                    .map(|field| record.values.get(field))
+                    .collect(),
+            )?;
             let token = key_token(&key)?;
             grouped
                 .entry(token)
@@ -171,18 +136,89 @@ pub(super) fn build_indexes(
     Ok(indexes)
 }
 
-impl IndexKey {
-    pub(super) fn from_value(value: Option<&Value>) -> Result<Self, IndexError> {
-        let Some(value) = value else {
-            return Ok(Self::Missing);
-        };
-        match value {
-            Value::Null => Ok(Self::Null),
-            Value::Bool(_) | Value::Number(_) | Value::String(_) => Ok(Self::Scalar(value.clone())),
-            Value::Array(_) | Value::Object(_) => Err(IndexError::Invalid(
-                "only scalar values can be indexed".into(),
-            )),
+fn validate_definition(
+    definition: &IndexDefinition,
+    table: Option<&DbfTable>,
+    names: &mut BTreeSet<String>,
+) -> Result<(), IndexError> {
+    if definition.name.trim().is_empty() {
+        return Err(IndexError::Invalid("index name is empty".into()));
+    }
+    if !names.insert(definition.name.clone()) {
+        return Err(IndexError::Invalid(format!(
+            "duplicate index name: {}",
+            definition.name
+        )));
+    }
+    if definition.fields.is_empty() {
+        return Err(IndexError::Invalid(format!(
+            "index {} has no fields",
+            definition.name
+        )));
+    }
+    let mut fields = BTreeSet::new();
+    for field_name in &definition.fields {
+        if field_name.trim().is_empty() {
+            return Err(IndexError::Invalid(format!(
+                "index {} has an empty field",
+                definition.name
+            )));
         }
+        if !fields.insert(field_name) {
+            return Err(IndexError::Invalid(format!(
+                "index {} repeats field: {}",
+                definition.name, field_name
+            )));
+        }
+        if table.is_some_and(|table| {
+            !table.fields.iter().any(|field| {
+                field.name == *field_name
+                    && field.flags & 0x01 == 0
+                    && !field.name.eq_ignore_ascii_case("_NULLFLAGS")
+            })
+        }) {
+            return Err(IndexError::Invalid(format!(
+                "index field is not a user field: {}",
+                field_name
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_key(key: &IndexKey, field_count: usize, index_name: &str) -> Result<(), IndexError> {
+    match (field_count, key) {
+        (
+            1,
+            IndexKey::Scalar(Value::Array(_)) | IndexKey::Scalar(Value::Object(_)),
+        ) => Err(IndexError::Invalid(
+            "only scalar values can be indexed".into(),
+        )),
+        (1, IndexKey::Missing | IndexKey::Null | IndexKey::Scalar(_)) => Ok(()),
+        (1, IndexKey::Compound(_)) => Err(IndexError::Invalid(format!(
+            "index {index_name} has a compound key for one field"
+        ))),
+        (_, IndexKey::Compound(parts)) if parts.len() == field_count => {
+            if parts.iter().any(|part| {
+                matches!(
+                    part,
+                    IndexKey::Compound(_)
+                        | IndexKey::Scalar(Value::Array(_))
+                        | IndexKey::Scalar(Value::Object(_))
+                )
+            }) {
+                return Err(IndexError::Invalid(
+                    "only scalar values can be indexed".into(),
+                ));
+            }
+            Ok(())
+        }
+        (_, IndexKey::Compound(_)) => Err(IndexError::Invalid(format!(
+            "index {index_name} has a compound key with the wrong field count"
+        ))),
+        (_, _) => Err(IndexError::Invalid(format!(
+            "index {index_name} requires a compound key"
+        ))),
     }
 }
 

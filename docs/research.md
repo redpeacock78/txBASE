@@ -20,7 +20,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | SQLite test breadth and quality | [Testing and quality](testing-quality.md) | Current test map plus reference |
 | HTTP methods, PATCH, and QUERY | [HTTP semantics](http-semantics.md) | Current routes plus protocol reference |
 | Multi-table DBF discovery and schema lookup | [Catalog](catalog.md) | Current boundary plus future relational work |
-| External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, equality, range, ordered-prefix traversal, candidate-count-ordered equality intersection, and future compound-index planner |
+| External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, equality, range, ordered-prefix traversal, compound-prefix sorting, candidate-count-ordered equality intersection, and future statistics-based planner |
 | CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Future |
 
 ## Research method
