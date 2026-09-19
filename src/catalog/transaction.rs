@@ -1,7 +1,6 @@
 use super::{Catalog, CatalogError, CatalogTransactionError};
 use crate::dbf::DbfTable;
 use crate::xbase::{OperationIr, OperationMethod};
-use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
