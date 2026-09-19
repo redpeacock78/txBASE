@@ -89,7 +89,7 @@ fn mutation_endpoints_persist_and_delete_records() {
         StatusCode(200)
     );
 
-    let delete = TestRequest::new()
+    let mut delete = TestRequest::new()
         .with_method(Method::Delete)
         .with_path("/records/3")
         .into();
