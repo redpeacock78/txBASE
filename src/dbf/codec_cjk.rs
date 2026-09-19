@@ -19,7 +19,7 @@ pub(super) fn encode(
     Some((bytes.into_owned(), had_errors))
 }
 
-pub(super) fn canonical_encoding_name(name: &str) -> Option<&'static str> {
+pub(crate) fn canonical_encoding_name(name: &str) -> Option<&'static str> {
     match name.to_ascii_lowercase().as_str() {
         "windows-31j" | "cp932" => Some("Windows-31J/CP932"),
         "gbk" | "cp936" => Some("GBK/CP936"),
