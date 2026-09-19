@@ -157,6 +157,29 @@ fn limits_sorted_group_output() {
 }
 
 #[test]
+fn projects_group_output_before_sorting() {
+    let table = table_with_two_active_records();
+    let request = parse(
+        br#"{
+            "aggregate": [
+                {"$group": {
+                    "_id": "$AGE",
+                    "count": {"$count": {}}
+                }},
+                {"$project": {"_id": 1}},
+                {"$sort": {"_id": -1}}
+            ]
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        execute_query(&table, &request).unwrap(),
+        vec![json!({"_id": 29}), json!({"_id": 7})]
+    );
+}
+
+#[test]
 fn rejects_unsupported_aggregation_combinations() {
     for body in [
         br#"{"aggregate":[]}"#.as_slice(),
@@ -174,6 +197,12 @@ fn rejects_unsupported_aggregation_combinations() {
         br#"{"aggregate":[{"$group":{"_id":null}},{"$limit":-1}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$limit":1},{"$limit":1}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$limit":1},{"$sort":{"_id":1}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$project":{"_id":1}},{"$group":{"_id":null}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null}},{"$project":{"_id":1,"count":0}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null}},{"$sort":{"_id":1}},{"$project":{"_id":1}}]}"#
+            .as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null}},{"$project":{"_id":1}},{"$project":{"_id":1}}]}"#
+            .as_slice(),
     ] {
         assert!(parse(body).is_err(), "expected rejection for {body:?}");
     }

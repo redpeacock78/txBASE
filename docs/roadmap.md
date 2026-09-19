@@ -43,7 +43,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, and generation-checked full-snapshot WAL recovery with explicit size limits and section checksums.
 
-The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, multiple or planned joins, cross-table transactions, aggregation stages beyond bounded `$match`, `$group`, final `$sort`, and final `$limit`, composite or cross-table constraints, a multi-file atomic XBF export commit, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, multiple or planned joins, cross-table transactions, aggregation stages beyond bounded `$match`, `$group`, `$project`, final `$sort`, and final `$limit`, composite or cross-table constraints, a multi-file atomic XBF export commit, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -118,6 +118,9 @@ missing field semantics before adding broader query surfaces.
 Distributed joins and distributed transactions remain later features.
 
 Aggregation must define missing, null, numeric overflow, and memory-limit behavior before it is added to the HTTP API.
+
+The current aggregation slice also permits one bounded `$project` over group output before the
+final sort and limit. It reuses the existing include/exclude projection contract.
 
 The planner explanation boundary is implemented by `explain_query_at` and `QUERY /explain`.
 Full cost-based choice remains future work.

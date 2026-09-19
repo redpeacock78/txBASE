@@ -48,7 +48,7 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 | IDX-003 | The selected table-scan or index plan is available as a tagged JSON explanation without changing query execution. | `src/query/planner.rs`; `src/server/explain.rs`; `docs/query-model.md` | `explain_endpoint_reports_scan_and_index_plans` | Boundary |
 | QRY-001 | Query parsing validates the documented filter, path, projection, sort, and update boundaries without claiming MongoDB compatibility. | `src/query/validation.rs`; `src/query/tests.rs` | `parses_query_shape`; `rejects_unknown_query_fields`; `rejects_unknown_and_mixed_projection_operators` | Current |
 | QRY-002 | Bounded `$expr` comparisons and malformed JSON query corpora fail safely and do not become index lookups. | `src/query/field_expression_tests.rs`; `src/query/malformed_tests.rs` | `compares_two_fields_with_expr`; `rejects_malformed_json_query_corpus` | Boundary |
-| QRY-003 | Physical cursors stop after the requested page and look-ahead record; sorted cursors enforce a matching keyset definition; bounded aggregation stages and local inner/left/semi/anti/cross joins enforce explicit bounds. | `src/query/pagination.rs`; `src/query/aggregation.rs`; `src/query/aggregation_plan.rs`; `src/query/join.rs` | `cursor_tests.rs`, `aggregation_tests.rs`, and `join_tests.rs` | Boundary |
+| QRY-003 | Physical cursors stop after the requested page and look-ahead record; sorted cursors enforce a matching keyset definition; bounded aggregation stages including group-output projection and local inner/left/semi/anti/cross joins enforce explicit bounds. | `src/query/pagination.rs`; `src/query/aggregation.rs`; `src/query/aggregation_plan.rs`; `src/query/join.rs` | `cursor_tests.rs`, `aggregation_tests.rs`, and `join_tests.rs` | Boundary |
 | QRY-004 | Borrowed and owned-snapshot query streams apply filter, projection, skip, and limit incrementally and reject blocking or resumable controls. | `src/query/stream.rs`; `src/query/stream_tests.rs` | `streams_filtered_projected_records_with_bounded_controls`; `snapshot_stream_is_independent_of_later_table_mutations`; `streaming_rejects_blocking_and_resume_controls` | Boundary |
 | CAT-001 | A catalog discovers only direct-child DBF files and reports table-specific load or verification failures. | `src/catalog.rs`; `docs/catalog.md` | `cargo test --all-targets --all-features` catalog and join cases | Current |
 | CAT-002 | The catalog server exposes discovered schemas and bounded read-only joins without adding cross-table writes. | `src/server/catalog.rs`; `docs/catalog.md`; `docs/http-semantics.md` | `catalog_server_query_join_executes_and_exposes_schema` | Boundary |
@@ -62,7 +62,7 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 The following topics have documentation or design notes but do not have a current implementation claim in the matrix:
 
 - backpressure and stable snapshot rules for long-lived streams;
-- a full cost-based planner, multiple or planned joins, and aggregation stages beyond bounded `$match` plus `$group`;
+- a full cost-based planner, multiple or planned joins, and aggregation stages beyond bounded `$match`, `$group`, and group-output `$project`;
 - cross-table transactions, transaction IDs, and MVCC visibility;
 - strict Shift_JIS versus CP932 selection, collation, and broader external fixtures;
 - Multi-file schema-preserving XBF-to-DBF atomic export, object-storage manifests, WASM hosting, and distributed replication.

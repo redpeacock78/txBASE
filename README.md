@@ -75,7 +75,7 @@ loaded table, so later mutations of the source table do not change the stream's 
 Both APIs reject sort, aggregate, page-size, and cursor controls, which need a blocking or
 resumable result boundary; an asynchronous backpressure protocol remains future work.
 
-`aggregate` currently accepts one `$group` stage with `$count`, integer `$sum`, `$avg`, `$min`, and `$max`, optionally preceded by bounded `$match` stages and followed by one `$sort` and `$limit` over group output; top-level sort, projection, pagination, and limit controls remain incompatible. `$avg` ignores missing, null, and nonnumeric values and returns null when a group has no numeric input.
+`aggregate` currently accepts one `$group` stage with `$count`, integer `$sum`, `$avg`, `$min`, and `$max`, optionally preceded by bounded `$match` stages, followed by one `$project`, `$sort`, and `$limit` over group output; top-level sort, projection, pagination, and limit controls remain incompatible. `$project` reuses inclusion/exclusion projection rules and must precede `$sort`/`$limit`. `$avg` ignores missing, null, and nonnumeric values and returns null when a group has no numeric input.
 
 The library also exposes one bounded local `inner`, `left`, `semi`, or `anti` equality join, plus a bounded `cross` join, over two catalog tables.
 It accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,

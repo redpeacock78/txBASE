@@ -1,6 +1,7 @@
 use super::{QueryError, QueryRequest, validation};
 use indexmap::IndexMap;
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub(super) struct GroupSpec {
@@ -12,6 +13,7 @@ pub(super) struct GroupSpec {
 pub(super) struct AggregationPlan {
     pub(super) matches: Vec<Map<String, Value>>,
     pub(super) group: GroupSpec,
+    pub(super) projection: Option<BTreeMap<String, i8>>,
     pub(super) sort: Option<IndexMap<String, i8>>,
     pub(super) limit: Option<u64>,
 }
@@ -59,6 +61,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
 
     let mut matches = Vec::new();
     let mut group = None;
+    let mut projection = None;
     let mut sort = None;
     let mut limit = None;
     for (index, stage) in stages.iter().enumerate() {
@@ -77,6 +80,11 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
                 matches.push(filter.clone());
             }
             "$group" if group.is_none() => group = Some(parse_group(value)?),
+            "$project"
+                if group.is_some() && projection.is_none() && sort.is_none() && limit.is_none() =>
+            {
+                projection = Some(parse_projection(value, index)?);
+            }
             "$sort" if group.is_some() && sort.is_none() && limit.is_none() => {
                 sort = Some(parse_sort(value, index)?);
             }
@@ -92,6 +100,11 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
                 return Err(QueryError::Invalid(
                     "aggregate supports only one $group stage".into(),
                 ));
+            }
+            "$project" => {
+                return Err(QueryError::Invalid(format!(
+                    "aggregate stage {index}.$project must follow $group, precede $sort/$limit, and appear once"
+                )));
             }
             "$sort" => {
                 return Err(QueryError::Invalid(format!(
@@ -116,9 +129,45 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
     Ok(AggregationPlan {
         matches,
         group,
+        projection,
         sort,
         limit,
     })
+}
+
+fn parse_projection(value: &Value, index: usize) -> Result<BTreeMap<String, i8>, QueryError> {
+    let object = value.as_object().ok_or_else(|| {
+        QueryError::Invalid(format!(
+            "aggregate stage {index}.$project must be an object"
+        ))
+    })?;
+    let mut projection = BTreeMap::new();
+    for (field, inclusion) in object {
+        if field.is_empty() {
+            return Err(QueryError::Invalid(format!(
+                "aggregate stage {index}.$project contains an empty field"
+            )));
+        }
+        let Some(inclusion) = inclusion.as_i64() else {
+            return Err(QueryError::Invalid(format!(
+                "aggregate projection value for {field} must be 0 or 1"
+            )));
+        };
+        if !matches!(inclusion, 0 | 1) {
+            return Err(QueryError::Invalid(format!(
+                "aggregate projection value for {field} must be 0 or 1"
+            )));
+        }
+        projection.insert(field.clone(), inclusion as i8);
+    }
+    let has_inclusion = projection.values().any(|value| *value == 1);
+    let has_exclusion = projection.values().any(|value| *value == 0);
+    if has_inclusion && has_exclusion {
+        return Err(QueryError::Invalid(
+            "aggregate projection cannot mix inclusion and exclusion".into(),
+        ));
+    }
+    Ok(projection)
 }
 
 fn parse_sort(value: &Value, index: usize) -> Result<IndexMap<String, i8>, QueryError> {

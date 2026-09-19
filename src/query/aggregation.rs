@@ -132,6 +132,15 @@ pub(super) fn execute(
         .into_values()
         .map(|group| finish_group(group, spec))
         .collect::<Result<Vec<_>, _>>()?;
+    if let Some(projection) = &plan.projection {
+        output = output
+            .into_iter()
+            .map(|value| match value {
+                Value::Object(values) => crate::query_path::project_values(&values, projection),
+                value => value,
+            })
+            .collect();
+    }
     if let Some(sort) = &plan.sort {
         output.sort_by(|left, right| compare_output_values(left, right, sort));
     }

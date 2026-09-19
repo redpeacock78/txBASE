@@ -126,12 +126,18 @@ preceding `$match` stages:
 ```
 
 The current aggregation boundary accepts one `$group` stage, zero or more `$match` stages before it,
-at most one final `$sort` stage, and at most one final `$limit` stage.
+one optional `$project` stage after it, at most one final `$sort` stage, and at most one final
+`$limit` stage.
 `_id` is either `null` or one dotted field reference.
 The supported accumulators are `$count: {}`, `$sum: "$FIELD"`, `$min: "$FIELD"`, and
 `$max: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
 The filter runs before grouping, and the result is a JSON array of documents containing `_id`
 and the named accumulator fields.
+
+`$project` reuses the query projection rules to include or exclude group-output fields. It must
+appear after `$group` and before `$sort` or `$limit`; inclusion and exclusion cannot be mixed.
+The projection is applied before the following `$sort`, so sorting a projected-away field yields
+the existing missing-value ordering.
 
 A missing group field becomes `null`, so missing and explicit `null` values share a group.
 Missing, `null`, and nonnumeric `$sum` inputs contribute zero.
