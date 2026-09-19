@@ -44,7 +44,7 @@ fn matches_if_match(value: &str, current: &str, resource_exists: bool) -> bool {
     if tags.iter().any(|tag| *tag == "*" || tag.starts_with("W/")) {
         return false;
     }
-    resource_exists && tags.iter().any(|tag| *tag == current)
+    resource_exists && tags.contains(&current)
 }
 
 fn fnv1a(bytes: &[u8]) -> u64 {

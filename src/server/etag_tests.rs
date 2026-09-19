@@ -26,7 +26,7 @@ fn cleanup(path: &Path) {
     let _ = fs::remove_file(path.with_extension("txbase.lock"));
 }
 
-fn header_value(response: &super::HttpResponse, name: &str) -> String {
+fn header_value(response: &super::HttpResponse, name: &'static str) -> String {
     response
         .headers()
         .iter()
