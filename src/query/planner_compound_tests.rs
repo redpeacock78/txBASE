@@ -140,3 +140,69 @@ fn chooses_a_compound_sort_index_with_the_smallest_equality_prefix() {
 
     remove_table_files(&path);
 }
+
+#[test]
+fn chooses_the_access_path_with_fewer_exact_candidates() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-query-planner-candidate-count-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&path);
+
+    let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    bytes[179] = b' ';
+    let mut table = DbfTable::from_bytes(&bytes).unwrap();
+    for (id, name, age, active) in [
+        (3, "Carol", 7, true),
+        (4, "Dave", 8, true),
+        (5, "Eve", 9, true),
+        (6, "Frank", 7, false),
+    ] {
+        table
+            .insert_record(
+                serde_json::json!({
+                    "ID": id,
+                    "NAME": name,
+                    "AGE": age,
+                    "ACTIVE": active
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            )
+            .unwrap();
+    }
+    fs::write(&path, table.to_bytes()).unwrap();
+    IndexFile::build(
+        &path,
+        vec![
+            IndexDefinition::named("by_active", "ACTIVE"),
+            IndexDefinition::named_fields(
+                "by_age_name_id",
+                vec!["AGE".into(), "NAME".into(), "ID".into()],
+            ),
+        ],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let request = parse(br#"{"filter":{"ACTIVE":true,"AGE":7},"sort":{"NAME":1,"ID":1}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &request).unwrap(),
+        QueryPlan::CompoundOrderedIndex {
+            name: "by_age_name_id".into(),
+            fields: vec!["AGE".into(), "NAME".into(), "ID".into()],
+            directions: vec![1, 1, 1],
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &request).unwrap(),
+        execute_query(&table, &request).unwrap()
+    );
+
+    remove_table_files(&path);
+}

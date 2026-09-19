@@ -209,7 +209,7 @@ Normal DBF saves record and apply an existing sidecar's target through the WAL; 
 
 The path-aware planner can intersect candidates from multiple valid single-field indexes for direct equality filters.
 
-It uses the sidecar's active-record and distinct-key statistics as a uniform equality estimate and can order single-field range candidates with a bounded histogram estimate; compatible compound sort candidates use exact candidate counts, not a full cost-based planner.
+It uses the sidecar's active-record and distinct-key statistics as a uniform equality estimate and can order single-field range candidates with a bounded histogram estimate; when equality, range, and ordered candidates coexist, it prefers the smallest exact candidate set. This remains a candidate-count heuristic, not a full cost-based planner.
 
 For multi-key sorts, it can use a single-field index for the first sort key and sort only equal-key groups by the remaining keys; this is not compound-index support.
 

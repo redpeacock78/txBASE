@@ -50,6 +50,25 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
     let Ok(index_file) = IndexFile::load(dbf_path) else {
         return table_scan();
     };
+    let mut candidates = Vec::new();
+    if let Some(access) = choose_equality(&index_file, request) {
+        candidates.push(access);
+    }
+    if let Some(access) = choose_range(&index_file, request) {
+        candidates.push(access);
+    }
+    if let Some(access) = choose_ordered(&index_file, request) {
+        candidates.push(access);
+    }
+
+    // ponytail: exact candidate counts only; add I/O and sort-cost terms when measurements justify them.
+    candidates
+        .into_iter()
+        .min_by_key(|access| access.records.as_ref().map_or(usize::MAX, Vec::len))
+        .unwrap_or_else(table_scan)
+}
+
+fn choose_equality(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {
     let mut equality_fields = request
         .filter
         .iter()
@@ -74,34 +93,36 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
         };
         equality_indexes.push((name, field.clone(), records));
     }
-    if let Some((name, field, first_records)) = equality_indexes.first() {
-        let mut records = first_records.clone();
-        for (_, _, candidates) in equality_indexes.iter().skip(1) {
-            records.retain(|record| candidates.binary_search(record).is_ok());
-        }
-        let plan = if equality_indexes.len() == 1 {
-            QueryPlan::EqualityIndex {
-                name: name.clone(),
-                field: field.clone(),
-            }
-        } else {
-            QueryPlan::IndexIntersection {
-                names: equality_indexes
-                    .iter()
-                    .map(|(name, _, _)| name.clone())
-                    .collect(),
-                fields: equality_indexes
-                    .iter()
-                    .map(|(_, field, _)| field.clone())
-                    .collect(),
-            }
-        };
-        return PlannedAccess {
-            plan,
-            records: Some(records),
-            ordered_prefix: 0,
-        };
+    let (name, field, first_records) = equality_indexes.first()?;
+    let mut records = first_records.clone();
+    for (_, _, candidates) in equality_indexes.iter().skip(1) {
+        records.retain(|record| candidates.binary_search(record).is_ok());
     }
+    let plan = if equality_indexes.len() == 1 {
+        QueryPlan::EqualityIndex {
+            name: name.clone(),
+            field: field.clone(),
+        }
+    } else {
+        QueryPlan::IndexIntersection {
+            names: equality_indexes
+                .iter()
+                .map(|(name, _, _)| name.clone())
+                .collect(),
+            fields: equality_indexes
+                .iter()
+                .map(|(_, field, _)| field.clone())
+                .collect(),
+        }
+    };
+    Some(PlannedAccess {
+        plan,
+        records: Some(records),
+        ordered_prefix: 0,
+    })
+}
+
+fn choose_range(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {
     let mut range_fields = request
         .filter
         .iter()
@@ -126,12 +147,16 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
         else {
             continue;
         };
-        return PlannedAccess {
+        return Some(PlannedAccess {
             plan: QueryPlan::RangeIndex { name, field },
             records: Some(records),
             ordered_prefix: 0,
-        };
+        });
     }
+    None
+}
+
+fn choose_ordered(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {
     if !request.sort.is_empty() {
         if request.sort.len() > 1 {
             let fields = request.sort.keys().map(String::as_str).collect::<Vec<_>>();
@@ -139,7 +164,7 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
             if let Ok(Some((name, index_fields, index_directions, records))) =
                 index_file.lookup_ordered_for_fields(&fields, &directions, &request.filter)
             {
-                return PlannedAccess {
+                return Some(PlannedAccess {
                     plan: QueryPlan::CompoundOrderedIndex {
                         name,
                         fields: index_fields,
@@ -147,14 +172,14 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
                     },
                     records: Some(records),
                     ordered_prefix: request.sort.len(),
-                };
+                });
             }
         }
         let (field, direction) = request.sort.iter().next().expect("sort has one field");
         let Ok(Some((name, records))) =
             index_file.lookup_ordered_for_field(field, *direction == -1)
         else {
-            return table_scan();
+            return None;
         };
         let plan = if request.sort.len() == 1 {
             QueryPlan::OrderedIndex {
@@ -169,13 +194,13 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
                 direction: *direction,
             }
         };
-        return PlannedAccess {
+        return Some(PlannedAccess {
             plan,
             records: Some(records),
             ordered_prefix: 1,
-        };
+        });
     }
-    table_scan()
+    None
 }
 
 fn table_scan() -> PlannedAccess {

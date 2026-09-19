@@ -337,7 +337,9 @@ An ascending or mixed-direction compound index provides the complete order when 
 
 The planner accepts the index order or its complete reverse, so compatible mixed-direction requests can avoid an in-memory sort as well.
 
-The planner compares exact candidate counts for compatible compound definitions, then prefers a shorter definition and a stable name tie-breaker.
+When equality, range, and ordered access paths coexist, the planner compares their exact candidate
+counts and prefers the smallest candidate set. Compound definitions still use their shortest
+definition and stable name tie-breakers when their candidate counts are equal.
 
 This local candidate-count choice is not a full cost model because it does not estimate index I/O, memory, cache state, collation, or range selectivity for compound keys.
 

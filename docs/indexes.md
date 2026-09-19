@@ -172,7 +172,9 @@ For a multi-key sort, a single-field index supplies the first sort-key order and
 
 When the requested sort fields match a compound definition after an exact equality prefix, the planner can consume the index order directly for the requested directions or their complete reverse.
 
-The planner compares the exact candidate counts of compatible compound definitions and prefers the smallest candidate set, then the shortest definition and a stable name tie-breaker.
+The planner compares the exact candidate counts of equality, range, and compatible ordered
+definitions and prefers the smallest candidate set. Equal compound candidates then prefer the
+shortest definition and a stable name tie-breaker.
 
 This is a local candidate-count heuristic, not a full I/O, memory, or statistics cost model.
 
