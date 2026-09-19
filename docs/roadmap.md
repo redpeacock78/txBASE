@@ -32,7 +32,7 @@ The repository currently provides:
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
-- A bounded aggregation pipeline with zero or more `$match` stages before one `$group` stage using `$count` and integer `$sum`.
+- A bounded aggregation pipeline with zero or more `$match` stages before one `$group` stage using `$count`, integer `$sum`, `$min`, and `$max`.
 - A bounded local `inner`, `left`, `semi`, or `anti` equality join over two catalog tables with qualified filtering and projection.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - A borrowed query stream for incremental filter and projection over an in-memory table snapshot.

@@ -101,7 +101,8 @@ preceding `$match` stages:
 
 The current aggregation boundary accepts one `$group` stage and zero or more `$match` stages before it.
 `_id` is either `null` or one dotted field reference.
-The supported accumulators are `$count: {}` and `$sum: "$FIELD"`.
+The supported accumulators are `$count: {}`, `$sum: "$FIELD"`, `$min: "$FIELD"`, and
+`$max: "$FIELD"`.
 The filter runs before grouping, and the result is a JSON array of documents containing `_id`
 and the named accumulator fields.
 
@@ -109,12 +110,16 @@ A missing group field becomes `null`, so missing and explicit `null` values shar
 Missing, `null`, and nonnumeric `$sum` inputs contribute zero.
 Fractional numbers are rejected because this slice preserves integer sums exactly.
 An integer sum that cannot be represented as a JSON signed or unsigned integer is rejected.
+Missing and `null` `$min` / `$max` inputs are ignored; an all-missing or all-null group returns
+`null` for that accumulator.
+Non-null `$min` / `$max` values must be comparable under the existing JSON ordering rules.
+Incomparable values are rejected.
 The executor rejects more than 10,000 groups and rejects combining aggregation with sort,
 projection, skip, limit, or cursor pagination.
 Group output order is not part of the contract, although the current implementation emits a
 deterministic key order.
 `$match` stages use the same predicate rules as the top-level `filter` and must precede `$group`.
-Stages after `$group`, additional grouping stages, and accumulator expressions remain unsupported.
+Stages after `$group`, additional grouping stages, and expression operands remain unsupported.
 
 MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as
 `$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).

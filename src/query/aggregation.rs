@@ -28,12 +28,16 @@ struct AccumulatorSpec {
 enum AccumulatorKind {
     Count,
     Sum(String),
+    Min(String),
+    Max(String),
 }
 
 #[derive(Debug)]
 enum AccumulatorState {
     Count(u64),
     Sum(i128),
+    Min(Option<Value>),
+    Max(Option<Value>),
 }
 
 #[derive(Debug)]
@@ -131,6 +135,12 @@ pub(super) fn execute(
                     *total = total.checked_add(integer).ok_or_else(|| {
                         QueryError::Invalid("aggregate $sum overflows i128".into())
                     })?;
+                }
+                (AccumulatorState::Min(current), AccumulatorKind::Min(field)) => {
+                    update_extreme(current, record, field, true)?;
+                }
+                (AccumulatorState::Max(current), AccumulatorKind::Max(field)) => {
+                    update_extreme(current, record, field, false)?;
                 }
                 _ => unreachable!("validated accumulator state and specification differ"),
             }
@@ -237,6 +247,21 @@ fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
                 })?,
                 &format!("$group.{name}.$sum"),
             )?),
+            "$min" | "$max" => {
+                let field = field_reference(
+                    operand.as_str().ok_or_else(|| {
+                        QueryError::Invalid(format!(
+                            "$group.{name}.{operator} must be a field reference"
+                        ))
+                    })?,
+                    &format!("$group.{name}.{operator}"),
+                )?;
+                if operator == "$min" {
+                    AccumulatorKind::Min(field)
+                } else {
+                    AccumulatorKind::Max(field)
+                }
+            }
             _ => {
                 return Err(QueryError::Invalid(format!(
                     "unsupported aggregate accumulator {operator}"
@@ -277,6 +302,8 @@ fn new_group(key: Value, spec: &GroupSpec) -> GroupState {
             .map(|accumulator| match &accumulator.kind {
                 AccumulatorKind::Count => AccumulatorState::Count(0),
                 AccumulatorKind::Sum(_) => AccumulatorState::Sum(0),
+                AccumulatorKind::Min(_) => AccumulatorState::Min(None),
+                AccumulatorKind::Max(_) => AccumulatorState::Max(None),
             })
             .collect(),
     }
@@ -291,10 +318,45 @@ fn finish_group(group: GroupState, spec: &GroupSpec) -> Result<Value, QueryError
             AccumulatorState::Sum(total) => {
                 Value::Number(number_from_i128(total, &accumulator.name)?)
             }
+            AccumulatorState::Min(value) | AccumulatorState::Max(value) => {
+                value.unwrap_or(Value::Null)
+            }
         };
         output.insert(accumulator.name.clone(), value);
     }
     Ok(Value::Object(output))
+}
+
+fn update_extreme(
+    current: &mut Option<Value>,
+    record: &DbfRecord,
+    field: &str,
+    choose_min: bool,
+) -> Result<(), QueryError> {
+    let Some(value) = field_value(&record.values, field) else {
+        return Ok(());
+    };
+    if value.is_null() {
+        return Ok(());
+    }
+    let Some(current_value) = current.as_ref() else {
+        *current = Some(value);
+        return Ok(());
+    };
+    let ordering = super::ordering::compare_values(current_value, &value).ok_or_else(|| {
+        QueryError::Invalid(format!(
+            "aggregate extreme field {field} contains incomparable values"
+        ))
+    })?;
+    let replace = if choose_min {
+        ordering.is_gt()
+    } else {
+        ordering.is_lt()
+    };
+    if replace {
+        *current = Some(value);
+    }
+    Ok(())
 }
 
 fn number_from_i128(value: i128, name: &str) -> Result<serde_json::Number, QueryError> {

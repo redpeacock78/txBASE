@@ -32,6 +32,26 @@ fn groups_filtered_records_with_count_and_integer_sum() {
 }
 
 #[test]
+fn groups_comparable_extremes_and_returns_null_for_missing_values() {
+    let table = table_with_two_active_records();
+    let request = parse(
+        br#"{
+            "aggregate": [{"$group": {
+                "youngest": {"$min": "$AGE"},
+                "oldest": {"$max": "$AGE"},
+                "missing_min": {"$min": "$MISSING"}
+            }}]
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        execute_query(&table, &request).unwrap(),
+        vec![json!({"_id": null, "youngest": 7, "oldest": 29, "missing_min": null})]
+    );
+}
+
+#[test]
 fn missing_group_fields_share_the_null_group() {
     let table = table_with_two_active_records();
     let request =

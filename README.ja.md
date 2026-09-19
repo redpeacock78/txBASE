@@ -61,7 +61,7 @@ sort、aggregate、page-size、cursorはblockingまたはresume boundaryを必�
 long-lived snapshotの安定性とbackpressureは未実装です。
 
 `aggregate`は一つの`$group` stageと、その前に0個以上置けるboundedな`$match` stageを使えます。
-`$count`と整数`$sum`をサポートします。
+`$count`、整数`$sum`、および比較可能な値に対する`$min` / `$max`をサポートします。
 `sort`、`projection`、pagination、`limit`との併用はできません。
 
 libraryにはcatalog table二つを読むboundedな`inner`、`left`、`semi`、`anti` equality joinもあります。

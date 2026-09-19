@@ -73,7 +73,7 @@ projection, skip, and limit without materializing the matching record set.
 It deliberately rejects sort, aggregate, page-size, and cursor controls, which need a blocking
 or resumable result boundary; backpressure and stable long-lived snapshot rules remain future work.
 
-`aggregate` currently accepts one `$group` stage with `$count` and integer `$sum`, optionally preceded by bounded `$match` stages; it cannot be combined with sort, projection, pagination, or limit controls.
+`aggregate` currently accepts one `$group` stage with `$count`, integer `$sum`, `$min`, and `$max`, optionally preceded by bounded `$match` stages; it cannot be combined with sort, projection, pagination, or limit controls.
 
 The library also exposes one bounded local `inner`, `left`, `semi`, or `anti` equality join over two catalog tables.
 It accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,
