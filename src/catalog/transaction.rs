@@ -8,13 +8,6 @@ use std::fs;
 use std::path::Path;
 
 impl Catalog {
-    pub(crate) fn commit_operations(
-        &self,
-        operations: &[OperationIr],
-    ) -> Result<u64, CatalogTransactionError> {
-        self.commit_operations_with_if_none_match(operations, None)
-    }
-
     pub(crate) fn commit_operations_with_if_none_match(
         &self,
         operations: &[OperationIr],
