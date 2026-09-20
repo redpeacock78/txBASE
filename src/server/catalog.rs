@@ -1,11 +1,16 @@
-use super::records::{delete_response, get_response, post_response_at, update_response};
+use super::records::{
+    delete_response_with_validator, get_response, post_response_at_with_validator,
+    update_response_with_validator,
+};
 use super::{
     HttpResponse, error, header, json_response, query_response_at, query_result_response,
     read_json_body,
 };
 use crate::catalog::Catalog;
+use crate::dbf::DbfTable;
 use crate::query::join::{self, JoinError};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::Path;
 use tiny_http::{Method, Request, Server};
 
@@ -157,11 +162,45 @@ pub(super) fn table_mutation_response(
             );
         }
     };
+    let validate = |candidate: &DbfTable| {
+        let mut replacements = BTreeMap::new();
+        replacements.insert(name.to_owned(), candidate.clone());
+        catalog
+            .validate_replacements(&replacements)
+            .map_err(|error| error.to_string())
+    };
     match request.method() {
-        Method::Post => post_response_at(request, &local_path, path, &mut table, dbf_path),
-        Method::Put => update_response(request, &local_path, &mut table, dbf_path, true),
-        Method::Patch => update_response(request, &local_path, &mut table, dbf_path, false),
-        Method::Delete => delete_response(request, &local_path, &mut table, dbf_path),
+        Method::Post => post_response_at_with_validator(
+            request,
+            &local_path,
+            path,
+            &mut table,
+            dbf_path,
+            Some(&validate),
+        ),
+        Method::Put => update_response_with_validator(
+            request,
+            &local_path,
+            &mut table,
+            dbf_path,
+            true,
+            Some(&validate),
+        ),
+        Method::Patch => update_response_with_validator(
+            request,
+            &local_path,
+            &mut table,
+            dbf_path,
+            false,
+            Some(&validate),
+        ),
+        Method::Delete => delete_response_with_validator(
+            request,
+            &local_path,
+            &mut table,
+            dbf_path,
+            Some(&validate),
+        ),
         _ => json_response(
             405,
             error(

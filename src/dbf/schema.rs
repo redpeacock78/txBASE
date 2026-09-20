@@ -6,6 +6,12 @@ impl DbfTable {
         self.encoding_override.as_deref()
     }
 
+    pub(crate) fn foreign_keys(&self) -> Result<Vec<(String, String, String)>, DbfError> {
+        self.schema
+            .as_ref()
+            .map_or_else(|| Ok(Vec::new()), SchemaMetadata::foreign_keys)
+    }
+
     pub fn schema_json(&self) -> Value {
         let declared_encoding = encoding_name(self.header.language_driver);
         let effective_encoding = self.encoding_override.as_deref().or(declared_encoding);

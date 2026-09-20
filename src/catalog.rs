@@ -6,6 +6,7 @@ use std::fmt::{self, Display, Formatter};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod constraints;
 mod journal;
 mod transaction;
 
@@ -221,6 +222,7 @@ impl Catalog {
                 source,
             })?;
         }
+        self.validate_replacements(&BTreeMap::new())?;
         Ok(())
     }
 
@@ -243,6 +245,13 @@ impl Catalog {
             self.open_table_unlocked(right)?,
         ))
     }
+
+    pub(crate) fn validate_replacements(
+        &self,
+        replacements: &BTreeMap<String, DbfTable>,
+    ) -> Result<(), CatalogError> {
+        constraints::validate_replacements(self, replacements)
+    }
 }
 
 #[cfg(test)]
@@ -259,6 +268,17 @@ mod tests {
             .split_whitespace()
             .map(|token| u8::from_str_radix(token, 16).unwrap())
             .collect()
+    }
+
+    fn foreign_key_metadata() -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "format": "txbase-schema",
+            "version": 1,
+            "fields": {
+                "ID": {"references": "users.ID"}
+            }
+        }))
+        .unwrap()
     }
 
     fn temporary_catalog() -> PathBuf {
@@ -394,6 +414,87 @@ mod tests {
                 .active_record(3)
                 .is_none()
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn catalog_foreign_keys_validate_mutations_and_parent_removal() {
+        let root = temporary_catalog();
+        fs::write(root.join("users.dbf"), fixture()).unwrap();
+        fs::write(root.join("posts.dbf"), fixture()).unwrap();
+        fs::write(root.join("posts.txschema.json"), foreign_key_metadata()).unwrap();
+        let catalog = Catalog::from_path(&root).unwrap();
+
+        let orphan = catalog
+            .commit_operations(&[OperationIr {
+                method: OperationMethod::Post,
+                path: "/posts/records".into(),
+                body: Some(json!({
+                    "ID": 3,
+                    "NAME": "Orphan",
+                    "AGE": 42,
+                    "ACTIVE": true
+                })),
+            }])
+            .unwrap_err();
+        assert!(
+            orphan
+                .to_string()
+                .contains("foreign key ID has no matching users.ID")
+        );
+        assert!(
+            catalog
+                .open_table("posts")
+                .unwrap()
+                .active_record(3)
+                .is_none()
+        );
+
+        catalog
+            .commit_operations(&[
+                OperationIr {
+                    method: OperationMethod::Post,
+                    path: "/users/records".into(),
+                    body: Some(json!({
+                        "ID": 3,
+                        "NAME": "Carol",
+                        "AGE": 42,
+                        "ACTIVE": true
+                    })),
+                },
+                OperationIr {
+                    method: OperationMethod::Post,
+                    path: "/posts/records".into(),
+                    body: Some(json!({
+                        "ID": 3,
+                        "NAME": "Carol",
+                        "AGE": 42,
+                        "ACTIVE": true
+                    })),
+                },
+            ])
+            .unwrap();
+
+        let delete_parent = catalog
+            .commit_operations(&[OperationIr {
+                method: OperationMethod::Delete,
+                path: "/users/records/1".into(),
+                body: None,
+            }])
+            .unwrap_err();
+        assert!(
+            delete_parent
+                .to_string()
+                .contains("foreign key ID has no matching users.ID")
+        );
+        assert!(
+            catalog
+                .open_table("users")
+                .unwrap()
+                .active_record(1)
+                .is_some()
+        );
+
         fs::remove_dir_all(root).unwrap();
     }
 

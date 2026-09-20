@@ -38,6 +38,8 @@ struct FieldMetadata {
     not_null: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     default: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    references: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -104,6 +106,7 @@ impl SchemaMetadata {
             }
             field_primary |= metadata.primary;
         }
+        self.foreign_keys()?;
         if !self.constraints.primary.is_empty() {
             if field_primary {
                 return Err(DbfError::Invalid(
@@ -116,6 +119,29 @@ impl SchemaMetadata {
             validate_key_fields(key, fields, &format!("constraints.unique[{index}]"), 2)?;
         }
         Ok(())
+    }
+
+    pub(super) fn foreign_keys(&self) -> Result<Vec<(String, String, String)>, DbfError> {
+        self.fields
+            .iter()
+            .filter_map(|(local_field, metadata)| {
+                metadata
+                    .references
+                    .as_deref()
+                    .map(|reference| (local_field, reference))
+            })
+            .map(|(local_field, reference)| {
+                let mut parts = reference.split('.');
+                let table = parts.next().unwrap_or_default();
+                let field = parts.next().unwrap_or_default();
+                if table.is_empty() || field.is_empty() || parts.next().is_some() {
+                    return Err(DbfError::Invalid(format!(
+                        "schema reference for field {local_field} must be TABLE.FIELD"
+                    )));
+                }
+                Ok((local_field.clone(), table.to_owned(), field.to_owned()))
+            })
+            .collect()
     }
 
     pub(super) fn apply_defaults(&self, values: &mut Map<String, Value>) {

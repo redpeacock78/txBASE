@@ -64,6 +64,8 @@ impl Catalog {
                     CatalogTransactionError::Invalid(format!("table {name}: {error}"))
                 })?;
         }
+        self.validate_replacements(&tables)
+            .map_err(CatalogTransactionError::Catalog)?;
 
         let mut changes = Vec::new();
         for (name, mut table) in tables {

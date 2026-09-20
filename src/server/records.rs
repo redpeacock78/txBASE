@@ -49,6 +49,24 @@ pub(super) fn post_response_at(
     table: &mut DbfTable,
     dbf_path: &Path,
 ) -> HttpResponse {
+    post_response_at_with_validator(
+        request,
+        operation_path,
+        location_path,
+        table,
+        dbf_path,
+        None,
+    )
+}
+
+pub(super) fn post_response_at_with_validator(
+    request: &mut Request,
+    operation_path: &str,
+    location_path: &str,
+    table: &mut DbfTable,
+    dbf_path: &Path,
+    validator: Option<&dyn Fn(&DbfTable) -> Result<(), String>>,
+) -> HttpResponse {
     if operation_path != "/records" {
         return json_response(404, error("not_found", "resource not found"), false);
     }
@@ -69,6 +87,11 @@ pub(super) fn post_response_at(
         Ok(id) => id,
         Err(error) => return dbf_error_response(error),
     };
+    if let Some(validate) = validator {
+        if let Err(message) = validate(table) {
+            return json_response(422, error("constraint_violation", &message), false);
+        }
+    }
     if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
         return response;
     }
@@ -92,6 +115,17 @@ pub(super) fn update_response(
     table: &mut DbfTable,
     dbf_path: &Path,
     replace: bool,
+) -> HttpResponse {
+    update_response_with_validator(request, path, table, dbf_path, replace, None)
+}
+
+pub(super) fn update_response_with_validator(
+    request: &mut Request,
+    path: &str,
+    table: &mut DbfTable,
+    dbf_path: &Path,
+    replace: bool,
+    validator: Option<&dyn Fn(&DbfTable) -> Result<(), String>>,
 ) -> HttpResponse {
     let Ok(id) = record_id(path) else {
         return json_response(404, error("not_found", "resource not found"), false);
@@ -124,6 +158,11 @@ pub(super) fn update_response(
     if let Err(error) = result {
         return dbf_error_response(error);
     }
+    if let Some(validate) = validator {
+        if let Err(message) = validate(table) {
+            return json_response(422, error("constraint_violation", &message), false);
+        }
+    }
     if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
         return response;
     }
@@ -143,6 +182,16 @@ pub(super) fn delete_response(
     table: &mut DbfTable,
     dbf_path: &Path,
 ) -> HttpResponse {
+    delete_response_with_validator(request, path, table, dbf_path, None)
+}
+
+pub(super) fn delete_response_with_validator(
+    request: &Request,
+    path: &str,
+    table: &mut DbfTable,
+    dbf_path: &Path,
+    validator: Option<&dyn Fn(&DbfTable) -> Result<(), String>>,
+) -> HttpResponse {
     let Ok(id) = record_id(path) else {
         return json_response(404, error("not_found", "resource not found"), false);
     };
@@ -160,6 +209,11 @@ pub(super) fn delete_response(
     let original = table.clone();
     if let Err(error) = table.delete_record(id) {
         return dbf_error_response(error);
+    }
+    if let Some(validate) = validator {
+        if let Err(message) = validate(table) {
+            return json_response(422, error("constraint_violation", &message), false);
+        }
     }
     if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
         return response;

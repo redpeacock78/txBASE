@@ -67,6 +67,7 @@ The current version accepts the following field properties:
 | `unique` | Rejects a non-null value already used by another active record |
 | `not_null` | Rejects JSON `null` on insert, replace, patch, or recall |
 | `default` | Supplies a scalar value when the field is omitted from an insert |
+| `references` | Declares a catalog-scoped `TABLE.FIELD` foreign-key target |
 
 The optional root `checks` array rejects a candidate record unless every table-level query
 predicate matches.
@@ -95,6 +96,12 @@ Defaults are applied before `not_null`, uniqueness, and `checks` validation.
 
 Composite unique constraints use the existing scalar comparison rules. A tuple containing a null
 value does not participate in uniqueness, matching the existing single-field unique behavior.
+
+`references` is resolved by the directory catalog after a named-table mutation or catalog
+transaction. Non-null child values must match an active record in the referenced table; null
+values are allowed, and parent updates or logical deletes that would leave a child dangling are
+rejected. The catalog does not cascade changes. Path-only single-table operations cannot resolve
+cross-table references and therefore do not enforce this property.
 
 Existing active records are checked when the sidecar is loaded, so an invalid pre-existing DBF is not silently accepted as a valid constrained table.
 
@@ -128,7 +135,6 @@ The current copy and WAL protocols do not claim one atomic multi-file commit for
 
 The sidecar does not yet implement:
 
-- `FOREIGN KEY` references or cross-table validation.
 - Collations or type declarations independent of DBF field descriptors.
 - A schema migration or metadata-edit command.
 - Automatic selection between a DBF language driver and an override.

@@ -15,6 +15,17 @@ fn fixture() -> Vec<u8> {
         .collect()
 }
 
+fn foreign_key_metadata() -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {
+            "ID": {"references": "users.ID"}
+        }
+    }))
+    .unwrap()
+}
+
 fn temporary_catalog() -> std::path::PathBuf {
     let id = NEXT_CATALOG_ID.fetch_add(1, Ordering::Relaxed);
     let path =
@@ -335,6 +346,32 @@ fn catalog_server_mutates_named_tables_with_single_table_semantics() {
     assert!(
         catalog
             .open_table("left")
+            .unwrap()
+            .active_record(3)
+            .is_none()
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn catalog_server_rejects_orphan_foreign_key_mutations() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.txschema.json"), foreign_key_metadata()).unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+
+    let mut post = json_request(
+        Method::Post,
+        "/posts/records",
+        r#"{"ID":3,"NAME":"Orphan","AGE":42,"ACTIVE":true}"#,
+    );
+    let response = super::catalog::table_mutation_response(&mut post, "/posts/records", &catalog);
+    assert_eq!(response.status_code(), StatusCode(422));
+    assert!(
+        catalog
+            .open_table("posts")
             .unwrap()
             .active_record(3)
             .is_none()

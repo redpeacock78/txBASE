@@ -125,6 +125,11 @@ named-table reads and mutations.
 
 It provides a cross-table atomic transaction boundary for named record mutations.
 
+When a field sidecar declares `references: "TABLE.FIELD"`, catalog named-table mutations and
+catalog transactions validate non-null child values against active rows in the referenced table.
+They reject parent updates or logical deletes that would leave a child dangling; nulls are allowed
+and changes are not cascaded. Direct single-table routes cannot resolve these cross-table rules.
+
 The catalog lock serializes catalog reads and writes, while per-table locks continue to protect
 direct DBF persistence.
 
