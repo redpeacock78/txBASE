@@ -211,6 +211,9 @@ alias testはlegacy alias全体をカバーします。
 
 上流の Rust `dbase-rs` CP936 フィクスチャは、legacy dBASE の `0x4d` driver ID を含み、読み取り、更新、バイト列の往復を検証します。
 
+上流の SeoulTech Korea Maps EUC-KR フィクスチャは、韓国語のフィールド名、16 件の実データ、legacy dBASE の `0x4e` driver ID をカバーします。
+読み取り、更新、バイト列の往復も検証します。
+
 クラシックな DBF フィールド記述子名にも実効コーデックを使うため、CJK の列名を JSON 参照と更新で利用できます。
 
 記述子の上限は引き続きバイト単位で、XBF 出力では ASCII のフィールド名だけを受け付けます。

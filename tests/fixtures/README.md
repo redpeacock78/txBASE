@@ -72,3 +72,14 @@ source is pinned to commit
 https://github.com/tmontaigu/dbase-rs/tree/395af3243cec931f0e9af402f0001b180ec527c1/tests/data
 and is distributed under the upstream MIT license. The fixture SHA-256 is
 `674d2b5724d62314e670130f9feca49e46c2c677e7ec4c620e8b957c3799ec92`.
+
+`external-korea-maps-euc-kr.dbf.hex` is a whitespace-separated hex encoding of
+the upstream `state.euc_kr.dbf` fixture from SeoulTech/korea-maps. It contains
+16 Korean administrative-region records, Korean field names, and the legacy
+dBASE `0x4e` driver ID. The source is pinned to commit
+`6d002c4fefad4e1d69a21a5ae64b7ccc521f86fe`:
+https://github.com/SeoulTech/korea-maps/tree/6d002c4fefad4e1d69a21a5ae64b7ccc521f86fe/shp
+The upstream README states that the data comes from Korea Statistics and that
+the repository is distributed under the Eclipse Public License. This repository
+includes only fixture bytes as third-party test data. The fixture SHA-256 is
+`01560d793acc1a12b6bb44a82dc0e4c0dd3a4e7d9ea5fedf37fffeb6240ce990`.
