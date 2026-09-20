@@ -47,7 +47,17 @@ fn backup_and_restore_cli_copy_a_dbf() {
         "txbase-cli-backup-restored-{}.dbf",
         std::process::id()
     ));
-    for path in [&source, &backup, &restored] {
+    let source_memo = source.with_extension("dbt");
+    let backup_memo = backup.with_extension("dbt");
+    let restored_memo = restored.with_extension("dbt");
+    for path in [
+        &source,
+        &backup,
+        &restored,
+        &source_memo,
+        &backup_memo,
+        &restored_memo,
+    ] {
         let _ = fs::remove_file(path);
     }
 
@@ -56,6 +66,7 @@ fn backup_and_restore_cli_copy_a_dbf() {
         .map(|byte| u8::from_str_radix(byte, 16).unwrap())
         .collect::<Vec<_>>();
     fs::write(&source, &fixture).unwrap();
+    fs::write(&source_memo, b"source memo").unwrap();
 
     for (operation, input, output_path) in [
         ("backup", &source, &backup),
@@ -77,8 +88,17 @@ fn backup_and_restore_cli_copy_a_dbf() {
     }
 
     assert_eq!(fs::read(&restored).unwrap(), fixture);
+    assert_eq!(fs::read(&backup_memo).unwrap(), b"source memo");
+    assert_eq!(fs::read(&restored_memo).unwrap(), b"source memo");
 
-    for path in [source, backup, restored] {
+    for path in [
+        source,
+        backup,
+        restored,
+        source_memo,
+        backup_memo,
+        restored_memo,
+    ] {
         fs::remove_file(path).unwrap();
     }
 }
