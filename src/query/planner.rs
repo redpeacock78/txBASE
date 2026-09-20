@@ -180,7 +180,7 @@ fn choose_range(
     }
     candidates
         .into_iter()
-        .min_by_key(|access| estimated_cost(access, index_file, active_record_count, request))
+        .min_by_key(|access| cost::estimated_cost(access, index_file, active_record_count, request))
 }
 
 fn choose_ordered(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {
