@@ -61,6 +61,10 @@ pub trait Wal {
     fn current_lsn(&self) -> Lsn {
         Lsn(0)
     }
+
+    fn next_transaction_id(&self) -> u64 {
+        1
+    }
 }
 
 #[derive(Debug, Default)]
@@ -97,6 +101,10 @@ impl Wal for MemoryWal {
 
     fn current_lsn(&self) -> Lsn {
         self.last_lsn.unwrap_or(Lsn(0))
+    }
+
+    fn next_transaction_id(&self) -> u64 {
+        next_transaction_id_after_records(&self.records)
     }
 }
 
@@ -226,6 +234,10 @@ impl Wal for FileWal {
     fn current_lsn(&self) -> Lsn {
         self.last_lsn.unwrap_or(Lsn(0))
     }
+
+    fn next_transaction_id(&self) -> u64 {
+        next_transaction_id_after_records(&self.records)
+    }
 }
 
 fn validate_record_size(record: &[u8]) -> Result<(), TransactionError> {
@@ -245,6 +257,19 @@ fn next_lsn(last_lsn: Option<Lsn>) -> Result<Lsn, TransactionError> {
             .ok_or_else(|| TransactionError::Invalid("WAL LSN overflows".into())),
         None => Ok(Lsn(0)),
     }
+}
+
+fn next_transaction_id_after_records(records: &[(Lsn, Vec<u8>)]) -> u64 {
+    records
+        .iter()
+        .filter_map(|(_, record)| transaction_id_from_record(record))
+        .max()
+        .map_or(1, |id| id.saturating_add(1))
+}
+
+fn transaction_id_from_record(record: &[u8]) -> Option<u64> {
+    (record.len() == 17 && matches!(record[0], b'C' | b'R'))
+        .then(|| u64::from_le_bytes(record[1..9].try_into().expect("transaction ID is fixed")))
 }
 
 pub trait Mvcc {
@@ -273,10 +298,11 @@ pub struct TransactionManager<W: Wal> {
 impl<W: Wal> TransactionManager<W> {
     pub fn new(wal: W) -> Self {
         let current_lsn = wal.current_lsn();
+        let next_transaction_id = wal.next_transaction_id();
         Self {
             wal,
             current_lsn,
-            next_transaction_id: 1,
+            next_transaction_id,
             active: BTreeMap::new(),
         }
     }

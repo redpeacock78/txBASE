@@ -352,7 +352,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming backpressure, planner-selected joins, additional aggregation stages, transaction IDs, MVCC, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
+Later phases may add a full cost-based index choice, streaming backpressure, planner-selected joins, additional aggregation stages, HTTP-visible transaction IDs, MVCC, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

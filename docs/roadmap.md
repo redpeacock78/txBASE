@@ -28,6 +28,8 @@ The repository currently provides:
 - Bounded `$expr` boolean trees over field-to-field comparison leaves that remain on the table-scan reference path.
 - HTTP `GET`, `QUERY`, `POST`, `PUT`, `PATCH`, and `DELETE` routes.
 - File or memory WAL types with `TXOP`, `TXDP`, `TXDB`, and `TXDM` persistence paths.
+- A low-level snapshot transaction engine whose `TransactionId` sequence resumes from retained
+  memory or file WAL commit/rollback records; DBF and catalog HTTP commits do not expose those IDs.
 - Startup recovery, stale-snapshot rejection, and an Ubuntu/macOS/Windows CI gate.
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
@@ -45,7 +47,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, planner-selected join strategies, transaction IDs or MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, planner-selected join strategies, DBF/catalog transaction IDs or MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -104,6 +106,10 @@ The catalog transaction slice prepares named operations across multiple DBFs und
 lock, commits DBF and changed-sidecar images through a directory journal, and recovers an
 incomplete prepare before the next catalog read. Transaction IDs and MVCC visibility remain
 future work.
+
+The lower-level `TransactionManager` is separate from those DBF persistence paths. Its
+`TransactionId` allocator resumes after reopening a WAL that retains completed transaction
+records; this does not provide historical row versions or expose IDs through HTTP.
 
 ## 4. Phase 2: expand the query model
 

@@ -187,7 +187,7 @@ recoverableな`TXSE` export boundaryでjournal化します。途中で停止し�
 path-aware plannerは、複数のsingle-field indexが有効なdirect equality filterであれば候補recordをintersectionできます。
 
 catalog joinは`txbase::query::join::parse`と`execute`から使います。
-複数join、cost-based planner、backpressure付きのstreaming、transaction ID、MVCC visibilityは未実装です。
+複数join、cost-based planner、backpressure付きのstreaming、HTTP-visibleなtransaction ID、MVCC visibilityは未実装です。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt`、`.txschema.json`、有効な`.txidx` sidecarもコピーします。
 sourceのindexがstaleまたは壊れている場合は拒否し、sourceにindexがなければdestinationの古いindexを削除します。

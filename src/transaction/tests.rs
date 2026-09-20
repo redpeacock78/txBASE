@@ -90,3 +90,39 @@ fn snapshot_engine_rolls_back_active_transaction() {
     assert!(engine.rollback(transaction).is_err());
     assert_eq!(engine.wal().records()[0].1[0], b'R');
 }
+
+#[test]
+fn snapshot_engine_resumes_transaction_ids_from_wal() {
+    let mut engine = InMemoryTransactionEngine::default();
+    let first = engine.begin(IsolationLevel::Snapshot).unwrap();
+    assert_eq!(first.id, TransactionId(1));
+    engine.commit(first).unwrap();
+
+    let wal = engine.into_wal();
+    let mut resumed = InMemoryTransactionEngine::new(wal);
+    let second = resumed.begin(IsolationLevel::Snapshot).unwrap();
+    assert_eq!(second.id, TransactionId(2));
+}
+
+#[test]
+fn file_snapshot_engine_resumes_transaction_ids_after_reopen() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-transaction-id-test-{}.wal",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&path);
+    {
+        let wal = FileWal::open(&path).unwrap();
+        let mut engine = FileTransactionEngine::new(wal);
+        let transaction = engine.begin(IsolationLevel::Snapshot).unwrap();
+        assert_eq!(transaction.id, TransactionId(1));
+        engine.commit(transaction).unwrap();
+    }
+    {
+        let wal = FileWal::open(&path).unwrap();
+        let mut engine = FileTransactionEngine::new(wal);
+        let transaction = engine.begin(IsolationLevel::Snapshot).unwrap();
+        assert_eq!(transaction.id, TransactionId(2));
+    }
+    fs::remove_file(path).unwrap();
+}
