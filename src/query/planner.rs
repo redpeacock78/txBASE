@@ -83,9 +83,11 @@ fn estimated_cost(
         .as_ref()
         .map_or(active_record_count, Vec::len);
     let remaining_sort = request.sort.len() > access.ordered_prefix;
-    let sort_cost = remaining_sort
-        .then(|| estimated_sort_cost(record_count))
-        .unwrap_or_default();
+    let sort_cost = if remaining_sort {
+        estimated_sort_cost(record_count)
+    } else {
+        0
+    };
     record_count.saturating_add(sort_cost)
 }
 
