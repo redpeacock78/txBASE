@@ -131,7 +131,7 @@ The current record scan remains the reference execution path while the query mod
 - Full range, histogram-based, and mixed-direction compound cost planning.
 
 The first join slice is local and bounded.
-It implements one or more equality conditions, uses a fresh single-field index for large direct or chained single-key probes, an exact field-order compound index for direct or chained probes, and a compatible ordered-index merge path for large direct joins when available, and otherwise uses a bounded nested-loop or in-memory hash map.
+It implements one or more equality conditions, compares bounded hash and index-probe costs after the small nested-loop boundary, uses a fresh single-field index when that estimate wins, uses an exact field-order compound index for direct or chained probes, and uses a compatible ordered-index merge path for large direct joins when that estimate wins.
 Additional stages may reference earlier joined tables and keep one catalog read lock across the
 pipeline, but full index-aware and cost-based merge planning, streaming, and broader null or
 missing field semantics before adding broader query surfaces.

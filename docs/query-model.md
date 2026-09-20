@@ -330,15 +330,25 @@ Missing and explicit `null` join keys do not match.
 
 The equality-join planner selects `NestedLoop` when the left and right active-row counts have at most 64 candidate pairs.
 
-For a direct single-key equality join or a chained single-key equality stage with a fresh single-field index on the probed table, it selects `IndexNestedLoop` for larger inputs and looks up each outer key in that index.
+For larger inputs, it compares bounded costs for the available strategies.
+
+`Hash` costs one pass over both inputs.
+
+`IndexNestedLoop` costs the outer-row count multiplied by a logarithmic index-probe estimate for the inner side.
+
+`Merge` costs one pass over both inputs when compatible ordered indexes are fresh on both sides.
+
+The strategy with the lower estimate wins, with `Merge` preferred over `IndexNestedLoop`, and `IndexNestedLoop` preferred over `Hash` for an exact tie.
+
+For a direct single-key equality join or a chained single-key equality stage, the indexed table is the inner side of the probe.
 
 For a chained `right` stage, it probes the indexed right table and restores right-major physical order before emitting the intermediate result.
 
 Direct and chained stages may also use a fresh compound index when the equality fields exactly match the index field order.
 
-For a large direct equality join with compatible fresh ordered indexes on both inputs, the planner selects `Merge` and restores left-major or right-major output order after matching key groups.
+For a large direct equality join with compatible fresh ordered indexes on both inputs, the planner selects `Merge` when its bounded cost is lowest and restores left-major or right-major output order after matching key groups.
 
-When that index is unavailable, stale, malformed, or not applicable, larger inputs select `Hash` and build one in-memory equality map for the right table, or the left table for a `right` join.
+When an index is unavailable, stale, malformed, or more expensive than the hash estimate, larger inputs select `Hash` and build one in-memory equality map for the right table, or the left table for a `right` join.
 
 The selector preserves left-major output order for non-right joins and right-major output order for right joins.
 
@@ -352,7 +362,9 @@ Table names cannot repeat, and the total stage count is capped at eight.
 
 Every intermediate result is capped at 100,000 rows.
 
-This is a bounded cardinality and index-availability strategy selector with a compatible-index merge path, not a full cost-based planner, full index-aware join planner, or streaming executor.
+This is a bounded cardinality cost model with a compatible-index merge path.
+
+It does not estimate index I/O, cache state, duplicate-key fanout, or output materialization, so it is not a full cost-based planner, full index-aware join planner, or streaming executor.
 
 The single-table HTTP server does not expose joins.
 

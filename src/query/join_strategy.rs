@@ -18,16 +18,58 @@ pub(super) fn choose_with_merge(
     index_available: bool,
     merge_available: bool,
 ) -> JoinStrategy {
-    // ponytail: fixed pair threshold; add measured index/cache terms when join statistics exist.
     let pair_count = left_count.saturating_mul(right_count);
     if pair_count <= NESTED_LOOP_PAIR_LIMIT {
-        JoinStrategy::NestedLoop
-    } else if merge_available {
-        JoinStrategy::Merge
-    } else if index_available {
-        JoinStrategy::IndexNestedLoop
+        return JoinStrategy::NestedLoop;
+    }
+
+    let mut best = (JoinStrategy::Hash, hash_cost(left_count, right_count), 2);
+    if index_available {
+        best = choose_better(
+            best,
+            (
+                JoinStrategy::IndexNestedLoop,
+                index_nested_loop_cost(left_count, right_count),
+                1,
+            ),
+        );
+    }
+    if merge_available {
+        best = choose_better(
+            best,
+            (JoinStrategy::Merge, merge_cost(left_count, right_count), 0),
+        );
+    }
+    best.0
+}
+
+fn choose_better(
+    current: (JoinStrategy, usize, u8),
+    candidate: (JoinStrategy, usize, u8),
+) -> (JoinStrategy, usize, u8) {
+    (candidate.1, candidate.2)
+        .lt(&(current.1, current.2))
+        .then_some(candidate)
+        .unwrap_or(current)
+}
+
+fn hash_cost(left_count: usize, right_count: usize) -> usize {
+    left_count.saturating_add(right_count)
+}
+
+fn merge_cost(left_count: usize, right_count: usize) -> usize {
+    hash_cost(left_count, right_count)
+}
+
+fn index_nested_loop_cost(outer_count: usize, inner_count: usize) -> usize {
+    outer_count.saturating_mul(index_probe_cost(inner_count))
+}
+
+fn index_probe_cost(inner_count: usize) -> usize {
+    if inner_count <= 1 {
+        1
     } else {
-        JoinStrategy::Hash
+        (inner_count.ilog2() as usize).saturating_add(1)
     }
 }
 
@@ -45,14 +87,15 @@ mod tests {
     }
 
     #[test]
-    fn chooses_hash_for_large_join_inputs() {
+    fn chooses_hash_for_large_unindexed_inputs() {
         assert_eq!(choose(9, 8, false), JoinStrategy::Hash);
         assert_eq!(choose(usize::MAX, 2, false), JoinStrategy::Hash);
     }
 
     #[test]
-    fn chooses_index_nested_loop_for_large_indexed_inputs() {
-        assert_eq!(choose(9, 8, true), JoinStrategy::IndexNestedLoop);
+    fn chooses_index_nested_loop_when_the_outer_side_is_small() {
+        assert_eq!(choose(8, 1_000, true), JoinStrategy::IndexNestedLoop);
+        assert_eq!(choose(1_000, 8, true), JoinStrategy::Hash);
     }
 
     #[test]

@@ -23,18 +23,17 @@ pub(super) fn execute(
 ) -> Result<Vec<Value>, JoinError> {
     let left_sorted = ordered_records(left_records, left_order, local_fields)?;
     let right_sorted = ordered_records(right_records, right_order, foreign_fields)?;
+    let left_matches = matching_ranges(&left_sorted, &right_sorted, left_records.len());
+    let right_matches = matching_ranges(&right_sorted, &left_sorted, right_records.len());
 
     let mut output = Vec::new();
     match &request.join.kind {
         JoinType::Inner => {
-            for &left_record in left_records {
-                let Some(key) = merge_key(&left_record.values, local_fields) else {
+            for (left_position, &left_record) in left_records.iter().enumerate() {
+                let Some(right_range) = left_matches[left_position].as_ref() else {
                     continue;
                 };
-                let Some(right_range) = equal_range(&right_sorted, &key) else {
-                    continue;
-                };
-                for right_row in &right_sorted[right_range] {
+                for right_row in &right_sorted[right_range.start..right_range.end] {
                     emit(
                         &mut output,
                         request,
@@ -45,13 +44,9 @@ pub(super) fn execute(
             }
         }
         JoinType::Left => {
-            for &left_record in left_records {
-                let Some(key) = merge_key(&left_record.values, local_fields) else {
-                    emit(&mut output, request, Some(left_record), None)?;
-                    continue;
-                };
-                if let Some(right_range) = equal_range(&right_sorted, &key) {
-                    for right_row in &right_sorted[right_range] {
+            for (left_position, &left_record) in left_records.iter().enumerate() {
+                if let Some(right_range) = left_matches[left_position].as_ref() {
+                    for right_row in &right_sorted[right_range.start..right_range.end] {
                         emit(
                             &mut output,
                             request,
@@ -65,33 +60,23 @@ pub(super) fn execute(
             }
         }
         JoinType::Semi => {
-            for &left_record in left_records {
-                if merge_key(&left_record.values, local_fields)
-                    .and_then(|key| equal_range(&right_sorted, &key))
-                    .is_some()
-                {
+            for (left_position, &left_record) in left_records.iter().enumerate() {
+                if left_matches[left_position].is_some() {
                     emit(&mut output, request, Some(left_record), None)?;
                 }
             }
         }
         JoinType::Anti => {
-            for &left_record in left_records {
-                if merge_key(&left_record.values, local_fields)
-                    .and_then(|key| equal_range(&right_sorted, &key))
-                    .is_none()
-                {
+            for (left_position, &left_record) in left_records.iter().enumerate() {
+                if left_matches[left_position].is_none() {
                     emit(&mut output, request, Some(left_record), None)?;
                 }
             }
         }
         JoinType::Right => {
-            for &right_record in right_records {
-                let Some(key) = merge_key(&right_record.values, foreign_fields) else {
-                    emit(&mut output, request, None, Some(right_record))?;
-                    continue;
-                };
-                if let Some(left_range) = equal_range(&left_sorted, &key) {
-                    for left_row in &left_sorted[left_range] {
+            for (right_position, &right_record) in right_records.iter().enumerate() {
+                if let Some(left_range) = right_matches[right_position].as_ref() {
+                    for left_row in &left_sorted[left_range.start..left_range.end] {
                         emit(
                             &mut output,
                             request,
@@ -144,31 +129,42 @@ fn merge_key(values: &Map<String, Value>, fields: &[String]) -> Option<Vec<Value
         .collect()
 }
 
-fn equal_range(records: &[OrderedRecord], key: &[Value]) -> Option<Range<usize>> {
-    let start = lower_bound(records, key, |ordering| ordering.is_lt());
-    if start == records.len() || compare_keys(&records[start].key, key) != Ordering::Equal {
-        return None;
-    }
-    let end = lower_bound(&records[start..], key, |ordering| !ordering.is_gt()) + start;
-    Some(start..end)
-}
-
-fn lower_bound(
-    records: &[OrderedRecord],
-    key: &[Value],
-    before: impl Fn(Ordering) -> bool,
-) -> usize {
-    let mut start = 0;
-    let mut end = records.len();
-    while start < end {
-        let middle = start + (end - start) / 2;
-        if before(compare_keys(&records[middle].key, key)) {
-            start = middle + 1;
-        } else {
-            end = middle;
+fn matching_ranges(
+    outer_sorted: &[OrderedRecord],
+    inner_sorted: &[OrderedRecord],
+    outer_count: usize,
+) -> Vec<Option<Range<usize>>> {
+    let mut matches = (0..outer_count).map(|_| None).collect::<Vec<_>>();
+    let mut outer_start = 0;
+    let mut inner_start = 0;
+    while outer_start < outer_sorted.len() && inner_start < inner_sorted.len() {
+        match compare_keys(
+            &outer_sorted[outer_start].key,
+            &inner_sorted[inner_start].key,
+        ) {
+            Ordering::Less => outer_start += 1,
+            Ordering::Greater => inner_start += 1,
+            Ordering::Equal => {
+                let outer_end = key_end(outer_sorted, outer_start);
+                let inner_end = key_end(inner_sorted, inner_start);
+                for row in &outer_sorted[outer_start..outer_end] {
+                    matches[row.position] = Some(inner_start..inner_end);
+                }
+                outer_start = outer_end;
+                inner_start = inner_end;
+            }
         }
     }
-    start
+    matches
+}
+
+fn key_end(records: &[OrderedRecord], start: usize) -> usize {
+    let key = &records[start].key;
+    let mut end = start + 1;
+    while end < records.len() && compare_keys(&records[end].key, key) == Ordering::Equal {
+        end += 1;
+    }
+    end
 }
 
 fn compare_keys(left: &[Value], right: &[Value]) -> Ordering {
@@ -191,5 +187,30 @@ fn value_rank(value: &Value) -> u8 {
         Value::Null => 0,
         Value::Array(_) => 4,
         Value::Object(_) => 5,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OrderedRecord, matching_ranges};
+    use serde_json::json;
+
+    fn ordered(position: usize, key: i64) -> OrderedRecord {
+        OrderedRecord {
+            position,
+            key: vec![json!(key)],
+        }
+    }
+
+    #[test]
+    fn scans_equal_key_runs_and_maps_them_to_outer_positions() {
+        let outer = vec![ordered(1, 1), ordered(3, 1), ordered(5, 3)];
+        let inner = vec![ordered(0, 1), ordered(2, 1), ordered(4, 2)];
+
+        let matches = matching_ranges(&outer, &inner, 6);
+
+        assert_eq!(matches[1], Some(0..2));
+        assert_eq!(matches[3], Some(0..2));
+        assert_eq!(matches[5], None);
     }
 }

@@ -200,9 +200,9 @@ path-aware plannerは、複数のsingle-field indexが有効なdirect equality f
 
 catalog joinは`txbase::query::join::parse`と`execute`から使います。
 複数joinは実装済みです。
-直接および多段の単一キー等値結合ステージは、検索対象側に鮮度検証済みの単一フィールドindexがあれば`IndexNestedLoop`を選びます。
+直接および多段の単一キー等値結合ステージは、64候補pairの境界を超えると有界なhashコストとindex probeコストを比較し、推定値が低い場合だけ鮮度検証済みの単一フィールドindexを使います。
 直接および多段ステージは、等値条件のフィールド順が複合indexのフィールド順と完全に一致する場合、その鮮度検証済み複合indexも使います。
-両入力に互換性のある鮮度検証済みordered indexがある大きな直接joinは、文書化した出力順を戻しながら有界なmerge strategyを使います。
+両入力に互換性のある鮮度検証済みordered indexがある大きな直接joinは、推定値が低い場合に文書化した出力順を戻しながら有界なmerge strategyを使います。
 それ以外の等値結合は候補pairが64以下ならnested-loop、それより大きければhash strategyを選びます。
 full index-awareまたはcost-based merge join planning、full cost-based planner、runtime固有のasync stream trait、historical row version、MVCC visibilityは未実装です。
 

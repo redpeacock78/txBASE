@@ -85,9 +85,9 @@ HTTP/1.1 chunked transfer. Runtime-specific async traits remain future work.
 `aggregate` currently accepts one terminal `$count` or `$distinct` stage, or one `$group` stage with `$count`, numeric `$sum`, `$avg`, `$min`, and `$max`, optionally preceded by bounded `$match` stages. `$distinct` takes a field reference such as `"$ACTIVE"` and returns a deterministic array of unique values, with missing values represented as `null`. Group output may be followed by one `$project`, `$sort`, and `$limit`; top-level sort, projection, pagination, and limit controls remain incompatible. `$project` reuses inclusion/exclusion projection rules and must precede `$sort`/`$limit`. `$sum` ignores missing, null, and nonnumeric values, preserves all-integral input as an integer, and rejects a non-finite accumulated result. `$avg` ignores missing, null, and nonnumeric values and returns null when a group has no numeric input.
 
 The library also exposes bounded local `inner`, `left`, `right`, `semi`, or `anti` equality joins, plus bounded `cross` joins, over a catalog table and optional additional stages.
-Direct and chained single-key equality stages use a fresh single-field index on the probed table when available and otherwise choose a nested-loop strategy for at most 64 candidate pairs or a hash strategy for larger inputs.
+Direct and chained single-key equality stages compare bounded hash and index-probe costs after the 64-pair nested-loop boundary, using a fresh single-field index only when its estimate is lower.
 Direct and chained stages can also use a fresh compound index when the equality fields exactly match its field order.
-Large direct joins with compatible fresh ordered indexes on both inputs use a bounded merge strategy while restoring the documented output order; full cost-based join planning remains future work.
+Large direct joins with compatible fresh ordered indexes on both inputs use a bounded merge strategy when its estimate is lowest while restoring the documented output order; I/O-aware full cost-based join planning remains future work.
 The required `join` is the first stage; an optional `joins` array applies additional stages from left to right.
 Each stage accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,
 supports multiple equality conditions, and is capped at 100,000 output rows.

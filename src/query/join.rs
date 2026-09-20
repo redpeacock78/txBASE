@@ -183,8 +183,8 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
         };
         if matches!(
             super::join_strategy::choose(
-                left_records.len(),
                 right_records.len(),
+                left_records.len(),
                 left_index.is_some(),
             ),
             super::join_strategy::JoinStrategy::IndexNestedLoop
