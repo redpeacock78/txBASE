@@ -10,6 +10,8 @@ mod wal;
 #[cfg(test)]
 mod export_tests;
 #[cfg(test)]
+mod malformed_tests;
+#[cfg(test)]
 mod tests;
 
 use std::error::Error;
