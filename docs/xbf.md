@@ -9,7 +9,8 @@ The repository now contains a bounded v1 codec at
 `txbase::xbf::{from_dbf, XbfTable::from_dbf}`, and durable snapshot helpers at
 `txbase::xbf::{read_path, write_path}`.
 The DBF conversion preserves representable field-level `primary`, `unique`, and
-`not_null` schema flags and rejects DBF metadata that XBF v1 cannot encode.
+`not_null` schema flags, including DBF-declared nullability, and rejects DBF
+metadata that XBF v1 cannot encode.
 The codec validates the draft header, section checksums, schema, directory, typed
 records, constraints, and configured size limits.
 The full-snapshot `.xwl` path records base and target generations and rejects a
@@ -262,6 +263,7 @@ This helper does not write an XBF file by itself; pass its result to
 
 - Field names and values.
 - Explicit nulls where the DBF reader can distinguish them.
+- DBF-declared nullable fields, even when the current records contain no null.
 - Memo and binary payloads.
 - Date and numeric values without avoidable precision loss.
 - Logical deletion state when the target keeps physical records.

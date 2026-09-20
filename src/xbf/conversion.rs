@@ -28,7 +28,9 @@ pub fn from_dbf(table: &DbfTable) -> Result<XbfTable, XbfError> {
         let ty = infer_type(field, &values)?;
         let (primary_key, unique, not_null) =
             constraints.get(&field.name).copied().unwrap_or_default();
-        let nullable = !primary_key && !not_null && values.iter().any(|value| value.is_null());
+        let nullable = !primary_key
+            && !not_null
+            && (field.is_nullable() || values.iter().any(|value| value.is_null()));
         fields.push(XbfField {
             name: field.name.clone(),
             ty,

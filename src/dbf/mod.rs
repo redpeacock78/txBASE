@@ -149,7 +149,7 @@ impl FieldDescriptor {
         matches!(self.field_type.to_ascii_uppercase(), b'Q' | b'V')
     }
 
-    fn is_nullable(&self) -> bool {
+    pub(crate) fn is_nullable(&self) -> bool {
         self.flags & 0x02 != 0
     }
 

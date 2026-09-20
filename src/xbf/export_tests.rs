@@ -51,6 +51,32 @@ fn converts_a_dbf_fixture_to_xbf_without_dropping_records() {
 }
 
 #[test]
+fn preserves_declared_dbf_nullability_without_a_current_null_value() {
+    let mut bytes = vec![0; 101];
+    bytes[0] = 0x30;
+    bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+    bytes[8..10].copy_from_slice(&97u16.to_le_bytes());
+    bytes[10..12].copy_from_slice(&3u16.to_le_bytes());
+    bytes[32..36].copy_from_slice(b"NAME");
+    bytes[43] = b'C';
+    bytes[48] = 1;
+    bytes[50] = 0x02;
+    bytes[64..74].copy_from_slice(b"_NullFlags");
+    bytes[80] = 1;
+    bytes[82] = 0x01;
+    bytes[96] = 0x0d;
+    bytes[97] = 0x20;
+    bytes[98] = b'A';
+    bytes[100] = 0x1a;
+
+    let dbf = crate::dbf::DbfTable::from_bytes(&bytes).unwrap();
+    assert_eq!(dbf.active_record(1).unwrap().values["NAME"], "A");
+    let xbf = super::from_dbf(&dbf).unwrap();
+
+    assert!(xbf.fields[0].nullable);
+}
+
+#[test]
 fn converts_representable_dbf_schema_constraints_to_xbf() {
     let path =
         std::env::temp_dir().join(format!("txbase-xbf-dbfschema-{}.dbf", std::process::id()));
