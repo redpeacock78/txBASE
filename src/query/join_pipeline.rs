@@ -137,7 +137,15 @@ fn apply_stage(
         None
     };
     if matches!(
-        super::join_strategy::choose(left.len(), right.len(), right_index.is_some()),
+        super::join_strategy::choose_with_probe_cost(
+            left.len(),
+            right.len(),
+            right_index.as_ref().and_then(|index| {
+                index_fields.as_deref().and_then(|fields| {
+                    super::join_index::equality_probe_cost(index, right.len(), fields)
+                })
+            }),
+        ),
         super::join_strategy::JoinStrategy::IndexNestedLoop
     ) {
         if let Some(index) = right_index.as_ref() {

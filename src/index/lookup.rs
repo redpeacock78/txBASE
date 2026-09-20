@@ -29,6 +29,28 @@ impl IndexFile {
         Some(records / distinct_keys + remainder)
     }
 
+    pub(crate) fn equality_fanout_estimate(&self, fields: &[&str]) -> Option<usize> {
+        let index = self.indexes.iter().find(|index| {
+            index.definition.fields.len() == fields.len()
+                && index
+                    .definition
+                    .fields
+                    .iter()
+                    .zip(fields)
+                    .all(|(indexed, requested)| indexed == *requested)
+        })?;
+        let distinct_keys = index.entries.len();
+        if distinct_keys == 0 {
+            return Some(0);
+        }
+        let indexed_records = index
+            .entries
+            .iter()
+            .map(|entry| entry.records.len())
+            .sum::<usize>();
+        Some(indexed_records.div_ceil(distinct_keys))
+    }
+
     pub(crate) fn range_selectivity_estimate(
         &self,
         field: &str,

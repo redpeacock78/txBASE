@@ -18,6 +18,16 @@ pub(super) fn load_fields(
     index.has_exact_fields(&fields).then_some(index)
 }
 
+pub(super) fn equality_probe_cost(
+    index: &IndexFile,
+    inner_count: usize,
+    fields: &[String],
+) -> Option<usize> {
+    let fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
+    let fanout = index.equality_fanout_estimate(&fields)?;
+    Some(super::join_strategy::index_probe_cost(inner_count, fanout))
+}
+
 pub(super) fn load_ordered_fields(
     catalog: &Catalog,
     table_name: &str,

@@ -342,7 +342,7 @@ For larger inputs, it compares bounded costs for the available strategies.
 
 `Hash` costs one pass over both inputs.
 
-`IndexNestedLoop` costs the outer-row count multiplied by a logarithmic index-probe estimate for the inner side.
+`IndexNestedLoop` costs the outer-row count multiplied by the inner-side logarithmic probe estimate plus its average equality fanout.
 
 `Merge` costs one pass over both inputs when compatible ordered indexes are fresh on both sides.
 

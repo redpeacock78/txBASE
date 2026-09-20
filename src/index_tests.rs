@@ -45,6 +45,7 @@ fn builds_and_loads_an_external_scalar_index() {
     assert!(loaded.lookup_eq("NAME", &json!("Bob")).unwrap().is_empty());
     assert_eq!(loaded.schema_json()["statistics"]["active_record_count"], 1);
     assert_eq!(loaded.equality_selectivity_estimate("NAME"), Some(1));
+    assert_eq!(loaded.equality_fanout_estimate(&["NAME"]), Some(1));
     assert_eq!(loaded.schema_json()["indexes"][0]["entry_count"], 1);
     assert_eq!(
         loaded.schema_json()["indexes"][0]["histogram_bucket_count"],

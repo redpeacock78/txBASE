@@ -182,10 +182,12 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
             None
         };
         if matches!(
-            super::join_strategy::choose(
+            super::join_strategy::choose_with_probe_cost(
                 right_records.len(),
                 left_records.len(),
-                left_index.is_some(),
+                left_index.as_ref().and_then(|index| {
+                    super::join_index::equality_probe_cost(index, left_records.len(), &local_fields)
+                }),
             ),
             super::join_strategy::JoinStrategy::IndexNestedLoop
         ) {
@@ -267,10 +269,12 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
         None
     };
     if matches!(
-        super::join_strategy::choose(
+        super::join_strategy::choose_with_probe_cost(
             left_records.len(),
             right_records.len(),
-            right_index.is_some(),
+            right_index.as_ref().and_then(|index| {
+                super::join_index::equality_probe_cost(index, right_records.len(), &foreign_fields)
+            }),
         ),
         super::join_strategy::JoinStrategy::IndexNestedLoop
     ) {
