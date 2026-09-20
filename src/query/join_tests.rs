@@ -227,7 +227,7 @@ fn right_join_keeps_unmatched_right_record() {
 }
 
 #[test]
-fn large_single_key_join_uses_a_fresh_foreign_index() {
+fn large_single_key_join_uses_fresh_ordered_indexes() {
     let root = catalog_with_many_indexed_posts();
     let catalog = Catalog::from_path(&root).unwrap();
     let request = parse(
@@ -250,7 +250,7 @@ fn large_single_key_join_uses_a_fresh_foreign_index() {
     assert!(!rows.is_empty());
     assert!(rows.iter().all(|row| row["users.ID"] == row["posts.ID"]));
 
-    let mut right_request = request;
+    let mut right_request = request.clone();
     right_request.join.kind = super::join::JoinType::Right;
     let right_rows = execute(&catalog, &right_request).unwrap();
     assert!(right_rows.iter().any(|row| {
@@ -258,6 +258,23 @@ fn large_single_key_join_uses_a_fresh_foreign_index() {
             .zip(row.get("posts.ID"))
             .is_some_and(|(left, right)| left == right)
     }));
+    assert!(right_rows.iter().any(|row| row.get("users.ID").is_none()));
+
+    let mut left_request = request.clone();
+    left_request.join.kind = super::join::JoinType::Left;
+    let left_rows = execute(&catalog, &left_request).unwrap();
+    assert!(!left_rows.is_empty());
+    assert!(left_rows.iter().all(|row| row.get("users.ID").is_some()));
+
+    let mut semi_request = request.clone();
+    semi_request.join.kind = super::join::JoinType::Semi;
+    let semi_rows = execute(&catalog, &semi_request).unwrap();
+    assert!(semi_rows.iter().all(|row| row.get("posts.ID").is_none()));
+
+    let mut anti_request = request;
+    anti_request.join.kind = super::join::JoinType::Anti;
+    let anti_rows = execute(&catalog, &anti_request).unwrap();
+    assert!(anti_rows.len() <= left_rows.len());
 
     let compound_request = parse(
         br#"{

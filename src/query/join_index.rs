@@ -18,6 +18,33 @@ pub(super) fn load_fields(
     index.has_exact_fields(&fields).then_some(index)
 }
 
+pub(super) fn load_ordered_fields(
+    catalog: &Catalog,
+    table_name: &str,
+    fields: &[String],
+) -> Option<Vec<usize>> {
+    let index = load_fields(catalog, table_name, fields)?;
+    ordered_records(&index, fields)
+}
+
+pub(super) fn ordered_records(index: &IndexFile, fields: &[String]) -> Option<Vec<usize>> {
+    if fields.is_empty() {
+        return None;
+    }
+    let fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
+    if fields.len() == 1 {
+        return index
+            .lookup_ordered_for_field(fields[0], false)
+            .ok()?
+            .map(|(_, records)| records);
+    }
+    let directions = vec![1; fields.len()];
+    index
+        .lookup_ordered_for_fields(&fields, &directions, &Map::new())
+        .ok()?
+        .map(|(_, _, _, records)| records)
+}
+
 pub(super) fn execute_join(
     left_records: &[&DbfRecord],
     right_records: &[&DbfRecord],

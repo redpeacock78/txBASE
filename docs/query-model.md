@@ -334,6 +334,8 @@ For a chained `right` stage, it probes the indexed right table and restores righ
 
 Direct and chained stages may also use a fresh compound index when the equality fields exactly match the index field order.
 
+For a large direct equality join with compatible fresh ordered indexes on both inputs, the planner selects `Merge` and restores left-major or right-major output order after matching key groups.
+
 When that index is unavailable, stale, malformed, or not applicable, larger inputs select `Hash` and build one in-memory equality map for the right table, or the left table for a `right` join.
 
 The selector preserves left-major output order for non-right joins and right-major output order for right joins.
@@ -348,7 +350,7 @@ Table names cannot repeat, and the total stage count is capped at eight.
 
 Every intermediate result is capped at 100,000 rows.
 
-This is a bounded cardinality and index-availability strategy selector, not a full cost-based planner, full index-aware join planner, or streaming executor.
+This is a bounded cardinality and index-availability strategy selector with a compatible-index merge path, not a full cost-based planner, full index-aware join planner, or streaming executor.
 
 The single-table HTTP server does not expose joins.
 

@@ -11,6 +11,7 @@ mod aggregation;
 mod aggregation_plan;
 pub mod join;
 mod join_index;
+mod join_merge;
 mod join_nested;
 mod join_strategy;
 mod ordering;

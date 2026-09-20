@@ -198,8 +198,9 @@ catalog joinは`txbase::query::join::parse`と`execute`から使います。
 複数joinは実装済みです。
 直接および多段の単一キー等値結合ステージは、検索対象側に鮮度検証済みの単一フィールドindexがあれば`IndexNestedLoop`を選びます。
 直接および多段ステージは、等値条件のフィールド順が複合indexのフィールド順と完全に一致する場合、その鮮度検証済み複合indexも使います。
+両入力に互換性のある鮮度検証済みordered indexがある大きな直接joinは、文書化した出力順を戻しながら有界なmerge strategyを使います。
 それ以外の等値結合は候補pairが64以下ならnested-loop、それより大きければhash strategyを選びます。
-full index-awareまたはmerge join planning、full cost-based planner、runtime固有のasync stream trait、historical row version、MVCC visibilityは未実装です。
+full index-awareまたはcost-based merge join planning、full cost-based planner、runtime固有のasync stream trait、historical row version、MVCC visibilityは未実装です。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt`、`.txschema.json`、`.txbase.state`、有効な`.txidx` sidecarもコピーします。
 sourceのindexがstaleまたは壊れている場合は拒否し、sourceにindexがなければdestinationの古いindexを削除します。

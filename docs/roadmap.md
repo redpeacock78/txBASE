@@ -50,7 +50,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, bounded scan-and-sort cost choice with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index or join model, full index-aware or merge join strategies, runtime-specific async traits, catalog-wide MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index or join model, full index-aware or cost-based merge join strategies, runtime-specific async traits, catalog-wide MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -131,9 +131,9 @@ The current record scan remains the reference execution path while the query mod
 - Full range, histogram-based, and mixed-direction compound cost planning.
 
 The first join slice is local and bounded.
-It implements one or more equality conditions, uses a fresh single-field index for large direct or chained single-key probes and an exact field-order compound index for direct or chained probes when available, and otherwise uses a bounded nested-loop or in-memory hash map.
+It implements one or more equality conditions, uses a fresh single-field index for large direct or chained single-key probes, an exact field-order compound index for direct or chained probes, and a compatible ordered-index merge path for large direct joins when available, and otherwise uses a bounded nested-loop or in-memory hash map.
 Additional stages may reference earlier joined tables and keep one catalog read lock across the
-pipeline, but full index-aware and merge planning, streaming, and broader null or
+pipeline, but full index-aware and cost-based merge planning, streaming, and broader null or
 missing field semantics before adding broader query surfaces.
 
 Distributed joins and distributed transactions remain later features.

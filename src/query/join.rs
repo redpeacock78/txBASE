@@ -140,8 +140,42 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
         super::join_strategy::choose(left_records.len(), right_records.len(), false),
         super::join_strategy::JoinStrategy::Hash
     );
+    let left_ordered = if large_join {
+        super::join_index::load_ordered_fields(catalog, &request.from, &local_fields)
+    } else {
+        None
+    };
+    let right_ordered = if large_join {
+        super::join_index::load_ordered_fields(catalog, &request.join.table, &foreign_fields)
+    } else {
+        None
+    };
+    let merge_available = left_ordered.is_some() && right_ordered.is_some();
 
     if let JoinType::Right = &request.join.kind {
+        if matches!(
+            super::join_strategy::choose_with_merge(
+                left_records.len(),
+                right_records.len(),
+                false,
+                merge_available,
+            ),
+            super::join_strategy::JoinStrategy::Merge
+        ) {
+            if let (Some(left_order), Some(right_order)) =
+                (left_ordered.as_ref(), right_ordered.as_ref())
+            {
+                return super::join_merge::execute(
+                    &left_records,
+                    &right_records,
+                    left_order,
+                    right_order,
+                    request,
+                    &local_fields,
+                    &foreign_fields,
+                );
+            }
+        }
         let left_index = if large_join {
             super::join_index::load_fields(catalog, &request.from, &local_fields)
         } else {
@@ -201,6 +235,30 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
             }
         }
         return Ok(output);
+    }
+
+    if matches!(
+        super::join_strategy::choose_with_merge(
+            left_records.len(),
+            right_records.len(),
+            false,
+            merge_available,
+        ),
+        super::join_strategy::JoinStrategy::Merge
+    ) {
+        if let (Some(left_order), Some(right_order)) =
+            (left_ordered.as_ref(), right_ordered.as_ref())
+        {
+            return super::join_merge::execute(
+                &left_records,
+                &right_records,
+                left_order,
+                right_order,
+                request,
+                &local_fields,
+                &foreign_fields,
+            );
+        }
     }
 
     let right_index = if large_join {
