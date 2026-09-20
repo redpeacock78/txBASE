@@ -21,6 +21,13 @@ fn korea_maps_fixture() -> Vec<u8> {
         .collect()
 }
 
+fn korea_maps_city_fixture() -> Vec<u8> {
+    include_str!("../../tests/fixtures/external-korea-maps-city-euc-kr.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect()
+}
+
 #[test]
 fn reads_and_writes_a_pinned_upstream_gbk_fixture() {
     let bytes = fixture();
@@ -115,6 +122,46 @@ fn reads_and_writes_a_pinned_upstream_euc_kr_fixture() {
     let reloaded = DbfTable::from_bytes(&table.to_bytes()).unwrap();
     assert_eq!(
         reloaded.active_record(1).unwrap().values["광역시명"],
+        "테스트"
+    );
+}
+
+#[test]
+fn reads_and_writes_a_pinned_upstream_city_euc_kr_fixture() {
+    let bytes = korea_maps_city_fixture();
+    let mut table = DbfTable::from_bytes(&bytes).unwrap();
+
+    assert_eq!(table.header.version, 0x03);
+    assert_eq!(table.header.language_driver, 0x4e);
+    assert_eq!(table.records().len(), 232);
+    assert_eq!(table.fields[0].name, "광역시코드");
+    assert_eq!(table.fields[1].name, "광역시명");
+    assert_eq!(table.fields[2].name, "시군구코드");
+    assert_eq!(table.fields[3].name, "시군구명");
+    assert_eq!(table.schema_json()["encoding"], "EUC-KR/CP949");
+    assert_eq!(table.active_record(1).unwrap().values["광역시코드"], "11");
+    assert_eq!(
+        table.active_record(1).unwrap().values["광역시명"],
+        "서울특별"
+    );
+    assert_eq!(table.active_record(1).unwrap().values["시군구코드"], "1111");
+    assert_eq!(
+        table.active_record(1).unwrap().values["시군구명"],
+        "1종로구"
+    );
+
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"시군구명": "테스트"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    let reloaded = DbfTable::from_bytes(&table.to_bytes()).unwrap();
+    assert_eq!(
+        reloaded.active_record(1).unwrap().values["시군구명"],
         "테스트"
     );
 }

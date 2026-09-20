@@ -83,3 +83,12 @@ The upstream README states that the data comes from Korea Statistics and that
 the repository is distributed under the Eclipse Public License. This repository
 includes only fixture bytes as third-party test data. The fixture SHA-256 is
 `01560d793acc1a12b6bb44a82dc0e4c0dd3a4e7d9ea5fedf37fffeb6240ce990`.
+
+`external-korea-maps-city-euc-kr.dbf.hex` is a whitespace-separated hex encoding
+of the upstream `city.euc_kr.dbf` fixture from SeoulTech/korea-maps. It contains
+232 Korean administrative-region records, four Korean field names, and the legacy
+dBASE `0x4e` driver ID. It is pinned to the same source commit as the state fixture:
+`6d002c4fefad4e1d69a21a5ae64b7ccc521f86fe`:
+https://github.com/SeoulTech/korea-maps/tree/6d002c4fefad4e1d69a21a5ae64b7ccc521f86fe/shp
+This repository includes only fixture bytes as third-party test data. The fixture
+SHA-256 is `9b521b581bea2673ab72995551108a16298539fa8ae5fd00a4191d591ade96d5`.

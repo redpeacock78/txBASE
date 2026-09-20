@@ -182,6 +182,9 @@ read, mutation, and byte round-trip boundary.
 An upstream SeoulTech Korea Maps EUC-KR fixture also covers Korean field names, 16 real records,
 and the legacy dBASE `0x4e` driver ID, including a read, mutation, and byte round-trip.
 
+The same source also provides a city-level EUC-KR fixture with four Korean field names and 232 real
+records, including the same read, mutation, and byte round-trip boundary.
+
 Classic field descriptor names use the same effective codec as character values, so CJK column names
 remain usable as JSON keys and mutation targets. The descriptor width limit remains a byte limit;
 XBF export still requires ASCII field names.
