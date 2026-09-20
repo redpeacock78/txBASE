@@ -199,7 +199,10 @@ pub(super) fn update_response_with_validator(
     }
 }
 
-fn apply_merge_patch(current: Map<String, Value>, patch: Map<String, Value>) -> Map<String, Value> {
+pub(super) fn apply_merge_patch(
+    current: Map<String, Value>,
+    patch: Map<String, Value>,
+) -> Map<String, Value> {
     let known_fields = current.keys().cloned().collect::<Vec<_>>();
     let unknown_null_fields = patch
         .iter()

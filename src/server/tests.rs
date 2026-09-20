@@ -137,6 +137,68 @@ fn merge_patch_updates_known_fields_and_preserves_the_rest() {
 }
 
 #[test]
+fn merge_patch_recursively_merges_object_members() {
+    let current = serde_json::json!({
+        "NESTED": {"KEEP": 1, "REMOVE": 2},
+        "ACTIVE": true
+    });
+    let patch = serde_json::json!({
+        "NESTED": {"KEEP": 3, "REMOVE": null}
+    });
+    let result = super::records::apply_merge_patch(
+        current.as_object().unwrap().clone(),
+        patch.as_object().unwrap().clone(),
+    );
+
+    assert_eq!(
+        result,
+        serde_json::json!({
+            "NESTED": {"KEEP": 3},
+            "ACTIVE": true
+        })
+        .as_object()
+        .unwrap()
+        .clone()
+    );
+}
+
+#[test]
+fn merge_patch_requires_an_object_root_and_patch_media_type() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-server-merge-patch-boundary-{}.dbf",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&path);
+    fs::write(&path, fixture()).unwrap();
+    let mut table = DbfTable::from_path(&path).unwrap();
+
+    let mut scalar_root = TestRequest::new()
+        .with_method(Method::Patch)
+        .with_path("/records/1")
+        .with_header(header("Content-Type", JSON_MERGE_PATCH_MEDIA_TYPE))
+        .with_body("null")
+        .into();
+    assert_eq!(
+        update_response(&mut scalar_root, "/records/1", &mut table, &path, false).status_code(),
+        StatusCode(422)
+    );
+    assert_eq!(table.active_record(1).unwrap().values["NAME"], "Alice");
+
+    let mut post = TestRequest::new()
+        .with_method(Method::Post)
+        .with_path("/records")
+        .with_header(header("Content-Type", JSON_MERGE_PATCH_MEDIA_TYPE))
+        .with_body(r#"{"NAME":"never inserted"}"#)
+        .into();
+    assert_eq!(
+        post_response(&mut post, "/records", &mut table, &path).status_code(),
+        StatusCode(415)
+    );
+
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn transaction_endpoint_commits_multiple_mutations_once() {
     let path = std::env::temp_dir().join(format!(
         "txbase-server-transaction-{}.dbf",

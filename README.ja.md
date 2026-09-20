@@ -87,11 +87,18 @@ curl -i -X PATCH \
   -d '{"NAME":"Caroline"}' \
   http://127.0.0.1:8080/records/3
 
+curl -i -X PATCH \
+  -H 'Content-Type: application/merge-patch+json' \
+  -d '{"NAME":"Alicia","AGE":null}' \
+  http://127.0.0.1:8080/records/3
+
 curl -i -X DELETE http://127.0.0.1:8080/records/3
 ```
 
 `POST`、`PUT`、`PATCH`、`DELETE`は、それぞれレコードの作成、置換、更新、論理削除を行います。
-`PATCH`では、型付きの`$set`、`$unset`、`$inc`演算子も使えます。
+`PATCH`は、ローカル形式の`application/json`更新文書と、`application/merge-patch+json`のオブジェクトパッチを受け付けます。
+後者はオブジェクトを再帰的にマージし、`null`をフィールド削除として扱い、配列またはスカラー値で現在値を置き換えます。
+ローカル形式のJSON文書では、型付きの`$set`、`$unset`、`$inc`演算子も使えます。
 
 単一テーブルの`POST /transaction`は、複数の操作をprivate copyへ適用してから、一つのsnapshot/WAL境界でcommitします。
 カタログの`POST /transaction`は、同じ役割を複数テーブル向けのカタログjournalで担います。
