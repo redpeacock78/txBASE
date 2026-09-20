@@ -132,5 +132,5 @@ It does not infer relationships from field names.
 
 The local join supports `inner`, `left`, `right`, `semi`, and `anti` equality joins plus a bounded
 `cross` join, with a hard result bound.
-It does not provide a cost-based planner, streaming backpressure, planned joins, transaction
-IDs, or MVCC visibility.
+It does not provide a cost-based planner, streaming backpressure, planner-selected join strategies,
+transaction IDs, or MVCC visibility.

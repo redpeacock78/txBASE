@@ -2,6 +2,10 @@ use super::*;
 
 impl DbfTable {
     pub fn insert_record(&mut self, values: Map<String, Value>) -> Result<usize, DbfError> {
+        let mut values = values;
+        if let Some(schema) = &self.schema {
+            schema.apply_defaults(&mut values);
+        }
         let mut values = self.normalize_values(&values)?;
         let mut auto_increment_updates = Vec::new();
         for (field_index, field) in self.fields.iter().enumerate() {

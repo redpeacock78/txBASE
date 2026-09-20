@@ -40,12 +40,12 @@ The repository currently provides:
 - A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.
-- An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement plus bounded table-level `checks` predicates.
+- An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement, scalar defaults for omitted inserts, and bounded table-level `checks` predicates.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP, with normalized schema output.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, planned joins, transaction IDs or MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite or cross-table constraints, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, planner-selected join strategies, transaction IDs or MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite or cross-table constraints, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -134,8 +134,8 @@ The planner explanation boundary is implemented by `explain_query_at` and `QUERY
 Full cost-based choice remains future work.
 
 The first constraint slice is an optional schema sidecar.
-It enforces one-field `primary`, `unique`, and `not_null` properties plus bounded table-level query-predicate `checks` on active records and mutation candidates without changing legacy DBF bytes.
-Composite keys, `FOREIGN KEY`, `DEFAULT`, and schema migration remain future work.
+It enforces one-field `primary`, `unique`, and `not_null` properties, scalar defaults for omitted inserts, plus bounded table-level query-predicate `checks` on active records and mutation candidates without changing legacy DBF bytes.
+Composite keys, `FOREIGN KEY`, and schema migration remain future work.
 
 ## 5. Phase 3: legacy international compatibility
 

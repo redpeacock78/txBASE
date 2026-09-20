@@ -27,7 +27,7 @@ The current sidecar is versioned independently from DBF:
   "version": 1,
   "fields": {
     "ID": {"primary": true},
-    "NAME": {"unique": true, "not_null": true}
+    "NAME": {"unique": true, "not_null": true, "default": "Unknown"}
   },
   "checks": [
     {"AGE": {"$gte": 0}}
@@ -63,6 +63,7 @@ The current version accepts the following field properties:
 | `primary` | Implies `unique` and `not_null`; only one single-field primary key is accepted |
 | `unique` | Rejects a non-null value already used by another active record |
 | `not_null` | Rejects JSON `null` on insert, replace, patch, or recall |
+| `default` | Supplies a scalar value when the field is omitted from an insert |
 | `checks` | Rejects a candidate record unless every table-level query predicate matches |
 
 The sidecar's `encoding` property is not a field constraint.
@@ -75,6 +76,10 @@ The same eight codecs can be selected temporarily by the public
 It does not add collation or an automatic conversion policy.
 
 Constraint checks run before the in-memory record is changed.
+
+Scalar `default` values are applied only to fields omitted from an insert. An explicit JSON `null`
+is not replaced, and replace, patch, and recall use the candidate values they already produce.
+Defaults are applied before `not_null`, uniqueness, and `checks` validation.
 
 Existing active records are checked when the sidecar is loaded, so an invalid pre-existing DBF is not silently accepted as a valid constrained table.
 
@@ -110,12 +115,11 @@ The sidecar does not yet implement:
 
 - Composite primary or unique keys.
 - `FOREIGN KEY` references or cross-table validation.
-- `DEFAULT` expressions or generated values.
 - Collations or type declarations independent of DBF field descriptors.
 - A schema migration or metadata-edit command.
 - Automatic selection between a DBF language driver and an override.
 
-These need an expression grammar, cross-table visibility, migration and recovery rules before they can be added safely.
+Composite and cross-table constraints need broader metadata, migration, and recovery rules before they can be added safely.
 
 SQLite's official [`CREATE TABLE` reference](https://sqlite.org/lang_createtable.html) distinguishes `NOT NULL`, `CHECK`, `UNIQUE`, `PRIMARY KEY`, and `FOREIGN KEY` constraints and documents their write-time behavior.
 

@@ -34,6 +34,8 @@ struct FieldMetadata {
     unique: bool,
     #[serde(default)]
     not_null: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    default: Option<Value>,
 }
 
 impl SchemaMetadata {
@@ -77,6 +79,13 @@ impl SchemaMetadata {
                     "schema metadata refers to unknown field {name}"
                 )));
             }
+            if let Some(default) = &metadata.default {
+                if default.is_array() || default.is_object() {
+                    return Err(DbfError::Invalid(format!(
+                        "schema default for field {name} must be a scalar"
+                    )));
+                }
+            }
             if metadata.primary && primary {
                 return Err(DbfError::Invalid(
                     "composite primary keys are not supported by this schema version".into(),
@@ -85,6 +94,16 @@ impl SchemaMetadata {
             primary |= metadata.primary;
         }
         Ok(())
+    }
+
+    pub(super) fn apply_defaults(&self, values: &mut Map<String, Value>) {
+        for (name, metadata) in &self.fields {
+            if let Some(default) = &metadata.default {
+                values
+                    .entry(name.clone())
+                    .or_insert_with(|| default.clone());
+            }
+        }
     }
 
     pub(super) fn validate_records(&self, records: &[DbfRecord]) -> Result<(), DbfError> {

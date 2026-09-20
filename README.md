@@ -256,10 +256,10 @@ The explicit `Shift_JIS` override accepts ASCII, half-width Katakana, and JIS X 
 extensions decode as U+FFFD and are rejected on write.
 
 An optional `users.txschema.json` sidecar adds one-field `primary`, `unique`, and `not_null`
-constraints plus bounded table-level query-predicate `checks`, and can explicitly select one of the
-supported CJK codecs without changing legacy DBF bytes.
+constraints, scalar `default` values for omitted inserts, and bounded table-level query-predicate
+`checks`, and can explicitly select one of the supported CJK codecs without changing legacy DBF bytes.
 Loaded active records and every insert, replace, patch, and recall are checked against it;
-foreign keys, defaults, and composite keys remain future work.
+foreign keys and composite keys remain future work.
 
 The implementation currently favors a readable DBF file plus separate WAL and memo sidecars.
 
@@ -348,7 +348,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming backpressure, planned joins, additional aggregation stages, transaction IDs, MVCC, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
+Later phases may add a full cost-based index choice, streaming backpressure, planner-selected joins, additional aggregation stages, transaction IDs, MVCC, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

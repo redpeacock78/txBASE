@@ -53,6 +53,17 @@ fn check_metadata() -> Vec<u8> {
     .unwrap()
 }
 
+fn default_metadata() -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {
+            "NAME": {"not_null": true, "default": "Unknown"}
+        }
+    }))
+    .unwrap()
+}
+
 fn encoding_metadata(name: &str) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({
         "format": "txbase-schema",
@@ -134,6 +145,40 @@ fn schema_checks_reject_invalid_candidates() {
         )
         .unwrap();
     assert_eq!(id, 3);
+    cleanup(&path);
+}
+
+#[test]
+fn schema_defaults_fill_missing_insert_fields() {
+    let path = temporary_path();
+    cleanup(&path);
+    fs::write(&path, fixture()).unwrap();
+    fs::write(path.with_extension("txschema.json"), default_metadata()).unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    let id = table
+        .insert_record(
+            serde_json::json!({"ID": 3, "AGE": 30})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    assert_eq!(table.active_record(id).unwrap().values["NAME"], "Unknown");
+
+    let explicit_null = table
+        .insert_record(
+            serde_json::json!({"ID": 4, "NAME": null, "AGE": 30})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap_err();
+    assert!(
+        explicit_null
+            .to_string()
+            .contains("field NAME must not be null")
+    );
     cleanup(&path);
 }
 
