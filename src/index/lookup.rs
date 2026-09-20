@@ -39,15 +39,22 @@ impl IndexFile {
                     .zip(fields)
                     .all(|(indexed, requested)| indexed == *requested)
         })?;
-        let distinct_keys = index.entries.len();
+        let joinable_entries = index
+            .entries
+            .iter()
+            .filter(|entry| is_joinable_key(&entry.key));
+        let (distinct_keys, indexed_records) = joinable_entries.fold(
+            (0usize, 0usize),
+            |(distinct_keys, indexed_records), entry| {
+                (
+                    distinct_keys + 1,
+                    indexed_records.saturating_add(entry.records.len()),
+                )
+            },
+        );
         if distinct_keys == 0 {
             return Some(0);
         }
-        let indexed_records = index
-            .entries
-            .iter()
-            .map(|entry| entry.records.len())
-            .sum::<usize>();
         Some(indexed_records.div_ceil(distinct_keys))
     }
 
@@ -279,6 +286,14 @@ impl IndexFile {
             }
         }
         Ok(best.map(|(_, name, fields, directions, records)| (name, fields, directions, records)))
+    }
+}
+
+fn is_joinable_key(key: &IndexKey) -> bool {
+    match key {
+        IndexKey::Scalar(Value::Bool(_) | Value::Number(_) | Value::String(_)) => true,
+        IndexKey::Compound(values) => values.iter().all(is_joinable_key),
+        IndexKey::Missing | IndexKey::Null | IndexKey::Scalar(_) => false,
     }
 }
 
