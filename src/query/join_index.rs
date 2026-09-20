@@ -7,12 +7,6 @@ use crate::query_path::field_value;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
-pub(super) fn load(catalog: &Catalog, table_name: &str, field: &str) -> Option<IndexFile> {
-    let path = catalog.table_path(table_name)?;
-    let index = IndexFile::load(path).ok()?;
-    index.has_single_field(field).then_some(index)
-}
-
 pub(super) fn load_fields(
     catalog: &Catalog,
     table_name: &str,
@@ -29,10 +23,15 @@ pub(super) fn execute_join(
     right_records: &[&DbfRecord],
     request: &JoinRequest,
     index: &IndexFile,
-    local_field: &str,
-    foreign_field: &str,
+    local_fields: &[String],
+    foreign_fields: &[String],
 ) -> Result<Option<Vec<Value>>, JoinError> {
-    let Some(probes) = probe_records(left_records, local_field, foreign_field, index)? else {
+    let local_fields = local_fields.iter().map(String::as_str).collect::<Vec<_>>();
+    let foreign_fields = foreign_fields
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let Some(probes) = probe_records(left_records, &local_fields, &foreign_fields, index)? else {
         return Ok(None);
     };
     let right_by_number = records_by_number(right_records);
@@ -67,10 +66,15 @@ pub(super) fn execute_right_join(
     right_records: &[&DbfRecord],
     request: &JoinRequest,
     index: &IndexFile,
-    local_field: &str,
-    foreign_field: &str,
+    local_fields: &[String],
+    foreign_fields: &[String],
 ) -> Result<Option<Vec<Value>>, JoinError> {
-    let Some(probes) = probe_records(right_records, foreign_field, local_field, index)? else {
+    let local_fields = local_fields.iter().map(String::as_str).collect::<Vec<_>>();
+    let foreign_fields = foreign_fields
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let Some(probes) = probe_records(right_records, &foreign_fields, &local_fields, index)? else {
         return Ok(None);
     };
     let left_by_number = records_by_number(left_records);
@@ -188,25 +192,37 @@ pub(super) fn execute_right_stage(
 
 fn probe_records(
     records: &[&DbfRecord],
-    probe_field: &str,
-    index_field: &str,
+    probe_fields: &[&str],
+    index_fields: &[&str],
     index: &IndexFile,
 ) -> Result<Option<Vec<Vec<usize>>>, JoinError> {
+    if probe_fields.is_empty() || probe_fields.len() != index_fields.len() {
+        return Ok(None);
+    }
     let mut probes = Vec::with_capacity(records.len());
     for record in records {
-        let Some(value) = field_value(&record.values, probe_field) else {
-            probes.push(Vec::new());
-            continue;
-        };
-        if value.is_null() {
-            probes.push(Vec::new());
-            continue;
+        let mut values = Vec::with_capacity(probe_fields.len());
+        let mut missing = false;
+        for field in probe_fields {
+            let Some(value) = field_value(&record.values, field) else {
+                missing = true;
+                break;
+            };
+            if value.is_null() {
+                missing = true;
+                break;
+            }
+            if !is_indexable(&value) {
+                return Ok(None);
+            }
+            values.push(value);
         }
-        if !is_indexable(&value) {
-            return Ok(None);
+        if missing {
+            probes.push(Vec::new());
+            continue;
         }
         let Some((_, records)) = index
-            .lookup_eq_for_field(index_field, &value)
+            .lookup_eq_for_fields(index_fields, &values)
             .map_err(|error| JoinError::Invalid(format!("join index lookup failed: {error}")))?
         else {
             return Ok(None);

@@ -4,12 +4,6 @@ use serde_json::{Map, Value};
 type CompoundOrdered = (String, Vec<String>, Vec<i8>, Vec<usize>);
 
 impl IndexFile {
-    pub(crate) fn has_single_field(&self, field: &str) -> bool {
-        self.indexes
-            .iter()
-            .any(|index| index.definition.fields.len() == 1 && index.definition.fields[0] == field)
-    }
-
     pub(crate) fn has_exact_fields(&self, fields: &[&str]) -> bool {
         self.indexes.iter().any(|index| {
             index.definition.fields.len() == fields.len()

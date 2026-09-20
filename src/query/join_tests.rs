@@ -52,10 +52,19 @@ fn catalog_with_many_indexed_posts() -> PathBuf {
     let root = temporary_catalog();
     let users_path = root.join("users.dbf");
     fs::write(&users_path, fixture()).unwrap();
-    IndexFile::build(&users_path, vec![IndexDefinition::named("by_id", "ID")])
-        .unwrap()
-        .save(&users_path)
-        .unwrap();
+    IndexFile::build(
+        &users_path,
+        vec![
+            IndexDefinition::named("by_id", "ID"),
+            IndexDefinition::named_fields(
+                "by_age_id",
+                vec![String::from("AGE"), String::from("ID")],
+            ),
+        ],
+    )
+    .unwrap()
+    .save(&users_path)
+    .unwrap();
     let mut posts = DbfTable::from_bytes(&fixture()).unwrap();
     for id in 1..=80 {
         posts
@@ -69,10 +78,19 @@ fn catalog_with_many_indexed_posts() -> PathBuf {
     }
     let posts_path = root.join("posts.dbf");
     posts.save_with_wal(&posts_path).unwrap();
-    IndexFile::build(&posts_path, vec![IndexDefinition::named("by_id", "ID")])
-        .unwrap()
-        .save(&posts_path)
-        .unwrap();
+    IndexFile::build(
+        &posts_path,
+        vec![
+            IndexDefinition::named("by_id", "ID"),
+            IndexDefinition::named_fields(
+                "by_age_id",
+                vec![String::from("AGE"), String::from("ID")],
+            ),
+        ],
+    )
+    .unwrap()
+    .save(&posts_path)
+    .unwrap();
     root
 }
 
@@ -236,6 +254,38 @@ fn large_single_key_join_uses_a_fresh_foreign_index() {
     right_request.join.kind = super::join::JoinType::Right;
     let right_rows = execute(&catalog, &right_request).unwrap();
     assert!(right_rows.iter().any(|row| {
+        row.get("users.ID")
+            .zip(row.get("posts.ID"))
+            .is_some_and(|(left, right)| left == right)
+    }));
+
+    let compound_request = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "inner",
+            "table": "posts",
+            "on": {
+              "users.ID": {"$eq": {"$field": "posts.ID"}},
+              "users.AGE": {"$eq": {"$field": "posts.AGE"}}
+            }
+          },
+          "projection": {"users.ID": 1, "posts.ID": 1, "users.AGE": 1, "posts.AGE": 1}
+        }"#,
+    )
+    .unwrap();
+    let compound_rows = execute(&catalog, &compound_request).unwrap();
+    assert!(!compound_rows.is_empty());
+    assert!(
+        compound_rows.iter().all(|row| {
+            row["users.ID"] == row["posts.ID"] && row["users.AGE"] == row["posts.AGE"]
+        })
+    );
+
+    let mut compound_right_request = compound_request;
+    compound_right_request.join.kind = super::join::JoinType::Right;
+    let compound_right_rows = execute(&catalog, &compound_right_request).unwrap();
+    assert!(compound_right_rows.iter().any(|row| {
         row.get("users.ID")
             .zip(row.get("posts.ID"))
             .is_some_and(|(left, right)| left == right)

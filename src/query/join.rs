@@ -142,8 +142,8 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
     );
 
     if let JoinType::Right = &request.join.kind {
-        let left_index = if large_join && local_fields.len() == 1 && foreign_fields.len() == 1 {
-            super::join_index::load(catalog, &request.from, &local_fields[0])
+        let left_index = if large_join {
+            super::join_index::load_fields(catalog, &request.from, &local_fields)
         } else {
             None
         };
@@ -161,8 +161,8 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
                     &right_records,
                     request,
                     index,
-                    &local_fields[0],
-                    &foreign_fields[0],
+                    &local_fields,
+                    &foreign_fields,
                 )? {
                     return Ok(output);
                 }
@@ -203,8 +203,8 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
         return Ok(output);
     }
 
-    let right_index = if large_join && local_fields.len() == 1 && foreign_fields.len() == 1 {
-        super::join_index::load(catalog, &request.join.table, &foreign_fields[0])
+    let right_index = if large_join {
+        super::join_index::load_fields(catalog, &request.join.table, &foreign_fields)
     } else {
         None
     };
@@ -222,8 +222,8 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
                 &right_records,
                 request,
                 index,
-                &local_fields[0],
-                &foreign_fields[0],
+                &local_fields,
+                &foreign_fields,
             )? {
                 return Ok(output);
             }
