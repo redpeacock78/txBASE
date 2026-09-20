@@ -29,7 +29,7 @@ Group output may have zero or more `$match` stages, followed by one optional `$p
 
 `_id` is either `null` or one dotted field reference.
 
-Supported accumulators are `$count: {}`, numeric `$sum: "$FIELD"`, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, and `$last: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
+Supported accumulators are `$count: {}`, numeric `$sum: "$FIELD"`, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, `$last: "$FIELD"`, `$push: "$FIELD"`, and `$addToSet: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
 
 The filter runs before grouping.
 
@@ -70,6 +70,12 @@ Incomparable values are rejected.
 `$first` and `$last` use input physical record order within each group.
 
 They return the first or last field value, including explicit `null`; a missing field is returned as `null`.
+
+`$push` returns every field value in input physical record order; `$addToSet` returns each JSON value once in its first-seen order.
+
+Missing fields are appended as `null` by both accumulators.
+
+The combined materialized value count for all `$push` and `$addToSet` accumulators is capped at 10,000.
 
 The executor rejects more than 10,000 groups and rejects aggregation combined with top-level sort, projection, skip, limit, or cursor pagination.
 

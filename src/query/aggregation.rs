@@ -9,6 +9,8 @@ use std::collections::{BTreeMap, btree_map::Entry};
 pub(super) const MAX_GROUPS: usize = 10_000;
 // ponytail: bound distinct materialization at the existing query scale; add spill-to-disk only if larger reports become required.
 pub(super) const MAX_DISTINCT_VALUES: usize = 10_000;
+// ponytail: bound group-array materialization globally; add spill-to-disk only if larger reports become required.
+pub(super) const MAX_COLLECTED_VALUES: usize = 10_000;
 pub(super) use super::aggregation_plan::validate;
 
 #[derive(Debug)]
@@ -26,6 +28,7 @@ enum AccumulatorState {
     Max(Option<Value>),
     First(Option<Value>),
     Last(Option<Value>),
+    Values(Vec<Value>),
 }
 
 #[derive(Debug)]
@@ -84,6 +87,7 @@ pub(super) fn execute(
         .as_ref()
         .expect("validated aggregation has a group or count stage");
     let mut groups = BTreeMap::<String, GroupState>::new();
+    let mut collected_values = 0;
     if spec.key_field.is_none() {
         groups.insert(String::from("null"), new_group(Value::Null, spec));
     }
@@ -191,6 +195,28 @@ pub(super) fn execute(
                 ) => {
                     *current = Some(field_value(&record.values, field).unwrap_or(Value::Null));
                 }
+                (
+                    AccumulatorState::Values(values),
+                    aggregation_plan::AccumulatorKind::Push(field),
+                ) => {
+                    append_collected_value(
+                        values,
+                        field_value(&record.values, field).unwrap_or(Value::Null),
+                        false,
+                        &mut collected_values,
+                    )?;
+                }
+                (
+                    AccumulatorState::Values(values),
+                    aggregation_plan::AccumulatorKind::AddToSet(field),
+                ) => {
+                    append_collected_value(
+                        values,
+                        field_value(&record.values, field).unwrap_or(Value::Null),
+                        true,
+                        &mut collected_values,
+                    )?;
+                }
                 _ => unreachable!("validated accumulator state and specification differ"),
             }
         }
@@ -248,6 +274,10 @@ fn new_group(key: Value, spec: &aggregation_plan::GroupSpec) -> GroupState {
                 aggregation_plan::AccumulatorKind::Max(_) => AccumulatorState::Max(None),
                 aggregation_plan::AccumulatorKind::First(_) => AccumulatorState::First(None),
                 aggregation_plan::AccumulatorKind::Last(_) => AccumulatorState::Last(None),
+                aggregation_plan::AccumulatorKind::Push(_)
+                | aggregation_plan::AccumulatorKind::AddToSet(_) => {
+                    AccumulatorState::Values(Vec::new())
+                }
             })
             .collect(),
     }
@@ -292,10 +322,31 @@ fn finish_group(
             | AccumulatorState::Max(value)
             | AccumulatorState::First(value)
             | AccumulatorState::Last(value) => value.unwrap_or(Value::Null),
+            AccumulatorState::Values(values) => Value::Array(values),
         };
         output.insert(accumulator.name.clone(), value);
     }
     Ok(Value::Object(output))
+}
+
+fn append_collected_value(
+    values: &mut Vec<Value>,
+    value: Value,
+    distinct: bool,
+    collected_values: &mut usize,
+) -> Result<(), QueryError> {
+    // ponytail: bounded arrays make linear JSON equality sufficient; use a keyed set only if this limit grows.
+    if distinct && values.iter().any(|existing| existing == &value) {
+        return Ok(());
+    }
+    if *collected_values >= MAX_COLLECTED_VALUES {
+        return Err(QueryError::Invalid(format!(
+            "aggregate collected value count exceeds {MAX_COLLECTED_VALUES}"
+        )));
+    }
+    values.push(value);
+    *collected_values += 1;
+    Ok(())
 }
 
 fn add_floating_sum(total: f64, value: f64, field: &str) -> Result<f64, QueryError> {

@@ -195,6 +195,73 @@ fn groups_first_and_last_values_in_physical_order() {
 }
 
 #[test]
+fn groups_pushed_values_and_deduplicates_set_values() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"VALUE": "first"}).as_object().unwrap().clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"VALUE": "first"}).as_object().unwrap().clone(),
+    };
+    let third = DbfRecord {
+        number: 3,
+        deleted: false,
+        values: json!({}).as_object().unwrap().clone(),
+    };
+    let records = [&first, &second, &third];
+    let stages = vec![
+        json!({
+            "$group": {
+                "_id": null,
+                "all_values": {"$push": "$VALUE"},
+                "unique_values": {"$addToSet": "$VALUE"}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        super::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({
+            "_id": null,
+            "all_values": ["first", "first", null],
+            "unique_values": ["first", null]
+        })]
+    );
+}
+
+#[test]
+fn bounds_materialized_group_values() {
+    let records = (0..=super::aggregation::MAX_COLLECTED_VALUES)
+        .map(|number| DbfRecord {
+            number,
+            deleted: false,
+            values: json!({"VALUE": number}).as_object().unwrap().clone(),
+        })
+        .collect::<Vec<_>>();
+    let references = records.iter().collect::<Vec<_>>();
+    let stages = vec![
+        json!({
+            "$group": {
+                "_id": null,
+                "values": {"$push": "$VALUE"}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    let error = super::aggregation::execute(&references, &stages).unwrap_err();
+    assert!(error.to_string().contains("collected value count"));
+}
+
+#[test]
 fn aggregation_restores_physical_order_after_index_candidates() {
     let table = table_with_two_active_records();
     let request = parse(
