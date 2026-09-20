@@ -28,7 +28,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | Native XBF storage format | [XBF v1 draft](xbf.md) | Draft codec, DBF conversion/export, snapshot path, generation-checked WAL, and journaled schema export |
 | Multi-table DBF discovery and bounded local equality join | [Catalog](catalog.md) and [Join model](joins.md) | Current boundary plus future relational work |
 | External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, equality, compound equality-prefix range candidates, histogram-estimated range ordering, ordered-prefix traversal, mixed-direction compound-prefix sorting, equality-prefix candidate choice, uniform-statistics-ordered equality intersection, bounded record, traversal, and sort cost choice, and future full I/O-aware cost model |
-| CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Future |
+| CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Current boundary plus future work |
 
 ## Research method
 
@@ -38,7 +38,7 @@ Implementation behavior is checked against the current source and tests before i
 
 Design notes are labeled future when they are not implemented.
 
-The research pass for this index was refreshed on 2026-09-20.
+The research pass for this index was refreshed on 2026-09-21.
 
 The README organization follows the section shape of [texenv's README](https://github.com/redpeacock78/texenv/blob/master/README.md), while the content is specific to txBASE.
 
