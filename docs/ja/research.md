@@ -81,6 +81,7 @@ README の構成は [texenv の README](https://github.com/redpeacock78/texenv/b
 - [Realtime Database save data](https://firebase.google.com/docs/database/admin/save-data)
 - [Realtime Database security](https://firebase.google.com/docs/database/security)
 - [Realtime Database offline capabilities](https://firebase.google.com/docs/database/android/offline-capabilities)
+- [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
 
 ### SQLite
 
@@ -114,4 +115,3 @@ README の構成は [texenv の README](https://github.com/redpeacock78/texenv/b
 新しい機能が形式、クエリ、トランザクション、HTTP の境界をまたぐ場合は、該当するトピック文書を更新し、新しい契約を証明する最小のフィクスチャまたは失敗テストを追加します。
 
 実装経路と再現可能な検査なしに、README へ広い互換性の主張を追加しません。
-- [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)

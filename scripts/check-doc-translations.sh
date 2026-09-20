@@ -11,6 +11,19 @@ heading_levels() {
     ' "$1"
 }
 
+markdown_links() {
+    awk '
+        /^```/ { fenced = !fenced; next }
+        !fenced {
+            line = $0
+            while (match(line, /\]\([^)]*\)/)) {
+                print substr(line, RSTART + 2, RLENGTH - 3)
+                line = substr(line, RSTART + RLENGTH)
+            }
+        }
+    ' "$1"
+}
+
 status=0
 
 for source in docs/*.md; do
@@ -25,6 +38,10 @@ for source in docs/*.md; do
         printf 'heading structure differs: %s <-> %s\n' "$source" "$translation" >&2
         status=1
     fi
+    if ! diff -u <(markdown_links "$source") <(markdown_links "$translation") >/dev/null; then
+        printf 'link targets differ: %s <-> %s\n' "$source" "$translation" >&2
+        status=1
+    fi
 done
 
 for translation in docs/ja/*.md; do
@@ -34,6 +51,24 @@ for translation in docs/ja/*.md; do
         printf 'English source is missing: %s\n' "$source" >&2
         status=1
     fi
+done
+
+for source in README.md README.ja.md docs/*.md docs/ja/*.md; do
+    directory=.
+    if [[ "$source" == */* ]]; then
+        directory=${source%/*}
+    fi
+    while IFS= read -r target; do
+        case "$target" in
+            ''|\#*|http://*|https://*|mailto:*) continue ;;
+        esac
+        target=${target%%\#*}
+        [[ -n "$target" ]] || continue
+        if [[ ! -e "$directory/$target" ]]; then
+            printf 'missing local Markdown link: %s -> %s\n' "$source" "$target" >&2
+            status=1
+        fi
+    done < <(markdown_links "$source")
 done
 
 exit "$status"
