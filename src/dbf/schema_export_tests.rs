@@ -168,3 +168,35 @@ fn schema_export_read_rejects_an_external_target_change() {
     assert!(schema_export::test_journal_path(&destination).exists());
     cleanup(&destination);
 }
+
+#[test]
+fn schema_export_rejects_malformed_journal_records() {
+    let cases = [
+        (
+            "invalid-header",
+            vec![b'b', b'a', b'd'],
+            "header is invalid",
+        ),
+        (
+            "unsupported-version",
+            vec![b'T', b'X', b'S', b'E', 2, 0, 0, 0],
+            "unsupported XBF schema export journal version",
+        ),
+        (
+            "unknown-flags",
+            vec![b'T', b'X', b'S', b'E', 1, 0, 0x80, 0],
+            "XBF schema export journal contains unknown flags",
+        ),
+    ];
+
+    for (name, record, message) in cases {
+        let destination = path(name);
+        cleanup(&destination);
+        schema_export::test_write_journal_record(&destination, &record).unwrap();
+
+        let error = schema_export::recover_schema_export_locked(&destination).unwrap_err();
+        assert!(error.to_string().contains(message));
+
+        cleanup(&destination);
+    }
+}

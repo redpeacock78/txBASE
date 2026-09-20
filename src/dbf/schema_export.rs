@@ -298,6 +298,14 @@ pub(super) fn test_write_journal(path: &Path, flags: u16) -> Result<(), DbfError
 }
 
 #[cfg(test)]
+pub(super) fn test_write_journal_record(path: &Path, record: &[u8]) -> Result<(), DbfError> {
+    let journal_path = journal_path(path);
+    let mut journal = FileWal::open(&journal_path).map_err(super::transaction_error)?;
+    journal.append(record).map_err(super::transaction_error)?;
+    journal.sync().map_err(super::transaction_error)
+}
+
+#[cfg(test)]
 pub(super) fn test_write_file(path: &Path, bytes: &[u8]) -> Result<(), DbfError> {
     write_file(path, bytes)
 }
