@@ -1,6 +1,5 @@
 use super::super::*;
 use super::fixture;
-use crate::index::{IndexDefinition, IndexFile};
 use fs2::FileExt;
 use std::fs::OpenOptions;
 
