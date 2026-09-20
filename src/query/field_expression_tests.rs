@@ -24,8 +24,33 @@ fn missing_expr_operand_does_not_match() {
 }
 
 #[test]
+fn composes_expression_comparisons_with_boolean_operators() {
+    let values = json!({
+        "AGE": 29,
+        "ACTIVE": true,
+        "ROLE": "author"
+    });
+    let filter = json!({
+        "$expr": {
+            "$and": [
+                {"$gte": ["$AGE", 18]},
+                {"$or": [
+                    {"$eq": ["$ACTIVE", true]},
+                    {"$eq": ["$ROLE", "admin"]}
+                ]},
+                {"$not": {"$eq": ["$ROLE", "guest"]}}
+            ]
+        }
+    });
+
+    assert!(matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap());
+}
+
+#[test]
 fn rejects_unsupported_or_malformed_expr() {
     assert!(parse(br#"{"filter":{"$expr":{"$regex":["$A","x"]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$gt":["$A"]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$gt":[{"x":1},"$A"]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$and":["$A"]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$not":[{"$eq":["$A",1]}]}}}"#).is_err());
 }

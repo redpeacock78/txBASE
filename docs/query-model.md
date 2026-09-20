@@ -304,13 +304,16 @@ MongoDB's [logical predicate reference](https://www.mongodb.com/docs/manual/refe
 
 MongoDB's [`$expr` predicate](https://www.mongodb.com/docs/manual/reference/operator/query/expr/) allows expressions inside a query predicate, including comparisons between two fields from the same document.
 
-txBASE implements only the bounded form `{"$expr":{"$gt":["$LEFT","$RIGHT"]}}` with one comparison operator and two scalar operands.
+txBASE implements a bounded expression tree: comparison leaves such as
+`{"$gt":["$LEFT","$RIGHT"]}` may be composed with `$and`, `$or`, and `$not`.
+Each comparison still has exactly two scalar or field-reference operands.
 
 A string operand beginning with `$` is a dotted field reference; all other scalar operands are literals.
 
 If either field reference is missing, the expression does not match.
 
 The expression path uses the table scan because a field-to-field comparison is not a constant-bound index lookup.
+Arithmetic, regular-expression, array, and document expressions remain unsupported.
 
 MongoDB's [array predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/) covers operators such as `$all`, `$elemMatch`, and `$size` that txBASE does not currently implement.
 

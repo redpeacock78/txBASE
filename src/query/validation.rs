@@ -72,17 +72,39 @@ fn validate_expression(expression: &Value, path: &str) -> Result<(), QueryError>
     let Some((operator, operands)) = expression.iter().next() else {
         return Err(QueryError::Invalid(format!("{path} cannot be empty")));
     };
-    if expression.len() != 1
-        || !matches!(
-            operator.as_str(),
-            "$eq" | "$ne" | "$gt" | "$gte" | "$lt" | "$lte"
-        )
-    {
+    if expression.len() != 1 {
         return Err(QueryError::Invalid(format!(
-            "{path} supports one comparison operator"
+            "{path} supports one expression operator"
         )));
     }
-    let operands = operands
+    match operator.as_str() {
+        "$and" | "$or" => {
+            let expressions = operands.as_array().ok_or_else(|| {
+                QueryError::Invalid(format!("{path}.{operator} must be an array"))
+            })?;
+            for (index, expression) in expressions.iter().enumerate() {
+                validate_expression(expression, &format!("{path}.{operator}[{index}]"))?;
+            }
+        }
+        "$not" => validate_expression(operands, &format!("{path}.$not"))?,
+        "$eq" | "$ne" | "$gt" | "$gte" | "$lt" | "$lte" => {
+            validate_comparison_operands(operands, operator, path)?;
+        }
+        _ => {
+            return Err(QueryError::Invalid(format!(
+                "{path} supports only boolean and comparison operators"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_comparison_operands(
+    value: &Value,
+    operator: &str,
+    path: &str,
+) -> Result<(), QueryError> {
+    let operands = value
         .as_array()
         .ok_or_else(|| QueryError::Invalid(format!("{path}.{operator} must be an array")))?;
     if operands.len() != 2 {

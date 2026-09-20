@@ -59,6 +59,42 @@ fn matches_expression(values: &Map<String, Value>, expression: &Value) -> Result
     let Some((operator, operands)) = expression.iter().next() else {
         return Err(QueryError::Invalid("filter.$expr cannot be empty".into()));
     };
+    if expression.len() != 1 {
+        return Err(QueryError::Invalid(
+            "filter.$expr supports one expression operator".into(),
+        ));
+    }
+    match operator.as_str() {
+        "$and" => {
+            let expressions = operands
+                .as_array()
+                .ok_or_else(|| QueryError::Invalid("filter.$expr.$and must be an array".into()))?;
+            for expression in expressions {
+                if !matches_expression(values, expression)? {
+                    return Ok(false);
+                }
+            }
+            return Ok(true);
+        }
+        "$or" => {
+            let expressions = operands
+                .as_array()
+                .ok_or_else(|| QueryError::Invalid("filter.$expr.$or must be an array".into()))?;
+            for expression in expressions {
+                if matches_expression(values, expression)? {
+                    return Ok(true);
+                }
+            }
+            return Ok(false);
+        }
+        "$not" => return Ok(!matches_expression(values, operands)?),
+        "$eq" | "$ne" | "$gt" | "$gte" | "$lt" | "$lte" => {}
+        _ => {
+            return Err(QueryError::Invalid(format!(
+                "unsupported expression operator {operator}"
+            )));
+        }
+    }
     let operands = operands
         .as_array()
         .ok_or_else(|| QueryError::Invalid(format!("filter.$expr.{operator} must be an array")))?;
@@ -80,11 +116,7 @@ fn matches_expression(values: &Map<String, Value>, expression: &Value) -> Result
         "$gte" => compare_values(&left, &right).is_some_and(|ordering| ordering.is_ge()),
         "$lt" => compare_values(&left, &right).is_some_and(|ordering| ordering.is_lt()),
         "$lte" => compare_values(&left, &right).is_some_and(|ordering| ordering.is_le()),
-        _ => {
-            return Err(QueryError::Invalid(format!(
-                "unsupported expression operator {operator}"
-            )));
-        }
+        _ => unreachable!("validated expression operator"),
     })
 }
 

@@ -58,7 +58,7 @@ curl -i -X QUERY \
   http://127.0.0.1:8080/records
 ```
 
-The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `page_size`, `cursor`, and a bounded `aggregate` pipeline with `$match`, `$count`, `$group`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$and`, `$or`, `$not`, and bounded `$expr` field comparisons.
+The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `page_size`, `cursor`, and a bounded `aggregate` pipeline with `$match`, `$count`, `$group`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$and`, `$or`, `$not`, and bounded `$expr` boolean trees over field comparisons.
 
 `page_size` enables a cursor response. Without `sort`, the cursor follows physical record order;
 with `sort`, it is a keyset token and the next request repeats the same sort definition.
