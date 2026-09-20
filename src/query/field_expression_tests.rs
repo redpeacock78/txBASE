@@ -81,6 +81,38 @@ fn compares_multiplication_expression_results() {
 }
 
 #[test]
+fn compares_division_expression_results() {
+    let values = json!({
+        "WHOLE": 12,
+        "PARTS": 3,
+        "ODD": 5,
+        "FRACTION": 2.5,
+    });
+    let filter = json!({
+        "$expr": {"$and": [
+            {"$eq": [{"$divide": ["$WHOLE", "$PARTS"]}, 4]},
+            {"$eq": [{"$divide": ["$ODD", "$PARTS"]}, "$FRACTION"]}
+        ]}
+    });
+
+    assert!(matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap());
+}
+
+#[test]
+fn rejects_division_by_zero() {
+    let filter = json!({
+        "$expr": {"$eq": [{"$divide": ["$VALUE", 0]}, 1]}
+    });
+
+    let error = matches_filter(
+        json!({"VALUE": 1}).as_object().unwrap(),
+        filter.as_object().unwrap(),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("cannot divide by zero"));
+}
+
+#[test]
 fn missing_or_non_numeric_expression_fields_do_not_match() {
     let missing = json!({
         "$expr": {"$eq": [{"$add": ["$MISSING", 1]}, 1]}
@@ -124,4 +156,5 @@ fn rejects_unsupported_or_malformed_expr() {
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$add":["$A",true]},1]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$add":["$A"]},1]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$multiply":["$A",true]},1]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$divide":["$A",true]},1]}}}"#).is_err());
 }

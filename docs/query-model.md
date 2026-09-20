@@ -276,7 +276,7 @@ Distinct output is capped at 10,000 values.
 
 Stages after `$limit`, additional grouping, count, or distinct stages remain unsupported.
 
-`$expr` operands are supported only in the bounded numeric `$add`, `$subtract`, and `$multiply` forms described below.
+`$expr` operands are supported only in the bounded numeric `$add`, `$subtract`, `$multiply`, and `$divide` forms described below.
 
 Broader expression evaluation remains unsupported.
 
@@ -397,7 +397,7 @@ That is why this first slice has a hard result bound and makes no planner-level 
 | Comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` | Compare decoded JSON values using the engine's explicit type rules |
 | Membership | `$in`, `$nin` | Match a value against a list of candidate values |
 | Logical | `$and`, `$or`, `$not` | Compose or invert predicate documents |
-| Expression | `$expr` | Compare scalar literals, field references, or bounded numeric `$add`/`$subtract`/`$multiply` expressions from the same record |
+| Expression | `$expr` | Compare scalar literals, field references, or bounded numeric `$add`/`$subtract`/`$multiply`/`$divide` expressions from the same record |
 
 An empty `$and` matches every record.
 
@@ -409,11 +409,15 @@ When a field contains an array, a predicate can match when an array element sati
 
 These choices are tested in `src/query/tests.rs` and `src/query/malformed_tests.rs`.
 
-`$add`, `$subtract`, and `$multiply` accept exactly two numeric literals, field references, or nested numeric expressions.
+`$add`, `$subtract`, `$multiply`, and `$divide` accept exactly two numeric literals, field references, or nested numeric expressions.
 
 Integer results remain JSON integers when they fit.
 
 Mixed or fractional results must be finite JSON numbers.
+
+Exact integer division remains an integer; non-exact division produces a finite JSON number.
+
+Division by zero is rejected.
 
 Missing or nonnumeric field operands make the comparison not match.
 

@@ -75,9 +75,14 @@ fn validate_expression_operand(operand: &Value, path: &str) -> Result<(), QueryE
     let Some((operator, operands)) = expression.iter().next() else {
         return Err(QueryError::Invalid(format!("{path} cannot be empty")));
     };
-    if expression.len() != 1 || !matches!(operator.as_str(), "$add" | "$subtract" | "$multiply") {
+    if expression.len() != 1
+        || !matches!(
+            operator.as_str(),
+            "$add" | "$subtract" | "$multiply" | "$divide"
+        )
+    {
         return Err(QueryError::Invalid(format!(
-            "{path} supports only $add, $subtract, and $multiply"
+            "{path} supports only $add, $subtract, $multiply, and $divide"
         )));
     }
     let operands = operands
@@ -206,7 +211,12 @@ fn resolve_numeric_expression(
             "filter.$expr numeric expression cannot be empty".into(),
         ));
     };
-    if expression.len() != 1 || !matches!(operator.as_str(), "$add" | "$subtract" | "$multiply") {
+    if expression.len() != 1
+        || !matches!(
+            operator.as_str(),
+            "$add" | "$subtract" | "$multiply" | "$divide"
+        )
+    {
         return Err(QueryError::Invalid(format!(
             "unsupported numeric expression operator {operator}"
         )));
@@ -242,12 +252,21 @@ fn apply_numeric_expression(
     let (Some(left), Some(right)) = (as_numeric(left), as_numeric(right)) else {
         return Ok(None);
     };
+    if operator == "$divide" && is_zero(right) {
+        return Err(QueryError::Invalid(
+            "filter.$expr.$divide cannot divide by zero".into(),
+        ));
+    }
     match (left, right) {
         (NumericValue::Integer(left), NumericValue::Integer(right)) => {
+            if operator == "$divide" && left % right != 0 {
+                return finite_json_number(operator, numeric_as_f64(left) / numeric_as_f64(right));
+            }
             let value = match operator {
                 "$add" => left.checked_add(right),
                 "$subtract" => left.checked_sub(right),
                 "$multiply" => left.checked_mul(right),
+                "$divide" => left.checked_div(right),
                 _ => unreachable!("validated numeric expression operator"),
             }
             .ok_or_else(|| {
@@ -262,15 +281,27 @@ fn apply_numeric_expression(
                 "$add" => left + right,
                 "$subtract" => left - right,
                 "$multiply" => left * right,
+                "$divide" => left / right,
                 _ => unreachable!("validated numeric expression operator"),
             };
-            if !value.is_finite() {
-                return Err(QueryError::Invalid(format!(
-                    "filter.$expr.{operator} result is not a finite JSON number"
-                )));
-            }
-            Ok(serde_json::Number::from_f64(value).map(Value::Number))
+            finite_json_number(operator, value)
         }
+    }
+}
+
+fn finite_json_number(operator: &str, value: f64) -> Result<Option<Value>, QueryError> {
+    if !value.is_finite() {
+        return Err(QueryError::Invalid(format!(
+            "filter.$expr.{operator} result is not a finite JSON number"
+        )));
+    }
+    Ok(serde_json::Number::from_f64(value).map(Value::Number))
+}
+
+fn is_zero(value: NumericValue) -> bool {
+    match value {
+        NumericValue::Integer(value) => value == 0,
+        NumericValue::Float(value) => value == 0.0,
     }
 }
 
