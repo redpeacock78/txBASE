@@ -33,7 +33,7 @@ The repository currently provides:
   memory or file WAL commit/rollback records, plus durable DBF single-table WAL commit IDs exposed
   by the HTTP mutation boundary.
 - Startup recovery, stale-snapshot rejection, and an Ubuntu/macOS/Windows CI gate.
-- Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
+- Schema introspection, DBF verification, sidecar-aware backup and restore, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A durable catalog-journal commit ID for multi-table mutation transactions.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
@@ -74,7 +74,7 @@ This phase keeps the database local and makes its operational boundary useful be
 
 ### Completion conditions
 
-Schema introspection, verification, copy tooling, `PACK`, `RECALL`, read-only WAL inspection, and the first directory-catalog boundary are implemented as the first Phase 1 slice.
+Schema introspection, verification, sidecar-aware backup and restore, copy tooling, `PACK`, `RECALL`, read-only WAL inspection, and the first directory-catalog boundary are implemented as the first Phase 1 slice.
 
 The catalog currently derives table identity from direct-child DBF filenames and does not persist a separate manifest.
 

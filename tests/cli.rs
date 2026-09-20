@@ -34,3 +34,51 @@ fn wal_inspect_cli_reports_a_torn_tail_without_mutating_the_file() {
 
     fs::remove_file(path).unwrap();
 }
+
+#[test]
+fn backup_and_restore_cli_copy_a_dbf() {
+    let source = std::env::temp_dir().join(format!(
+        "txbase-cli-backup-source-{}.dbf",
+        std::process::id()
+    ));
+    let backup =
+        std::env::temp_dir().join(format!("txbase-cli-backup-copy-{}.dbf", std::process::id()));
+    let restored = std::env::temp_dir().join(format!(
+        "txbase-cli-backup-restored-{}.dbf",
+        std::process::id()
+    ));
+    for path in [&source, &backup, &restored] {
+        let _ = fs::remove_file(path);
+    }
+
+    let fixture = include_str!("fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|byte| u8::from_str_radix(byte, 16).unwrap())
+        .collect::<Vec<_>>();
+    fs::write(&source, &fixture).unwrap();
+
+    for (operation, input, output_path) in [
+        ("backup", &source, &backup),
+        ("restore", &backup, &restored),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_txbase"))
+            .args([
+                operation,
+                input.to_str().unwrap(),
+                output_path.to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{operation} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    assert_eq!(fs::read(&restored).unwrap(), fixture);
+
+    for path in [source, backup, restored] {
+        fs::remove_file(path).unwrap();
+    }
+}
