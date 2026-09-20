@@ -84,18 +84,24 @@ fn estimated_cost(
         .map_or(active_record_count, Vec::len);
     let remaining_sort = request.sort.len() > access.ordered_prefix;
     let sort_cost = if remaining_sort {
-        estimated_sort_cost(record_count)
+        estimated_sort_cost(record_count, access.ordered_prefix)
     } else {
         0
     };
     record_count.saturating_add(sort_cost)
 }
 
-fn estimated_sort_cost(record_count: usize) -> usize {
+fn estimated_sort_cost(record_count: usize, ordered_prefix: usize) -> usize {
     if record_count < 2 {
         return 0;
     }
-    record_count.saturating_mul(record_count.ilog2() as usize)
+    let full_sort = record_count.saturating_mul(record_count.ilog2() as usize);
+    // ponytail: group cardinalities are not persisted; discount one full pass when an ordered prefix exists.
+    if ordered_prefix == 0 {
+        full_sort
+    } else {
+        full_sort.saturating_sub(record_count)
+    }
 }
 
 fn choose_equality(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {
