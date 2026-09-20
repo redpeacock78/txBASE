@@ -210,4 +210,4 @@ catalog server は `QUERY /{table}/records/stream` を公開します。
 - [MongoDB documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
-- [Firestore query cursors](https://www.mongodb.com/docs/firestore/query-data/query-cursors)
+- [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
