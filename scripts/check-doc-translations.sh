@@ -26,6 +26,11 @@ markdown_links() {
 
 status=0
 
+if ! diff -u <(heading_levels README.md) <(heading_levels README.ja.md) >/dev/null; then
+    printf 'heading structure differs: README.md <-> README.ja.md\n' >&2
+    status=1
+fi
+
 for source in docs/*.md; do
     name=${source#docs/}
     translation="docs/ja/$name"
