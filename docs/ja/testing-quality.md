@@ -168,6 +168,7 @@ HTTP テストは、直接の WAL と DBF 復旧テストの代わりにはな�
 各マトリクスジョブは次を実行します。
 
 ```bash
+bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets --all-features

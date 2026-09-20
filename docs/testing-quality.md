@@ -162,6 +162,7 @@ The workflow in `.github/workflows/ci.yml` runs on Ubuntu, macOS, and Windows.
 Every matrix job runs:
 
 ```bash
+bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets --all-features
