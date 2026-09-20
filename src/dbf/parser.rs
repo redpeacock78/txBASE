@@ -1,4 +1,3 @@
-use super::persistence::read_transaction_state;
 use super::*;
 
 impl DbfTable {
