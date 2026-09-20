@@ -75,9 +75,9 @@ fn validate_expression_operand(operand: &Value, path: &str) -> Result<(), QueryE
     let Some((operator, operands)) = expression.iter().next() else {
         return Err(QueryError::Invalid(format!("{path} cannot be empty")));
     };
-    if expression.len() != 1 || !matches!(operator.as_str(), "$add" | "$subtract") {
+    if expression.len() != 1 || !matches!(operator.as_str(), "$add" | "$subtract" | "$multiply") {
         return Err(QueryError::Invalid(format!(
-            "{path} supports only $add and $subtract"
+            "{path} supports only $add, $subtract, and $multiply"
         )));
     }
     let operands = operands
@@ -206,7 +206,7 @@ fn resolve_numeric_expression(
             "filter.$expr numeric expression cannot be empty".into(),
         ));
     };
-    if expression.len() != 1 || !matches!(operator.as_str(), "$add" | "$subtract") {
+    if expression.len() != 1 || !matches!(operator.as_str(), "$add" | "$subtract" | "$multiply") {
         return Err(QueryError::Invalid(format!(
             "unsupported numeric expression operator {operator}"
         )));
@@ -247,6 +247,7 @@ fn apply_numeric_expression(
             let value = match operator {
                 "$add" => left.checked_add(right),
                 "$subtract" => left.checked_sub(right),
+                "$multiply" => left.checked_mul(right),
                 _ => unreachable!("validated numeric expression operator"),
             }
             .ok_or_else(|| {
@@ -260,6 +261,7 @@ fn apply_numeric_expression(
             let value = match operator {
                 "$add" => left + right,
                 "$subtract" => left - right,
+                "$multiply" => left * right,
                 _ => unreachable!("validated numeric expression operator"),
             };
             if !value.is_finite() {

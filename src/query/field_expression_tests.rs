@@ -64,6 +64,23 @@ fn compares_numeric_expression_results() {
 }
 
 #[test]
+fn compares_multiplication_expression_results() {
+    let values = json!({
+        "PRICE": 12,
+        "QUANTITY": 3,
+        "TOTAL": 36,
+    });
+    let filter = json!({
+        "$expr": {"$eq": [
+            {"$multiply": ["$PRICE", "$QUANTITY"]},
+            "$TOTAL"
+        ]}
+    });
+
+    assert!(matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap());
+}
+
+#[test]
 fn missing_or_non_numeric_expression_fields_do_not_match() {
     let missing = json!({
         "$expr": {"$eq": [{"$add": ["$MISSING", 1]}, 1]}
@@ -106,4 +123,5 @@ fn rejects_unsupported_or_malformed_expr() {
     assert!(parse(br#"{"filter":{"$expr":{"$not":[{"$eq":["$A",1]}]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$add":["$A",true]},1]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$add":["$A"]},1]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$multiply":["$A",true]},1]}}}"#).is_err());
 }
