@@ -272,13 +272,14 @@ as the effective `encoding_override` and `encoding_metadata.effective` in schema
 an explicit override, or the fallback.
 
 The DBF codec recognizes the four Visual FoxPro CJK driver IDs for Windows-31J/CP932, GBK/CP936,
-EUC-KR/CP949, and Big5/CP950, plus the legacy dBASE `0x4d` CP936 driver ID.
+EUC-KR/CP949, and Big5/CP950, plus the legacy dBASE aliases `0x13`, `0x4d`, `0x4e`, and `0x4f`
+for CP932, CP936, CP949, and CP950.
 Malformed reads use U+FFFD and writes reject unmappable or over-width values.
 The explicit `Shift_JIS` override accepts ASCII, half-width Katakana, and JIS X 0208; CP932
 extensions decode as U+FFFD and are rejected on write.
-Pinned DBF fixtures cover the four Visual FoxPro CJK driver IDs and the legacy dBASE `0x4d` ID,
-and pinned explicit-codec byte fixtures cover DBF record decoding and write round-trips for all
-eight supported explicit codec names.
+Pinned DBF fixtures cover the four Visual FoxPro CJK driver IDs and the legacy dBASE `0x4d` ID;
+the alias tests cover the full legacy alias set. Pinned explicit-codec byte fixtures cover DBF
+record decoding and write round-trips for all eight supported explicit codec names.
 
 An optional `users.txschema.json` sidecar adds one-field `primary`, `unique`, and `not_null`
 constraints, bounded composite `unique` keys, scalar `default` values for omitted inserts, and

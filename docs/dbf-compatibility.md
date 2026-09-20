@@ -103,10 +103,16 @@ supported CJK fixtures. The Visual FoxPro IDs are documented by
 | Driver ID | Declared platform | Effective codec |
 | --- | --- | --- |
 | `0x7b` | Japanese Windows | Windows-31J/CP932 through `encoding_rs::SHIFT_JIS` |
+| `0x13` | Legacy Japanese Shift-JIS | Windows-31J/CP932 through `encoding_rs::SHIFT_JIS` |
 | `0x4d` | dBASE Simplified Chinese | GBK/CP936 |
 | `0x7a` | Simplified Chinese Windows | GBK/CP936 |
+| `0x4f` | Legacy Traditional Chinese | Big5/CP950 |
 | `0x79` | Korean Windows | EUC-KR/CP949 |
+| `0x4e` | Legacy Korean ANSI/OEM | EUC-KR/CP949 |
 | `0x78` | Traditional Chinese Windows | Big5/CP950 |
+
+The legacy IDs `0x13`, `0x4d`, `0x4e`, and `0x4f` follow the code-page mapping documented by
+the pinned Ruby [`dbf` compatibility table](https://github.com/infused/dbf/blob/6b6547384439fd009815d20112b22c58eee83503/README.md#encodings-code-pages).
 
 The `encoding` member in `schema` output identifies every supported declared code page, including
 the four CJK codecs above.

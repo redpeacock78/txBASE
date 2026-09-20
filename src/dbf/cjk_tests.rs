@@ -98,6 +98,37 @@ fn decodes_and_encodes_declared_cjk_drivers() {
 }
 
 #[test]
+fn decodes_and_encodes_legacy_cjk_driver_aliases() {
+    for (language_driver, value) in [
+        (0x13, "日本"),
+        (0x4d, "中文"),
+        (0x4e, "한국"),
+        (0x4f, "中文"),
+    ] {
+        let mut bytes = fixture();
+        bytes[29] = language_driver;
+        let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": value})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        assert_eq!(
+            DbfTable::from_bytes(&table.to_bytes())
+                .unwrap()
+                .active_record(1)
+                .unwrap()
+                .values["NAME"],
+            value
+        );
+    }
+}
+
+#[test]
 fn explicit_euc_jp_and_gb18030_overrides_round_trip() {
     for (canonical, value) in [("EUC-JP", "日本"), ("GB18030", "中文")] {
         let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some(canonical)).unwrap();

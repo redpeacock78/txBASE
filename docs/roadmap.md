@@ -44,7 +44,7 @@ The repository currently provides:
 - A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
 - A bounded thread-backed snapshot stream whose producer applies channel backpressure and stops when its consumer is dropped.
-- Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950, plus the legacy dBASE `0x4d` CP936 driver ID.
+- Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950, plus the legacy dBASE aliases `0x13`, `0x4d`, `0x4e`, and `0x4f`.
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, bounded table-level `checks` predicates, and catalog-scoped `references` validation.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP, with normalized schema output.
 - A rebuildable external scalar and compound-key index sidecar with equality, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
@@ -172,7 +172,7 @@ The phase must preserve DBF byte widths and reject ambiguous or unrepresentable 
 Every encoding needs a declared name, byte-width rule, round-trip fixture, invalid-byte behavior, and comparison policy.
 
 The first declared-driver slice covers the four Visual FoxPro CJK IDs listed in the DBF
-compatibility document and the legacy dBASE `0x4d` CP936 ID.
+compatibility document and the legacy dBASE aliases listed there.
 It uses replacement characters for malformed reads and rejects unmappable or over-width writes.
 The sidecar and path-oriented CLI now provide explicit overrides for those four codecs plus strict
 Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP; none of the latter four claims a DBF language-driver
@@ -180,7 +180,8 @@ mapping.
 Schema output exposes declared and effective names plus the interpretation source.
 Strict Shift_JIS accepts ASCII, half-width Katakana, and JIS X 0208, while CP932 extensions are
 replaced on read or rejected on write. Pinned DBF fixtures cover the four Visual FoxPro CJK IDs
-and the legacy dBASE `0x4d` ID, and round-trip their multibyte record values. An upstream Visual FoxPro Windows-1251 fixture also
+and the legacy dBASE `0x4d` ID, and round-trip their multibyte record values. Alias tests cover
+the complete legacy alias set. An upstream Visual FoxPro Windows-1251 fixture also
 round-trips Cyrillic record values. Pinned explicit-codec byte fixtures cover DBF record decoding
 and write round-trips for all eight supported explicit codec names. The query layer now has a bounded
 `unicode-lowercase` sort collation; locale-aware CJK collation and additional broader upstream CJK

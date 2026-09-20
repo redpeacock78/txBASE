@@ -102,10 +102,15 @@ Visual FoxPro の ID については、[Visual FoxPro がサポートするコ�
 | ドライバー ID | 宣言されたプラットフォーム | 実効コーデック |
 | --- | --- | --- |
 | `0x7b` | 日本語 Windows | `encoding_rs::SHIFT_JIS` による Windows-31J/CP932 |
+| `0x13` | 従来型の日本語 Shift-JIS | `encoding_rs::SHIFT_JIS` による Windows-31J/CP932 |
 | `0x4d` | dBASE 簡体字中国語 | GBK/CP936 |
 | `0x7a` | 簡体字中国語 Windows | GBK/CP936 |
+| `0x4f` | 従来型の繁体字中国語 | Big5/CP950 |
 | `0x79` | 韓国語 Windows | EUC-KR/CP949 |
+| `0x4e` | 従来型の韓国語 ANSI/OEM | EUC-KR/CP949 |
 | `0x78` | 繁体字中国語 Windows | Big5/CP950 |
+
+従来型の ID `0x13`、`0x4d`、`0x4e`、`0x4f` には、固定した Ruby [`dbf` 互換性表](https://github.com/infused/dbf/blob/6b6547384439fd009815d20112b22c58eee83503/README.md#encodings-code-pages)のコードページ対応を使います。
 
 `schema` 出力の `encoding` メンバーは、上記四つの CJK コーデックを含む、サポートするすべての宣言済みコードページを識別します。
 

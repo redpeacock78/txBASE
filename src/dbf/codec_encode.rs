@@ -236,7 +236,9 @@ pub fn encode_character_with_encoding(
             0x7d => encode_codepage(&text, CP1255_UPPER),
             0x7e => encode_codepage(&text, CP1256_UPPER),
             0x03 | 0x57 => encode_windows_1252(&text),
-            0x4d | 0x78..=0x7b => encode_cjk(&text, language_driver, None)
+            0x13 | 0x4d | 0x4e | 0x4f => encode_cjk(&text, language_driver, None)
+                .and_then(|(bytes, had_errors)| (!had_errors).then_some(bytes)),
+            0x78..=0x7b => encode_cjk(&text, language_driver, None)
                 .and_then(|(bytes, had_errors)| (!had_errors).then_some(bytes)),
             _ => Some(text.into_bytes()),
         }

@@ -172,10 +172,10 @@ fn encoding(language_driver: u8, encoding_override: Option<&str>) -> Option<&'st
         });
     }
     Some(match language_driver {
-        0x78 => BIG5,
-        0x79 => EUC_KR,
+        0x4f | 0x78 => BIG5,
+        0x4e | 0x79 => EUC_KR,
         0x4d | 0x7a => GBK,
-        0x7b => SHIFT_JIS,
+        0x13 | 0x7b => SHIFT_JIS,
         _ => return None,
     })
 }

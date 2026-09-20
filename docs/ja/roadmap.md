@@ -42,7 +42,7 @@ HTTP、JSON、MCP、WASM はストレージ形式の上位にあるアクセス�
 - カーソル境界検証と安全なテーブルスキャンフォールバックを備えた有界 `unicode-lowercase` ソート照合。
 - メモリ内テーブルスナップショットに対する段階的なフィルターとプロジェクションのための、借用型および所有型スナップショットクエリストリーム。
 - チャネルのバックプレッシャーを適用し、consumer が drop されると停止する、スレッドを使った有界スナップショットストリーム。
-- Windows-31J/CP932、GBK/CP936、EUC-KR/CP949、Big5/CP950 に対する宣言済み Visual FoxPro CJK ドライバーと、legacy dBASE の `0x4d` CP936 driver ID の対応。
+- Windows-31J/CP932、GBK/CP936、EUC-KR/CP949、Big5/CP950 に対する宣言済み Visual FoxPro CJK ドライバーと、legacy dBASE の `0x13`、`0x4d`、`0x4e`、`0x4f` alias の対応。
 - 単一フィールドの `primary`、`unique`、`not_null` 強制、有界な複合 `primary` と `unique` キー、省略された insert 用のスカラー既定値、有界なテーブルレベル `checks` 述語、カタログスコープの `references` 検証を持つ任意の `*.txschema.json` サイドカー。
 - 上記四つの CJK コーデックと strict Shift_JIS、EUC-JP、GB18030、ISO-2022-JP に対する明示的なサイドカーおよび呼び出し単位のオーバーライドと、正規化されたスキーマ出力。
 - 等値、範囲、複合等値プレフィックス範囲の候補検索、ヒストグラムによる範囲順序推定、単一フィールドと順序プレフィックスの走査、フィールド方向ごとの複合プレフィックスソート走査、等値プレフィックス候補数、一様統計による等値候補積集合、レコード数、インデックス走査、ソート作業に基づく有界なコスト選択と非選択的なインデックスをテーブルスキャンへ戻すフォールバック、パス対応計画、DBF と memo の鮮度検査を持つ再構築可能な外部スカラーおよび複合キーインデックスサイドカー。
@@ -180,7 +180,7 @@ HTTP サーバーは `/records/stream` と `/{table}/records/stream` をこの�
 
 各エンコーディングには、宣言名、バイト幅規則、往復フィクスチャ、不正バイト動作、比較方針が必要です。
 
-最初の宣言ドライバースライスは、DBF 互換性文書に記載した四つの Visual FoxPro CJK ID と、legacy dBASE の `0x4d` CP936 ID をカバーします。
+最初の宣言ドライバースライスは、DBF 互換性文書に記載した四つの Visual FoxPro CJK ID と、そこに記載した legacy dBASE alias をカバーします。
 
 壊れた読み取りには置換文字を使い、表現できない文字または幅を超える書き込みを拒否します。
 
@@ -193,6 +193,7 @@ HTTP サーバーは `/records/stream` と `/{table}/records/stream` をこの�
 strict Shift_JIS は ASCII、半角カタカナ、JIS X 0208 を受け付け、CP932 拡張を読み取りで置換し、書き込みで拒否します。
 
 固定DBFフィクスチャは四つの Visual FoxPro CJK ID と legacy dBASE の `0x4d` ID をカバーし、マルチバイトレコード値を往復します。
+alias testはlegacy alias全体をカバーします。
 
 上流 Visual FoxPro の Windows-1251 フィクスチャも、キリル文字のレコード値を往復します。
 

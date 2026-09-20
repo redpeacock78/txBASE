@@ -14,10 +14,10 @@ fn reports_names_for_supported_language_drivers() {
         (&[0xcb][..], "Windows-1253"),
         (&[0x7d][..], "Windows-1255"),
         (&[0x7e][..], "Windows-1256"),
-        (&[0x78][..], "Big5/CP950"),
-        (&[0x79][..], "EUC-KR/CP949"),
+        (&[0x4f, 0x78][..], "Big5/CP950"),
+        (&[0x4e, 0x79][..], "EUC-KR/CP949"),
         (&[0x4d, 0x7a][..], "GBK/CP936"),
-        (&[0x7b][..], "Windows-31J/CP932"),
+        (&[0x13, 0x7b][..], "Windows-31J/CP932"),
     ] {
         for driver in drivers {
             assert_eq!(encoding_name(*driver), Some(name));
