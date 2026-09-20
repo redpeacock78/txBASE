@@ -76,6 +76,28 @@ fn catalog_with_many_indexed_posts() -> PathBuf {
     root
 }
 
+fn catalog_with_many_indexed_posts_and_comments() -> PathBuf {
+    let root = catalog_with_many_indexed_posts();
+    let mut comments = DbfTable::from_bytes(&fixture()).unwrap();
+    for _ in 0..80 {
+        comments
+            .insert_record(
+                json!({"ID": 1, "NAME": "Indexed comment", "AGE": 1, "ACTIVE": true})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+    }
+    let comments_path = root.join("comments.dbf");
+    comments.save_with_wal(&comments_path).unwrap();
+    IndexFile::build(&comments_path, vec![IndexDefinition::named("by_id", "ID")])
+        .unwrap()
+        .save(&comments_path)
+        .unwrap();
+    root
+}
+
 fn catalog_with_posts_and_comments() -> PathBuf {
     let root = catalog_with_posts();
     let mut comments = DbfTable::from_bytes(&fixture()).unwrap();
@@ -201,6 +223,39 @@ fn large_single_key_join_uses_a_fresh_foreign_index() {
             .zip(row.get("posts.ID"))
             .is_some_and(|(left, right)| left == right)
     }));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn chained_single_key_join_uses_a_fresh_foreign_index() {
+    let root = catalog_with_many_indexed_posts_and_comments();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let request = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "cross",
+            "table": "posts",
+            "on": {}
+          },
+          "joins": [
+            {
+              "type": "inner",
+              "table": "comments",
+              "on": {
+                "posts.ID": {"$eq": {"$field": "comments.ID"}}
+              }
+            }
+          ],
+          "projection": {"posts.ID": 1, "comments.ID": 1}
+        }"#,
+    )
+    .unwrap();
+
+    let rows = execute(&catalog, &request).unwrap();
+
+    assert!(rows.len() > 64);
+    assert!(rows.iter().all(|row| row["posts.ID"] == row["comments.ID"]));
     fs::remove_dir_all(root).unwrap();
 }
 

@@ -1,9 +1,10 @@
-use super::join::{JoinError, JoinRequest, JoinType, emit};
+use super::join::{JoinError, JoinRequest, JoinSpec, JoinType, emit};
+use super::join_pipeline::push_combined;
 use crate::catalog::Catalog;
 use crate::dbf::DbfRecord;
 use crate::index::IndexFile;
 use crate::query_path::field_value;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
 pub(super) fn load(catalog: &Catalog, table_name: &str, field: &str) -> Option<IndexFile> {
@@ -73,6 +74,54 @@ pub(super) fn execute_right_join(
     Ok(Some(output))
 }
 
+pub(super) fn execute_stage(
+    left: &[Map<String, Value>],
+    right: &[Map<String, Value>],
+    right_numbers: &[usize],
+    spec: &JoinSpec,
+    index: &IndexFile,
+    local_field: &str,
+    index_field: &str,
+) -> Result<Option<Vec<Map<String, Value>>>, JoinError> {
+    let Some(probes) = probe_rows(left, local_field, index_field, index)? else {
+        return Ok(None);
+    };
+    if right.len() != right_numbers.len() {
+        return Err(JoinError::Invalid(
+            "join index row numbers do not match loaded rows".into(),
+        ));
+    }
+    let right_positions = right_numbers
+        .iter()
+        .enumerate()
+        .map(|(position, number)| (*number, position))
+        .collect::<BTreeMap<_, _>>();
+    let mut output = Vec::new();
+    for (left_row, matches) in left.iter().zip(&probes) {
+        match &spec.kind {
+            JoinType::Inner => {
+                push_row_matches(&mut output, left_row, matches, right, &right_positions)?;
+            }
+            JoinType::Left => {
+                if matches.is_empty() {
+                    push_combined(&mut output, Some(left_row), None)?;
+                } else {
+                    push_row_matches(&mut output, left_row, matches, right, &right_positions)?;
+                }
+            }
+            JoinType::Semi if !matches.is_empty() => {
+                push_combined(&mut output, Some(left_row), None)?;
+            }
+            JoinType::Anti if matches.is_empty() => {
+                push_combined(&mut output, Some(left_row), None)?;
+            }
+            JoinType::Semi | JoinType::Anti => {}
+            JoinType::Right | JoinType::Cross => return Ok(None),
+        }
+    }
+    Ok(Some(output))
+}
+
 fn probe_records(
     records: &[&DbfRecord],
     probe_field: &str,
@@ -82,6 +131,36 @@ fn probe_records(
     let mut probes = Vec::with_capacity(records.len());
     for record in records {
         let Some(value) = field_value(&record.values, probe_field) else {
+            probes.push(Vec::new());
+            continue;
+        };
+        if value.is_null() {
+            probes.push(Vec::new());
+            continue;
+        }
+        if !is_indexable(&value) {
+            return Ok(None);
+        }
+        let Some((_, records)) = index
+            .lookup_eq_for_field(index_field, &value)
+            .map_err(|error| JoinError::Invalid(format!("join index lookup failed: {error}")))?
+        else {
+            return Ok(None);
+        };
+        probes.push(records);
+    }
+    Ok(Some(probes))
+}
+
+fn probe_rows(
+    rows: &[Map<String, Value>],
+    probe_field: &str,
+    index_field: &str,
+    index: &IndexFile,
+) -> Result<Option<Vec<Vec<usize>>>, JoinError> {
+    let mut probes = Vec::with_capacity(rows.len());
+    for row in rows {
+        let Some(value) = field_value(row, probe_field) else {
             probes.push(Vec::new());
             continue;
         };
@@ -128,6 +207,24 @@ fn emit_matches(
         } else {
             emit(output, request, Some(outer_record), Some(inner_record))?;
         }
+    }
+    Ok(())
+}
+
+fn push_row_matches(
+    output: &mut Vec<Map<String, Value>>,
+    left_row: &Map<String, Value>,
+    matches: &[usize],
+    right: &[Map<String, Value>],
+    right_positions: &BTreeMap<usize, usize>,
+) -> Result<(), JoinError> {
+    for record_number in matches {
+        let Some(position) = right_positions.get(record_number).copied() else {
+            return Err(JoinError::Invalid(format!(
+                "join index references missing active row: {record_number}"
+            )));
+        };
+        push_combined(output, Some(left_row), Some(&right[position]))?;
     }
     Ok(())
 }

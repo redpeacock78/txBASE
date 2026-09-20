@@ -7,6 +7,11 @@ use std::collections::BTreeMap;
 
 pub(super) const MAX_JOIN_STAGES: usize = 8;
 
+struct LoadedRows {
+    values: Vec<Map<String, Value>>,
+    numbers: Vec<usize>,
+}
+
 pub(super) fn validate(request: &JoinRequest) -> Result<(), JoinError> {
     if request.joins.len() >= MAX_JOIN_STAGES {
         return Err(JoinError::Invalid(format!(
@@ -25,10 +30,10 @@ pub(super) fn validate(request: &JoinRequest) -> Result<(), JoinError> {
 pub(super) fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, JoinError> {
     validate(request)?;
     let _lock = catalog.acquire_read_lock()?;
-    let mut rows = load_rows(catalog, &request.from)?;
+    let mut rows = load_rows(catalog, &request.from)?.values;
     for spec in std::iter::once(&request.join).chain(request.joins.iter()) {
         let right = load_rows(catalog, &spec.table)?;
-        rows = apply_stage(rows, &right, spec)?;
+        rows = apply_stage(catalog, rows, &right.values, &right.numbers, spec)?;
     }
 
     let mut output = Vec::new();
@@ -75,17 +80,22 @@ fn validate_spec(spec: &JoinSpec, available: &[&str]) -> Result<(), JoinError> {
     Ok(())
 }
 
-fn load_rows(catalog: &Catalog, table_name: &str) -> Result<Vec<Map<String, Value>>, JoinError> {
+fn load_rows(catalog: &Catalog, table_name: &str) -> Result<LoadedRows, JoinError> {
     let table = catalog.open_table_unlocked(table_name)?;
-    Ok(table
-        .active_records()
-        .map(|record| qualified_values(table_name, &record.values))
-        .collect())
+    let mut values = Vec::new();
+    let mut numbers = Vec::new();
+    for record in table.active_records() {
+        numbers.push(record.number);
+        values.push(qualified_values(table_name, &record.values));
+    }
+    Ok(LoadedRows { values, numbers })
 }
 
 fn apply_stage(
+    catalog: &Catalog,
     left: Vec<Map<String, Value>>,
     right: &[Map<String, Value>],
+    right_numbers: &[usize],
     spec: &JoinSpec,
 ) -> Result<Vec<Map<String, Value>>, JoinError> {
     let (local_fields, foreign_fields) = stage_fields(spec);
@@ -105,6 +115,39 @@ fn apply_stage(
             }
         }
         return Ok(output);
+    }
+
+    let right_index = if !matches!(&spec.kind, JoinType::Right)
+        && matches!(
+            super::join_strategy::choose(left.len(), right.len(), false),
+            super::join_strategy::JoinStrategy::Hash
+        )
+        && local_fields.len() == 1
+        && foreign_fields.len() == 1
+    {
+        unqualified_field(&foreign_fields[0], &spec.table)
+            .and_then(|field| super::join_index::load(catalog, &spec.table, field))
+    } else {
+        None
+    };
+    if matches!(
+        super::join_strategy::choose(left.len(), right.len(), right_index.is_some()),
+        super::join_strategy::JoinStrategy::IndexNestedLoop
+    ) {
+        if let Some(index) = right_index.as_ref() {
+            if let Some(output) = super::join_index::execute_stage(
+                &left,
+                right,
+                right_numbers,
+                spec,
+                index,
+                &local_fields[0],
+                unqualified_field(&foreign_fields[0], &spec.table)
+                    .expect("validated foreign join field"),
+            )? {
+                return Ok(output);
+            }
+        }
     }
 
     if matches!(&spec.kind, JoinType::Right) {
@@ -205,6 +248,11 @@ fn stage_fields(spec: &JoinSpec) -> (Vec<String>, Vec<String>) {
         .iter()
         .map(|(local, condition)| (local.clone(), condition.equality.field.clone()))
         .unzip()
+}
+
+fn unqualified_field<'a>(path: &'a str, table: &str) -> Option<&'a str> {
+    let (qualified_table, field) = path.split_once('.')?;
+    (qualified_table == table && !field.is_empty()).then_some(field)
 }
 
 pub(super) fn encoded_key(
