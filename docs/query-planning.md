@@ -112,6 +112,8 @@ These statistics feed a bounded integer cost estimate.
 
 The planner compares the active-record count for a table scan with the exact candidate count for an index path, adds a bounded logarithmic traversal term derived from the selected sidecar's entry count, and adds estimated in-memory sort work when the path does not provide the complete requested order.
 
+Access-path candidate construction remains in `src/query/planner.rs`, while the bounded cost calculation lives in `src/query/planner_cost.rs`.
+
 This is local planning logic, not MongoDB planner compatibility.
 
 For a multi-key sort, a single-field index provides the first-key order.
