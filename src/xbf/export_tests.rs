@@ -51,6 +51,80 @@ fn converts_a_dbf_fixture_to_xbf_without_dropping_records() {
 }
 
 #[test]
+fn converts_representable_dbf_schema_constraints_to_xbf() {
+    let path =
+        std::env::temp_dir().join(format!("txbase-xbf-dbfschema-{}.dbf", std::process::id()));
+    let schema_path = path.with_extension("txschema.json");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&schema_path);
+    let bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|byte| u8::from_str_radix(byte, 16).unwrap())
+        .collect::<Vec<_>>();
+    fs::write(&path, bytes).unwrap();
+    fs::write(
+        &schema_path,
+        serde_json::to_vec(&json!({
+            "format": "txbase-schema",
+            "version": 1,
+            "fields": {
+                "ID": {"primary": true},
+                "NAME": {"unique": true, "not_null": true}
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let dbf = crate::dbf::DbfTable::from_path(&path).unwrap();
+    let xbf = super::from_dbf(&dbf).unwrap();
+    let id = xbf.fields.iter().find(|field| field.name == "ID").unwrap();
+    let name = xbf
+        .fields
+        .iter()
+        .find(|field| field.name == "NAME")
+        .unwrap();
+    assert!(id.primary_key && id.unique && !id.nullable);
+    assert!(!name.primary_key && name.unique && !name.nullable);
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(schema_path).unwrap();
+}
+
+#[test]
+fn rejects_dbf_schema_constraints_without_an_xbf_v1_representation() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-xbf-dbfschema-unsupported-{}.dbf",
+        std::process::id()
+    ));
+    let schema_path = path.with_extension("txschema.json");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&schema_path);
+    let bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|byte| u8::from_str_radix(byte, 16).unwrap())
+        .collect::<Vec<_>>();
+    fs::write(&path, bytes).unwrap();
+    fs::write(
+        &schema_path,
+        serde_json::to_vec(&json!({
+            "format": "txbase-schema",
+            "version": 1,
+            "checks": [{"AGE": {"$gte": 0}}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let dbf = crate::dbf::DbfTable::from_path(&path).unwrap();
+    let error = super::from_dbf(&dbf).unwrap_err();
+    assert!(error.to_string().contains("not representable in XBF v1"));
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(schema_path).unwrap();
+}
+
+#[test]
 fn exports_a_representable_xbf_table_to_dbf() {
     let table = XbfTable {
         generation: 3,

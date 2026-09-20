@@ -307,6 +307,15 @@ impl DbfTable {
         self.transaction_id
     }
 
+    pub(crate) fn xbf_field_constraints(
+        &self,
+    ) -> Result<BTreeMap<String, (bool, bool, bool)>, DbfError> {
+        self.schema.as_ref().map_or_else(
+            || Ok(BTreeMap::new()),
+            SchemaMetadata::xbf_field_constraints,
+        )
+    }
+
     pub(crate) fn representation_hash(&self) -> u64 {
         let mut representation = self.to_bytes();
         representation.extend_from_slice(

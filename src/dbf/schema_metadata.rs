@@ -186,6 +186,28 @@ impl SchemaMetadata {
     pub(super) fn encoding(&self) -> Option<&str> {
         self.encoding.as_deref()
     }
+
+    pub(super) fn xbf_field_constraints(
+        &self,
+    ) -> Result<BTreeMap<String, (bool, bool, bool)>, DbfError> {
+        if !self.checks.is_empty()
+            || !self.constraints.primary.is_empty()
+            || !self.constraints.unique.is_empty()
+            || self
+                .fields
+                .values()
+                .any(|field| field.default.is_some() || field.references.is_some())
+        {
+            return Err(DbfError::Invalid(
+                "schema metadata contains constraints not representable in XBF v1".into(),
+            ));
+        }
+        Ok(self
+            .fields
+            .iter()
+            .map(|(name, field)| (name.clone(), (field.primary, field.unique, field.not_null)))
+            .collect())
+    }
 }
 
 impl SchemaMetadata {

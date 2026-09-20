@@ -8,6 +8,8 @@ The repository now contains a bounded v1 codec at
 `txbase::xbf::{encode, decode}`, a bounded DBF-to-XBF conversion helper at
 `txbase::xbf::{from_dbf, XbfTable::from_dbf}`, and durable snapshot helpers at
 `txbase::xbf::{read_path, write_path}`.
+The DBF conversion preserves representable field-level `primary`, `unique`, and
+`not_null` schema flags and rejects DBF metadata that XBF v1 cannot encode.
 The codec validates the draft header, section checksums, schema, directory, typed
 records, constraints, and configured size limits.
 The full-snapshot `.xwl` path records base and target generations and rejects a
@@ -265,6 +267,13 @@ This helper does not write an XBF file by itself; pass its result to
 - Logical deletion state when the target keeps physical records.
 
 Legacy bytes are decoded before becoming XBF UTF-8 text.
+
+When the loaded DBF has a schema sidecar, the converter copies field-level
+`primary`, `unique`, and `not_null` flags into the XBF schema.
+Composite keys, checks, defaults, and references are rejected because XBF v1
+has no corresponding schema fields.
+Encoding metadata is not copied because the DBF bytes have already been
+decoded into XBF values.
 
 The current `XBF -> DBF` boundary supports an in-memory classic DBF table with
 `C`, binary `C`, `N`, `L`, `D`, and Visual FoxPro `T` fields.

@@ -3,6 +3,11 @@ use crate::dbf::{DbfTable, FieldDescriptor};
 use serde_json::Value;
 
 pub fn from_dbf(table: &DbfTable) -> Result<XbfTable, XbfError> {
+    let constraints = table.xbf_field_constraints().map_err(|error| {
+        XbfError::Invalid(format!(
+            "DBF schema metadata cannot be represented in XBF: {error}"
+        ))
+    })?;
     let source_fields = table
         .fields
         .iter()
@@ -21,13 +26,15 @@ pub fn from_dbf(table: &DbfTable) -> Result<XbfTable, XbfError> {
             .map(|record| record.values.get(&field.name).unwrap_or(&Value::Null))
             .collect::<Vec<_>>();
         let ty = infer_type(field, &values)?;
-        let nullable = values.iter().any(|value| value.is_null());
+        let (primary_key, unique, not_null) =
+            constraints.get(&field.name).copied().unwrap_or_default();
+        let nullable = !primary_key && !not_null && values.iter().any(|value| value.is_null());
         fields.push(XbfField {
             name: field.name.clone(),
             ty,
             nullable,
-            primary_key: false,
-            unique: false,
+            primary_key,
+            unique: primary_key || unique,
         });
         types.push(ty);
     }
