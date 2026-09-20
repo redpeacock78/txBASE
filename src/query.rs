@@ -160,6 +160,7 @@ fn execute_query_with_records(
     }
 
     if let Some(stages) = request.aggregate.as_deref() {
+        records.sort_unstable_by_key(|record| record.number);
         return Ok(QueryPage {
             records: aggregation::execute(&records, stages)?,
             next_cursor: None,

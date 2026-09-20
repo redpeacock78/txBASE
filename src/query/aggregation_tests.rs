@@ -195,6 +195,28 @@ fn groups_first_and_last_values_in_physical_order() {
 }
 
 #[test]
+fn aggregation_restores_physical_order_after_index_candidates() {
+    let table = table_with_two_active_records();
+    let request = parse(
+        br#"{
+            "aggregate": [{"$group": {
+                "_id": null,
+                "first_value": {"$first": "$NAME"},
+                "last_value": {"$last": "$NAME"}
+            }}]
+        }"#,
+    )
+    .unwrap();
+
+    let page = super::execute_query_with_records(&table, &request, Some(vec![2, 1]), 0).unwrap();
+
+    assert_eq!(
+        page.records,
+        vec![json!({"_id": null, "first_value": "Alice", "last_value": "Bob"})]
+    );
+}
+
+#[test]
 fn missing_group_fields_share_the_null_group() {
     let table = table_with_two_active_records();
     let request =
