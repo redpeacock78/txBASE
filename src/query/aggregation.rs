@@ -179,7 +179,11 @@ pub(super) fn execute(
                                 "aggregate $sum operand {operand_name} must contain a finite JSON number"
                             ))
                         })?;
-                        let total = add_floating_sum(*integer as f64, value, operand_name)?;
+                        let total = add_floating_sum(
+                            floating.unwrap_or(*integer as f64),
+                            value,
+                            operand_name,
+                        )?;
                         *floating = Some(total);
                     };
                 }
