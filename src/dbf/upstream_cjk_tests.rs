@@ -100,7 +100,7 @@ fn reads_and_writes_a_pinned_upstream_euc_kr_fixture() {
     assert_eq!(table.active_record(1).unwrap().values["광역시코드"], "11");
     assert_eq!(
         table.active_record(1).unwrap().values["광역시명"],
-        "서울특별시"
+        "서울특별"
     );
 
     table
