@@ -173,9 +173,9 @@ fn execute_query_with_records(
     }
 
     let (records, next_cursor) = if pagination::is_sorted_page(request) {
-        pagination::apply_sorted(records, request)?
+        pagination::apply_sorted(records, request, table.representation_hash())?
     } else {
-        pagination::apply(records, request)?
+        pagination::apply(records, request, table.representation_hash())?
     };
 
     Ok(QueryPage {

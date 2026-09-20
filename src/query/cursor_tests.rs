@@ -14,12 +14,64 @@ fn paginates_in_physical_record_order() {
     let table = table_with_two_active_records();
     let first = execute_query_page(&table, &parse(br#"{"page_size":1}"#).unwrap()).unwrap();
     assert_eq!(first.records.len(), 1);
-    assert_eq!(first.next_cursor.as_deref(), Some("1"));
+    let cursor = first
+        .next_cursor
+        .clone()
+        .expect("physical page has a cursor");
+    assert!(cursor.contains(r#""version":1"#));
+    assert!(cursor.contains(r#""snapshot":"#));
 
-    let next =
-        execute_query_page(&table, &parse(br#"{"page_size":1,"cursor":"1"}"#).unwrap()).unwrap();
+    let next = execute_query_page(
+        &table,
+        &parse(
+            serde_json::json!({"page_size": 1, "cursor": cursor})
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
     assert_eq!(next.records.len(), 1);
     assert_eq!(next.next_cursor, None);
+}
+
+#[test]
+fn rejects_a_physical_cursor_for_a_changed_snapshot() {
+    let table = table_with_two_active_records();
+    let cursor = execute_query_page(&table, &parse(br#"{"page_size":1}"#).unwrap())
+        .unwrap()
+        .next_cursor
+        .unwrap();
+    let mut changed = table.clone();
+    changed
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "Changed"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    let request = parse(
+        serde_json::json!({"page_size": 1, "cursor": cursor})
+            .to_string()
+            .as_bytes(),
+    )
+    .unwrap();
+
+    let error = execute_query_page(&changed, &request).unwrap_err();
+    assert!(error.to_string().contains("different table snapshot"));
+}
+
+#[test]
+fn accepts_a_legacy_physical_cursor_without_snapshot_binding() {
+    let table = table_with_two_active_records();
+    let request = parse(br#"{"page_size":1,"cursor":"1"}"#).unwrap();
+
+    assert_eq!(
+        execute_query_page(&table, &request).unwrap().records.len(),
+        1
+    );
 }
 
 #[test]
@@ -90,6 +142,39 @@ fn rejects_a_sorted_cursor_for_a_different_sort() {
             .to_string()
             .contains("does not match the sort definition")
     );
+}
+
+#[test]
+fn rejects_a_sorted_cursor_for_a_changed_snapshot() {
+    let table = table_with_two_active_records();
+    let request = parse(br#"{"page_size":1,"sort":{"AGE":1}}"#).unwrap();
+    let cursor = execute_query_page(&table, &request)
+        .unwrap()
+        .next_cursor
+        .unwrap();
+    let mut changed = table.clone();
+    changed
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "Changed"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    let next_request = parse(
+        serde_json::json!({
+            "page_size": 1,
+            "sort": {"AGE": 1},
+            "cursor": cursor,
+        })
+        .to_string()
+        .as_bytes(),
+    )
+    .unwrap();
+
+    let error = execute_query_page(&changed, &next_request).unwrap_err();
+    assert!(error.to_string().contains("different table snapshot"));
 }
 
 #[test]

@@ -87,6 +87,8 @@ The current cursor slice supports physical-record pagination and sorted keyset p
 It rejects `skip`, caps pages at 1,000 records, and physical pages scan only until the requested
 page and one look-ahead record are found.
 Sorted pages materialize matching record references before applying the keyset boundary.
+Newly emitted physical and sorted cursors carry a versioned table-representation snapshot tag and
+reject reuse after a table change; legacy untagged cursors remain a compatibility boundary.
 The public `query::stream_query` iterator covers unsorted filter and projection without
 materializing matching records.
 `query::stream_query_snapshot` owns a clone of the loaded table to keep records stable while the

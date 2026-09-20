@@ -144,10 +144,13 @@ Range handling is a representation transfer feature and does not change QUERY's 
 
 When a query includes `page_size`, the successful JSON representation is an object with
 `records` and a nullable `cursor` member.
-Without `sort`, the cursor is a physical DBF record position.
-With `sort`, it is a versioned keyset token bound to the same sort fields and directions.
-Both forms require the same query semantics and stable table snapshot, and neither can be
-combined with `skip`.
+Without `sort`, the emitted cursor is a versioned token containing the physical DBF record
+position and a table-representation snapshot tag.
+With `sort`, it is a versioned keyset token bound to the same sort fields, directions, and
+snapshot tag.
+Reusing an emitted cursor after the table changes returns `422` instead of mixing pages from
+different representations. Legacy untagged cursors remain accepted for compatibility, and
+neither form can be combined with `skip`.
 
 ## 5. Persistence and retries
 

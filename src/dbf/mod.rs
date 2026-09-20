@@ -291,6 +291,19 @@ impl DbfTable {
     pub fn to_bytes(&self) -> Vec<u8> {
         self.bytes.clone()
     }
+
+    pub(crate) fn representation_hash(&self) -> u64 {
+        let mut representation = self.to_bytes();
+        representation.extend_from_slice(
+            &serde_json::to_vec(&self.active_json()).expect("DBF values must be JSON serializable"),
+        );
+        let mut hash = 0xcbf29ce484222325;
+        for byte in representation {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        hash
+    }
 }
 
 fn save_bytes_to(path: &Path, bytes: &[u8], temporary_extension: &str) -> Result<(), DbfError> {

@@ -69,6 +69,9 @@ curl -i -X QUERY \
 どちらのcursor modeも`skip`とは併用できず、最大1,000件です。
 physical cursor pageは、要求されたpageとlook-aheadのmatchを見つけた時点でscanを止めます。
 sorted cursor pageは既存のsort comparatorを再利用します。
+新しく発行するcursorはopaqueなversion付きtokenで、発行時のtable representationに束縛されます。
+table変更後に再利用すると、snapshotを混ぜずにinvalid-queryとして拒否します。
+旧numeric physical cursorとversion-1 sorted cursorは互換のため受け入れますが、snapshot束縛はありません。
 libraryの`query::stream_query`は、matching record全体をmaterializeせずにfilter、projection、skip、limitを適用するborrowed iteratorです。
 sort、aggregate、page-size、cursorはblockingまたはresume boundaryを必要とするため拒否します。
 `query::stream_query_snapshot`はloaded tableのcloneを保持するため、元tableへの後続mutationから独立したpull-based iteratorです。

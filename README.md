@@ -67,6 +67,9 @@ Neither mode combines with `skip`, and both are capped at 1,000 records.
 Physical cursor pages scan in record order and stop after the page plus one look-ahead match.
 Sorted cursor pages reuse the query sort comparator and provide a deterministic physical-record
 tie-breaker.
+Emitted cursors are opaque, versioned, and bound to the current table representation. Reusing a
+cursor after the table changes returns an invalid-query error instead of silently mixing snapshots.
+Legacy numeric physical cursors and version-1 sorted cursors remain accepted without that binding.
 
 The library also exposes `query::stream_query`, a borrowed iterator that applies filter,
 projection, skip, and limit without materializing the matching record set.

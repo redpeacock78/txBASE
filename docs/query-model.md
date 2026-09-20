@@ -104,15 +104,20 @@ Sort ties preserve DBF record order.
 }
 ```
 
-The cursor is the one-based physical DBF record number after the returned page.
-The next request sends that token with the same `page_size` and resumes after that record.
-When `sort` is present, the cursor is a JSON string containing versioned sort keys and the
-last physical record number used as a deterministic tie-breaker.
+The page boundary is the one-based physical DBF record number after the returned page.
+The emitted physical cursor is an opaque versioned JSON string containing that record number and
+a table-representation snapshot tag. The next request sends that token with the same `page_size`
+and resumes after that record only if the table representation is unchanged.
+When `sort` is present, the cursor is a JSON string containing versioned sort keys, the snapshot
+tag, and the last physical record number used as a deterministic tie-breaker.
 The next request must repeat the same sort fields and directions.
 Sorted cursors are keyset boundaries, not offsets; `skip` cannot be combined with either cursor
 mode, and `page_size` is capped at 1,000.
-Neither cursor token is a snapshot identifier; callers must repeat the same query semantics and
-keep the underlying table snapshot stable while paging.
+If a table changes after a cursor is issued, reusing it returns an invalid-query error rather than
+combining pages from different representations. This is a snapshot-consistency boundary, not
+historical MVCC: the old page is not retained for later readers.
+Legacy numeric physical cursors and version-1 sorted cursors remain accepted without a snapshot
+tag for compatibility.
 
 Physical cursor pages scan active records in physical order and stop after one extra matching
 record proves that another page exists.

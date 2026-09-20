@@ -2,11 +2,7 @@ use super::{DbfTable, HttpResponse, Response, error, header, json_response, requ
 use tiny_http::Request;
 
 pub(super) fn current(table: &DbfTable) -> String {
-    let mut representation = table.to_bytes();
-    representation.extend_from_slice(
-        &serde_json::to_vec(&table.active_json()).expect("DBF values must be JSON serializable"),
-    );
-    format!("\"txbase-{:016x}\"", fnv1a(&representation))
+    format!("\"txbase-{:016x}\"", table.representation_hash())
 }
 
 pub(super) fn with_current(response: HttpResponse, table: &DbfTable) -> HttpResponse {
@@ -73,13 +69,4 @@ fn matches_if_none_match(value: &str, current: &str, resource_exists: bool) -> b
         && tags
             .iter()
             .any(|tag| tag.strip_prefix("W/").unwrap_or(tag) == current)
-}
-
-fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut hash = 0xcbf29ce484222325;
-    for byte in bytes {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    hash
 }

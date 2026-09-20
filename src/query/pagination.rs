@@ -9,7 +9,18 @@ use serde_json::Value;
 use std::cmp::Ordering;
 
 pub(super) const MAX_PAGE_SIZE: u64 = 1_000;
-const SORTED_CURSOR_VERSION: u8 = 1;
+const PHYSICAL_CURSOR_VERSION: u8 = 1;
+const LEGACY_SORTED_CURSOR_VERSION: u8 = 1;
+const SORTED_CURSOR_VERSION: u8 = 2;
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PhysicalCursor {
+    version: u8,
+    record: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    snapshot: Option<u64>,
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -19,6 +30,8 @@ struct SortedCursor {
     keys: Vec<SortedCursorKey>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     collation: Option<Collation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    snapshot: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -85,10 +98,11 @@ pub(super) fn execute_physical_page(
     table: &DbfTable,
     request: &QueryRequest,
 ) -> Result<QueryPage, QueryError> {
+    let snapshot = table.representation_hash();
     let cursor = request
         .cursor
         .as_deref()
-        .map(cursor_position)
+        .map(|cursor| physical_cursor_position(cursor, snapshot))
         .transpose()?
         .unwrap_or_default();
     let page_size = request
@@ -125,13 +139,16 @@ pub(super) fn execute_physical_page(
 
     Ok(QueryPage {
         records,
-        next_cursor: has_more.then(|| last_number.expect("page has a last record").to_string()),
+        next_cursor: has_more.then(|| {
+            encode_physical_cursor(last_number.expect("page has a last record"), snapshot)
+        }),
     })
 }
 
 pub(super) fn apply<'a>(
     mut records: Vec<&'a DbfRecord>,
     request: &QueryRequest,
+    snapshot: u64,
 ) -> Result<(Vec<&'a DbfRecord>, Option<String>), QueryError> {
     let paginated = request.page_size.is_some() || request.cursor.is_some();
     if !paginated {
@@ -153,7 +170,7 @@ pub(super) fn apply<'a>(
 
     records.sort_unstable_by_key(|record| record.number);
     if let Some(cursor) = request.cursor.as_deref() {
-        let cursor = cursor_position(cursor)?;
+        let cursor = physical_cursor_position(cursor, snapshot)?;
         records.retain(|record| record.number > cursor);
     }
     if let Some(limit) = request.limit {
@@ -176,6 +193,7 @@ pub(super) fn apply<'a>(
 pub(super) fn apply_sorted<'a>(
     mut records: Vec<&'a DbfRecord>,
     request: &QueryRequest,
+    snapshot: u64,
 ) -> Result<(Vec<&'a DbfRecord>, Option<String>), QueryError> {
     let cursor = request
         .cursor
@@ -184,6 +202,7 @@ pub(super) fn apply_sorted<'a>(
         .transpose()?;
     if let Some(cursor) = cursor.as_ref() {
         validate_sorted_cursor(cursor, &request.sort, request.collation)?;
+        validate_cursor_snapshot(cursor.snapshot, snapshot)?;
         records.retain(|record| {
             compare_record_to_cursor(record, cursor, &request.sort, request.collation).is_gt()
         });
@@ -202,7 +221,7 @@ pub(super) fn apply_sorted<'a>(
     let next_cursor = if has_more {
         records
             .last()
-            .map(|record| encode_sorted_cursor(record, &request.sort, request.collation))
+            .map(|record| encode_sorted_cursor(record, &request.sort, request.collation, snapshot))
             .transpose()?
     } else {
         None
@@ -220,11 +239,19 @@ fn validate_sorted_cursor(
     sort: &IndexMap<String, i8>,
     collation: Option<Collation>,
 ) -> Result<(), QueryError> {
-    if cursor.version != SORTED_CURSOR_VERSION {
+    if !matches!(
+        cursor.version,
+        LEGACY_SORTED_CURSOR_VERSION | SORTED_CURSOR_VERSION
+    ) {
         return Err(QueryError::Invalid(format!(
             "unsupported sorted cursor version {}",
             cursor.version
         )));
+    }
+    if cursor.version == SORTED_CURSOR_VERSION && cursor.snapshot.is_none() {
+        return Err(QueryError::Invalid(
+            "sorted cursor snapshot is missing".into(),
+        ));
     }
     if cursor.keys.len() != sort.len() {
         return Err(QueryError::Invalid(
@@ -255,6 +282,7 @@ fn encode_sorted_cursor(
     record: &DbfRecord,
     sort: &IndexMap<String, i8>,
     collation: Option<Collation>,
+    snapshot: u64,
 ) -> Result<String, QueryError> {
     let keys = sort
         .iter()
@@ -273,6 +301,7 @@ fn encode_sorted_cursor(
         record: record.number,
         keys,
         collation,
+        snapshot: Some(snapshot),
     })
     .map_err(|error| QueryError::Invalid(format!("sorted cursor encoding failed: {error}")))
 }
@@ -299,7 +328,53 @@ fn compare_record_to_cursor(
 }
 
 pub(super) fn cursor_position(cursor: &str) -> Result<usize, QueryError> {
-    cursor
-        .parse::<usize>()
-        .map_err(|_| QueryError::Invalid("cursor must be a decimal physical record number".into()))
+    Ok(parse_physical_cursor(cursor)?.record)
+}
+
+fn physical_cursor_position(cursor: &str, snapshot: u64) -> Result<usize, QueryError> {
+    let cursor = parse_physical_cursor(cursor)?;
+    validate_cursor_snapshot(cursor.snapshot, snapshot)?;
+    Ok(cursor.record)
+}
+
+fn parse_physical_cursor(cursor: &str) -> Result<PhysicalCursor, QueryError> {
+    if let Ok(record) = cursor.parse::<usize>() {
+        return Ok(PhysicalCursor {
+            version: 0,
+            record,
+            snapshot: None,
+        });
+    }
+    let parsed = serde_json::from_str::<PhysicalCursor>(cursor)
+        .map_err(|error| QueryError::Invalid(format!("invalid physical cursor: {error}")))?;
+    if parsed.version != PHYSICAL_CURSOR_VERSION {
+        return Err(QueryError::Invalid(format!(
+            "unsupported physical cursor version {}",
+            parsed.version
+        )));
+    }
+    if parsed.snapshot.is_none() {
+        return Err(QueryError::Invalid(
+            "physical cursor snapshot is missing".into(),
+        ));
+    }
+    Ok(parsed)
+}
+
+fn encode_physical_cursor(record: usize, snapshot: u64) -> String {
+    serde_json::to_string(&PhysicalCursor {
+        version: PHYSICAL_CURSOR_VERSION,
+        record,
+        snapshot: Some(snapshot),
+    })
+    .expect("physical cursor is serializable")
+}
+
+fn validate_cursor_snapshot(snapshot: Option<u64>, current: u64) -> Result<(), QueryError> {
+    if snapshot.is_some_and(|snapshot| snapshot != current) {
+        return Err(QueryError::Invalid(
+            "cursor belongs to a different table snapshot".into(),
+        ));
+    }
+    Ok(())
 }
