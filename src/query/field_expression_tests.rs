@@ -86,12 +86,13 @@ fn compares_division_expression_results() {
         "WHOLE": 12,
         "PARTS": 3,
         "ODD": 5,
+        "FRACTION_PARTS": 2,
         "FRACTION": 2.5,
     });
     let filter = json!({
         "$expr": {"$and": [
             {"$eq": [{"$divide": ["$WHOLE", "$PARTS"]}, 4]},
-            {"$eq": [{"$divide": ["$ODD", "$PARTS"]}, "$FRACTION"]}
+            {"$eq": [{"$divide": ["$ODD", "$FRACTION_PARTS"]}, "$FRACTION"]}
         ]}
     });
 
