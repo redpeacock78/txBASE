@@ -1,4 +1,4 @@
-use super::{HttpResponse, error, header, json_response, read_json_body};
+use super::{HttpResponse, ServerBody, error, header, json_response, read_json_body};
 use crate::dbf::DbfTable;
 use crate::query::{self, BoundedQueryStream};
 use std::io::{self, Read};
@@ -30,11 +30,10 @@ pub(super) fn response(request: &mut Request, table: &DbfTable) -> HttpResponse 
             header("Content-Type", NDJSON_MEDIA_TYPE),
             header("Accept-Query", "\"application/json\""),
         ],
-        NdjsonReader::new(stream),
+        ServerBody::Stream(Box::new(NdjsonReader::new(stream))),
         None,
         None,
     )
-    .boxed()
 }
 
 struct NdjsonReader {

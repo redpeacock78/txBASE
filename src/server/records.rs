@@ -1,5 +1,5 @@
 use super::{
-    DbfTable, HttpResponse, Response, dbf_error_response, error, etag, header, json_response,
+    DbfTable, HttpResponse, dbf_error_response, empty_response, error, etag, header, json_response,
     read_json_object,
 };
 use crate::dbf::DbfRecord;
@@ -222,12 +222,7 @@ pub(super) fn delete_response_with_validator(
     if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
         return response;
     }
-    etag::with_transaction(
-        Response::from_string(String::new())
-            .with_status_code(204)
-            .boxed(),
-        table,
-    )
+    etag::with_transaction(empty_response(204), table)
 }
 
 pub(super) fn persist_mutation(

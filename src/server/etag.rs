@@ -1,4 +1,4 @@
-use super::{DbfTable, HttpResponse, Response, error, header, json_response, request_header};
+use super::{DbfTable, HttpResponse, empty_response, error, header, json_response, request_header};
 use tiny_http::Request;
 
 pub(super) fn current(table: &DbfTable) -> String {
@@ -42,12 +42,7 @@ pub(super) fn not_modified_for_tag(
     if !matches_if_none_match(value, tag, resource_exists) {
         return None;
     }
-    Some(with_tag(
-        Response::from_data(Vec::<u8>::new())
-            .with_status_code(304)
-            .boxed(),
-        tag,
-    ))
+    Some(with_tag(empty_response(304), tag))
 }
 
 pub(super) fn require_if_match(

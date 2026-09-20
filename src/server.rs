@@ -1,9 +1,9 @@
 use crate::dbf::{DbfError, DbfTable};
 use crate::query::{self, JSON_QUERY_MEDIA_TYPE};
 use serde_json::{Map, Value, json};
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::path::Path;
-use tiny_http::{Header, Method, Request, Response, ResponseBox, Server};
+use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 mod catalog;
 mod catalog_transaction;
@@ -15,7 +15,35 @@ mod stream;
 mod transaction;
 
 const MAX_BODY: usize = 1024 * 1024;
-type HttpResponse = ResponseBox;
+
+enum ServerBody {
+    Buffered(Cursor<Vec<u8>>),
+    Stream(Box<dyn Read + Send>),
+}
+
+impl ServerBody {
+    fn into_inner(self) -> Vec<u8> {
+        match self {
+            Self::Buffered(body) => body.into_inner(),
+            Self::Stream(mut body) => {
+                let mut bytes = Vec::new();
+                let _ = body.read_to_end(&mut bytes);
+                bytes
+            }
+        }
+    }
+}
+
+impl Read for ServerBody {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Buffered(body) => body.read(buffer),
+            Self::Stream(body) => body.read(buffer),
+        }
+    }
+}
+
+type HttpResponse = Response<ServerBody>;
 
 use range::query_result_response;
 use records::{delete_response, get_response, post_response, update_response};
@@ -243,21 +271,34 @@ fn json_response(status: u16, body: Value, accept_query: bool) -> HttpResponse {
 }
 
 fn json_bytes_response(status: u16, body: Vec<u8>, accept_query: bool) -> HttpResponse {
-    let mut response = Response::from_data(body)
-        .with_status_code(status)
-        .with_header(header("Content-Type", "application/json"));
+    let body_length = body.len();
+    let mut response = Response::new(
+        StatusCode(status),
+        vec![header("Content-Type", "application/json")],
+        ServerBody::Buffered(Cursor::new(body)),
+        Some(body_length),
+        None,
+    );
     if accept_query {
         response = response.with_header(header("Accept-Query", "\"application/json\""));
     }
-    response.boxed()
+    response
 }
 
 pub(super) fn options_response(allow: &str) -> HttpResponse {
-    Response::from_data(Vec::new())
-        .with_status_code(204)
+    empty_response(204)
         .with_header(header("Allow", allow))
         .with_header(header("Accept-Query", "\"application/json\""))
-        .boxed()
+}
+
+pub(super) fn empty_response(status: u16) -> HttpResponse {
+    Response::new(
+        StatusCode(status),
+        Vec::new(),
+        ServerBody::Buffered(Cursor::new(Vec::new())),
+        Some(0),
+        None,
+    )
 }
 
 fn header(name: &str, value: &str) -> Header {
