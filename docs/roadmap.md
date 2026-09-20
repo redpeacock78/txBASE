@@ -25,7 +25,7 @@ The repository currently provides:
 - DBF parsing and writing for selected classic and Visual FoxPro fields.
 - DBT and FPT memo or binary sidecar paths for the supported formats.
 - JSON query execution with a small MongoDB-inspired predicate vocabulary.
-- Bounded `$expr` boolean trees over field-to-field comparison leaves, including numeric `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` operands, that remain on the table-scan reference path.
+- Bounded `$expr` boolean trees over field-to-field comparison leaves, including numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` operands, that remain on the table-scan reference path.
 - HTTP `GET`, `QUERY`, `POST`, `PUT`, `PATCH`, and `DELETE` routes.
 - File or memory WAL types with `TXOP`, `TXTI`, `TXDP`, `TXDB`, and `TXDM` persistence paths.
 - A low-level snapshot transaction engine whose `TransactionId` sequence resumes from retained
@@ -50,7 +50,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index or join model, full index-aware or cost-based merge join strategies, runtime-specific async traits, catalog-wide MVCC visibility, aggregation stages beyond bounded input and group-output `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index or join model, full index-aware or cost-based merge join strategies, runtime-specific async traits, catalog-wide MVCC visibility, aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, `$group` with `$sum`, `$avg`, `$min`, and `$max`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -124,8 +124,8 @@ The current record scan remains the reference execution path while the query mod
 
 ### Candidate scope
 
-- Additional aggregation stages and accumulator expressions.
-- Full expression evaluation beyond the bounded `$expr` boolean-tree form and its numeric `$add`/`$subtract`/`$multiply`/`$divide`/`$mod` operands.
+- Additional aggregation stages and accumulator expressions beyond the current bounded group accumulators.
+- Full expression evaluation beyond the bounded `$expr` boolean-tree form and its numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` operands.
 - Joins.
 - Constraints.
 - Full physical cost planning for range and mixed-direction compound paths.

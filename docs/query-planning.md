@@ -42,7 +42,7 @@ txBASE implements a bounded expression tree.
 
 Comparison leaves such as `{"$gt":["$LEFT","$RIGHT"]}` may be composed with `$and`, `$or`, and `$not`.
 
-Comparison operands may also contain a two-operand numeric `$add`, `$subtract`, `$multiply`, `$divide`, or `$mod` expression.
+Comparison operands may also contain a unary numeric `$abs` expression or a two-operand numeric `$add`, `$subtract`, `$multiply`, `$divide`, or `$mod` expression.
 
 Integer arithmetic preserves JSON integer output when the result fits.
 

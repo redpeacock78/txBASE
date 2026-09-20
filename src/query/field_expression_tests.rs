@@ -64,6 +64,23 @@ fn compares_numeric_expression_results() {
 }
 
 #[test]
+fn compares_absolute_expression_results() {
+    let values = json!({
+        "VALUE": -7,
+        "ABSOLUTE": 7,
+        "FRACTIONAL_ABSOLUTE": 2.5,
+    });
+    let filter = json!({
+        "$expr": {"$and": [
+            {"$eq": [{"$abs": "$VALUE"}, "$ABSOLUTE"]},
+            {"$eq": [{"$abs": -2.5}, "$FRACTIONAL_ABSOLUTE"]}
+        ]}
+    });
+
+    assert!(matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap());
+}
+
+#[test]
 fn compares_multiplication_expression_results() {
     let values = json!({
         "PRICE": 12,
@@ -187,4 +204,6 @@ fn rejects_unsupported_or_malformed_expr() {
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$multiply":["$A",true]},1]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$divide":["$A",true]},1]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$mod":["$A",true]},1]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$abs":true},1]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$abs":["$A"]},1]}}}"#).is_err());
 }

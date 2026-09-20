@@ -135,11 +135,11 @@ A delta with the wrong base must be rejected.
 
 `src/query/planner_compound_tests.rs::chooses_a_table_scan_for_a_non_selective_index` covers the bounded cost tie that rejects an index when it returns every active record.
 
-`src/query/aggregation_tests.rs::filters_group_output_before_projection_and_sorting` covers a bounded post-group `$match`; `sums_fractional_and_integer_numbers` covers mixed numeric `$sum` input and preserves integer output for all-integral input.
+`src/query/aggregation_tests.rs::filters_group_output_before_projection_and_sorting` covers a bounded post-group `$match`; `sums_fractional_and_integer_numbers` covers mixed numeric `$sum` input and preserves integer output for all-integral input; `groups_numeric_average_and_returns_null_for_missing_values` covers `$avg`; and `groups_comparable_extremes_and_returns_null_for_missing_values` covers `$min` and `$max`.
 
 `src/query/join_strategy.rs::chooses_nested_loop_for_small_join_inputs`, `chooses_hash_for_large_unindexed_inputs`, `chooses_index_nested_loop_when_the_outer_side_is_small`, `chooses_hash_when_index_fanout_is_expensive`, and `chooses_merge_for_large_dual_indexed_inputs` cover the bounded equality-join cost choices; `src/query/join_merge.rs::scans_equal_key_runs_and_maps_them_to_outer_positions` covers the linear ordered-key merge scan, and the join tests cover output order, chained-stage semantics, and indexed fallback paths.
 
-`src/query/field_expression_tests.rs` covers dotted field references, missing or nonnumeric operands, bounded numeric `$add`/`$subtract`/`$multiply`/`$divide`/`$mod`, zero divisors, and malformed or unsupported `$expr` documents.
+`src/query/field_expression_tests.rs` covers dotted field references, missing or nonnumeric operands, bounded numeric `$abs`, `$add`/`$subtract`/`$multiply`/`$divide`/`$mod`, zero divisors, and malformed or unsupported `$expr` documents.
 
 ### Compatibility tests
 

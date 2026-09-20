@@ -276,7 +276,7 @@ Distinct output is capped at 10,000 values.
 
 Stages after `$limit`, additional grouping, count, or distinct stages remain unsupported.
 
-`$expr` operands are supported only in the bounded numeric `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` forms described below.
+`$expr` operands are supported only in the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` forms described below.
 
 Broader expression evaluation remains unsupported.
 
@@ -397,7 +397,7 @@ That is why this first slice has a hard result bound and makes no planner-level 
 | Comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` | Compare decoded JSON values using the engine's explicit type rules |
 | Membership | `$in`, `$nin` | Match a value against a list of candidate values |
 | Logical | `$and`, `$or`, `$not` | Compose or invert predicate documents |
-| Expression | `$expr` | Compare scalar literals, field references, or bounded numeric `$add`/`$subtract`/`$multiply`/`$divide`/`$mod` expressions from the same record |
+| Expression | `$expr` | Compare scalar literals, field references, or bounded numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` expressions from the same record |
 
 An empty `$and` matches every record.
 
@@ -408,6 +408,8 @@ Missing fields match `$ne` and `$nin` according to the current executor contract
 When a field contains an array, a predicate can match when an array element satisfies the predicate.
 
 These choices are tested in `src/query/tests.rs` and `src/query/malformed_tests.rs`.
+
+`$abs` accepts exactly one numeric literal, field reference, or nested numeric expression.
 
 `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` accept exactly two numeric literals, field references, or nested numeric expressions.
 

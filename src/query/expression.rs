@@ -78,12 +78,16 @@ fn validate_expression_operand(operand: &Value, path: &str) -> Result<(), QueryE
     if expression.len() != 1
         || !matches!(
             operator.as_str(),
-            "$add" | "$subtract" | "$multiply" | "$divide" | "$mod"
+            "$abs" | "$add" | "$subtract" | "$multiply" | "$divide" | "$mod"
         )
     {
         return Err(QueryError::Invalid(format!(
-            "{path} supports only $add, $subtract, $multiply, $divide, and $mod"
+            "{path} supports only $abs, $add, $subtract, $multiply, $divide, and $mod"
         )));
+    }
+    if operator == "$abs" {
+        validate_numeric_expression_operand(operands, &format!("{path}.$abs"))?;
+        return Ok(());
     }
     let operands = operands
         .as_array()
@@ -214,12 +218,18 @@ fn resolve_numeric_expression(
     if expression.len() != 1
         || !matches!(
             operator.as_str(),
-            "$add" | "$subtract" | "$multiply" | "$divide" | "$mod"
+            "$abs" | "$add" | "$subtract" | "$multiply" | "$divide" | "$mod"
         )
     {
         return Err(QueryError::Invalid(format!(
             "unsupported numeric expression operator {operator}"
         )));
+    }
+    if operator == "$abs" {
+        let Some(value) = resolve_operand(values, operands)? else {
+            return Ok(None);
+        };
+        return apply_absolute_expression(&value);
     }
     let operands = operands
         .as_array()
@@ -295,6 +305,21 @@ fn apply_numeric_expression(
             };
             finite_json_number(operator, value)
         }
+    }
+}
+
+fn apply_absolute_expression(value: &Value) -> Result<Option<Value>, QueryError> {
+    let Some(value) = as_numeric(value) else {
+        return Ok(None);
+    };
+    match value {
+        NumericValue::Integer(value) => {
+            let value = value.checked_abs().ok_or_else(|| {
+                QueryError::Invalid("filter.$expr.$abs integer result overflows".into())
+            })?;
+            Ok(Some(Value::Number(number_from_i128(value)?)))
+        }
+        NumericValue::Float(value) => finite_json_number("$abs", value.abs()),
     }
 }
 
