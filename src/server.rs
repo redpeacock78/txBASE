@@ -310,4 +310,7 @@ fn header(name: &str, value: &str) -> Header {
 mod tests;
 
 #[cfg(test)]
+mod catalog_tests;
+
+#[cfg(test)]
 mod etag_tests;
