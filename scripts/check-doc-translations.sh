@@ -24,6 +24,19 @@ markdown_links() {
     ' "$1"
 }
 
+documented_paths() {
+    awk '
+        /^```/ { fenced = !fenced; next }
+        !fenced {
+            line = $0
+            while (match(line, /(src|tests)\/[A-Za-z0-9_.*\/-]+/)) {
+                print substr(line, RSTART, RLENGTH)
+                line = substr(line, RSTART + RLENGTH)
+            }
+        }
+    ' "$1" | sort -u
+}
+
 status=0
 
 if ! diff -u <(heading_levels README.md) <(heading_levels README.ja.md) >/dev/null; then
@@ -74,6 +87,18 @@ for source in README.md README.ja.md docs/*.md docs/ja/*.md; do
             status=1
         fi
     done < <(markdown_links "$source")
+done
+
+for source in README.md README.ja.md docs/*.md docs/ja/*.md; do
+    while IFS= read -r target; do
+        case "$target" in
+            *\**|*\?*|*\[*) continue ;;
+        esac
+        if [[ ! -e "$target" ]]; then
+            printf 'missing documented repository path: %s -> %s\n' "$source" "$target" >&2
+            status=1
+        fi
+    done < <(documented_paths "$source")
 done
 
 exit "$status"

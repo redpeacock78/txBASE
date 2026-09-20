@@ -168,6 +168,10 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets --all-features
 ```
 
+The documentation check also verifies that concrete `src/` and `tests/` paths written in Markdown still exist after a source refactor.
+
+Wildcard examples remain descriptive and are not expanded by this check.
+
 This is the current green gate.
 
 It is intentionally smaller than SQLite's full release process.

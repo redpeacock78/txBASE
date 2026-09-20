@@ -174,6 +174,10 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets --all-features
 ```
 
+ドキュメント検査は、ソースをリファクタリングした後も Markdown に書かれた具体的な `src/` および `tests/` のパスが存在することを検証します。
+
+ワイルドカードを含む例は説明用として扱い、この検査では展開しません。
+
 これが現在の green gate です。
 
 SQLite の完全なリリースプロセスより意図的に小さくしています。
