@@ -69,11 +69,19 @@ pub(super) fn descriptor(
             "DBF field names must be non-empty ASCII of at most 10 bytes",
         ));
     }
-    if !preserve_constraints && (field.primary_key || field.unique) {
-        return Err(invalid(
-            field,
-            "DBF export cannot preserve primary or unique constraints",
-        ));
+    if !preserve_constraints {
+        if field.primary_key || field.unique {
+            return Err(invalid(
+                field,
+                "DBF export cannot preserve primary or unique constraints",
+            ));
+        }
+        if !field.nullable {
+            return Err(invalid(
+                field,
+                "DBF export cannot preserve a not-null constraint",
+            ));
+        }
     }
     if !field.nullable && values.iter().any(|value| matches!(value, XbfValue::Null)) {
         return Err(invalid(field, "non-nullable field contains NULL"));

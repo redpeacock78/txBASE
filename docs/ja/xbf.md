@@ -288,7 +288,7 @@ DBF バイト列はすでに XBF の値へデコードされているため、�
 
 現在の `XBF -> DBF` 境界は、`C`、バイナリ `C`、`N`、`L`、`D`、Visual FoxPro `T` フィールドを持つメモリ内の従来 DBF テーブルをサポートします。
 
-直接の `to_dbf` 経路は UUID と JSON 値、ASCII 以外または幅を超えるフィールド名、DBF フィールド制限を超える値、正確な数値範囲を超える符号なし整数、primary または unique 制約、NULL のテキストまたはバイナリ値を拒否します。
+直接の `to_dbf` 経路は UUID と JSON 値、ASCII 以外または幅を超えるフィールド名、DBF フィールド制限を超える値、正確な数値範囲を超える符号なし整数、primary、unique、または not-null 制約、NULL のテキストまたはバイナリ値を拒否します。
 
 `to_dbf_with_schema` 経路は、DBF 値が表現可能なら primary と unique の制約を受け付け、サイドカーのメタデータを別に返します。
 

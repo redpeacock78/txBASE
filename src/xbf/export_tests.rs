@@ -158,21 +158,21 @@ fn exports_a_representable_xbf_table_to_dbf() {
             XbfField {
                 name: "ID".into(),
                 ty: XbfType::Signed64,
-                nullable: false,
+                nullable: true,
                 primary_key: false,
                 unique: false,
             },
             XbfField {
                 name: "NAME".into(),
                 ty: XbfType::String,
-                nullable: false,
+                nullable: true,
                 primary_key: false,
                 unique: false,
             },
             XbfField {
                 name: "ACTIVE".into(),
                 ty: XbfType::Boolean,
-                nullable: false,
+                nullable: true,
                 primary_key: false,
                 unique: false,
             },
@@ -227,6 +227,28 @@ fn exports_xbf_constraints_as_schema_metadata() {
             }
         })
     );
+}
+
+#[test]
+fn rejects_direct_export_of_non_nullable_fields() {
+    let table = XbfTable {
+        generation: 0,
+        fields: vec![XbfField {
+            name: "ID".into(),
+            ty: XbfType::Signed64,
+            nullable: false,
+            primary_key: false,
+            unique: false,
+        }],
+        records: vec![XbfRecord {
+            deleted: false,
+            values: vec![XbfValue::Signed64(1)],
+        }],
+    };
+
+    let error = super::to_dbf(&table).unwrap_err();
+    assert!(error.to_string().contains("not-null constraint"));
+    assert!(super::to_dbf_with_schema(&table).is_ok());
 }
 
 #[test]

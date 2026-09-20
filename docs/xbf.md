@@ -281,8 +281,8 @@ The current `XBF -> DBF` boundary supports an in-memory classic DBF table with
 `C`, binary `C`, `N`, `L`, `D`, and Visual FoxPro `T` fields.
 The direct `to_dbf` path rejects UUID and JSON values, non-ASCII or over-wide
 field names, values over the DBF field limits, unsigned integers above the
-exact numeric range, primary or unique constraints, and NULL text or binary
-values.
+exact numeric range, primary, unique, or not-null constraints, and NULL text or
+binary values.
 The `to_dbf_with_schema` path accepts primary and unique constraints when the
 DBF values are representable and returns their sidecar metadata separately.
 The returned `DbfTable` can then use its existing `save_to` or `save_with_wal`
