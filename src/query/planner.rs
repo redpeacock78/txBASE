@@ -199,6 +199,15 @@ fn choose_range(index_file: &IndexFile, request: &QueryRequest) -> Option<Planne
         let Some((lower, upper)) = range_bounds(condition) else {
             continue;
         };
+        if let Ok(Some((name, records))) =
+            index_file.lookup_compound_range_for_field(&field, lower, upper, &request.filter)
+        {
+            return Some(PlannedAccess {
+                plan: QueryPlan::RangeIndex { name, field },
+                records: Some(records),
+                ordered_prefix: 0,
+            });
+        }
         let Ok(Some((name, records))) = index_file.lookup_range_for_field(&field, lower, upper)
         else {
             continue;

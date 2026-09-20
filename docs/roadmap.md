@@ -47,7 +47,7 @@ The repository currently provides:
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, bounded table-level `checks` predicates, and catalog-scoped `references` validation.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP, with normalized schema output.
-- A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
+- A rebuildable external scalar and compound-key index sidecar with equality, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
 The baseline intentionally does not include a full cost-based index or join model, full index-aware or cost-based merge join strategies, runtime-specific async traits, catalog-wide MVCC visibility, aggregation stages beyond bounded input and group-output `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
@@ -81,7 +81,7 @@ independent named-table HTTP mutations that reuse the single-table persistence b
 
 It does not yet provide relationships, cross-table index coordination, or MVCC visibility.
 
-The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact equality and range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
+The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact equality and range candidate lookup, equality-prefix compound range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
 It does not yet support a full cost model, collation-aware index keys, catalog-wide MVCC visibility, or historical row versions.
 
@@ -128,7 +128,7 @@ The current record scan remains the reference execution path while the query mod
 - Full expression evaluation beyond the bounded `$expr` boolean-tree form and its numeric `$add`/`$subtract`/`$multiply`/`$divide` operands.
 - Joins.
 - Constraints.
-- Full range, histogram-based, and mixed-direction compound cost planning.
+- Full physical cost planning for range and mixed-direction compound paths.
 
 The first join slice is local and bounded.
 It implements one or more equality conditions, compares bounded hash and index-probe costs after the small nested-loop boundary, uses a fresh single-field index when that estimate wins, uses an exact field-order compound index for direct or chained probes, and uses a compatible ordered-index merge path for large direct joins when that estimate wins.

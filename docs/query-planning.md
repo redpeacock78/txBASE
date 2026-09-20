@@ -90,7 +90,7 @@ Connecting an index to query execution therefore needs more than a parser change
 
 It needs key encoding, null and missing-field rules, duplicate ordering, update maintenance, recovery records, stale-index detection, and a planner policy.
 
-The current planner considers direct top-level equality, single-bound-per-side range predicates, single-field ordered traversal, and compound sort requests whose fields match an index suffix after an exact equality prefix.
+The current planner considers direct top-level equality, single-bound-per-side range predicates, single-field ordered traversal, compound equality-prefix range predicates, and compound sort requests whose fields match an index suffix after an exact equality prefix.
 
 Multiple valid single-field equality indexes may be intersected by record number before the normal filter pipeline.
 
@@ -103,6 +103,10 @@ This limits repeated membership checks when predicates have different expected c
 The equality estimate assumes a uniform distribution.
 
 Single-field range indexes use a persisted equi-depth histogram and sum record counts of overlapping buckets.
+
+A compound index can supply range candidates when every preceding indexed field has an exact equality predicate and the next indexed field has the range predicate.
+
+The compound candidate path filters the indexed range component and returns physical record order before the normal query filter pipeline runs.
 
 These statistics feed a bounded integer cost estimate.
 
@@ -134,7 +138,7 @@ Compound definitions use their shortest definition and stable name tie-breakers 
 
 An exact cost tie preserves the existing candidate order, so the table scan wins a tie with an index path.
 
-This bounded model estimates in-memory index traversal but does not estimate physical index I/O, memory, cache state, collation, or range selectivity for compound keys.
+This bounded model estimates in-memory index traversal but does not estimate physical index I/O, memory, cache state, collation, or compound-range selectivity.
 
 MongoDB's current guidance recommends a compound index for queries that repeatedly search multiple fields.
 
@@ -142,9 +146,9 @@ The txBASE intersection is a local candidate-reduction feature.
 
 It does not claim MongoDB planner compatibility or replace a future compound-index contract.
 
-MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a future compound-index planner must define index field order.
+MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a full compound-index planner must define index field order.
 
-txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, per-field direction metadata for compound definitions, and a bounded cost estimate for scan, index traversal, and remaining sort work.
+txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, compound equality-prefix range candidates, per-field direction metadata for compound definitions, and a bounded cost estimate for scan, index traversal, and remaining sort work.
 
 It does not have a full I/O-aware cost model.
 
@@ -156,8 +160,8 @@ The roadmap keeps index design separate from query syntax so a query document do
 
 The following require separate public contracts:
 
-1. Full expression evaluation and cost-based index choice with explicit missing, null, collation, and compound-range rules.
-2. Additional aggregation stages and accumulators with bounded memory behavior.
+1. Full expression evaluation and cost-based index choice with explicit missing, null, collation, and compound-range selectivity rules.
+2. Additional aggregation stages and accumulators beyond the current bounded group contract, with bounded memory behavior.
 3. Full index-aware and cost-based merge join strategies with broader join semantics.
 4. Runtime-specific async traits for long-lived streams.
 5. Differential tests against a small reference evaluator.

@@ -160,7 +160,7 @@ It depends on the file system honoring the file and directory sync operations us
 
 ## Current boundary
 
-The sidecar currently supports build, exact equality lookup, range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, per-field-direction compound-key construction and prefix traversal, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for that intersection, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
+The sidecar currently supports build, exact equality lookup, range candidate lookup, compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, per-field-direction compound-key construction and prefix traversal, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for that intersection, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
@@ -173,11 +173,15 @@ index to copy.
 
 Direct DBF edits, unsupported sidecar definitions, and refresh I/O failures leave the sidecar stale; `index rebuild` is the explicit repair path.
 
-The path-aware query executor uses equality, equality intersection, range, single-field ordered, or compound-prefix ordered sidecar traversal when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
+The path-aware query executor uses equality, equality intersection, range, compound equality-prefix range, single-field ordered, or compound-prefix ordered sidecar traversal when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
 
 For a multi-key sort, a single-field index supplies the first sort-key order and the executor stably sorts only equal-key groups by the remaining keys.
 
 When the requested sort fields match a compound definition after an exact equality prefix, the planner can consume the index order directly for the requested directions or their complete reverse.
+
+When a range field follows an exact equality prefix in a compound definition, the planner can use the matching compound entries as a candidate prefilter.
+
+The candidate path keeps the range comparison in the normal executor, so index direction changes traversal order but not range semantics.
 
 The planner compares the table scan and each valid equality, range, or compatible ordered path
 with a bounded integer cost. A table scan costs the active-record count plus remaining sort work.
@@ -201,7 +205,9 @@ An overlapped bucket is counted in full, so the estimate is intentionally coarse
 
 The path-less `QueryExecutor` implementation remains a table-scan reference path.
 
-The range candidate lookup narrows the typed key domain and uses binary seeks for the lower and upper bounds.
+Single-field range candidate lookup narrows the typed key domain and uses binary seeks for the lower and upper bounds.
+
+Compound equality-prefix range lookup filters the next indexed component and returns physical record order before the normal filter pipeline.
 
 It still materializes candidate record numbers and sorts them by physical DBF order before the normal filter pipeline.
 
@@ -211,4 +217,4 @@ Freshness validation still reads the DBF and memo bytes, and the query executor 
 
 A full I/O-aware cost model, collation-aware planning, and cross-table atomic commits require separate contracts.
 
-The equality, equality-intersection, statistics-ordered, histogram-ordered range, single-field ordered, ordered-prefix, compound-prefix, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs a full I/O-aware model and cross-table contracts.
+The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs a full I/O-aware model and cross-table contracts.

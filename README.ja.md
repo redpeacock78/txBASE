@@ -296,11 +296,11 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 当面はDBF、memo、WAL、query、HTTPのcontractをfixtureとfailure testで固めます。
 
-secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort plannerを実装済みです。
+secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、exact equality prefix後のcompound range candidate planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort plannerを実装済みです。
 
 equality、range、ordered candidateが同時に有効な場合は、active record数または正確なcandidate数、サイドカーの走査、残りのsort作業に基づく有界な整数コストでtable scanとindex経路を比較します。
 
-これはI/O、memory、cache、collation、compound rangeを含む完全なcost modelではありません。
+これはI/O、memory、cache、collation、compound rangeのselectivityを含む完全なcost modelではありません。
 一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
 I/Oを考慮したfull cost model、collation-aware planning、runtime固有のasync stream trait、追加のaggregation stage、cross-table constraint、追加のCJK encodingはroadmapで検討します。
 XBFのwire contractは[XBF v1 format draft](docs/ja/xbf.md)に記載しています。draftのcodec、DBFからXBFへの変換、限定されたXBFからDBFへのexport、schema sidecar付きjournal export、durable snapshot path、generation付きfull-snapshot WAL recoveryを提供します。strictな複数file reader atomicityとobject-storage commitは未対応です。

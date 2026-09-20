@@ -78,6 +78,48 @@ fn uses_a_mixed_direction_compound_index() {
 }
 
 #[test]
+fn uses_a_compound_range_after_an_equality_prefix() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-query-planner-compound-range-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&path);
+
+    let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    bytes[179] = b' ';
+    let table = DbfTable::from_bytes(&bytes).unwrap();
+    fs::write(&path, bytes).unwrap();
+    IndexFile::build(
+        &path,
+        vec![IndexDefinition::named_fields(
+            "by_active_age",
+            vec!["ACTIVE".into(), "AGE".into()],
+        )],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let request = parse(br#"{"filter":{"ACTIVE":true,"AGE":{"$gte":20,"$lt":30}}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &request).unwrap(),
+        QueryPlan::RangeIndex {
+            name: "by_active_age".into(),
+            field: "AGE".into(),
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &request).unwrap(),
+        execute_query(&table, &request).unwrap()
+    );
+
+    remove_table_files(&path);
+}
+
+#[test]
 fn chooses_a_compound_sort_index_with_the_smallest_equality_prefix() {
     let path = std::env::temp_dir().join(format!(
         "txbase-query-planner-compound-cost-{}.dbf",

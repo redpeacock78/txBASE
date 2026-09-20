@@ -220,6 +220,76 @@ impl IndexFile {
         Ok(Some((index.definition.name.clone(), records)))
     }
 
+    pub(crate) fn lookup_compound_range_for_field(
+        &self,
+        field: &str,
+        lower: Option<(&Value, bool)>,
+        upper: Option<(&Value, bool)>,
+        filter: &Map<String, Value>,
+    ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
+        if lower.is_none() && upper.is_none() {
+            return Err(IndexError::Invalid("range must have a bound".into()));
+        }
+        let lower = lower
+            .map(|(value, inclusive)| IndexKey::from_value(Some(value)).map(|key| (key, inclusive)))
+            .transpose()?;
+        let upper = upper
+            .map(|(value, inclusive)| IndexKey::from_value(Some(value)).map(|key| (key, inclusive)))
+            .transpose()?;
+
+        for index in &self.indexes {
+            let Some(offset) = index
+                .definition
+                .fields
+                .iter()
+                .position(|indexed| indexed == field)
+            else {
+                continue;
+            };
+            if offset == 0 {
+                continue;
+            }
+            let Some(prefix) = equality_prefix(filter, &index.definition.fields[..offset]) else {
+                continue;
+            };
+            let mut records = Vec::new();
+            // ponytail: scan the sidecar after the equality prefix; add prefix-bounded seeks if compound-range latency matters.
+            for entry in &index.entries {
+                let IndexKey::Compound(parts) = &entry.key else {
+                    continue;
+                };
+                if !key_has_prefix(&entry.key, &prefix) {
+                    continue;
+                }
+                let Some(actual) = parts.get(offset) else {
+                    continue;
+                };
+                let in_lower = lower.as_ref().is_none_or(|(bound, inclusive)| {
+                    let ordering = ordering::compare_keys(actual, bound);
+                    if *inclusive {
+                        !ordering.is_lt()
+                    } else {
+                        ordering.is_gt()
+                    }
+                });
+                let in_upper = upper.as_ref().is_none_or(|(bound, inclusive)| {
+                    let ordering = ordering::compare_keys(actual, bound);
+                    if *inclusive {
+                        !ordering.is_gt()
+                    } else {
+                        ordering.is_lt()
+                    }
+                });
+                if in_lower && in_upper {
+                    records.extend(entry.records.iter().copied());
+                }
+            }
+            records.sort_unstable();
+            return Ok(Some((index.definition.name.clone(), records)));
+        }
+        Ok(None)
+    }
+
     pub(crate) fn lookup_ordered_for_field(
         &self,
         field: &str,
