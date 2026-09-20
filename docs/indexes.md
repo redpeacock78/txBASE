@@ -181,6 +181,8 @@ When the requested sort fields match a compound definition after an exact equali
 
 When a range field follows an exact equality prefix in a compound definition, the planner can use the matching compound entries as a candidate prefilter.
 
+The compound range lookup first narrows the sidecar to the contiguous equality-prefix interval and scans only that interval.
+
 The candidate path keeps the range comparison in the normal executor, so index direction changes traversal order but not range semantics.
 
 The planner compares the table scan and each valid equality, range, or compatible ordered path

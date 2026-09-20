@@ -252,15 +252,19 @@ impl IndexFile {
             let Some(prefix) = equality_prefix(filter, &index.definition.fields[..offset]) else {
                 continue;
             };
+            let prefix_start = lower_bound(&index.entries, |entry| {
+                !compare_index_prefix(&entry.key, &prefix, index.definition.directions()).is_lt()
+            });
+            let prefix_entries = &index.entries[prefix_start..];
+            let prefix_end = lower_bound(prefix_entries, |entry| {
+                compare_index_prefix(&entry.key, &prefix, index.definition.directions()).is_gt()
+            });
             let mut records = Vec::new();
-            // ponytail: scan the sidecar after the equality prefix; add prefix-bounded seeks if compound-range latency matters.
-            for entry in &index.entries {
+            // ponytail: scan only the equality-prefix interval; add range-field seeks if prefix groups become large.
+            for entry in &prefix_entries[..prefix_end] {
                 let IndexKey::Compound(parts) = &entry.key else {
                     continue;
                 };
-                if !key_has_prefix(&entry.key, &prefix) {
-                    continue;
-                }
                 let Some(actual) = parts.get(offset) else {
                     continue;
                 };
@@ -442,6 +446,30 @@ fn key_has_prefix(key: &IndexKey, prefix: &[IndexKey]) -> bool {
         .iter()
         .zip(prefix)
         .all(|(actual, expected)| ordering::compare_keys(actual, expected).is_eq())
+}
+
+fn compare_index_prefix(
+    key: &IndexKey,
+    prefix: &[IndexKey],
+    directions: &[i8],
+) -> std::cmp::Ordering {
+    let IndexKey::Compound(parts) = key else {
+        return std::cmp::Ordering::Greater;
+    };
+    parts
+        .iter()
+        .zip(prefix)
+        .enumerate()
+        .map(|(position, (actual, expected))| {
+            let ordering = ordering::compare_keys(actual, expected);
+            if directions.get(position) == Some(&-1) {
+                ordering.reverse()
+            } else {
+                ordering
+            }
+        })
+        .find(|ordering| !ordering.is_eq())
+        .unwrap_or(std::cmp::Ordering::Equal)
 }
 
 fn lower_bound<T>(items: &[T], predicate: impl Fn(&T) -> bool) -> usize {

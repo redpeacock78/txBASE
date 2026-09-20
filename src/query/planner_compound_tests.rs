@@ -94,9 +94,10 @@ fn uses_a_compound_range_after_an_equality_prefix() {
     fs::write(&path, bytes).unwrap();
     IndexFile::build(
         &path,
-        vec![IndexDefinition::named_fields(
+        vec![IndexDefinition::named_fields_with_directions(
             "by_active_age",
             vec!["ACTIVE".into(), "AGE".into()],
+            vec![-1, 1],
         )],
     )
     .unwrap()
