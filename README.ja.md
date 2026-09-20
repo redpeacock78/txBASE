@@ -192,7 +192,7 @@ src/query.rs        JSON queryの実行とfilter評価
 src/query/          planner、ordering、validation、有界join、queryテスト
 src/server.rs       HTTP routing、QUERY validation、共通response
 src/server/         record、catalog、ETag、explain、transactionのroute
-src/transaction.rs  fileまたはmemoryのWALとsnapshot transaction
+src/transaction/    fileまたはmemoryのWALとsnapshot transaction
 src/xbf/            bounded XBF v1 codec、DBF変換、永続化、WAL、テスト
 tests/fixtures/     外部形式のfixture
 tests/corpus/       壊れたDBF、memo、WAL、JSONの入力

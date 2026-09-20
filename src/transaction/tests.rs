@@ -1,5 +1,6 @@
 use super::*;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 
 #[test]
 fn memory_wal_assigns_monotonic_lsn_and_syncs() {

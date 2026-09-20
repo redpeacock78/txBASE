@@ -182,7 +182,7 @@ src/query.rs        JSON query execution and filter evaluation
 src/query/          Planner, ordering, validation, bounded joins, and query tests
 src/server.rs       HTTP routing, QUERY validation, and shared responses
 src/server/         Record, catalog, ETag, explain, and transaction routes
-src/transaction.rs  File or memory WAL and snapshot transactions
+src/transaction/    File or memory WAL and snapshot transactions
 src/xbf/            Bounded XBF v1 codec, DBF conversion, persistence, WAL, and tests
 tests/fixtures/     External-format fixtures
 tests/corpus/       Malformed DBF, memo, WAL, and JSON inputs
