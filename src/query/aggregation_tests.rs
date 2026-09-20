@@ -1,4 +1,5 @@
 use super::*;
+use crate::dbf::DbfRecord;
 use serde_json::json;
 
 fn table_with_two_active_records() -> DbfTable {
@@ -28,6 +29,37 @@ fn groups_filtered_records_with_count_and_integer_sum() {
     assert_eq!(
         execute_query(&table, &request).unwrap(),
         vec![json!({"_id": null, "count": 2, "total_age": 36})]
+    );
+}
+
+#[test]
+fn sums_fractional_and_integer_numbers() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"AMOUNT": 1.5}).as_object().unwrap().clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"AMOUNT": 2}).as_object().unwrap().clone(),
+    };
+    let records = [&first, &second];
+    let stages = vec![
+        json!({
+            "$group": {
+                "_id": null,
+                "total": {"$sum": "$AMOUNT"}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        super::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({"_id": null, "total": 3.5})]
     );
 }
 

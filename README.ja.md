@@ -81,8 +81,9 @@ sort、aggregate、page-size、cursorはblockingまたはresume boundaryを必�
 
 `aggregate`は、0個以上の`$match` stageの後に一つの終端`$count`または`$distinct` stage、または一つの`$group` stageを使えます。
 `$group`の後には一つの`$project`、最後の`$sort`、最後の`$limit`を置けます。
-`$count`、整数`$sum`、数値の`$avg`、および比較可能な値に対する`$min` / `$max`をサポートします。
+`$count`、数値の`$sum`、数値の`$avg`、および比較可能な値に対する`$min` / `$max`をサポートします。
 `$avg`はmissing、null、非数値を無視し、group内に数値がなければ`null`を返します。
+`$sum`はmissing、null、非数値を無視し、入力がすべて整数なら整数を返し、累積結果が有限なJSON数値でなければ拒否します。
 `$project`はgroup出力に対してinclude/exclude projectionを適用し、`$sort`または`$limit`の前に置きます。
 top-levelの`sort`、`projection`、pagination、`limit`との併用はできません。
 

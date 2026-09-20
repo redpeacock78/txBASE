@@ -132,6 +132,8 @@ DBF、memo、WAL、JSON 入力について決定的なコーパスを保ちま�
 
 `src/query/planner_compound_tests.rs::chooses_a_table_scan_for_a_non_selective_index` は、すべてのアクティブレコードを返すインデックスを拒否する有界コストの同点処理を検査します。
 
+`src/query/aggregation_tests.rs::sums_fractional_and_integer_numbers` は、整数と小数が混在する `$sum` 入力と、整数だけの入力で整数を返す規則を検査します。
+
 `src/query/join_strategy.rs::chooses_nested_loop_for_small_join_inputs`、`chooses_hash_for_large_join_inputs`、`chooses_index_nested_loop_for_large_indexed_inputs`、`chooses_merge_for_large_dual_indexed_inputs` は、等値結合の決定的な戦略しきい値を検査します。
 `large_single_key_join_uses_fresh_ordered_indexes` は、直接の ordered index 経路を検査します。
 同じテストの複合キーケースは、直接の複合 ordered index 経路を検査します。

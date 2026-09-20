@@ -212,7 +212,7 @@ Group output may have one optional `$project`, at most one final `$sort`, and at
 
 `_id` is either `null` or one dotted field reference.
 
-Supported accumulators are `$count: {}`, `$sum: "$FIELD"`, `$min: "$FIELD"`, and `$max: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
+Supported accumulators are `$count: {}`, numeric `$sum: "$FIELD"`, `$min: "$FIELD"`, and `$max: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
 
 The filter runs before grouping.
 
@@ -232,9 +232,11 @@ Missing and explicit `null` values therefore share a group.
 
 Missing, `null`, and nonnumeric `$sum` inputs contribute zero.
 
-Fractional numbers are rejected because this slice preserves integer sums exactly.
+All-integral `$sum` inputs preserve an integer JSON result.
 
-An integer sum that cannot be represented as a JSON signed or unsigned integer is rejected.
+If any fractional input occurs, `$sum` returns a finite JSON floating-point result.
+
+An accumulated `$sum` that is not finite or cannot be represented as JSON is rejected.
 
 Missing, `null`, and nonnumeric `$avg` inputs are ignored.
 

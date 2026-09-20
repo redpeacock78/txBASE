@@ -14,8 +14,14 @@ pub(super) use super::aggregation_plan::validate;
 #[derive(Debug)]
 enum AccumulatorState {
     Count(u64),
-    Average { total: f64, count: u64 },
-    Sum(i128),
+    Average {
+        total: f64,
+        count: u64,
+    },
+    Sum {
+        integer: i128,
+        floating: Option<f64>,
+    },
     Min(Option<Value>),
     Max(Option<Value>),
 }
@@ -128,7 +134,10 @@ pub(super) fn execute(
                         QueryError::Invalid("aggregate average count overflows u64".into())
                     })?;
                 }
-                (AccumulatorState::Sum(total), aggregation_plan::AccumulatorKind::Sum(field)) => {
+                (
+                    AccumulatorState::Sum { integer, floating },
+                    aggregation_plan::AccumulatorKind::Sum(field),
+                ) => {
                     let Some(value) = field_value(&record.values, field) else {
                         continue;
                     };
@@ -138,18 +147,27 @@ pub(super) fn execute(
                     let Some(number) = value.as_number() else {
                         continue;
                     };
-                    let integer = number
+                    if let Some(value) = number
                         .as_i64()
                         .map(i128::from)
-                        .or_else(|| number.as_u64().map(i128::from));
-                    let Some(integer) = integer else {
-                        return Err(QueryError::Invalid(format!(
-                            "aggregate $sum field {field} must contain integer numbers"
-                        )));
-                    };
-                    *total = total.checked_add(integer).ok_or_else(|| {
-                        QueryError::Invalid("aggregate $sum overflows i128".into())
-                    })?;
+                        .or_else(|| number.as_u64().map(i128::from))
+                    {
+                        if let Some(total) = floating {
+                            *total = add_floating_sum(*total, value as f64, field)?;
+                        } else {
+                            *integer = integer.checked_add(value).ok_or_else(|| {
+                                QueryError::Invalid("aggregate $sum overflows i128".into())
+                            })?;
+                        }
+                    } else {
+                        let value = number.as_f64().ok_or_else(|| {
+                            QueryError::Invalid(format!(
+                                "aggregate $sum field {field} must contain a finite JSON number"
+                            ))
+                        })?;
+                        let total = add_floating_sum(*integer as f64, value, field)?;
+                        *floating = Some(total);
+                    }
                 }
                 (AccumulatorState::Min(current), aggregation_plan::AccumulatorKind::Min(field)) => {
                     update_extreme(current, record, field, true)?;
@@ -196,7 +214,10 @@ fn new_group(key: Value, spec: &aggregation_plan::GroupSpec) -> GroupState {
                     total: 0.0,
                     count: 0,
                 },
-                aggregation_plan::AccumulatorKind::Sum(_) => AccumulatorState::Sum(0),
+                aggregation_plan::AccumulatorKind::Sum(_) => AccumulatorState::Sum {
+                    integer: 0,
+                    floating: None,
+                },
                 aggregation_plan::AccumulatorKind::Min(_) => AccumulatorState::Min(None),
                 aggregation_plan::AccumulatorKind::Max(_) => AccumulatorState::Max(None),
             })
@@ -228,9 +249,17 @@ fn finish_group(
                         })?
                 }
             }
-            AccumulatorState::Sum(total) => {
-                Value::Number(number_from_i128(total, &accumulator.name)?)
-            }
+            AccumulatorState::Sum { integer, floating } => match floating {
+                Some(total) => serde_json::Number::from_f64(total)
+                    .map(Value::Number)
+                    .ok_or_else(|| {
+                        QueryError::Invalid(format!(
+                            "aggregate {} does not fit JSON",
+                            accumulator.name
+                        ))
+                    })?,
+                None => Value::Number(number_from_i128(integer, &accumulator.name)?),
+            },
             AccumulatorState::Min(value) | AccumulatorState::Max(value) => {
                 value.unwrap_or(Value::Null)
             }
@@ -238,6 +267,15 @@ fn finish_group(
         output.insert(accumulator.name.clone(), value);
     }
     Ok(Value::Object(output))
+}
+
+fn add_floating_sum(total: f64, value: f64, field: &str) -> Result<f64, QueryError> {
+    let total = total + value;
+    total.is_finite().then_some(total).ok_or_else(|| {
+        QueryError::Invalid(format!(
+            "aggregate $sum field {field} exceeds finite JSON number range"
+        ))
+    })
 }
 
 fn update_extreme(

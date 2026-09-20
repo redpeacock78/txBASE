@@ -212,7 +212,7 @@ catalog server は `QUERY /{table}/records/stream` を公開します。
 
 `_id` は `null` または一つのドット区切りフィールド参照です。
 
-サポートするアキュムレータは `$count: {}`、`$sum: "$FIELD"`、`$min: "$FIELD"`、`$max: "$FIELD"`、および有限な JSON 数値に対する `$avg: "$FIELD"` です。
+サポートするアキュムレータは `$count: {}`、数値の `$sum: "$FIELD"`、`$min: "$FIELD"`、`$max: "$FIELD"`、および有限な JSON 数値に対する `$avg: "$FIELD"` です。
 
 フィルターはグループ化より前に実行します。
 
@@ -232,9 +232,11 @@ catalog server は `QUERY /{table}/records/stream` を公開します。
 
 欠損、`null`、数値以外の `$sum` 入力は 0 として扱います。
 
-このスライスは整数和を正確に保つため、小数は拒否します。
+`$sum` の数値入力がすべて整数なら、結果も JSON の整数になります。
 
-JSON の符号付き整数または符号なし整数で表せない整数和は拒否します。
+小数を一つでも含む場合、`$sum` は有限な JSON 浮動小数点数を返します。
+
+`$sum` の累積結果が有限でない場合、または JSON で表現できない場合は拒否します。
 
 欠損、`null`、数値以外の `$avg` 入力は無視します。
 
