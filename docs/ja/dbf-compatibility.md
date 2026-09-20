@@ -91,15 +91,18 @@ Visual FoxPro の nullable テーブルは内部で `_NullFlags` を使います
 
 言語ドライバーのバイトは、文字バイトをどう解釈するかを宣言します。
 
-txBASE は `src/dbf/codepages.rs` が実装するコードページを現在サポートします。
+txBASE は `src/dbf/codec.rs` と `src/dbf/codec_cjk.rs` が実装するコードページを現在サポートします。
 
 これには、サポートするドライバー ID が使う CP437、CP850、CP852、CP866、Windows-1250、Windows-1251、Windows-1252、Windows-1253、Windows-1254、Windows-1255、Windows-1256 の対応が含まれます。
 
-現在の CJK スライスは、[Visual FoxPro がサポートするコードページ](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)に記載された Visual FoxPro ドライバー ID もデコードおよびエンコードします。
+現在の CJK スライスは、サポートする CJK フィクスチャで必要な DBF 言語ドライバー ID もデコードおよびエンコードします。
+
+Visual FoxPro の ID については、[Visual FoxPro がサポートするコードページ](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)を参照してください。
 
 | ドライバー ID | 宣言されたプラットフォーム | 実効コーデック |
 | --- | --- | --- |
 | `0x7b` | 日本語 Windows | `encoding_rs::SHIFT_JIS` による Windows-31J/CP932 |
+| `0x4d` | dBASE 簡体字中国語 | GBK/CP936 |
 | `0x7a` | 簡体字中国語 Windows | GBK/CP936 |
 | `0x79` | 韓国語 Windows | EUC-KR/CP949 |
 | `0x78` | 繁体字中国語 Windows | Big5/CP950 |

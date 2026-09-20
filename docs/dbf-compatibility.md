@@ -91,14 +91,16 @@ The [Visual FoxPro variable-length field description](https://vfphelp.com/help/h
 
 The language-driver byte declares how character bytes should be interpreted.
 
-txBASE currently supports the code pages implemented in `src/dbf/codepages.rs`, including CP437, CP850, CP852, CP866, Windows-1250, Windows-1251, Windows-1252, Windows-1253, Windows-1254, Windows-1255, and Windows-1256 mappings used by the supported driver IDs.
+txBASE currently supports the code pages implemented in `src/dbf/codec.rs` and `src/dbf/codec_cjk.rs`, including CP437, CP850, CP852, CP866, Windows-1250, Windows-1251, Windows-1252, Windows-1253, Windows-1254, Windows-1255, and Windows-1256 mappings used by the supported driver IDs.
 
-The current CJK slice also decodes and encodes the Visual FoxPro driver IDs documented by
+The current CJK slice also decodes and encodes the DBF language-driver IDs needed by the
+supported CJK fixtures. The Visual FoxPro IDs are documented by
 [Code Pages Supported by Visual FoxPro](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm):
 
 | Driver ID | Declared platform | Effective codec |
 | --- | --- | --- |
 | `0x7b` | Japanese Windows | Windows-31J/CP932 through `encoding_rs::SHIFT_JIS` |
+| `0x4d` | dBASE Simplified Chinese | GBK/CP936 |
 | `0x7a` | Simplified Chinese Windows | GBK/CP936 |
 | `0x79` | Korean Windows | EUC-KR/CP949 |
 | `0x78` | Traditional Chinese Windows | Big5/CP950 |
