@@ -7,6 +7,13 @@ fn fixture() -> Vec<u8> {
         .collect()
 }
 
+fn cp936_fixture() -> Vec<u8> {
+    include_str!("../../tests/fixtures/external-dbase-rs-cp936.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect()
+}
+
 #[test]
 fn reads_and_writes_a_pinned_upstream_gbk_fixture() {
     let bytes = fixture();
@@ -41,5 +48,33 @@ fn reads_and_writes_a_pinned_upstream_gbk_fixture() {
     assert_eq!(
         reloaded.active_record(1).unwrap().values["设计编号"],
         "测试"
+    );
+}
+
+#[test]
+fn reads_and_writes_a_pinned_upstream_cp936_fixture() {
+    let bytes = cp936_fixture();
+    let mut table = DbfTable::from_bytes(&bytes).unwrap();
+
+    assert_eq!(table.header.version, 0x03);
+    assert_eq!(table.header.language_driver, 0x4d);
+    assert_eq!(table.records().len(), 1);
+    assert_eq!(table.fields[0].name, "TEST");
+    assert_eq!(table.schema_json()["encoding"], "GBK/CP936");
+    assert_eq!(table.active_record(1).unwrap().values["TEST"], "测试中文");
+
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"TEST": "中文更新"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    let reloaded = DbfTable::from_bytes(&table.to_bytes()).unwrap();
+    assert_eq!(
+        reloaded.active_record(1).unwrap().values["TEST"],
+        "中文更新"
     );
 }

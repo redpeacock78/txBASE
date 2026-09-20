@@ -63,3 +63,12 @@ The upstream repository is identified as LGPL-3.0; see the
 includes only the fixture bytes as third-party test data, not JavaDBF source
 code. The fixture SHA-256 is
 `661e3f5c7281fae001fa91245df7281d241200169634939ef7ef97123b35d9bc`.
+
+`external-dbase-rs-cp936.dbf.hex` is a whitespace-separated hex encoding of the
+upstream `cp936.dbf` fixture from the independent Rust `dbase-rs` reader and
+writer. It contains one CP936/GBK `TEST` field with the value `测试中文`. The
+source is pinned to commit
+`395af3243cec931f0e9af402f0001b180ec527c1`:
+https://github.com/tmontaigu/dbase-rs/tree/395af3243cec931f0e9af402f0001b180ec527c1/tests/data
+and is distributed under the upstream MIT license. The fixture SHA-256 is
+`674d2b5724d62314e670130f9feca49e46c2c677e7ec4c620e8b957c3799ec92`.

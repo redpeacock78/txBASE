@@ -165,6 +165,9 @@ CJK collation and additional broader upstream CJK fixtures remain future work.
 An upstream JavaDBF GBK fixture also covers three GBK-encoded CJK field names and 28 real records,
 including a read, mutation, and byte round-trip.
 
+An upstream Rust `dbase-rs` CP936 fixture also covers a real GBK record value and the same
+read, mutation, and byte round-trip boundary.
+
 Classic field descriptor names use the same effective codec as character values, so CJK column names
 remain usable as JSON keys and mutation targets. The descriptor width limit remains a byte limit;
 XBF export still requires ASCII field names.
