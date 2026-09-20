@@ -8,6 +8,8 @@ use serde_json::Value;
 use std::path::Path;
 use tiny_http::Request;
 
+type MutationValidator<'a> = dyn Fn(&DbfTable) -> Result<(), String> + 'a;
+
 pub(super) fn get_response(request: &Request, path: &str, table: &DbfTable) -> HttpResponse {
     if path == "/records" {
         if let Some(response) = etag::not_modified(request, table, true) {
@@ -65,7 +67,7 @@ pub(super) fn post_response_at_with_validator(
     location_path: &str,
     table: &mut DbfTable,
     dbf_path: &Path,
-    validator: Option<&dyn Fn(&DbfTable) -> Result<(), String>>,
+    validator: Option<&MutationValidator<'_>>,
 ) -> HttpResponse {
     if operation_path != "/records" {
         return json_response(404, error("not_found", "resource not found"), false);
@@ -125,7 +127,7 @@ pub(super) fn update_response_with_validator(
     table: &mut DbfTable,
     dbf_path: &Path,
     replace: bool,
-    validator: Option<&dyn Fn(&DbfTable) -> Result<(), String>>,
+    validator: Option<&MutationValidator<'_>>,
 ) -> HttpResponse {
     let Ok(id) = record_id(path) else {
         return json_response(404, error("not_found", "resource not found"), false);
@@ -190,7 +192,7 @@ pub(super) fn delete_response_with_validator(
     path: &str,
     table: &mut DbfTable,
     dbf_path: &Path,
-    validator: Option<&dyn Fn(&DbfTable) -> Result<(), String>>,
+    validator: Option<&MutationValidator<'_>>,
 ) -> HttpResponse {
     let Ok(id) = record_id(path) else {
         return json_response(404, error("not_found", "resource not found"), false);
