@@ -228,7 +228,11 @@ fn catalog_server_query_join_executes_and_exposes_schema() {
     fs::write(root.join("right.dbf"), fixture()).unwrap();
     let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
 
-    let response = super::catalog::schema_response(&catalog);
+    let schema_request = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/catalog")
+        .into();
+    let response = super::catalog::schema_response(&schema_request, &catalog);
     assert_eq!(response.status_code(), StatusCode(200));
     let mut schema_body = String::new();
     response
@@ -449,6 +453,85 @@ fn catalog_server_transaction_commits_multiple_named_tables() {
         30
     );
     assert!(!root.join(".txbase.catalog.txn").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn catalog_etag_guards_schema_reads_and_transactions() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.dbf"), fixture()).unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+
+    let schema_request = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/catalog")
+        .into();
+    let response = super::catalog::schema_response(&schema_request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let tag = response
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv("ETag"))
+        .map(|header| header.value.as_str().to_owned())
+        .expect("catalog schema ETag");
+
+    let conditional_request = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/catalog")
+        .with_header(header("If-None-Match", &format!("W/{tag}")))
+        .into();
+    let response = super::catalog::schema_response(&conditional_request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(304));
+    assert!(response.into_reader().into_inner().is_empty());
+
+    let before = fs::read(root.join("users.dbf")).unwrap();
+    let body = r#"{"operations":[{"method":"PATCH","path":"/users/records/1","body":{"$inc":{"AGE":1}}}]}"#;
+    let mut matching = TestRequest::new()
+        .with_method(Method::Post)
+        .with_path("/transaction")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-None-Match", &tag))
+        .with_body(body)
+        .into();
+    let response = super::catalog_transaction::response(&mut matching, &catalog);
+    assert_eq!(response.status_code(), StatusCode(412));
+    assert_eq!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("ETag"))
+            .map(|header| header.value.as_str()),
+        Some(tag.as_str())
+    );
+    assert_eq!(fs::read(root.join("users.dbf")).unwrap(), before);
+
+    let mut stale = TestRequest::new()
+        .with_method(Method::Post)
+        .with_path("/transaction")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-None-Match", "\"stale\""))
+        .with_body(body)
+        .into();
+    let response = super::catalog_transaction::response(&mut stale, &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let next_tag = response
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv("ETag"))
+        .map(|header| header.value.as_str().to_owned())
+        .expect("committed catalog ETag");
+    assert_ne!(next_tag, tag);
+    assert_eq!(
+        catalog
+            .open_table("users")
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["AGE"],
+        30
+    );
+
     fs::remove_dir_all(root).unwrap();
 }
 

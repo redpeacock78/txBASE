@@ -82,7 +82,10 @@ It implements a strong table representation tag and optional `If-Match` protecti
 
 GET and HEAD provide `If-None-Match` cache validation, and single-table mutation routes use the same condition with `412 Precondition Failed` when the weak comparison matches.
 
-The catalog-wide transaction endpoint has no catalog representation ETag yet.
+The catalog-wide transaction route exposes a catalog representation `ETag`.
+
+Its `If-None-Match` condition is evaluated under the catalog write lock; a matching condition returns `412 Precondition Failed` without mutation, and a successful commit returns the new tag.
+
 JSON Patch and JSON Merge Patch media types are not implemented.
 
 The MongoDB-shaped update document is an application format inside the JSON body.
@@ -104,7 +107,6 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 The following require explicit contracts before implementation:
 
 - A standard patch media type in addition to the local update document.
-- A catalog representation ETag and validator for the catalog-wide transaction endpoint.
 - Broader multi-record mutation semantics and visibility rules.
 - Differential tests against a small mutation reference model.
 

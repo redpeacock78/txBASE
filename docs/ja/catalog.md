@@ -69,7 +69,9 @@ catalog.verify()?;
 txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 ```
 
-`GET` または `HEAD /catalog` は検出したテーブルスキーマを返します。
+`GET` または `HEAD /catalog` は検出したテーブルスキーマと、カタログ表現を示す強い `ETag` を返します。
+
+強いタグまたは弱いタグが一致する `If-None-Match`、あるいは `*` を指定すると、本文なしの `304 Not Modified` を返します。
 
 `GET` または `HEAD /{table}/records` と `/{table}/records/{id}` は、現在の表現 `ETag` を含む単一テーブルのレコード応答意味論を再利用します。
 
@@ -86,6 +88,10 @@ txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 未完了の準備は次のカタログ読み取り時にロールバックします。
 
 成功したカタログジャーナルコミットは永続的なカタログトランザクション ID を進め、JSON 本文と `X-Txbase-Transaction-Id` ヘッダーで返します。
+
+応答は新しいカタログ表現 `ETag` も返します。
+
+強いタグまたは弱いタグが一致する `If-None-Match`、あるいは `*` はカタログ write lock の内側で評価し、DBF やサイドカーを変更せず `412 Precondition Failed` を返します。
 
 これは順序と識別の境界であり、MVCC の可視性ではありません。
 

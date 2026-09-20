@@ -49,14 +49,14 @@ The response does not authorize a method on a resource that its route rules woul
 | `HEAD /records` and `HEAD /records/{id}` | Same target selection as `GET` | Same status and representation headers without response content |
 | `QUERY /records` | `Content-Type: application/json` and a query document | Filtered JSON result with `Accept-Query`; paged queries return `records` and `cursor` |
 | `QUERY /explain` | `Content-Type: application/json` and a query document | Selected table-scan or index plan with `Accept-Query` |
-| `GET /catalog` and `HEAD /catalog` (catalog server) | No JSON body | Discovered table schemas |
+| `GET /catalog` and `HEAD /catalog` (catalog server) | No JSON body | Discovered table schemas with a strong catalog `ETag`; conditional requests may return `304` |
 | `GET`/`HEAD /{table}/records[/{id}]` (catalog server) | No JSON body | Named-table records |
 | `QUERY /{table}/records` (catalog server) | `Content-Type: application/json` and a query document | Filtered named-table records with `Accept-Query` |
 | `QUERY /{table}/explain` (catalog server) | `Content-Type: application/json` and a query document | Named-table query plan with `Accept-Query` |
 | `QUERY /join` (catalog server) | `Content-Type: application/json` and a bounded join document | Joined JSON result with `Accept-Query` |
 | `POST /{table}/records` (catalog server) | JSON object with known fields | `201 Created`, table-qualified `Location` |
 | `PUT`/`PATCH`/`DELETE /{table}/records/{id}` (catalog server) | Same body and precondition rules as single-table routes | Independent named-table mutation |
-| `POST /transaction` (catalog server) | JSON object containing named-table mutation operations | `200` after catalog-journal commit across all named tables |
+| `POST /transaction` (catalog server) | JSON object containing named-table mutation operations | `200` with the new catalog `ETag` after catalog-journal commit, or `412` without mutation for a matching `If-None-Match` |
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |
 | `POST /transaction` | JSON object containing a non-empty `operations` array | `200` after one-table atomic snapshot commit |
 | `PUT /records/{id}` | JSON object replacing fields | Resulting record |
@@ -94,7 +94,14 @@ limited to `GET` and `HEAD` for `304`; mutation routes use the same weak compari
 A matching strong or weak tag, or `*` for an existing target, returns `412 Precondition Failed` with the current `ETag` and performs no mutation.
 An unmatched condition permits the operation.
 The `/records` collection and single-table transaction target are existing resources, so `*` rejects those operations.
-The catalog-wide transaction endpoint does not yet expose a catalog representation ETag and remains outside this boundary.
+`GET` and `HEAD /catalog` expose a strong catalog representation `ETag`.
+A matching strong or weak `If-None-Match`, or `*`, returns `304 Not Modified` with the current
+`ETag` and no body.
+The catalog-wide `POST /transaction` accepts `If-None-Match`; a matching condition is evaluated
+under the catalog write lock and returns `412 Precondition Failed` with the current `ETag` without
+mutating any DBF or sidecar.
+An unmatched condition permits the transaction, and a successful commit returns the new catalog
+representation `ETag`.
 
 ## 3. PATCH
 
@@ -110,10 +117,11 @@ For collision-sensitive patches, the RFC recommends conditional requests such as
 
 txBASE currently accepts `application/json` plain field patches and the typed `$set`, `$unset`, and `$inc` subset described in [the mutation model](mutation-model.md).
 
-txBASE implements a strong table representation tag, optional `If-Match` protection for the
-state-changing routes described above, and `If-None-Match` validation for reads and single-table mutations.
+txBASE implements strong table and catalog representation tags, optional `If-Match` protection for
+the state-changing routes described above, and `If-None-Match` validation for reads, single-table
+mutations, and catalog-wide transactions.
 
-It does not yet implement catalog-wide transaction validators, JSON Patch, or JSON Merge Patch media types.
+It does not yet implement JSON Patch or JSON Merge Patch media types.
 
 The MongoDB-shaped update document is an application format inside the JSON body.
 
@@ -195,7 +203,6 @@ Clients must not infer exactly-once effects from a successful TCP exchange alone
 
 The following require explicit contracts before implementation:
 
-- A catalog representation ETag for `POST /transaction` and its `If-None-Match` behavior.
 - `Content-Location` and cache-key rules for QUERY bodies.
 - HTTP streaming and backpressure.
 - CORS and authentication policy.

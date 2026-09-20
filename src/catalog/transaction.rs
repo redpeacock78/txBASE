@@ -12,6 +12,14 @@ impl Catalog {
         &self,
         operations: &[OperationIr],
     ) -> Result<u64, CatalogTransactionError> {
+        self.commit_operations_with_if_none_match(operations, None)
+    }
+
+    pub(crate) fn commit_operations_with_if_none_match(
+        &self,
+        operations: &[OperationIr],
+        if_none_match: Option<&str>,
+    ) -> Result<u64, CatalogTransactionError> {
         if operations.is_empty() {
             return Err(CatalogTransactionError::Invalid(
                 "operations must not be empty".into(),
@@ -20,6 +28,14 @@ impl Catalog {
         let _lock = self
             .acquire_write_lock()
             .map_err(CatalogTransactionError::Catalog)?;
+        if let Some(value) = if_none_match {
+            let (_, tag) = self
+                .schema_representation_unlocked()
+                .map_err(CatalogTransactionError::Catalog)?;
+            if matches_if_none_match(value, &tag) {
+                return Err(CatalogTransactionError::PreconditionFailed { tag });
+            }
+        }
         let mut tables = BTreeMap::<String, DbfTable>::new();
         for operation in operations {
             let Some((name, local_path)) = transaction_operation_path(&operation.path) else {
@@ -116,6 +132,15 @@ impl Catalog {
         }
         commit(&self.root, changes).map_err(CatalogTransactionError::Catalog)
     }
+}
+
+fn matches_if_none_match(value: &str, current: &str) -> bool {
+    let tags = value.split(',').map(str::trim).collect::<Vec<_>>();
+    if tags.len() == 1 && tags[0] == "*" {
+        return true;
+    }
+    tags.iter()
+        .any(|tag| tag.strip_prefix("W/").unwrap_or(tag) == current)
 }
 
 fn transaction_operation_path(path: &str) -> Option<(&str, String)> {

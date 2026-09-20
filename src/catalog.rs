@@ -46,6 +46,7 @@ impl From<std::io::Error> for CatalogError {
 #[derive(Debug)]
 pub(crate) enum CatalogTransactionError {
     Invalid(String),
+    PreconditionFailed { tag: String },
     Catalog(CatalogError),
 }
 
@@ -53,6 +54,9 @@ impl Display for CatalogTransactionError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Invalid(message) => write!(formatter, "invalid catalog transaction: {message}"),
+            Self::PreconditionFailed { .. } => {
+                write!(formatter, "catalog transaction precondition failed")
+            }
             Self::Catalog(error) => write!(formatter, "catalog transaction error: {error}"),
         }
     }
@@ -61,7 +65,7 @@ impl Display for CatalogTransactionError {
 impl Error for CatalogTransactionError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Invalid(_) => None,
+            Self::Invalid(_) | Self::PreconditionFailed { .. } => None,
             Self::Catalog(error) => Some(error),
         }
     }
@@ -197,6 +201,17 @@ impl Catalog {
         self.schema_json_unlocked()
     }
 
+    pub(crate) fn schema_representation(&self) -> Result<(Value, String), CatalogError> {
+        let _lock = transaction::read_lock(&self.root)?;
+        self.schema_representation_unlocked()
+    }
+
+    pub(crate) fn schema_representation_unlocked(&self) -> Result<(Value, String), CatalogError> {
+        let schema = self.schema_json_unlocked()?;
+        let tag = representation_tag(&schema);
+        Ok((schema, tag))
+    }
+
     fn schema_json_unlocked(&self) -> Result<Value, CatalogError> {
         let transaction_id = journal::read_transaction_id_locked(&self.root)?;
         let mut tables = Vec::with_capacity(self.tables.len());
@@ -258,6 +273,15 @@ impl Catalog {
     ) -> Result<(), CatalogError> {
         constraints::validate_replacements(self, replacements)
     }
+}
+
+fn representation_tag(schema: &Value) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in schema.to_string().bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("\"txbase-catalog-{hash:016x}\"")
 }
 
 #[cfg(test)]

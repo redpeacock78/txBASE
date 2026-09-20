@@ -3,7 +3,7 @@ use super::records::{
     update_response_with_validator,
 };
 use super::{
-    HttpResponse, error, header, json_response, options_response, query_response_at,
+    HttpResponse, error, etag, header, json_response, options_response, query_response_at,
     query_result_response, read_json_body,
 };
 use crate::catalog::Catalog;
@@ -30,7 +30,7 @@ fn handle_request(mut request: Request, catalog: &Catalog) {
     let response = if request.method().as_str() == "OPTIONS" {
         options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY")
     } else if matches!(request.method(), Method::Get | Method::Head) && path == "/catalog" {
-        schema_response(catalog)
+        schema_response(&request, catalog)
     } else if matches!(request.method(), Method::Get | Method::Head)
         && record_route(&path).is_some()
     {
@@ -267,9 +267,14 @@ fn table_explain_route(path: &str) -> Option<&str> {
     }
 }
 
-pub(super) fn schema_response(catalog: &Catalog) -> HttpResponse {
-    match catalog.schema_json() {
-        Ok(schema) => json_response(200, schema, false),
+pub(super) fn schema_response(request: &Request, catalog: &Catalog) -> HttpResponse {
+    match catalog.schema_representation() {
+        Ok((schema, tag)) => {
+            if let Some(response) = etag::not_modified_for_tag(request, &tag, true) {
+                return response;
+            }
+            etag::with_tag(json_response(200, schema, false), &tag)
+        }
         Err(catalog_error) => json_response(
             500,
             error("catalog_error", &catalog_error.to_string()),

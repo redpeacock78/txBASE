@@ -69,7 +69,9 @@ The optional catalog server exposes that boundary over HTTP:
 txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 ```
 
-`GET` or `HEAD /catalog` returns the discovered table schemas. `GET` or `HEAD /{table}/records`
+`GET` or `HEAD /catalog` returns the discovered table schemas with a strong catalog representation
+`ETag`. A matching strong or weak `If-None-Match`, or `*`, returns `304 Not Modified` with no
+body. `GET` or `HEAD /{table}/records`
 and `/{table}/records/{id}` reuse the single-table record response semantics, including the
 current representation `ETag`. `QUERY /{table}/records` accepts the same JSON query document as
 the single-table route, and `QUERY /{table}/explain` returns the same selected plan as the
@@ -81,8 +83,10 @@ mutation, WAL, ETag, validation, and constraint behavior. Each request commits o
 DBF. `POST /transaction` accepts named-table mutation paths and commits all affected DBFs under
 one catalog journal; an incomplete prepare is rolled back on the next catalog read. Successful
 catalog-journal commits advance a durable catalog transaction ID and return it in the JSON body
-and `X-Txbase-Transaction-Id` header. This is an ordering/identification boundary, not MVCC
-visibility.
+and `X-Txbase-Transaction-Id` header. The response also returns the new catalog representation
+`ETag`. A matching strong or weak `If-None-Match`, or `*`, is evaluated under the catalog write
+lock and returns `412 Precondition Failed` without changing any DBF or sidecar. This is an
+ordering/identification boundary, not MVCC visibility.
 The catalog is discovered once at server startup, while each request loads the named table through
 the existing recovery path. Named-table mutations do not add or remove tables.
 

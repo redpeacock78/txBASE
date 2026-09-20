@@ -89,7 +89,7 @@ supports multiple equality conditions, and is capped at 100,000 output rows.
 `semi` and `anti` emit only qualified left-table fields, based on whether a right-side match exists.
 `cross` requires an empty `on` object and caps candidate pairs at 100,000.
 The single-table HTTP server does not expose joins. Run the catalog server to expose catalog
-schema through `GET /catalog`, named-table reads and independent mutations through
+schema through `GET /catalog` with a strong catalog representation `ETag`, named-table reads and independent mutations through
 `GET`/`HEAD`/`POST`/`PUT`/`PATCH`/`DELETE /{table}/records[/{id}]`, and the same bounded join through
 `QUERY /join`:
 
@@ -101,7 +101,8 @@ txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 single-table routes. Named-table mutations reuse single-table WAL/ETag behavior and commit one
 DBF at a time, including its `X-Txbase-Transaction-Id` response header. Catalog `POST /transaction`
 commits named-table mutations atomically through a catalog journal and returns its durable catalog
-commit ID in JSON and `X-Txbase-Transaction-Id`; MVCC remains future work.
+commit ID and new catalog representation `ETag` in JSON and response headers. A matching
+`If-None-Match` is rejected with `412 Precondition Failed` without mutation; MVCC remains future work.
 
 The single-table server also exposes `QUERY /explain`, which returns the selected table-scan or
 index plan for the same query document.

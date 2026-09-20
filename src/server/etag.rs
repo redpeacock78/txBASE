@@ -6,7 +6,11 @@ pub(super) fn current(table: &DbfTable) -> String {
 }
 
 pub(super) fn with_current(response: HttpResponse, table: &DbfTable) -> HttpResponse {
-    response.with_header(header("ETag", &current(table)))
+    with_tag(response, &current(table))
+}
+
+pub(super) fn with_tag(response: HttpResponse, tag: &str) -> HttpResponse {
+    response.with_header(header("ETag", tag))
 }
 
 pub(super) fn with_transaction(response: HttpResponse, table: &DbfTable) -> HttpResponse {
@@ -25,16 +29,23 @@ pub(super) fn not_modified(
     table: &DbfTable,
     resource_exists: bool,
 ) -> Option<HttpResponse> {
-    let value = request_header(request, "If-None-Match")?;
     let tag = current(table);
-    if !matches_if_none_match(value, &tag, resource_exists) {
+    not_modified_for_tag(request, &tag, resource_exists)
+}
+
+pub(super) fn not_modified_for_tag(
+    request: &Request,
+    tag: &str,
+    resource_exists: bool,
+) -> Option<HttpResponse> {
+    let value = request_header(request, "If-None-Match")?;
+    if !matches_if_none_match(value, tag, resource_exists) {
         return None;
     }
-    Some(
-        Response::from_data(Vec::<u8>::new())
-            .with_status_code(304)
-            .with_header(header("ETag", &tag)),
-    )
+    Some(with_tag(
+        Response::from_data(Vec::<u8>::new()).with_status_code(304),
+        tag,
+    ))
 }
 
 pub(super) fn require_if_match(

@@ -92,7 +92,8 @@ resultと各中間stageは最大100,000行です。
 `semi`と`anti`は右側の列を返さず、右側のmatch有無で左側の行を一度だけ返します。
 `cross`は空の`on`を受け付け、候補pair数を100,000以下に制限します。
 single-table HTTP serverからは利用できませんが、`--serve-catalog DIRECTORY`のcatalog serverでは
-read-onlyな`QUERY /join`として利用できます。cross-table mutationは`POST /transaction`でatomicにcommitできます。
+catalog schemaを`GET /catalog`でstrongなcatalog representation `ETag`とともに取得し、read-onlyな`QUERY /join`として利用できます。
+cross-table mutationは`POST /transaction`でatomicにcommitできます。
 
 `$expr`による同一record内のfield比較も、二つのscalar operandに限定して提供します。
 
@@ -108,6 +109,8 @@ GETとHEADは`If-None-Match`にも対応し、一致すれば`304 Not Modified`�
 single-tableの状態変更には`If-None-Match`も付けられ、一致すれば`412 Precondition Failed`を返して変更しません。
 `If-Match`にcurrentなstrong tagまたは既存resourceに対する`*`以外を指定すると`412 Precondition Failed`となり、tableは変更されません。
 WAL-backed mutationは`X-Txbase-Transaction-Id`を返し、single-tableの`POST /transaction`では同じ値をJSONの`transaction_id`にも含めます。
+catalog serverの`POST /transaction`は新しいcatalog representation `ETag`も返します。
+一致する`If-None-Match`は`412 Precondition Failed`となり、DBFやsidecarを変更しません。
 
 ### Mutation
 

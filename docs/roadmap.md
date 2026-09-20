@@ -36,7 +36,7 @@ The repository currently provides:
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A durable catalog-journal commit ID for multi-table mutation transactions.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
-- Strong table representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table and named-table routes, and optional If-Match protection for single-table mutations and transactions.
+- Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations and transactions.
 - A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, integer `$sum`, numeric `$avg`, `$min`, and `$max`, plus final `$sort` and `$limit` stages over group output.
 - A bounded local `inner`, `left`, `right`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
