@@ -3,8 +3,8 @@ use std::io;
 
 mod wal;
 
+pub(crate) use wal::MAX_WAL_RECORD_SIZE;
 pub use wal::{FileWal, MemoryWal, WalInspection, WalRecordInfo};
-pub(crate) use wal::{MAX_WAL_RECORD_SIZE, WAL_MAGIC};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Lsn(pub u64);

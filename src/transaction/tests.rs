@@ -1,3 +1,4 @@
+use super::wal::WAL_MAGIC;
 use super::*;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
