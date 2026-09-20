@@ -39,7 +39,7 @@ pub(crate) fn matches_filter(
                     .ok_or_else(|| QueryError::Invalid("$not must be an object".into()))?;
                 !matches_filter(values, clause)?
             }
-            "$expr" => matches_expression(values, condition)?,
+            "$expr" => super::expression::matches(values, condition)?,
             _ => {
                 let actual = field_value(values, field);
                 matches_condition(actual.as_ref(), condition)?
@@ -50,83 +50,6 @@ pub(crate) fn matches_filter(
         }
     }
     Ok(true)
-}
-
-fn matches_expression(values: &Map<String, Value>, expression: &Value) -> Result<bool, QueryError> {
-    let expression = expression
-        .as_object()
-        .ok_or_else(|| QueryError::Invalid("filter.$expr must be an object".into()))?;
-    let Some((operator, operands)) = expression.iter().next() else {
-        return Err(QueryError::Invalid("filter.$expr cannot be empty".into()));
-    };
-    if expression.len() != 1 {
-        return Err(QueryError::Invalid(
-            "filter.$expr supports one expression operator".into(),
-        ));
-    }
-    match operator.as_str() {
-        "$and" => {
-            let expressions = operands
-                .as_array()
-                .ok_or_else(|| QueryError::Invalid("filter.$expr.$and must be an array".into()))?;
-            for expression in expressions {
-                if !matches_expression(values, expression)? {
-                    return Ok(false);
-                }
-            }
-            return Ok(true);
-        }
-        "$or" => {
-            let expressions = operands
-                .as_array()
-                .ok_or_else(|| QueryError::Invalid("filter.$expr.$or must be an array".into()))?;
-            for expression in expressions {
-                if matches_expression(values, expression)? {
-                    return Ok(true);
-                }
-            }
-            return Ok(false);
-        }
-        "$not" => return Ok(!matches_expression(values, operands)?),
-        "$eq" | "$ne" | "$gt" | "$gte" | "$lt" | "$lte" => {}
-        _ => {
-            return Err(QueryError::Invalid(format!(
-                "unsupported expression operator {operator}"
-            )));
-        }
-    }
-    let operands = operands
-        .as_array()
-        .ok_or_else(|| QueryError::Invalid(format!("filter.$expr.{operator} must be an array")))?;
-    let [left, right] = operands.as_slice() else {
-        return Err(QueryError::Invalid(format!(
-            "filter.$expr.{operator} requires two operands"
-        )));
-    };
-    let (Some(left), Some(right)) = (
-        resolve_expression_operand(values, left),
-        resolve_expression_operand(values, right),
-    ) else {
-        return Ok(false);
-    };
-    Ok(match operator.as_str() {
-        "$eq" => left == right,
-        "$ne" => left != right,
-        "$gt" => compare_values(&left, &right).is_some_and(|ordering| ordering.is_gt()),
-        "$gte" => compare_values(&left, &right).is_some_and(|ordering| ordering.is_ge()),
-        "$lt" => compare_values(&left, &right).is_some_and(|ordering| ordering.is_lt()),
-        "$lte" => compare_values(&left, &right).is_some_and(|ordering| ordering.is_le()),
-        _ => unreachable!("validated expression operator"),
-    })
-}
-
-fn resolve_expression_operand(values: &Map<String, Value>, operand: &Value) -> Option<Value> {
-    let Some(reference) = operand.as_str().and_then(|value| value.strip_prefix('$')) else {
-        return Some(operand.clone());
-    };
-    (!reference.is_empty())
-        .then(|| field_value(values, reference))
-        .flatten()
 }
 
 pub(crate) fn matches_condition(

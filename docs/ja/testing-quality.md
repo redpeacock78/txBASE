@@ -140,7 +140,7 @@ DBF、memo、WAL、JSON 入力について決定的なコーパスを保ちま�
 `chained_single_key_join_uses_a_fresh_foreign_index`、`chained_right_single_key_join_uses_a_fresh_foreign_index`、`chained_compound_join_uses_a_fresh_foreign_index`、`chained_right_compound_join_uses_a_fresh_foreign_index` は、多段ステージにおけるインデックス経路を検査します。
 結合テストは、出力順と連鎖ステージの意味論を検査します。
 
-`src/query/field_expression_tests.rs` は、ドット区切りフィールド参照、欠損オペランド、壊れたまたは未サポートの `$expr` 文書を検査します。
+`src/query/field_expression_tests.rs` は、ドット区切りフィールド参照、欠損または非数値オペランド、有界な数値 `$add` / `$subtract`、壊れたまたは未サポートの `$expr` 文書を検査します。
 
 ### 互換性テスト
 

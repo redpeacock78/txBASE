@@ -47,10 +47,50 @@ fn composes_expression_comparisons_with_boolean_operators() {
 }
 
 #[test]
+fn compares_numeric_expression_results() {
+    let values = json!({
+        "PRICE": 12,
+        "TAX": 1.5,
+        "TOTAL": 13.5,
+    });
+    let filter = json!({
+        "$expr": {"$eq": [
+            {"$add": ["$PRICE", "$TAX"]},
+            "$TOTAL"
+        ]}
+    });
+
+    assert!(matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap());
+}
+
+#[test]
+fn missing_or_non_numeric_expression_fields_do_not_match() {
+    let missing = json!({
+        "$expr": {"$eq": [{"$add": ["$MISSING", 1]}, 1]}
+    });
+    let non_numeric = json!({"$expr": {"$eq": [{"$subtract": ["$NAME", 1]}, 0]}});
+
+    assert!(!matches_filter(&json!({"VALUE": 1}), missing.as_object().unwrap()).unwrap());
+    assert!(!matches_filter(&json!({"NAME": "one"}), non_numeric.as_object().unwrap()).unwrap());
+}
+
+#[test]
+fn rejects_numeric_expression_results_that_do_not_fit_json() {
+    let filter = json!({
+        "$expr": {"$eq": [{"$add": [u64::MAX, 1]}, 0]}
+    });
+
+    let error = matches_filter(&json!({}), filter.as_object().unwrap()).unwrap_err();
+    assert!(error.to_string().contains("does not fit JSON"));
+}
+
+#[test]
 fn rejects_unsupported_or_malformed_expr() {
     assert!(parse(br#"{"filter":{"$expr":{"$regex":["$A","x"]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$gt":["$A"]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$gt":[{"x":1},"$A"]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$and":["$A"]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$not":[{"$eq":["$A",1]}]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$add":["$A",true]},1]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$add":["$A"]},1]}}}"#).is_err());
 }

@@ -96,7 +96,10 @@ single-table HTTP serverからは利用できませんが、`--serve-catalog DIR
 catalog schemaを`GET /catalog`でstrongなcatalog representation `ETag`とともに取得し、read-onlyな`QUERY /join`として利用できます。
 cross-table mutationは`POST /transaction`でatomicにcommitできます。
 
-`$expr`による同一record内のfield比較も、二つのscalar operandに限定して提供します。
+`$expr`による同一record内のfield比較を提供します。
+比較operandには二つの数値operandを持つ`$add`と`$subtract`を含められます。
+整数結果は収まる場合に整数を維持し、混在型または小数の結果は有限なJSON数値でなければなりません。
+欠損または非数値のfield operandは比較不一致になり、整数overflowと有限でない結果は拒否します。
 
 predicateは`$eq`、`$ne`、`$gt`、`$gte`、`$lt`、`$lte`、`$in`、`$nin`、`$and`、`$or`、`$not`、限定された`$expr`です。
 

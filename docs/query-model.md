@@ -377,7 +377,7 @@ That is why this first slice has a hard result bound and makes no planner-level 
 | Comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` | Compare decoded JSON values using the engine's explicit type rules |
 | Membership | `$in`, `$nin` | Match a value against a list of candidate values |
 | Logical | `$and`, `$or`, `$not` | Compose or invert predicate documents |
-| Expression | `$expr` | Compare two scalar literals or field references from the same record |
+| Expression | `$expr` | Compare scalar literals, field references, or bounded numeric `$add`/`$subtract` expressions from the same record |
 
 An empty `$and` matches every record.
 
@@ -388,6 +388,16 @@ Missing fields match `$ne` and `$nin` according to the current executor contract
 When a field contains an array, a predicate can match when an array element satisfies the predicate.
 
 These choices are tested in `src/query/tests.rs` and `src/query/malformed_tests.rs`.
+
+`$add` and `$subtract` accept exactly two numeric literals, field references, or nested numeric expressions.
+
+Integer results remain JSON integers when they fit.
+
+Mixed or fractional results must be finite JSON numbers.
+
+Missing or nonnumeric field operands make the comparison not match.
+
+Integer overflow and non-finite results are rejected.
 
 They are txBASE behavior and must not be described as MongoDB compatibility.
 

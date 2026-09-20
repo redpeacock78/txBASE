@@ -135,7 +135,7 @@ A delta with the wrong base must be rejected.
 
 `src/query/join_strategy.rs::chooses_nested_loop_for_small_join_inputs`, `chooses_hash_for_large_join_inputs`, `chooses_index_nested_loop_for_large_indexed_inputs`, and `chooses_merge_for_large_dual_indexed_inputs` cover the deterministic equality-join strategy threshold; `large_single_key_join_uses_fresh_ordered_indexes` and its compound cases cover ordered-index merge paths, the chained indexed cases cover pipeline fallback paths, and the join tests cover output order and chained-stage semantics.
 
-`src/query/field_expression_tests.rs` covers dotted field references, missing operands, and malformed or unsupported `$expr` documents.
+`src/query/field_expression_tests.rs` covers dotted field references, missing or nonnumeric operands, bounded numeric `$add`/`$subtract`, and malformed or unsupported `$expr` documents.
 
 ### Compatibility tests
 

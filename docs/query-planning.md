@@ -42,7 +42,13 @@ txBASE implements a bounded expression tree.
 
 Comparison leaves such as `{"$gt":["$LEFT","$RIGHT"]}` may be composed with `$and`, `$or`, and `$not`.
 
-Each comparison still has exactly two scalar or field-reference operands.
+Comparison operands may also contain a two-operand numeric `$add` or `$subtract` expression.
+
+Integer arithmetic preserves JSON integer output when the result fits.
+
+Mixed or fractional arithmetic must produce a finite JSON number.
+
+Missing or nonnumeric field values make the comparison not match.
 
 A string operand beginning with `$` is a dotted field reference.
 
@@ -52,7 +58,7 @@ If either field reference is missing, the expression does not match.
 
 The expression path uses a table scan because a field-to-field comparison is not a constant-bound index lookup.
 
-Arithmetic, regular-expression, array, and document expressions remain unsupported.
+Regular-expression, array, and document expressions remain unsupported.
 
 MongoDB's [array predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/) covers operators such as `$all`, `$elemMatch`, and `$size` that txBASE does not implement.
 

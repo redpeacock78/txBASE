@@ -231,4 +231,5 @@ mod aggregation_tests;
 #[cfg(test)]
 mod join_tests;
 
+mod expression;
 mod join_pipeline;
