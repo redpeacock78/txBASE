@@ -99,15 +99,24 @@ fn decodes_and_encodes_declared_cjk_drivers() {
 
 #[test]
 fn decodes_and_encodes_legacy_cjk_driver_aliases() {
-    for (language_driver, value) in [
-        (0x13, "日本"),
-        (0x4d, "中文"),
-        (0x4e, "한국"),
-        (0x4f, "中文"),
+    for (language_driver, encoding, value) in [
+        (0x13, "Windows-31J/CP932", "日本"),
+        (0x4d, "GBK/CP936", "中文"),
+        (0x4e, "EUC-KR/CP949", "한국"),
+        (0x4f, "Big5/CP950", "中文"),
     ] {
         let mut bytes = fixture();
         bytes[29] = language_driver;
         let mut table = DbfTable::from_bytes(&bytes).unwrap();
+        assert_eq!(table.schema_json()["encoding"], encoding);
+        assert_eq!(
+            table.schema_json()["encoding_metadata"],
+            serde_json::json!({
+                "declared": encoding,
+                "effective": encoding,
+                "source": "language-driver",
+            })
+        );
         table
             .patch_record(
                 1,
