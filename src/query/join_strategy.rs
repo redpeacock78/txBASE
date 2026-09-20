@@ -33,7 +33,7 @@ pub(super) fn choose_with_merge(
 
 #[cfg(test)]
 mod tests {
-    use super::{JoinStrategy, NESTED_LOOP_PAIR_LIMIT, choose};
+    use super::{JoinStrategy, NESTED_LOOP_PAIR_LIMIT, choose, choose_with_merge};
 
     #[test]
     fn chooses_nested_loop_for_small_join_inputs() {
