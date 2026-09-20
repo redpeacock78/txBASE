@@ -122,6 +122,55 @@ pub(super) fn execute_stage(
     Ok(Some(output))
 }
 
+pub(super) fn execute_right_stage(
+    left: &[Map<String, Value>],
+    right: &[Map<String, Value>],
+    right_numbers: &[usize],
+    index: &IndexFile,
+    local_field: &str,
+    index_field: &str,
+) -> Result<Option<Vec<Map<String, Value>>>, JoinError> {
+    let Some(probes) = probe_rows(left, local_field, index_field, index)? else {
+        return Ok(None);
+    };
+    if right.len() != right_numbers.len() {
+        return Err(JoinError::Invalid(
+            "join index row numbers do not match loaded rows".into(),
+        ));
+    }
+    let right_positions = right_numbers
+        .iter()
+        .enumerate()
+        .map(|(position, number)| (*number, position))
+        .collect::<BTreeMap<_, _>>();
+    let mut matches_by_right = BTreeMap::<usize, Vec<usize>>::new();
+    for (left_position, matches) in probes.iter().enumerate() {
+        for record_number in matches {
+            if !right_positions.contains_key(record_number) {
+                return Err(JoinError::Invalid(format!(
+                    "join index references missing active row: {record_number}"
+                )));
+            }
+            matches_by_right
+                .entry(*record_number)
+                .or_default()
+                .push(left_position);
+        }
+    }
+
+    let mut output = Vec::new();
+    for (right_row, record_number) in right.iter().zip(right_numbers) {
+        if let Some(left_positions) = matches_by_right.get(record_number) {
+            for left_position in left_positions {
+                push_combined(&mut output, Some(&left[*left_position]), Some(right_row))?;
+            }
+        } else {
+            push_combined(&mut output, None, Some(right_row))?;
+        }
+    }
+    Ok(Some(output))
+}
+
 fn probe_records(
     records: &[&DbfRecord],
     probe_field: &str,

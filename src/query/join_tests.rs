@@ -89,6 +89,14 @@ fn catalog_with_many_indexed_posts_and_comments() -> PathBuf {
             )
             .unwrap();
     }
+    comments
+        .insert_record(
+            json!({"ID": 99, "NAME": "Orphan", "AGE": 99, "ACTIVE": true})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
     let comments_path = root.join("comments.dbf");
     comments.save_with_wal(&comments_path).unwrap();
     IndexFile::build(&comments_path, vec![IndexDefinition::named("by_id", "ID")])
@@ -256,6 +264,40 @@ fn chained_single_key_join_uses_a_fresh_foreign_index() {
 
     assert!(rows.len() > 64);
     assert!(rows.iter().all(|row| row["posts.ID"] == row["comments.ID"]));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn chained_right_single_key_join_uses_a_fresh_foreign_index() {
+    let root = catalog_with_many_indexed_posts_and_comments();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let request = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "cross",
+            "table": "posts",
+            "on": {}
+          },
+          "joins": [
+            {
+              "type": "right",
+              "table": "comments",
+              "on": {
+                "posts.ID": {"$eq": {"$field": "comments.ID"}}
+              }
+            }
+          ],
+          "projection": {"posts.ID": 1, "comments.ID": 1}
+        }"#,
+    )
+    .unwrap();
+
+    let rows = execute(&catalog, &request).unwrap();
+
+    assert!(rows.len() >= 80);
+    assert!(rows.iter().all(|row| row.get("comments.ID").is_some()));
+    assert!(rows.iter().any(|row| row.get("posts.ID").is_none()));
     fs::remove_dir_all(root).unwrap();
 }
 

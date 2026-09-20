@@ -328,7 +328,9 @@ Missing and explicit `null` join keys do not match.
 
 The equality-join planner selects `NestedLoop` when the left and right active-row counts have at most 64 candidate pairs.
 
-For a direct single-key equality join or a chained non-right single-key equality stage with a fresh single-field index on the probed table, it selects `IndexNestedLoop` for larger inputs and looks up each outer key in that index.
+For a direct single-key equality join or a chained single-key equality stage with a fresh single-field index on the probed table, it selects `IndexNestedLoop` for larger inputs and looks up each outer key in that index.
+
+For a chained `right` stage, it probes the indexed right table and restores right-major physical order before emitting the intermediate result.
 
 When that index is unavailable, stale, malformed, or not applicable, larger inputs select `Hash` and build one in-memory equality map for the right table, or the left table for a `right` join.
 

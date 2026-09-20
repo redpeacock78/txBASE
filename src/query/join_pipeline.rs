@@ -117,14 +117,13 @@ fn apply_stage(
         return Ok(output);
     }
 
-    let right_index = if !matches!(&spec.kind, JoinType::Right)
-        && matches!(
-            super::join_strategy::choose(left.len(), right.len(), false),
-            super::join_strategy::JoinStrategy::Hash
-        )
-        && local_fields.len() == 1
+    let right_index = if local_fields.len() == 1
         && foreign_fields.len() == 1
-    {
+        && (matches!(&spec.kind, JoinType::Right)
+            || matches!(
+                super::join_strategy::choose(left.len(), right.len(), false),
+                super::join_strategy::JoinStrategy::Hash
+            )) {
         unqualified_field(&foreign_fields[0], &spec.table)
             .and_then(|field| super::join_index::load(catalog, &spec.table, field))
     } else {
@@ -135,16 +134,29 @@ fn apply_stage(
         super::join_strategy::JoinStrategy::IndexNestedLoop
     ) {
         if let Some(index) = right_index.as_ref() {
-            if let Some(output) = super::join_index::execute_stage(
-                &left,
-                right,
-                right_numbers,
-                spec,
-                index,
-                &local_fields[0],
-                unqualified_field(&foreign_fields[0], &spec.table)
-                    .expect("validated foreign join field"),
-            )? {
+            let output = if matches!(&spec.kind, JoinType::Right) {
+                super::join_index::execute_right_stage(
+                    &left,
+                    right,
+                    right_numbers,
+                    index,
+                    &local_fields[0],
+                    unqualified_field(&foreign_fields[0], &spec.table)
+                        .expect("validated foreign join field"),
+                )?
+            } else {
+                super::join_index::execute_stage(
+                    &left,
+                    right,
+                    right_numbers,
+                    spec,
+                    index,
+                    &local_fields[0],
+                    unqualified_field(&foreign_fields[0], &spec.table)
+                        .expect("validated foreign join field"),
+                )?
+            };
+            if let Some(output) = output {
                 return Ok(output);
             }
         }
