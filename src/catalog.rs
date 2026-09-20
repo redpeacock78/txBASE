@@ -367,23 +367,26 @@ mod tests {
         let catalog = Catalog::from_path(&root).unwrap();
 
         let transaction_id = catalog
-            .commit_operations(&[
-                OperationIr {
-                    method: OperationMethod::Post,
-                    path: "/users/records".into(),
-                    body: Some(json!({
-                        "ID": 3,
-                        "NAME": "Carol",
-                        "AGE": 42,
-                        "ACTIVE": true
-                    })),
-                },
-                OperationIr {
-                    method: OperationMethod::Patch,
-                    path: "/posts/records/1".into(),
-                    body: Some(json!({"$inc": {"AGE": 1}})),
-                },
-            ])
+            .commit_operations_with_if_none_match(
+                &[
+                    OperationIr {
+                        method: OperationMethod::Post,
+                        path: "/users/records".into(),
+                        body: Some(json!({
+                            "ID": 3,
+                            "NAME": "Carol",
+                            "AGE": 42,
+                            "ACTIVE": true
+                        })),
+                    },
+                    OperationIr {
+                        method: OperationMethod::Patch,
+                        path: "/posts/records/1".into(),
+                        body: Some(json!({"$inc": {"AGE": 1}})),
+                    },
+                ],
+                None,
+            )
             .unwrap();
         assert_eq!(transaction_id, 1);
         assert_eq!(catalog.transaction_id().unwrap(), Some(1));
@@ -421,23 +424,26 @@ mod tests {
         let catalog = Catalog::from_path(&root).unwrap();
 
         let error = catalog
-            .commit_operations(&[
-                OperationIr {
-                    method: OperationMethod::Post,
-                    path: "/users/records".into(),
-                    body: Some(json!({
-                        "ID": 3,
-                        "NAME": "Carol",
-                        "AGE": 42,
-                        "ACTIVE": true
-                    })),
-                },
-                OperationIr {
-                    method: OperationMethod::Patch,
-                    path: "/posts/records/999".into(),
-                    body: Some(json!({"NAME": "never committed"})),
-                },
-            ])
+            .commit_operations_with_if_none_match(
+                &[
+                    OperationIr {
+                        method: OperationMethod::Post,
+                        path: "/users/records".into(),
+                        body: Some(json!({
+                            "ID": 3,
+                            "NAME": "Carol",
+                            "AGE": 42,
+                            "ACTIVE": true
+                        })),
+                    },
+                    OperationIr {
+                        method: OperationMethod::Patch,
+                        path: "/posts/records/999".into(),
+                        body: Some(json!({"NAME": "never committed"})),
+                    },
+                ],
+                None,
+            )
             .unwrap_err();
         assert!(matches!(error, CatalogTransactionError::Invalid(_)));
         assert_eq!(fs::read(root.join("users.dbf")).unwrap(), before_users);
@@ -461,16 +467,19 @@ mod tests {
         let catalog = Catalog::from_path(&root).unwrap();
 
         let orphan = catalog
-            .commit_operations(&[OperationIr {
-                method: OperationMethod::Post,
-                path: "/posts/records".into(),
-                body: Some(json!({
-                    "ID": 3,
-                    "NAME": "Orphan",
-                    "AGE": 42,
-                    "ACTIVE": true
-                })),
-            }])
+            .commit_operations_with_if_none_match(
+                &[OperationIr {
+                    method: OperationMethod::Post,
+                    path: "/posts/records".into(),
+                    body: Some(json!({
+                        "ID": 3,
+                        "NAME": "Orphan",
+                        "AGE": 42,
+                        "ACTIVE": true
+                    })),
+                }],
+                None,
+            )
             .unwrap_err();
         assert!(
             orphan
@@ -486,36 +495,42 @@ mod tests {
         );
 
         catalog
-            .commit_operations(&[
-                OperationIr {
-                    method: OperationMethod::Post,
-                    path: "/users/records".into(),
-                    body: Some(json!({
-                        "ID": 3,
-                        "NAME": "Carol",
-                        "AGE": 42,
-                        "ACTIVE": true
-                    })),
-                },
-                OperationIr {
-                    method: OperationMethod::Post,
-                    path: "/posts/records".into(),
-                    body: Some(json!({
-                        "ID": 3,
-                        "NAME": "Carol",
-                        "AGE": 42,
-                        "ACTIVE": true
-                    })),
-                },
-            ])
+            .commit_operations_with_if_none_match(
+                &[
+                    OperationIr {
+                        method: OperationMethod::Post,
+                        path: "/users/records".into(),
+                        body: Some(json!({
+                            "ID": 3,
+                            "NAME": "Carol",
+                            "AGE": 42,
+                            "ACTIVE": true
+                        })),
+                    },
+                    OperationIr {
+                        method: OperationMethod::Post,
+                        path: "/posts/records".into(),
+                        body: Some(json!({
+                            "ID": 3,
+                            "NAME": "Carol",
+                            "AGE": 42,
+                            "ACTIVE": true
+                        })),
+                    },
+                ],
+                None,
+            )
             .unwrap();
 
         let delete_parent = catalog
-            .commit_operations(&[OperationIr {
-                method: OperationMethod::Delete,
-                path: "/users/records/1".into(),
-                body: None,
-            }])
+            .commit_operations_with_if_none_match(
+                &[OperationIr {
+                    method: OperationMethod::Delete,
+                    path: "/users/records/1".into(),
+                    body: None,
+                }],
+                None,
+            )
             .unwrap_err();
         assert!(
             delete_parent
