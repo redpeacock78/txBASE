@@ -77,8 +77,9 @@ resumable result boundary; an asynchronous backpressure protocol remains future 
 
 `aggregate` currently accepts one terminal `$count` or `$distinct` stage, or one `$group` stage with `$count`, integer `$sum`, `$avg`, `$min`, and `$max`, optionally preceded by bounded `$match` stages. `$distinct` takes a field reference such as `"$ACTIVE"` and returns a deterministic array of unique values, with missing values represented as `null`. Group output may be followed by one `$project`, `$sort`, and `$limit`; top-level sort, projection, pagination, and limit controls remain incompatible. `$project` reuses inclusion/exclusion projection rules and must precede `$sort`/`$limit`. `$avg` ignores missing, null, and nonnumeric values and returns null when a group has no numeric input.
 
-The library also exposes one bounded local `inner`, `left`, `right`, `semi`, or `anti` equality join, plus a bounded `cross` join, over two catalog tables.
-It accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,
+The library also exposes bounded local `inner`, `left`, `right`, `semi`, or `anti` equality joins, plus bounded `cross` joins, over a catalog table and optional additional stages.
+The required `join` is the first stage; an optional `joins` array applies additional stages from left to right.
+Each stage accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,
 supports multiple equality conditions, and is capped at 100,000 output rows.
 `semi` and `anti` emit only qualified left-table fields, based on whether a right-side match exists.
 `cross` requires an empty `on` object and caps candidate pairs at 100,000.
@@ -346,7 +347,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming backpressure, planned and multiple joins, additional aggregation stages, transaction IDs, MVCC, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
+Later phases may add a full cost-based index choice, streaming backpressure, planned joins, additional aggregation stages, transaction IDs, MVCC, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

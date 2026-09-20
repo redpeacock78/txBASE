@@ -27,6 +27,8 @@ pub struct JoinRequest {
     pub from: String,
     pub join: JoinSpec,
     #[serde(default)]
+    pub joins: Vec<JoinSpec>,
+    #[serde(default)]
     pub filter: Map<String, Value>,
     #[serde(default)]
     pub projection: BTreeMap<String, i8>,
@@ -105,6 +107,9 @@ pub fn parse(body: &[u8]) -> Result<JoinRequest, JoinError> {
 
 pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, JoinError> {
     validate(request)?;
+    if !request.joins.is_empty() {
+        return super::join_pipeline::execute(catalog, request);
+    }
     let (local_fields, foreign_fields) = join_fields(request)?;
     let (left, right) = catalog.open_tables(&request.from, &request.join.table)?;
     let left_records = left.active_records().collect::<Vec<_>>();
@@ -208,7 +213,11 @@ fn validate(request: &JoinRequest) -> Result<(), JoinError> {
     }
     join_fields(request)?;
     super::validation::validate_filter(&request.filter, "filter")?;
-    validate_projection(&request.projection)
+    validate_projection(&request.projection)?;
+    if !request.joins.is_empty() {
+        super::join_pipeline::validate(request)?;
+    }
+    Ok(())
 }
 
 fn join_fields(request: &JoinRequest) -> Result<(Vec<String>, Vec<String>), JoinError> {

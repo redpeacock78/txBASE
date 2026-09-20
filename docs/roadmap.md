@@ -34,7 +34,7 @@ The repository currently provides:
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - Strong table representation ETags on successful reads, GET/HEAD If-None-Match validation, and optional If-Match protection for single-table mutations and transactions.
 - A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, integer `$sum`, numeric `$avg`, `$min`, and `$max`, plus final `$sort` and `$limit` stages over group output.
-- A bounded local `inner`, `left`, `right`, `semi`, or `anti` equality join plus a bounded `cross` join over two catalog tables with qualified filtering and projection.
+- A bounded local `inner`, `left`, `right`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
@@ -45,7 +45,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, multiple or planned joins, transaction IDs or MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite or cross-table constraints, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, planned joins, transaction IDs or MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite or cross-table constraints, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -118,7 +118,8 @@ The current record scan remains the reference execution path while the query mod
 The first join slice is local and bounded.
 It implements one or more equality conditions and uses an in-memory right-side map, or a
 left-side map for a right join.
-Future join work must define planner selection, streaming, multiple joins, and broader null or
+Additional stages may reference earlier joined tables and keep one catalog read lock across the
+pipeline, but planner selection, streaming, and broader null or
 missing field semantics before adding broader query surfaces.
 
 Distributed joins and distributed transactions remain later features.

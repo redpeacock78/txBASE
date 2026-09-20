@@ -240,12 +240,17 @@ Missing and explicit `null` join keys do not match.
 
 The implementation builds one in-memory equality map for the right table, or the left table for a
 `right` join, and rejects a result larger than 100,000 rows.
+For multiple joins, the required `join` object is the first stage and an optional `joins` array
+adds stages from left to right.
+Each additional stage may reference any table already present in the intermediate row and adds
+one new table; table names cannot repeat, and the total stage count is capped at eight.
+Every intermediate result is capped at 100,000 rows.
 This is a bounded nested execution boundary, not a cost-based planner or a streaming executor.
 The single-table HTTP server does not expose joins. The catalog server exposes the same
 read-only boundary at `QUERY /join`; cross-table writes and transactions remain outside this
 surface.
 The join accepts the existing filter and projection rules, but not sort, pagination, aggregation,
-multiple joins, self-join aliases, or cross-table transactions.
+self-join aliases, or cross-table transactions.
 
 MongoDB's [`$lookup` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/)
 is the reference vocabulary.

@@ -47,6 +47,13 @@ fn catalog_with_posts() -> PathBuf {
     root
 }
 
+fn catalog_with_posts_and_comments() -> PathBuf {
+    let root = catalog_with_posts();
+    let comments = DbfTable::from_bytes(&fixture()).unwrap();
+    comments.save_with_wal(root.join("comments.dbf")).unwrap();
+    root
+}
+
 #[test]
 fn left_join_accepts_attachment_shape_and_projects_namespaced_fields() {
     let root = catalog_with_posts();
@@ -237,6 +244,52 @@ fn join_accepts_multiple_equality_conditions() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["users.NAME"], "Alice");
     assert_eq!(rows[0]["posts.NAME"], "Alice");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn chained_joins_reference_fields_from_prior_stages() {
+    let root = catalog_with_posts_and_comments();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let request = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "inner",
+            "table": "posts",
+            "on": {
+              "users.ID": {"$eq": {"$field": "posts.ID"}}
+            }
+          },
+          "joins": [
+            {
+              "type": "left",
+              "table": "comments",
+              "on": {
+                "posts.ID": {"$eq": {"$field": "comments.ID"}}
+              }
+            }
+          ],
+          "projection": {
+            "users.NAME": 1,
+            "posts.NAME": 1,
+            "comments.NAME": 1
+          }
+        }"#,
+    )
+    .unwrap();
+
+    let rows = execute(&catalog, &request).unwrap();
+
+    assert_eq!(rows.len(), 2);
+    assert!(
+        rows.iter()
+            .all(|row| row.get("users.NAME") == Some(&json!("Alice")))
+    );
+    assert!(
+        rows.iter()
+            .all(|row| row.get("comments.NAME") == Some(&json!("Alice")))
+    );
     fs::remove_dir_all(root).unwrap();
 }
 

@@ -56,8 +56,8 @@ catalog.verify()?;
 `verify` loads and verifies every discovered table, reporting the table name when a table fails.
 
 The bounded local join boundary is separate from catalog discovery.
-Call `txbase::query::join::execute` with a `Catalog` and a validated join document to read two
-named tables without adding a persistent relationship manifest.
+Call `txbase::query::join::execute` with a `Catalog` and a validated join document to read one or
+more named tables without adding a persistent relationship manifest.
 
 The optional catalog server exposes that boundary over HTTP:
 
@@ -70,7 +70,7 @@ and `/{table}/records/{id}` reuse the single-table record response semantics, in
 current representation `ETag`. `QUERY /{table}/records` accepts the same JSON query document as
 the single-table route, and `QUERY /{table}/explain` returns the same selected plan as the
 single-table `QUERY /explain`. `QUERY /join` accepts the same JSON join document as
-`query::join::parse`, returns a JSON array, and retains the 100,000-row join bound.
+`query::join::parse`, returns a JSON array, and retains the 100,000-row per-stage join bound.
 
 `POST /{table}/records` and `PUT`/`PATCH`/`DELETE /{table}/records/{id}` reuse the single-table
 mutation, WAL, ETag, validation, and constraint behavior. Each request commits only its named
@@ -132,5 +132,5 @@ It does not infer relationships from field names.
 
 The local join supports `inner`, `left`, `right`, `semi`, and `anti` equality joins plus a bounded
 `cross` join, with a hard result bound.
-It does not provide a cost-based planner, streaming backpressure, multiple joins, transaction
+It does not provide a cost-based planner, streaming backpressure, planned joins, transaction
 IDs, or MVCC visibility.
