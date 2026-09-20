@@ -54,7 +54,8 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
     let Ok(index_file) = IndexFile::load(dbf_path) else {
         return table_scan();
     };
-    let mut candidates = Vec::new();
+    let active_record_count = index_file.active_record_count();
+    let mut candidates = vec![table_scan()];
     if let Some(access) = choose_equality(&index_file, request) {
         candidates.push(access);
     }
@@ -65,11 +66,34 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
         candidates.push(access);
     }
 
-    // ponytail: exact candidate counts only; add I/O and sort-cost terms when measurements justify them.
+    // ponytail: bounded record-and-sort cost; add I/O/cache terms only with measurements and a contract.
     candidates
         .into_iter()
-        .min_by_key(|access| access.records.as_ref().map_or(usize::MAX, Vec::len))
+        .min_by_key(|access| estimated_cost(access, active_record_count, request))
         .unwrap_or_else(table_scan)
+}
+
+fn estimated_cost(
+    access: &PlannedAccess,
+    active_record_count: usize,
+    request: &QueryRequest,
+) -> usize {
+    let record_count = access
+        .records
+        .as_ref()
+        .map_or(active_record_count, Vec::len);
+    let remaining_sort = request.sort.len() > access.ordered_prefix;
+    let sort_cost = remaining_sort
+        .then(|| estimated_sort_cost(record_count))
+        .unwrap_or_default();
+    record_count.saturating_add(sort_cost)
+}
+
+fn estimated_sort_cost(record_count: usize) -> usize {
+    if record_count < 2 {
+        return 0;
+    }
+    record_count.saturating_mul(record_count.ilog2() as usize)
 }
 
 fn choose_equality(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {

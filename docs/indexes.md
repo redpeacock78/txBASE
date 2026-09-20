@@ -179,17 +179,19 @@ For a multi-key sort, a single-field index supplies the first sort-key order and
 
 When the requested sort fields match a compound definition after an exact equality prefix, the planner can consume the index order directly for the requested directions or their complete reverse.
 
-The planner compares the exact candidate counts of equality, range, and compatible ordered
-definitions and prefers the smallest candidate set. Equal compound candidates then prefer the
-shortest definition and a stable name tie-breaker.
+The planner compares the table scan and each valid equality, range, or compatible ordered path
+with a bounded integer cost. A table scan costs the active-record count plus remaining sort work.
+An index path costs its exact candidate count plus remaining sort work. An ordered path that
+supplies the complete requested order has no sort term. Equal costs preserve the existing
+candidate order, so the table scan wins an exact tie.
 
-This is a local candidate-count heuristic, not a full I/O, memory, or statistics cost model.
+This is a local cardinality-and-sort model, not a full I/O, memory, or cache cost model.
 
 The planner now records the active-record count and derives each single-field index's distinct-key count from its entries.
 
 It estimates an equality candidate count by assuming a uniform distribution, orders the candidate indexes by that estimate, and then uses exact record lists for the intersection.
 
-The equality estimate is a local statistic, not a histogram or a cost-based planner.
+The equality estimate is a local statistic and one input to the bounded cost model.
 
 For multiple range predicates, the planner sums the record counts of overlapping histogram buckets and tries the smallest estimate first.
 
@@ -205,6 +207,6 @@ It still materializes candidate record numbers and sorts them by physical DBF or
 
 Freshness validation still reads the DBF and memo bytes, and the query executor still materializes candidate record numbers, so this is not a claim of zero-copy or end-to-end index I/O.
 
-Full cost-based index choice, collation-aware planning, and cross-table atomic commits require separate contracts.
+A full I/O-aware cost model, collation-aware planning, and cross-table atomic commits require separate contracts.
 
-The equality, equality-intersection, statistics-ordered, histogram-ordered range, single-field ordered, ordered-prefix, and compound-prefix planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs a full cost model and cross-table contracts.
+The equality, equality-intersection, statistics-ordered, histogram-ordered range, single-field ordered, ordered-prefix, compound-prefix, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs a full I/O-aware model and cross-table contracts.

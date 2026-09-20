@@ -129,6 +129,8 @@ A delta with the wrong base must be rejected.
 
 `src/query/planner_compound_tests.rs::chooses_a_compound_sort_index_with_the_smallest_equality_prefix` covers equality-prefix candidate counting and compound-plan equivalence with the table scan.
 
+`src/query/planner_compound_tests.rs::chooses_a_table_scan_for_a_non_selective_index` covers the bounded cost tie that rejects an index when it returns every active record.
+
 `src/query/field_expression_tests.rs` covers dotted field references, missing operands, and malformed or unsupported `$expr` documents.
 
 ### Compatibility tests

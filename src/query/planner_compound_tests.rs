@@ -206,3 +206,37 @@ fn chooses_the_access_path_with_fewer_exact_candidates() {
 
     remove_table_files(&path);
 }
+
+#[test]
+fn chooses_a_table_scan_for_a_non_selective_index() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-query-planner-non-selective-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&path);
+
+    let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    bytes[179] = b' ';
+    bytes[196] = b'T';
+    let table = DbfTable::from_bytes(&bytes).unwrap();
+    fs::write(&path, bytes).unwrap();
+    IndexFile::build(&path, vec![IndexDefinition::named("by_active", "ACTIVE")])
+        .unwrap()
+        .save(&path)
+        .unwrap();
+
+    let request = parse(br#"{"filter":{"ACTIVE":true}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &request).unwrap(),
+        QueryPlan::TableScan
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &request).unwrap(),
+        execute_query(&table, &request).unwrap()
+    );
+
+    remove_table_files(&path);
+}

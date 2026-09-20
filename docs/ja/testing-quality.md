@@ -130,6 +130,8 @@ DBF、memo、WAL、JSON 入力について決定的なコーパスを保ちま�
 
 `src/query/planner_compound_tests.rs::chooses_a_compound_sort_index_with_the_smallest_equality_prefix` は、等値プレフィックス候補数と、テーブルスキャンと同値の複合計画を検査します。
 
+`src/query/planner_compound_tests.rs::chooses_a_table_scan_for_a_non_selective_index` は、すべてのアクティブレコードを返すインデックスを拒否する有界コストの同点処理を検査します。
+
 `src/query/field_expression_tests.rs` は、ドット区切りフィールド参照、欠損オペランド、壊れたまたは未サポートの `$expr` 文書を検査します。
 
 ### 互換性テスト
