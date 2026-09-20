@@ -144,7 +144,7 @@ DBF headerのlanguage-driver byteが信頼できない場合は、read、schema�
 invocation単位のoverrideは`*.txschema.json`より優先され、保存されません。
 
 effectiveな値はschema outputの`encoding_override`または`encoding_metadata.effective`で確認できます。
-`encoding_metadata`はdeclared codecと、language-driver・explicit override・fallbackのsourceも返します。
+`encoding_metadata`はdeclared codecと、language-driver、explicit override、fallbackのsourceも返します。
 
 ```bash
 txbase schema path/to/users.dbf
@@ -279,7 +279,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 ## Todo
 
-`xbf report`はファイルを書き込まず、XBFの型・値がDBFへ変換可能かとschema sidecarの要否を確認します。
+`xbf report`はファイルを書き込まず、XBFの型と値がDBFへ変換可能かとschema sidecarの要否を確認します。
 
 当面はDBF、memo、WAL、query、HTTPのcontractをfixtureとfailure testで固めます。
 
