@@ -1,4 +1,4 @@
-use super::{DbfError, DbfTable, encoding_name};
+use super::{DbfError, DbfTable, encoding_name, schema_metadata::SchemaMetadata};
 use serde_json::{Value, json};
 
 impl DbfTable {
