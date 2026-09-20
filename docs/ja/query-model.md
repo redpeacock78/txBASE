@@ -208,7 +208,7 @@ catalog server は `QUERY /{table}/records/stream` を公開します。
 
 現在の集約境界は、0 個以上の `$match` の後に終端 `$count`、終端 `$distinct`、または `$group` を一つだけ受け付けます。
 
-グループ出力には任意の `$project` を一つ、最後の `$sort` を最大一つ、最後の `$limit` を最大一つ置けます。
+グループ出力には 0 個以上の `$match` を置き、その後に任意の `$project` を一つ、最後の `$sort` を最大一つ、最後の `$limit` を最大一つ置けます。
 
 `_id` は `null` または一つのドット区切りフィールド参照です。
 
@@ -258,7 +258,11 @@ catalog server は `QUERY /{table}/records/stream` を公開します。
 
 `$limit` は 0 以上の整数を受け付け、ソート後の具体化されたグループ結果を切り詰めます。
 
-`$match` ステージはトップレベルの `filter` と同じ述語規則を使い、`$group`、`$count`、`$distinct` より前に置く必要があります。
+`$match` ステージはトップレベルの `filter` と同じ述語規則を使います。
+
+入力に対する `$match` ステージは `$group`、`$count`、`$distinct` より前に置く必要があります。
+
+グループ出力に対する `$match` ステージは `$group` の後、`$project`、`$sort`、`$limit` より前に置く必要があります。
 
 `$count` は名前付きの 0 以上の整数フィールドを一つ持つ文書を返し、一致するレコードがない場合も 0 を返します。
 
@@ -270,7 +274,11 @@ catalog server は `QUERY /{table}/records/stream` を公開します。
 
 distinct 出力は 10,000 値までです。
 
-`$limit` 後のステージ、追加の group、count、distinct ステージ、および式オペランドは未サポートです。
+`$limit` 後のステージ、追加の group、count、distinct ステージは未サポートです。
+
+`$expr` のオペランドは、後述する有界な数値 `$add` と `$subtract` の形式だけをサポートします。
+
+より広い式評価は未サポートです。
 
 MongoDB は `$group` をブロッキングステージとして説明し、[$count と $sum を含む集約ステージの仕様](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)を定義しています。
 

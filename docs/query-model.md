@@ -208,7 +208,7 @@ The query document can contain one terminal `$count` or `$distinct` stage, or on
 
 The current aggregation boundary accepts zero or more `$match` stages followed by one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
 
-Group output may have one optional `$project`, at most one final `$sort`, and at most one final `$limit` stage.
+Group output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, and at most one final `$limit` stage.
 
 `_id` is either `null` or one dotted field reference.
 
@@ -258,7 +258,11 @@ Without `$sort`, group output order is not part of the contract, although the cu
 
 `$limit` accepts a non-negative integer and truncates the materialized group result after sorting.
 
-`$match` stages use the same predicate rules as top-level `filter` and must precede `$group`, `$count`, or `$distinct`.
+`$match` stages use the same predicate rules as top-level `filter`.
+
+Input `$match` stages must precede `$group`, `$count`, or `$distinct`.
+
+Group-output `$match` stages must follow `$group` and precede `$project`, `$sort`, or `$limit`.
 
 `$count` emits one document containing the named non-negative integer field, including zero when no records match.
 
@@ -270,7 +274,11 @@ Both stages are terminal and cannot be combined with group-output stages.
 
 Distinct output is capped at 10,000 values.
 
-Stages after `$limit`, additional grouping, count, or distinct stages, and expression operands remain unsupported.
+Stages after `$limit`, additional grouping, count, or distinct stages remain unsupported.
+
+`$expr` operands are supported only in the bounded numeric `$add` and `$subtract` forms described below.
+
+Broader expression evaluation remains unsupported.
 
 MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as `$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).
 

@@ -50,7 +50,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, bounded scan-and-sort cost choice with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index or join model, full index-aware or cost-based merge join strategies, runtime-specific async traits, catalog-wide MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index or join model, full index-aware or cost-based merge join strategies, runtime-specific async traits, catalog-wide MVCC visibility, aggregation stages beyond bounded input and group-output `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -140,9 +140,9 @@ Distributed joins and distributed transactions remain later features.
 
 Aggregation must define missing, null, numeric overflow, and memory-limit behavior before it is added to the HTTP API.
 
-The current aggregation slice also permits one terminal `$count` or `$distinct` stage, or one `$group` with a
-bounded `$project` over group output before the final sort and limit. It reuses the existing
-include/exclude projection contract.
+The current aggregation slice also permits one terminal `$count` or `$distinct` stage, or one `$group` with
+bounded group-output `$match` stages and a bounded `$project` before the final sort and limit. It reuses the
+existing include/exclude projection contract.
 
 The planner explanation boundary is implemented by `explain_query_at` and `QUERY /explain`.
 Full cost-based choice remains future work.

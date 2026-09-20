@@ -12,6 +12,7 @@ pub(super) struct GroupSpec {
 #[derive(Debug, Clone)]
 pub(super) struct AggregationPlan {
     pub(super) matches: Vec<Map<String, Value>>,
+    pub(super) group_matches: Vec<Map<String, Value>>,
     pub(super) group: Option<GroupSpec>,
     pub(super) count: Option<String>,
     pub(super) distinct: Option<String>,
@@ -63,6 +64,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
     }
 
     let mut matches = Vec::new();
+    let mut group_matches = Vec::new();
     let mut group = None;
     let mut count = None;
     let mut distinct = None;
@@ -83,6 +85,15 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
                 })?;
                 validation::validate_filter(filter, &format!("aggregate[{index}].$match"))?;
                 matches.push(filter.clone());
+            }
+            "$match"
+                if group.is_some() && projection.is_none() && sort.is_none() && limit.is_none() =>
+            {
+                let filter = value.as_object().ok_or_else(|| {
+                    QueryError::Invalid(format!("aggregate stage {index}.$match must be an object"))
+                })?;
+                validation::validate_filter(filter, &format!("aggregate[{index}].$match"))?;
+                group_matches.push(filter.clone());
             }
             "$group" if group.is_none() && count.is_none() && distinct.is_none() => {
                 group = Some(parse_group(value)?);
@@ -106,7 +117,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
             }
             "$match" => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate stage {index}.$match must precede $group, $count, or $distinct"
+                    "aggregate stage {index}.$match must precede $group or follow $group before $project, $sort, or $limit"
                 )));
             }
             "$group" => {
@@ -149,6 +160,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
     }
     Ok(AggregationPlan {
         matches,
+        group_matches,
         group,
         count,
         distinct,

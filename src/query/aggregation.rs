@@ -184,6 +184,16 @@ pub(super) fn execute(
         .into_values()
         .map(|group| finish_group(group, spec))
         .collect::<Result<Vec<_>, _>>()?;
+    for filter in &plan.group_matches {
+        let mut filtered = Vec::with_capacity(output.len());
+        for value in output {
+            let values = value.as_object().expect("group output is always an object");
+            if matches_filter(values, filter)? {
+                filtered.push(value);
+            }
+        }
+        output = filtered;
+    }
     if let Some(projection) = &plan.projection {
         output = output
             .into_iter()
