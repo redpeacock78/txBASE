@@ -75,7 +75,7 @@ table変更後に再利用すると、snapshotを混ぜずにinvalid-queryとし
 libraryの`query::stream_query`は、matching record全体をmaterializeせずにfilter、projection、skip、limitを適用するborrowed iteratorです。
 sort、aggregate、page-size、cursorはblockingまたはresume boundaryを必要とするため拒否します。
 `query::stream_query_snapshot`はloaded tableのcloneを保持するため、元tableへの後続mutationから独立したpull-based iteratorです。
-非同期backpressure protocolは未実装です。
+`query::stream_query_bounded`はそのsnapshot iteratorをboundedな標準library channelの背後で動かし、consumerが読み取らない間はproducerを停止します。consumerをdropするとproducerも停止します。runtime固有のasync traitとHTTP chunked streamingは未実装です。
 
 `aggregate`は一つの`$group` stageと、その前に0個以上置けるboundedな`$match` stage、group後に一つだけ置ける`$project`、`$sort`、`$limit` stageを使えます。
 `$count`、整数`$sum`、数値の`$avg`、および比較可能な値に対する`$min` / `$max`をサポートします。

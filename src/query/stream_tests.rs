@@ -66,3 +66,35 @@ fn snapshot_stream_is_independent_of_later_table_mutations() {
         ]
     );
 }
+
+#[test]
+fn bounded_snapshot_stream_keeps_a_fixed_snapshot() {
+    let mut table = table_with_two_active_records();
+    let request = parse(br#"{"projection":{"NAME":1}}"#).unwrap();
+    let stream = stream_query_bounded(&table, &request, 1).unwrap();
+
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "Changed"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        stream.collect::<Result<Vec<_>, _>>().unwrap(),
+        vec![
+            serde_json::json!({"NAME": "Alice"}),
+            serde_json::json!({"NAME": "Bob"})
+        ]
+    );
+}
+
+#[test]
+fn bounded_stream_requires_positive_capacity() {
+    let table = table_with_two_active_records();
+    let request = parse(br#"{"projection":{"NAME":1}}"#).unwrap();
+    assert!(stream_query_bounded(&table, &request, 0).is_err());
+}

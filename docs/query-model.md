@@ -138,7 +138,10 @@ blocking or resumable result boundary.
 The iterator does not provide a long-lived snapshot or an asynchronous backpressure protocol.
 `query::stream_query_snapshot` is the stable-snapshot variant: it clones the loaded table before
 iteration, so later mutations of the source table do not change its records.
-It remains pull-based and does not provide an asynchronous backpressure protocol.
+`query::stream_query_bounded` runs the same owned snapshot iterator on a producer thread and
+delivers items through a bounded standard-library channel. The producer blocks while the channel
+is full, and dropping the consumer cancels production. It remains an in-process pull consumer;
+runtime-specific async traits and HTTP chunked streaming are separate future boundaries.
 
 ## 2. Bounded aggregation
 
@@ -445,7 +448,7 @@ The roadmap may later cover the following in separate contracts:
 1. Full expression evaluation and cost-based index choice with explicit missing, null, collation, and compound-range rules.
 2. A catalog for multiple tables and schema metadata.
 3. Additional aggregation stages and joins with bounded memory behavior.
-4. Backpressure and stable snapshot rules for long-lived streams.
+4. Runtime-specific async traits and HTTP chunked streaming for long-lived streams.
 5. Differential tests against a small reference evaluator.
 
 Until those contracts exist, the record scan is the simpler and more honest execution model.

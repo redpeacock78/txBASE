@@ -43,13 +43,14 @@ The repository currently provides:
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
+- A bounded thread-backed snapshot stream whose producer applies channel backpressure and stops when its consumer is dropped.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950.
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, bounded table-level `checks` predicates, and catalog-scoped `references` validation.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP, with normalized schema output.
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, planner-selected join strategies, catalog-wide MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, runtime-specific async traits or HTTP streaming, planner-selected join strategies, catalog-wide MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -60,7 +61,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - Schema introspection.
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
-- An asynchronous backpressure protocol for long-lived streams.
+- Runtime-specific async traits and HTTP chunked streaming for long-lived streams.
 - Transaction IDs and independently visible multi-record snapshots.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
@@ -97,7 +98,9 @@ The public `query::stream_query` iterator covers unsorted filter and projection 
 materializing matching records.
 `query::stream_query_snapshot` owns a clone of the loaded table to keep records stable while the
 caller consumes the pull-based iterator.
-An asynchronous backpressure protocol remains a later contract.
+`query::stream_query_bounded` runs the same snapshot iterator behind a bounded standard-library
+channel, so the producer blocks on a full channel and stops when the consumer is dropped.
+Runtime-specific async traits and HTTP streaming remain later contracts.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 

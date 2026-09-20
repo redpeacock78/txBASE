@@ -2,6 +2,8 @@ use super::{QueryError, QueryRequest, matches_filter};
 use crate::dbf::DbfTable;
 use crate::query_path::project;
 use serde_json::Value;
+use std::sync::mpsc::{Receiver, sync_channel};
+use std::thread;
 
 pub struct QueryStream<'table, 'request> {
     records: std::slice::Iter<'table, crate::dbf::DbfRecord>,
@@ -22,6 +24,10 @@ pub struct QuerySnapshotStream<'request> {
     limit: Option<u64>,
     yielded: u64,
     done: bool,
+}
+
+pub struct BoundedQueryStream {
+    receiver: Receiver<Result<Value, QueryError>>,
 }
 
 pub fn stream_query<'table, 'request>(
@@ -55,6 +61,37 @@ pub fn stream_query_snapshot<'request>(
         yielded: 0,
         done: false,
     })
+}
+
+pub fn stream_query_bounded(
+    table: &DbfTable,
+    request: &QueryRequest,
+    capacity: usize,
+) -> Result<BoundedQueryStream, QueryError> {
+    validate_stream_request(request)?;
+    if capacity == 0 {
+        return Err(QueryError::Invalid(
+            "bounded stream capacity must be positive".into(),
+        ));
+    }
+    let table = table.clone();
+    let request = request.clone();
+    let (sender, receiver) = sync_channel(capacity);
+    thread::spawn(move || {
+        let stream = match stream_query_snapshot(&table, &request) {
+            Ok(stream) => stream,
+            Err(error) => {
+                let _ = sender.send(Err(error));
+                return;
+            }
+        };
+        for item in stream {
+            if sender.send(item).is_err() {
+                break;
+            }
+        }
+    });
+    Ok(BoundedQueryStream { receiver })
 }
 
 fn validate_stream_request(request: &QueryRequest) -> Result<(), QueryError> {
@@ -134,5 +171,13 @@ impl<'request> Iterator for QuerySnapshotStream<'request> {
             self.yielded += 1;
             return Some(Ok(project(record, &self.request.projection)));
         }
+    }
+}
+
+impl Iterator for BoundedQueryStream {
+    type Item = Result<Value, QueryError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.receiver.recv().ok()
     }
 }

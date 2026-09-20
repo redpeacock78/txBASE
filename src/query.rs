@@ -25,7 +25,10 @@ pub use planner::QueryPlan;
 #[cfg(test)]
 pub(crate) use predicate::matches_condition;
 pub(crate) use predicate::matches_filter;
-pub use stream::{QuerySnapshotStream, QueryStream, stream_query, stream_query_snapshot};
+pub use stream::{
+    BoundedQueryStream, QuerySnapshotStream, QueryStream, stream_query, stream_query_bounded,
+    stream_query_snapshot,
+};
 pub(crate) use validation::validate_filter;
 
 #[cfg(test)]

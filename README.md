@@ -75,8 +75,10 @@ The library also exposes `query::stream_query`, a borrowed iterator that applies
 projection, skip, and limit without materializing the matching record set.
 `query::stream_query_snapshot` provides the same pull-based iterator over an owned clone of the
 loaded table, so later mutations of the source table do not change the stream's records.
+`query::stream_query_bounded` runs that snapshot iterator behind a bounded standard-library
+channel. The producer blocks when the channel is full and stops when the consumer is dropped.
 Both APIs reject sort, aggregate, page-size, and cursor controls, which need a blocking or
-resumable result boundary; an asynchronous backpressure protocol remains future work.
+resumable result boundary. Runtime-specific async traits and HTTP chunked streaming remain future work.
 
 `aggregate` currently accepts one terminal `$count` or `$distinct` stage, or one `$group` stage with `$count`, integer `$sum`, `$avg`, `$min`, and `$max`, optionally preceded by bounded `$match` stages. `$distinct` takes a field reference such as `"$ACTIVE"` and returns a deterministic array of unique values, with missing values represented as `null`. Group output may be followed by one `$project`, `$sort`, and `$limit`; top-level sort, projection, pagination, and limit controls remain incompatible. `$project` reuses inclusion/exclusion projection rules and must precede `$sort`/`$limit`. `$avg` ignores missing, null, and nonnumeric values and returns null when a group has no numeric input.
 
