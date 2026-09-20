@@ -332,6 +332,8 @@ For a direct single-key equality join or a chained single-key equality stage wit
 
 For a chained `right` stage, it probes the indexed right table and restores right-major physical order before emitting the intermediate result.
 
+Chained non-right stages may also use a fresh compound index when the equality fields exactly match the index field order; direct compound joins remain on the nested-loop or hash reference paths.
+
 When that index is unavailable, stale, malformed, or not applicable, larger inputs select `Hash` and build one in-memory equality map for the right table, or the left table for a `right` join.
 
 The selector preserves left-major output order for non-right joins and right-major output order for right joins.

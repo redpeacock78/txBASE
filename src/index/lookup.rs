@@ -10,6 +10,18 @@ impl IndexFile {
             .any(|index| index.definition.fields.len() == 1 && index.definition.fields[0] == field)
     }
 
+    pub(crate) fn has_exact_fields(&self, fields: &[&str]) -> bool {
+        self.indexes.iter().any(|index| {
+            index.definition.fields.len() == fields.len()
+                && index
+                    .definition
+                    .fields
+                    .iter()
+                    .zip(fields)
+                    .all(|(indexed, requested)| indexed == *requested)
+        })
+    }
+
     pub(crate) fn equality_selectivity_estimate(&self, field: &str) -> Option<usize> {
         let index = self.indexes.iter().find(|index| {
             index.definition.fields.len() == 1 && index.definition.fields[0] == field
@@ -68,6 +80,39 @@ impl IndexFile {
             index
                 .entries
                 .binary_search_by(|entry| ordering::compare_keys(&entry.key, &key))
+                .ok()
+                .map(|position| index.entries[position].records.clone())
+                .unwrap_or_default(),
+        )))
+    }
+
+    pub(crate) fn lookup_eq_for_fields(
+        &self,
+        fields: &[&str],
+        values: &[Value],
+    ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
+        let Some(index) = self.indexes.iter().find(|index| {
+            index.definition.fields.len() == fields.len()
+                && index
+                    .definition
+                    .fields
+                    .iter()
+                    .zip(fields)
+                    .all(|(indexed, requested)| indexed == *requested)
+        }) else {
+            return Ok(None);
+        };
+        if values.len() != fields.len() {
+            return Ok(None);
+        }
+        let key = IndexKey::from_values(values.iter().map(Some).collect())?;
+        Ok(Some((
+            index.definition.name.clone(),
+            index
+                .entries
+                .binary_search_by(|entry| {
+                    ordering::compare_index_keys(&entry.key, &key, index.definition.directions())
+                })
                 .ok()
                 .map(|position| index.entries[position].records.clone())
                 .unwrap_or_default(),

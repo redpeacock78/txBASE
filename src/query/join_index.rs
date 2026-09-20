@@ -13,6 +13,17 @@ pub(super) fn load(catalog: &Catalog, table_name: &str, field: &str) -> Option<I
     index.has_single_field(field).then_some(index)
 }
 
+pub(super) fn load_fields(
+    catalog: &Catalog,
+    table_name: &str,
+    fields: &[String],
+) -> Option<IndexFile> {
+    let path = catalog.table_path(table_name)?;
+    let index = IndexFile::load(path).ok()?;
+    let fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
+    index.has_exact_fields(&fields).then_some(index)
+}
+
 pub(super) fn execute_join(
     left_records: &[&DbfRecord],
     right_records: &[&DbfRecord],
@@ -80,10 +91,12 @@ pub(super) fn execute_stage(
     right_numbers: &[usize],
     spec: &JoinSpec,
     index: &IndexFile,
-    local_field: &str,
-    index_field: &str,
+    local_fields: &[String],
+    index_fields: &[String],
 ) -> Result<Option<Vec<Map<String, Value>>>, JoinError> {
-    let Some(probes) = probe_rows(left, local_field, index_field, index)? else {
+    let local_fields = local_fields.iter().map(String::as_str).collect::<Vec<_>>();
+    let index_fields = index_fields.iter().map(String::as_str).collect::<Vec<_>>();
+    let Some(probes) = probe_rows(left, &local_fields, &index_fields, index)? else {
         return Ok(None);
     };
     if right.len() != right_numbers.len() {
@@ -130,7 +143,13 @@ pub(super) fn execute_right_stage(
     local_field: &str,
     index_field: &str,
 ) -> Result<Option<Vec<Map<String, Value>>>, JoinError> {
-    let Some(probes) = probe_rows(left, local_field, index_field, index)? else {
+    let Some(probes) = probe_rows(
+        left,
+        std::slice::from_ref(&local_field),
+        std::slice::from_ref(&index_field),
+        index,
+    )?
+    else {
         return Ok(None);
     };
     if right.len() != right_numbers.len() {
@@ -203,25 +222,37 @@ fn probe_records(
 
 fn probe_rows(
     rows: &[Map<String, Value>],
-    probe_field: &str,
-    index_field: &str,
+    probe_fields: &[&str],
+    index_fields: &[&str],
     index: &IndexFile,
 ) -> Result<Option<Vec<Vec<usize>>>, JoinError> {
+    if probe_fields.is_empty() || probe_fields.len() != index_fields.len() {
+        return Ok(None);
+    }
     let mut probes = Vec::with_capacity(rows.len());
     for row in rows {
-        let Some(value) = field_value(row, probe_field) else {
-            probes.push(Vec::new());
-            continue;
-        };
-        if value.is_null() {
-            probes.push(Vec::new());
-            continue;
+        let mut values = Vec::with_capacity(probe_fields.len());
+        let mut missing = false;
+        for field in probe_fields {
+            let Some(value) = field_value(row, field) else {
+                missing = true;
+                break;
+            };
+            if value.is_null() {
+                missing = true;
+                break;
+            }
+            if !is_indexable(&value) {
+                return Ok(None);
+            }
+            values.push(value);
         }
-        if !is_indexable(&value) {
-            return Ok(None);
+        if missing {
+            probes.push(Vec::new());
+            continue;
         }
         let Some((_, records)) = index
-            .lookup_eq_for_field(index_field, &value)
+            .lookup_eq_for_fields(index_fields, &values)
             .map_err(|error| JoinError::Invalid(format!("join index lookup failed: {error}")))?
         else {
             return Ok(None);

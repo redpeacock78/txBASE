@@ -117,15 +117,22 @@ fn apply_stage(
         return Ok(output);
     }
 
-    let right_index = if local_fields.len() == 1
-        && foreign_fields.len() == 1
-        && (matches!(&spec.kind, JoinType::Right)
-            || matches!(
+    let index_fields = foreign_fields
+        .iter()
+        .map(|field| unqualified_field(field, &spec.table).map(str::to_owned))
+        .collect::<Option<Vec<_>>>();
+    let right_index = if let Some(index_fields) = index_fields.as_deref() {
+        let should_try = if matches!(&spec.kind, JoinType::Right) {
+            local_fields.len() == 1 && index_fields.len() == 1
+        } else {
+            matches!(
                 super::join_strategy::choose(left.len(), right.len(), false),
                 super::join_strategy::JoinStrategy::Hash
-            )) {
-        unqualified_field(&foreign_fields[0], &spec.table)
-            .and_then(|field| super::join_index::load(catalog, &spec.table, field))
+            )
+        };
+        should_try
+            .then(|| super::join_index::load_fields(catalog, &spec.table, index_fields))
+            .flatten()
     } else {
         None
     };
@@ -135,26 +142,34 @@ fn apply_stage(
     ) {
         if let Some(index) = right_index.as_ref() {
             let output = if matches!(&spec.kind, JoinType::Right) {
-                super::join_index::execute_right_stage(
-                    &left,
-                    right,
-                    right_numbers,
-                    index,
-                    &local_fields[0],
-                    unqualified_field(&foreign_fields[0], &spec.table)
-                        .expect("validated foreign join field"),
-                )?
+                if let (Some(local_field), Some(index_field)) = (
+                    local_fields.first(),
+                    index_fields.as_deref().and_then(|fields| fields.first()),
+                ) {
+                    super::join_index::execute_right_stage(
+                        &left,
+                        right,
+                        right_numbers,
+                        index,
+                        local_field,
+                        index_field,
+                    )?
+                } else {
+                    None
+                }
             } else {
-                super::join_index::execute_stage(
-                    &left,
-                    right,
-                    right_numbers,
-                    spec,
-                    index,
-                    &local_fields[0],
-                    unqualified_field(&foreign_fields[0], &spec.table)
-                        .expect("validated foreign join field"),
-                )?
+                match index_fields.as_deref() {
+                    Some(index_fields) => super::join_index::execute_stage(
+                        &left,
+                        right,
+                        right_numbers,
+                        spec,
+                        index,
+                        &local_fields,
+                        index_fields,
+                    )?,
+                    None => None,
+                }
             };
             if let Some(output) = output {
                 return Ok(output);
