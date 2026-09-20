@@ -128,7 +128,17 @@ pub(super) fn validate_constraints(
     fields: &[XbfField],
     records: &[XbfRecord],
 ) -> Result<(), XbfError> {
+    let mut primary_key_count = 0;
     for (field_index, field) in fields.iter().enumerate() {
+        if field.primary_key {
+            primary_key_count += 1;
+            if field.nullable {
+                return Err(XbfError::Invalid(format!(
+                    "primary-key field {} cannot be nullable",
+                    field.name
+                )));
+            }
+        }
         if !field.unique && !field.primary_key {
             continue;
         }
@@ -153,6 +163,11 @@ pub(super) fn validate_constraints(
                 )));
             }
         }
+    }
+    if primary_key_count > 1 {
+        return Err(XbfError::Invalid(
+            "XBF v1 supports at most one primary-key field".into(),
+        ));
     }
     Ok(())
 }

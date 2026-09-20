@@ -252,6 +252,28 @@ fn rejects_direct_export_of_non_nullable_fields() {
 }
 
 #[test]
+fn rejects_invalid_primary_key_schema_during_export() {
+    let table = XbfTable {
+        generation: 0,
+        fields: vec![XbfField {
+            name: "ID".into(),
+            ty: XbfType::Signed64,
+            nullable: true,
+            primary_key: true,
+            unique: true,
+        }],
+        records: vec![XbfRecord {
+            deleted: false,
+            values: vec![XbfValue::Signed64(1)],
+        }],
+    };
+
+    let error = super::to_dbf_with_schema(&table).unwrap_err();
+    assert!(error.to_string().contains("cannot be nullable"));
+    assert!(!super::dbf_export_report(&table).representable);
+}
+
+#[test]
 fn saves_xbf_dbf_and_schema_sidecar() {
     let path = std::env::temp_dir().join(format!(
         "txbase-xbf-export-schema-{}.dbf",
