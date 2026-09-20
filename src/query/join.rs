@@ -301,7 +301,7 @@ fn validate_projection(projection: &BTreeMap<String, i8>) -> Result<(), JoinErro
     Ok(())
 }
 
-fn encoded_key(
+pub(super) fn encoded_key(
     values: &Map<String, Value>,
     fields: &[String],
 ) -> Result<Option<String>, JoinError> {
@@ -320,7 +320,7 @@ fn encoded_key(
         .map_err(|error| JoinError::Invalid(format!("join key encoding failed: {error}")))
 }
 
-fn emit(
+pub(super) fn emit(
     output: &mut Vec<Value>,
     request: &JoinRequest,
     left: Option<&DbfRecord>,
