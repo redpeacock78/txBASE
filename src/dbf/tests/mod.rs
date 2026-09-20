@@ -52,3 +52,4 @@ mod memo;
 mod memo_foxpro;
 mod mutation;
 mod persistence;
+mod recovery;

@@ -62,7 +62,7 @@ The current Rust test layout is already split by ownership:
 | DBF format | `src/dbf/tests/format.rs`, `format_codepages.rs`, `format_foxpro.rs` |
 | Memo sidecars | `src/dbf/tests/memo.rs`, `memo_foxpro.rs`, `src/dbf/malformed_memo_tests.rs` |
 | DBF mutation | `src/dbf/tests/mutation.rs`, `mutation_model_tests.rs`, `writer_tests.rs` |
-| Persistence | `src/dbf/tests/persistence.rs`, `recovery_fault_tests.rs`, `src/dbf/recovery.rs` |
+| Persistence | `src/dbf/tests/persistence.rs`, `src/dbf/tests/recovery.rs`, `recovery_fault_tests.rs`, `src/dbf/recovery.rs` |
 | Maintenance | `src/dbf/tests/maintenance.rs`, `src/dbf/schema.rs`, `src/dbf/maintenance.rs` |
 | Malformed input | `src/dbf/malformed_tests.rs`, `src/dbf/parser_fuzz_tests.rs`, `src/query/malformed_tests.rs`, `src/transaction/malformed_tests.rs`, `src/xbf/malformed_tests.rs`, `tests/corpus/xbf/` |
 | Query and HTTP | `src/query/tests.rs`, `src/query/cursor_tests.rs`, `src/query/aggregation_tests.rs`, `src/server/tests.rs`, `src/server/catalog_tests.rs`, `src/server/range.rs` |
@@ -113,7 +113,7 @@ An already-applied target must not be applied twice.
 
 A delta with the wrong base must be rejected.
 
-`src/dbf/tests/persistence.rs::recovery_replays_the_dbf_and_index_target_from_one_wal` covers the DBF-replaced/index-not-yet-replaced boundary with a durable `TXDI` target.
+`src/dbf/tests/recovery.rs::recovery_replays_the_dbf_and_index_target_from_one_wal` covers the DBF-replaced/index-not-yet-replaced boundary with a durable `TXDI` target.
 
 `src/query/planner_tests.rs::uses_a_valid_equality_index_and_preserves_scan_results` covers single-index equality, equality intersection, empty intersections, range, ordered traversal, and table-scan equivalence.
 

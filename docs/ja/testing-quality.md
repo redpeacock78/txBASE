@@ -63,7 +63,7 @@ txBASE での実用的な適用は、各形式またはプロトコル規則を�
 | DBF 形式 | `src/dbf/tests/format.rs`、`format_codepages.rs`、`format_foxpro.rs` |
 | memo サイドカー | `src/dbf/tests/memo.rs`、`memo_foxpro.rs`、`src/dbf/malformed_memo_tests.rs` |
 | DBF 更新 | `src/dbf/tests/mutation.rs`、`mutation_model_tests.rs`、`writer_tests.rs` |
-| 永続化 | `src/dbf/tests/persistence.rs`、`recovery_fault_tests.rs`、`src/dbf/recovery.rs` |
+| 永続化 | `src/dbf/tests/persistence.rs`、`src/dbf/tests/recovery.rs`、`recovery_fault_tests.rs`、`src/dbf/recovery.rs` |
 | 保守 | `src/dbf/tests/maintenance.rs`、`src/dbf/schema.rs`、`src/dbf/maintenance.rs` |
 | 壊れた入力 | `src/dbf/malformed_tests.rs`、`src/dbf/parser_fuzz_tests.rs`、`src/query/malformed_tests.rs`、`src/transaction/malformed_tests.rs`、`src/xbf/malformed_tests.rs`、`tests/corpus/xbf/` |
 | クエリと HTTP | `src/query/tests.rs`、`src/query/cursor_tests.rs`、`src/query/aggregation_tests.rs`、`src/server/tests.rs`、`src/server/catalog_tests.rs`、`src/server/range.rs` |
@@ -114,7 +114,7 @@ DBF、memo、WAL、JSON 入力について決定的なコーパスを保ちま�
 
 基底が異なる差分は拒否します。
 
-`src/dbf/tests/persistence.rs::recovery_replays_the_dbf_and_index_target_from_one_wal` は、永続的な `TXDI` 対象を使い、DBF 置換後かつインデックス未置換の境界を検査します。
+`src/dbf/tests/recovery.rs::recovery_replays_the_dbf_and_index_target_from_one_wal` は、永続的な `TXDI` 対象を使い、DBF 置換後かつインデックス未置換の境界を検査します。
 
 `src/query/planner_tests.rs::uses_a_valid_equality_index_and_preserves_scan_results` は、単一インデックスの等値、等値積集合、空の積集合、範囲、順序付き走査、テーブルスキャンとの同値を検査します。
 
