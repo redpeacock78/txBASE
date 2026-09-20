@@ -150,10 +150,7 @@ pub(super) fn update_response_with_validator(
         }
     };
     let values = if is_merge_patch {
-        let Some(current) = table
-            .active_record(id)
-            .map(|record| record.values.clone())
-        else {
+        let Some(current) = table.active_record(id).map(|record| record.values.clone()) else {
             return json_response(
                 500,
                 error("storage_error", "record disappeared during update"),
