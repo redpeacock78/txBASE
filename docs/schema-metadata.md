@@ -128,13 +128,12 @@ The current copy and WAL protocols do not claim one atomic multi-file commit for
 
 The sidecar does not yet implement:
 
-- Composite primary keys.
 - `FOREIGN KEY` references or cross-table validation.
 - Collations or type declarations independent of DBF field descriptors.
 - A schema migration or metadata-edit command.
 - Automatic selection between a DBF language driver and an override.
 
-Composite primary and cross-table constraints need broader metadata, migration, and recovery rules before they can be added safely.
+Cross-table constraints need broader metadata, migration, and recovery rules before they can be added safely.
 
 SQLite's official [`CREATE TABLE` reference](https://sqlite.org/lang_createtable.html) distinguishes `NOT NULL`, `CHECK`, `UNIQUE`, `PRIMARY KEY`, and `FOREIGN KEY` constraints and documents their write-time behavior.
 

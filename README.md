@@ -260,7 +260,7 @@ constraints, bounded composite `unique` keys, scalar `default` values for omitte
 bounded table-level query-predicate `checks`, and can explicitly select one of the supported CJK
 codecs without changing legacy DBF bytes.
 Loaded active records and every insert, replace, patch, and recall are checked against it;
-composite primary keys and foreign keys remain future work.
+foreign keys remain future work.
 
 The implementation currently favors a readable DBF file plus separate WAL and memo sidecars.
 
