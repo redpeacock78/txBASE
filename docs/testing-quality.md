@@ -131,7 +131,7 @@ A delta with the wrong base must be rejected.
 
 `src/query/planner_compound_tests.rs::chooses_a_table_scan_for_a_non_selective_index` covers the bounded cost tie that rejects an index when it returns every active record.
 
-`src/query/join_strategy.rs::chooses_nested_loop_for_small_join_inputs` and `chooses_hash_for_large_join_inputs` cover the deterministic equality-join strategy threshold; the join tests cover output order and chained-stage semantics.
+`src/query/join_strategy.rs::chooses_nested_loop_for_small_join_inputs`, `chooses_hash_for_large_join_inputs`, and `chooses_index_nested_loop_for_large_indexed_inputs` cover the deterministic equality-join strategy threshold; `large_single_key_join_uses_a_fresh_foreign_index` covers the direct indexed path, and the join tests cover output order and chained-stage semantics.
 
 `src/query/field_expression_tests.rs` covers dotted field references, missing operands, and malformed or unsupported `$expr` documents.
 

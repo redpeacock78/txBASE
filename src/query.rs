@@ -10,6 +10,7 @@ use std::fmt::{self, Display, Formatter};
 mod aggregation;
 mod aggregation_plan;
 pub mod join;
+mod join_index;
 mod join_nested;
 mod join_strategy;
 mod ordering;

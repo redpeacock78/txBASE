@@ -109,7 +109,7 @@ fn apply_stage(
 
     if matches!(&spec.kind, JoinType::Right) {
         if matches!(
-            super::join_strategy::choose(left.len(), right.len()),
+            super::join_strategy::choose(left.len(), right.len(), false),
             super::join_strategy::JoinStrategy::NestedLoop
         ) {
             return super::join_nested::execute_right_stage(
@@ -144,7 +144,7 @@ fn apply_stage(
     }
 
     if matches!(
-        super::join_strategy::choose(left.len(), right.len()),
+        super::join_strategy::choose(left.len(), right.len(), false),
         super::join_strategy::JoinStrategy::NestedLoop
     ) {
         return super::join_nested::execute_stage(

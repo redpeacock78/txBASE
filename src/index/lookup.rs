@@ -4,6 +4,12 @@ use serde_json::{Map, Value};
 type CompoundOrdered = (String, Vec<String>, Vec<i8>, Vec<usize>);
 
 impl IndexFile {
+    pub(crate) fn has_single_field(&self, field: &str) -> bool {
+        self.indexes
+            .iter()
+            .any(|index| index.definition.fields.len() == 1 && index.definition.fields[0] == field)
+    }
+
     pub(crate) fn equality_selectivity_estimate(&self, field: &str) -> Option<usize> {
         let index = self.indexes.iter().find(|index| {
             index.definition.fields.len() == 1 && index.definition.fields[0] == field

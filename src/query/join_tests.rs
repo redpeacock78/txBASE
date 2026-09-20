@@ -1,6 +1,7 @@
 use super::join::{JoinError, execute, parse};
 use crate::catalog::Catalog;
 use crate::dbf::DbfTable;
+use crate::index::{IndexDefinition, IndexFile};
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
@@ -44,6 +45,34 @@ fn catalog_with_posts() -> PathBuf {
         )
         .unwrap();
     posts.save_with_wal(root.join("posts.dbf")).unwrap();
+    root
+}
+
+fn catalog_with_many_indexed_posts() -> PathBuf {
+    let root = temporary_catalog();
+    let users_path = root.join("users.dbf");
+    fs::write(&users_path, fixture()).unwrap();
+    IndexFile::build(&users_path, vec![IndexDefinition::named("by_id", "ID")])
+        .unwrap()
+        .save(&users_path)
+        .unwrap();
+    let mut posts = DbfTable::from_bytes(&fixture()).unwrap();
+    for id in 1..=80 {
+        posts
+            .insert_record(
+                json!({"ID": id, "NAME": "Indexed", "AGE": id, "ACTIVE": true})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+    }
+    let posts_path = root.join("posts.dbf");
+    posts.save_with_wal(&posts_path).unwrap();
+    IndexFile::build(&posts_path, vec![IndexDefinition::named("by_id", "ID")])
+        .unwrap()
+        .save(&posts_path)
+        .unwrap();
     root
 }
 
@@ -137,6 +166,41 @@ fn right_join_keeps_unmatched_right_record() {
             row.get("posts.NAME") == Some(&other) && row.get("users.NAME").is_none()
         })
     );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn large_single_key_join_uses_a_fresh_foreign_index() {
+    let root = catalog_with_many_indexed_posts();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let request = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "inner",
+            "table": "posts",
+            "on": {
+              "users.ID": {"$eq": {"$field": "posts.ID"}}
+            }
+          },
+          "projection": {"users.ID": 1, "posts.ID": 1}
+        }"#,
+    )
+    .unwrap();
+
+    let rows = execute(&catalog, &request).unwrap();
+
+    assert!(!rows.is_empty());
+    assert!(rows.iter().all(|row| row["users.ID"] == row["posts.ID"]));
+
+    let mut right_request = request;
+    right_request.join.kind = super::join::JoinType::Right;
+    let right_rows = execute(&catalog, &right_request).unwrap();
+    assert!(right_rows.iter().any(|row| {
+        row.get("users.ID")
+            .zip(row.get("posts.ID"))
+            .is_some_and(|(left, right)| left == right)
+    }));
     fs::remove_dir_all(root).unwrap();
 }
 

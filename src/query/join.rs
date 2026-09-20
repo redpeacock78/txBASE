@@ -136,9 +136,40 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
         return Ok(output);
     }
 
+    let large_join = matches!(
+        super::join_strategy::choose(left_records.len(), right_records.len(), false),
+        super::join_strategy::JoinStrategy::Hash
+    );
+
     if let JoinType::Right = &request.join.kind {
+        let left_index = if large_join && local_fields.len() == 1 && foreign_fields.len() == 1 {
+            super::join_index::load(catalog, &request.from, &local_fields[0])
+        } else {
+            None
+        };
         if matches!(
-            super::join_strategy::choose(left_records.len(), right_records.len()),
+            super::join_strategy::choose(
+                left_records.len(),
+                right_records.len(),
+                left_index.is_some(),
+            ),
+            super::join_strategy::JoinStrategy::IndexNestedLoop
+        ) {
+            if let Some(index) = left_index.as_ref() {
+                if let Some(output) = super::join_index::execute_right_join(
+                    &left_records,
+                    &right_records,
+                    request,
+                    index,
+                    &local_fields[0],
+                    &foreign_fields[0],
+                )? {
+                    return Ok(output);
+                }
+            }
+        }
+        if matches!(
+            super::join_strategy::choose(left_records.len(), right_records.len(), false),
             super::join_strategy::JoinStrategy::NestedLoop
         ) {
             return super::join_nested::execute_right_join(
@@ -172,8 +203,35 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
         return Ok(output);
     }
 
+    let right_index = if large_join && local_fields.len() == 1 && foreign_fields.len() == 1 {
+        super::join_index::load(catalog, &request.join.table, &foreign_fields[0])
+    } else {
+        None
+    };
     if matches!(
-        super::join_strategy::choose(left_records.len(), right_records.len()),
+        super::join_strategy::choose(
+            left_records.len(),
+            right_records.len(),
+            right_index.is_some(),
+        ),
+        super::join_strategy::JoinStrategy::IndexNestedLoop
+    ) {
+        if let Some(index) = right_index.as_ref() {
+            if let Some(output) = super::join_index::execute_join(
+                &left_records,
+                &right_records,
+                request,
+                index,
+                &local_fields[0],
+                &foreign_fields[0],
+            )? {
+                return Ok(output);
+            }
+        }
+    }
+
+    if matches!(
+        super::join_strategy::choose(left_records.len(), right_records.len(), false),
         super::join_strategy::JoinStrategy::NestedLoop
     ) {
         return super::join_nested::execute_join(
