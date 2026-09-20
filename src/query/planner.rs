@@ -208,7 +208,10 @@ fn choose_range(
             index_file.lookup_compound_range_for_field(&field, lower, upper, &request.filter)
         {
             candidates.push(PlannedAccess {
-                plan: QueryPlan::RangeIndex { name, field },
+                plan: QueryPlan::RangeIndex {
+                    name,
+                    field: field.clone(),
+                },
                 records: Some(records),
                 ordered_prefix: 0,
             });
