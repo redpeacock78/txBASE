@@ -57,50 +57,7 @@ The executor applies filtering, sorting, projection, skipping, and limiting in t
 
 Sort ties preserve DBF record order.
 
-The pipeline may end with one bounded `$sort` stage over group output:
-
-```json
-{
-  "aggregate": [
-    {"$group": {"_id": "$COUNTRY", "count": {"$count": {}}}},
-    {"$sort": {"count": -1, "_id": 1}}
-  ]
-}
-```
-
-A count-only pipeline may end after optional `$match` stages with one terminal `$count` stage:
-
-```json
-{
-  "aggregate": [
-    {"$match": {"ACTIVE": true}},
-    {"$count": "total"}
-  ]
-}
-```
-
-A distinct pipeline may end after optional `$match` stages with one terminal `$distinct` stage:
-
-```json
-{
-  "aggregate": [
-    {"$match": {"ACTIVE": true}},
-    {"$distinct": "$COUNTRY"}
-  ]
-}
-```
-
-An optional final `$limit` may follow `$sort`, or `$group` when sorting is omitted:
-
-```json
-{
-  "aggregate": [
-    {"$group": {"_id": "$COUNTRY", "count": {"$count": {}}}},
-    {"$sort": {"count": -1}},
-    {"$limit": 10}
-  ]
-}
-```
+The optional `aggregate` pipeline is defined in [Aggregation model](aggregation.md).
 
 `page_size` enables the bounded cursor response shape:
 
@@ -187,214 +144,7 @@ whole query.
 
 Runtime-specific async traits remain a separate future boundary.
 
-## 2. Bounded aggregation
-
-The query document can contain one terminal `$count` or `$distinct` stage, or one blocking `$group` stage after `filter` and zero or more preceding `$match` stages:
-
-```json
-{
-  "filter": {"ACTIVE": true},
-  "aggregate": [
-    {
-      "$group": {
-        "_id": "$COUNTRY",
-        "count": {"$count": {}},
-        "total_age": {"$sum": "$AGE"}
-      }
-    }
-  ]
-}
-```
-
-The current aggregation boundary accepts zero or more `$match` stages followed by one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
-
-Group output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, and at most one final `$limit` stage.
-
-`_id` is either `null` or one dotted field reference.
-
-Supported accumulators are `$count: {}`, numeric `$sum: "$FIELD"`, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, and `$last: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
-
-The filter runs before grouping.
-
-The result is a JSON array of documents containing `_id` and the named accumulator fields.
-
-`$project` reuses the query projection rules for group-output fields.
-
-It must appear after `$group` and before `$sort` or `$limit`.
-
-Inclusion and exclusion cannot be mixed.
-
-Projection runs before the following `$sort`, so sorting a projected-away field uses the existing missing-value ordering.
-
-A missing group field becomes `null`.
-
-Missing and explicit `null` values therefore share a group.
-
-Missing, `null`, and nonnumeric `$sum` inputs contribute zero.
-
-All-integral `$sum` inputs preserve an integer JSON result.
-
-If any fractional input occurs, `$sum` returns a finite JSON floating-point result.
-
-An accumulated `$sum` that is not finite or cannot be represented as JSON is rejected.
-
-Missing, `null`, and nonnumeric `$avg` inputs are ignored.
-
-An all-missing or all-nonnumeric group returns `null`, and a non-finite accumulated result is rejected.
-
-Missing and `null` `$min` and `$max` inputs are ignored.
-
-An all-missing or all-null group returns `null` for that accumulator.
-
-Non-null `$min` and `$max` values must be comparable under the existing JSON ordering rules.
-
-Incomparable values are rejected.
-
-`$first` and `$last` use input physical record order within each group.
-
-They return the first or last field value, including explicit `null`; a missing field is returned as `null`.
-
-The executor rejects more than 10,000 groups and rejects aggregation combined with top-level sort, projection, skip, limit, or cursor pagination.
-
-Without `$sort`, group output order is not part of the contract, although the current implementation emits deterministic key order.
-
-`$sort` uses the existing JSON sort ordering and stable ties.
-
-`$limit` accepts a non-negative integer and truncates the materialized group result after sorting.
-
-`$match` stages use the same predicate rules as top-level `filter`.
-
-Input `$match` stages must precede `$group`, `$count`, or `$distinct`.
-
-Group-output `$match` stages must follow `$group` and precede `$project`, `$sort`, or `$limit`.
-
-`$count` emits one document containing the named non-negative integer field, including zero when no records match.
-
-`$distinct` takes one field reference and emits unique field values as a JSON array.
-
-Missing fields and explicit `null` share one `null` value.
-
-Both stages are terminal and cannot be combined with group-output stages.
-
-Distinct output is capped at 10,000 values.
-
-Stages after `$limit`, additional grouping, count, or distinct stages remain unsupported.
-
-`$expr` operands are supported only in the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` forms described below.
-
-Broader expression evaluation remains unsupported.
-
-MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as `$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).
-
-Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/) is represented by this bounded txBASE stage without claiming full MongoDB pipeline compatibility.
-
-## 3. Bounded local join
-
-The library exposes one bounded local join through `txbase::query::join`.
-
-It accepts the relation shape from the roadmap and supports one or more equality conditions between two catalog tables:
-
-```json
-{
-  "from": "users",
-  "join": {
-    "type": "left",
-    "table": "posts",
-    "on": {
-      "users.ID": {
-        "$eq": {
-          "$field": "posts.USER_ID"
-        }
-      }
-    }
-  },
-  "filter": {
-    "users.ACTIVE": true
-  },
-  "projection": {
-    "users.NAME": 1,
-    "posts.TITLE": 1
-  }
-}
-```
-
-`join.parse` validates this JSON, and `join::execute` loads named tables from a `Catalog`.
-
-The current join types are `inner`, `left`, `right`, `semi`, `anti`, and `cross`.
-
-The result is a flat JSON object whose keys use the `table.field` form.
-
-An unmatched left row is retained without right-table fields.
-
-An unmatched right row is retained without left-table fields for a `right` join.
-
-`semi` emits one left row when at least one right row matches.
-
-`anti` emits one left row when no right row matches.
-
-Neither type emits right-table fields.
-
-`cross` accepts an empty `on` object and emits every left and right pair.
-
-Its candidate pair count is capped at 100,000 before filtering.
-
-Missing and explicit `null` join keys do not match.
-
-The equality-join planner selects `NestedLoop` when the left and right active-row counts have at most 64 candidate pairs.
-
-For larger inputs, it compares bounded costs for the available strategies.
-
-`Hash` costs one pass over both inputs.
-
-`IndexNestedLoop` costs the outer-row count multiplied by the inner-side logarithmic probe estimate plus its average equality fanout.
-
-`Merge` costs one pass over both inputs when compatible ordered indexes are fresh on both sides.
-
-The strategy with the lower estimate wins, with `Merge` preferred over `IndexNestedLoop`, and `IndexNestedLoop` preferred over `Hash` for an exact tie.
-
-For a direct single-key equality join or a chained single-key equality stage, the indexed table is the inner side of the probe.
-
-For a chained `right` stage, it probes the indexed right table and restores right-major physical order before emitting the intermediate result.
-
-Direct and chained stages may also use a fresh compound index when the equality fields exactly match the index field order.
-
-For a large direct equality join with compatible fresh ordered indexes on both inputs, the planner selects `Merge` when its bounded cost is lowest and restores left-major or right-major output order after matching key groups.
-
-When an index is unavailable, stale, malformed, or more expensive than the hash estimate, larger inputs select `Hash` and build one in-memory equality map for the right table, or the left table for a `right` join.
-
-The selector preserves left-major output order for non-right joins and right-major output order for right joins.
-
-It rejects a result larger than 100,000 rows.
-
-For multiple joins, the required `join` object is the first stage and an optional `joins` array adds stages from left to right.
-
-Each additional stage may reference any table already present in the intermediate row and adds one new table.
-
-Table names cannot repeat, and the total stage count is capped at eight.
-
-Every intermediate result is capped at 100,000 rows.
-
-This is a bounded cardinality cost model with a compatible-index merge path.
-
-It does not estimate index I/O, cache state, duplicate-key fanout, or output materialization, so it is not a full cost-based planner, full index-aware join planner, or streaming executor.
-
-The single-table HTTP server does not expose joins.
-
-The catalog server exposes the same read-only boundary at `QUERY /join`.
-
-Cross-table writes and transactions remain outside this surface.
-
-The join accepts the existing filter and projection rules, but not sort, pagination, aggregation, self-join aliases, or cross-table transactions.
-
-MongoDB's [`$lookup` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/) is reference vocabulary.
-
-MongoDB describes `$lookup` as a left outer join that adds matching foreign documents as an array, while txBASE emits flat relational rows to match the attached join plan.
-
-The MongoDB documentation also calls out the performance cost of an unindexed foreign-side join.
-
-That is why this first slice has a hard result bound and makes no planner-level performance claim.
-
-## 4. Current predicate vocabulary
+## 2. Current predicate vocabulary
 
 | Family | Operators | Current rule |
 | --- | --- | --- |
@@ -433,7 +183,7 @@ Integer overflow and non-finite results are rejected.
 
 They are txBASE behavior and must not be described as MongoDB compatibility.
 
-## 5. Paths, arrays, and projection
+## 3. Paths, arrays, and projection
 
 Dotted paths traverse nested JSON objects and arrays.
 
@@ -450,6 +200,8 @@ The current implementation does not promise every MongoDB projection rule, posit
 ## Related documents
 
 - [Query planning and external vocabulary](query-planning.md)
+- [Aggregation model](aggregation.md)
+- [Join model](joins.md)
 - [Mutation model](mutation-model.md)
 - [Secondary-index sidecar](indexes.md)
 - [HTTP method semantics](http-semantics.md)
@@ -461,5 +213,3 @@ The current implementation does not promise every MongoDB projection rule, posit
 - [MongoDB query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
-- [MongoDB `$group` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
-- [MongoDB `$lookup` join stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/)

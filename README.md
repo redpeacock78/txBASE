@@ -360,6 +360,8 @@ Files are split when ownership or maintenance becomes clearer; a crate split sho
 - [Multi-table catalog](docs/catalog.md)
 - [Secondary-index sidecar](docs/indexes.md)
 - [Query model](docs/query-model.md)
+- [Aggregation model](docs/aggregation.md)
+- [Join model](docs/joins.md)
 - [Query planning and external vocabulary](docs/query-planning.md)
 - [Mutation model](docs/mutation-model.md)
 - [Firebase data-model and synchronization lessons](docs/firebase-model.md)

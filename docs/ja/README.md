@@ -15,6 +15,8 @@
 ## クエリとプロトコルの契約
 
 - [クエリモデル](query-model.md)
+- [集約モデル](aggregation.md)
+- [結合モデル](joins.md)
 - [クエリ計画と外部語彙](query-planning.md)
 - [更新モデル](mutation-model.md)
 - [HTTP メソッドの意味と QUERY](http-semantics.md)

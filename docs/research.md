@@ -15,7 +15,9 @@ This repository does not claim compatibility merely because it uses a familiar n
 | Topic | Document | Status |
 | --- | --- | --- |
 | dBASE and Visual FoxPro file structure | [DBF compatibility](dbf-compatibility.md) | Current plus future encoding work |
-| Query execution contract | [Query model](query-model.md) | Current subset |
+| Query document, predicates, cursors, and streams | [Query model](query-model.md) | Current subset |
+| Bounded aggregation contract | [Aggregation model](aggregation.md) | Current subset |
+| Bounded local join contract | [Join model](joins.md) and [Catalog](catalog.md) | Current boundary |
 | MongoDB predicates and query planning | [Query planning](query-planning.md) | Current subset plus reference |
 | Mutation operators and atomicity | [Mutation model](mutation-model.md) | Current subset plus future boundary |
 | Firestore and Realtime Database design | [Firebase model](firebase-model.md) | Reference |
@@ -24,7 +26,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | HTTP methods, PATCH, and QUERY | [HTTP semantics](http-semantics.md) | Current routes plus protocol reference |
 | Relational schema constraints over DBF | [Schema metadata](schema-metadata.md) | Current local subset plus future relational work |
 | Native XBF storage format | [XBF v1 draft](xbf.md) | Draft codec, DBF conversion/export, snapshot path, generation-checked WAL, and journaled schema export |
-| Multi-table DBF discovery and bounded local equality join | [Catalog](catalog.md) and [Query model](query-model.md) | Current boundary plus future relational work |
+| Multi-table DBF discovery and bounded local equality join | [Catalog](catalog.md) and [Join model](joins.md) | Current boundary plus future relational work |
 | External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, equality, compound equality-prefix range candidates, histogram-estimated range ordering, ordered-prefix traversal, mixed-direction compound-prefix sorting, equality-prefix candidate choice, uniform-statistics-ordered equality intersection, bounded record, traversal, and sort cost choice, and future full I/O-aware cost model |
 | CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Future |
 

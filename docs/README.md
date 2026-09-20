@@ -17,6 +17,8 @@ Research and future work do not imply an implemented feature.
 ## Query and protocol contracts
 
 - [Query model](query-model.md)
+- [Aggregation model](aggregation.md)
+- [Join model](joins.md)
 - [Query planning and external vocabulary](query-planning.md)
 - [Mutation model](mutation-model.md)
 - [HTTP method semantics and QUERY](http-semantics.md)

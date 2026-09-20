@@ -57,52 +57,7 @@ MongoDB は語彙と比較対象を提供しますが、互換性の目標では
 
 ソートキーが同値の場合は DBF のレコード順を保ちます。
 
-パイプラインの末尾には、グループ出力に対する有界な `$sort` ステージを一つ置けます。
-
-```json
-{
-  "aggregate": [
-    {"$group": {"_id": "$COUNTRY", "count": {"$count": {}}}},
-    {"$sort": {"count": -1, "_id": 1}}
-  ]
-}
-```
-
-件数だけを求めるパイプラインは、任意の `$match` ステージの後に終端 `$count` ステージを一つ置けます。
-
-```json
-{
-  "aggregate": [
-    {"$match": {"ACTIVE": true}},
-    {"$count": "total"}
-  ]
-}
-```
-
-重複を除くパイプラインは、任意の `$match` ステージの後に終端 `$distinct` ステージを一つ置けます。
-
-```json
-{
-  "aggregate": [
-    {"$match": {"ACTIVE": true}},
-    {"$distinct": "$COUNTRY"}
-  ]
-}
-```
-
-最後の `$limit` は `$sort` の後に置けます。
-
-ソートを省略する場合は `$group` の後にも置けます。
-
-```json
-{
-  "aggregate": [
-    {"$group": {"_id": "$COUNTRY", "count": {"$count": {}}}},
-    {"$sort": {"count": -1}},
-    {"$limit": 10}
-  ]
-}
-```
+任意の `aggregate` パイプラインの仕様は[集約モデル](aggregation.md)にあります。
 
 `page_size` を指定すると、有界なカーソル応答を使用します。
 
@@ -187,214 +142,7 @@ catalog server は `QUERY /{table}/records/stream` を公開します。
 
 ランタイム固有の非同期トレイトは別の将来境界です。
 
-## 2. 有界集約
-
-クエリ文書には、`filter` と 0 個以上の先行 `$match` ステージの後に、終端 `$count`、終端 `$distinct`、またはブロッキングな `$group` を一つ置けます。
-
-```json
-{
-  "filter": {"ACTIVE": true},
-  "aggregate": [
-    {
-      "$group": {
-        "_id": "$COUNTRY",
-        "count": {"$count": {}},
-        "total_age": {"$sum": "$AGE"}
-      }
-    }
-  ]
-}
-```
-
-現在の集約境界は、0 個以上の `$match` の後に終端 `$count`、終端 `$distinct`、または `$group` を一つだけ受け付けます。
-
-グループ出力には 0 個以上の `$match` を置き、その後に任意の `$project` を一つ、最後の `$sort` を最大一つ、最後の `$limit` を最大一つ置けます。
-
-`_id` は `null` または一つのドット区切りフィールド参照です。
-
-サポートするアキュムレータは `$count: {}`、数値の `$sum: "$FIELD"`、`$min: "$FIELD"`、`$max: "$FIELD"`、`$first: "$FIELD"`、`$last: "$FIELD"`、および有限な JSON 数値に対する `$avg: "$FIELD"` です。
-
-フィルターはグループ化より前に実行します。
-
-結果は `_id` と名前付きアキュムレータフィールドを持つ JSON オブジェクトの配列です。
-
-`$project` はクエリのプロジェクション規則を再利用してグループ出力のフィールドを包含または除外します。
-
-`$project` は `$group` の後、`$sort` または `$limit` の前に置く必要があります。
-
-包含と除外は混在できません。
-
-プロジェクションは後続の `$sort` より前に適用するため、除外したフィールドをソートすると既存の欠損値順になります。
-
-欠損したグループフィールドは `null` になります。
-
-そのため欠損値と明示的な `null` は同じグループになります。
-
-欠損、`null`、数値以外の `$sum` 入力は 0 として扱います。
-
-`$sum` の数値入力がすべて整数なら、結果も JSON の整数になります。
-
-小数を一つでも含む場合、`$sum` は有限な JSON 浮動小数点数を返します。
-
-`$sum` の累積結果が有限でない場合、または JSON で表現できない場合は拒否します。
-
-欠損、`null`、数値以外の `$avg` 入力は無視します。
-
-すべてが欠損または数値以外のグループは `null` を返し、非有限の累積結果は拒否します。
-
-欠損と `null` の `$min` および `$max` 入力は無視します。
-
-すべてが欠損または `null` のグループでは、そのアキュムレータは `null` になります。
-
-非 `null` の `$min` および `$max` 値は、既存の JSON 順序規則で比較できなければなりません。
-
-比較できない値は拒否します。
-
-`$first` と `$last` は、各グループ内の入力物理レコード順を使います。
-
-明示的な `null` を含めて最初または最後のフィールド値を返し、欠損フィールドは `null` として返します。
-
-10,000 を超えるグループは拒否し、集約とトップレベルの `sort`、`projection`、`skip`、`limit`、cursor ページングの併用も拒否します。
-
-`$sort` がない場合のグループ出力順は契約に含めませんが、現在の実装は決定的なキー順で出力します。
-
-`$sort` は既存の JSON ソート順と安定した同値順を使います。
-
-`$limit` は 0 以上の整数を受け付け、ソート後の具体化されたグループ結果を切り詰めます。
-
-`$match` ステージはトップレベルの `filter` と同じ述語規則を使います。
-
-入力に対する `$match` ステージは `$group`、`$count`、`$distinct` より前に置く必要があります。
-
-グループ出力に対する `$match` ステージは `$group` の後、`$project`、`$sort`、`$limit` より前に置く必要があります。
-
-`$count` は名前付きの 0 以上の整数フィールドを一つ持つ文書を返し、一致するレコードがない場合も 0 を返します。
-
-`$distinct` は一つのフィールド参照を受け取り、重複しないフィールド値を JSON 配列で返します。
-
-欠損フィールドと明示的な `null` は一つの `null` 値として扱います。
-
-両ステージは終端であり、グループ出力ステージとは併用できません。
-
-distinct 出力は 10,000 値までです。
-
-`$limit` 後のステージ、追加の group、count、distinct ステージは未サポートです。
-
-`$expr` のオペランドは、後述する有界な数値 `$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod` の形式だけをサポートします。
-
-より広い式評価は未サポートです。
-
-MongoDB は `$group` をブロッキングステージとして説明し、[$count と $sum を含む集約ステージの仕様](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)を定義しています。
-
-txBASE は MongoDB の完全なパイプライン互換性を主張せず、その別個の [`$count` ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)を有界なステージとして表現します。
-
-## 3. 有界ローカル結合
-
-ライブラリは `txbase::query::join` を通じて一つの有界ローカル結合を公開します。
-
-ロードマップにある関係形状を受け取り、二つのカタログテーブル間に一つ以上の等値条件を指定できます。
-
-```json
-{
-  "from": "users",
-  "join": {
-    "type": "left",
-    "table": "posts",
-    "on": {
-      "users.ID": {
-        "$eq": {
-          "$field": "posts.USER_ID"
-        }
-      }
-    }
-  },
-  "filter": {
-    "users.ACTIVE": true
-  },
-  "projection": {
-    "users.NAME": 1,
-    "posts.TITLE": 1
-  }
-}
-```
-
-`join.parse` は JSON を検証し、`join::execute` は `Catalog` から名前付きテーブルをロードします。
-
-現在の結合型は `inner`、`left`、`right`、`semi`、`anti`、`cross` です。
-
-結果はキーを `table.field` 形式で修飾したフラットな JSON オブジェクトです。
-
-一致しない左行は右テーブルのフィールドなしで残ります。
-
-`right` 結合では一致しない右行が左テーブルのフィールドなしで残ります。
-
-`semi` は少なくとも一つの右行が一致したときに左行を一つ出力します。
-
-`anti` は一致する右行がないときに左行を一つ出力します。
-
-どちらも右テーブルのフィールドを出力しません。
-
-`cross` は空の `on` オブジェクトを受け付け、左行と右行のすべての組を出力します。
-
-フィルター前の候補ペア数は 100,000 までです。
-
-欠損した結合キーと明示的な `null` は一致しません。
-
-等値結合のプランナーは、左と右のアクティブ行数から候補ペアが 64 以下になる場合に `NestedLoop` を選びます。
-
-候補ペアが 64 より多い場合、利用可能な戦略の有界コストを比較します。
-
-`Hash` のコストは、両入力を一度ずつ走査する値です。
-
-`IndexNestedLoop` のコストは、外側の行数に内側のインデックス検索の対数推定値と平均等値ファンアウトを加えた値です。
-
-互換性のある ordered index が両側で鮮度を保っている場合、`Merge` のコストは両入力を一度ずつ走査する値です。
-
-推定値が最も小さい戦略を選び、完全な同点では `Merge`、`IndexNestedLoop`、`Hash` の順を優先します。
-
-直接または多段の単一キー等値結合では、インデックス付きテーブルを検索の内側に置きます。
-
-多段の `right` ステージでは、インデックス付きの右テーブルを検索し、中間結果を出力する前に右側の物理順へ戻します。
-
-直接および多段ステージでは、等値条件のフィールド順がインデックスのフィールド順と完全に一致する場合、鮮度検証済みの複合インデックスも使えます。
-
-両入力に互換性のある鮮度検証済み ordered index がある大きな直接等値結合では、有界コストが最も小さい場合にプランナーが `Merge` を選び、キーグループを照合した後に左主体または右主体の出力順へ戻します。
-
-インデックスがない、古い、壊れている、利用できない、またはハッシュ推定値より高い場合は `Hash` を選び、`right` 結合では左テーブル、それ以外では右テーブルについて一つのメモリ内等値マップを作ります。
-
-この選択器は、`right` 以外では左行を外側にした出力順を、`right` では右行を外側にした出力順を保ちます。
-
-結果が 100,000 行を超える場合は拒否します。
-
-複数結合では必須の `join` オブジェクトが最初のステージとなり、任意の `joins` 配列が左から右へステージを追加します。
-
-追加ステージは中間行にすでに含まれる任意のテーブルを参照し、新しいテーブルを一つ追加できます。
-
-テーブル名は重複できず、ステージ数は 8 までです。
-
-各中間結果は 100,000 行までです。
-
-これは互換インデックスの merge 経路を備えた有界なカーディナリティコストモデルです。
-
-インデックス I/O、キャッシュ状態、重複キーの増幅、出力の materialize を推定しないため、完全なコストベースプランナー、完全なインデックス対応結合プランナー、ストリーミング実行器ではありません。
-
-単一テーブル HTTP サーバーは結合を公開しません。
-
-カタログサーバーは `QUERY /join` で同じ読み取り専用境界を公開します。
-
-テーブル間の書き込みとトランザクションはこの境界の外側です。
-
-結合は既存の `filter` と `projection` の規則を受け付けますが、`sort`、ページング、集約、自己結合エイリアス、テーブル間トランザクションは受け付けません。
-
-MongoDB の [`$lookup` ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/)を語彙の参照にします。
-
-MongoDB は `$lookup` を一致する外部文書を配列として追加する左外部結合として説明しますが、txBASE は付属する結合計画に合わせてフラットな関係行を出力します。
-
-MongoDB の文書は、外部側にインデックスがない結合の性能コストも説明しています。
-
-そのため最初のスライスには結果数の上限を設け、プランナーレベルの性能を主張しません。
-
-## 4. 現在の述語語彙
+## 2. 現在の述語語彙
 
 | 分類 | 演算子 | 現在の規則 |
 | --- | --- | --- |
@@ -433,7 +181,7 @@ MongoDB の文書は、外部側にインデックスがない結合の性能コ
 
 これらは txBASE の動作であり、MongoDB 互換性として説明してはいけません。
 
-## 5. パス、配列、プロジェクション
+## 3. パス、配列、プロジェクション
 
 ドット区切りパスはネストした JSON オブジェクトと配列をたどります。
 
@@ -450,6 +198,8 @@ MongoDB の文書は、外部側にインデックスがない結合の性能コ
 ## 関連文書
 
 - [クエリ計画と外部語彙](query-planning.md)
+- [集約モデル](aggregation.md)
+- [結合モデル](joins.md)
 - [更新モデル](mutation-model.md)
 - [セカンダリインデックスのサイドカー](indexes.md)
 - [HTTP メソッドの意味](http-semantics.md)
@@ -460,6 +210,4 @@ MongoDB の文書は、外部側にインデックスがない結合の性能コ
 - [MongoDB documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
-- [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
-- [MongoDB `$group` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
-- [MongoDB `$lookup` join stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/)
+- [Firestore query cursors](https://www.mongodb.com/docs/firestore/query-data/query-cursors)
