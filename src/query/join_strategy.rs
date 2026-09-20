@@ -8,7 +8,7 @@ pub(super) const NESTED_LOOP_PAIR_LIMIT: usize = 64;
 
 pub(super) fn choose(left_count: usize, right_count: usize) -> JoinStrategy {
     // ponytail: fixed pair threshold; add measured index/cache terms when join statistics exist.
-    let pair_count = left_count.checked_mul(right_count).unwrap_or(usize::MAX);
+    let pair_count = left_count.saturating_mul(right_count);
     if pair_count <= NESTED_LOOP_PAIR_LIMIT {
         JoinStrategy::NestedLoop
     } else {
