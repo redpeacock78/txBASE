@@ -43,6 +43,16 @@ fn metadata() -> Vec<u8> {
     .unwrap()
 }
 
+fn check_metadata() -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {},
+        "checks": [{"AGE": {"$gte": 0}}]
+    }))
+    .unwrap()
+}
+
 fn encoding_metadata(name: &str) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({
         "format": "txbase-schema",
@@ -90,6 +100,40 @@ fn loads_schema_metadata_and_enforces_local_constraints() {
             .contains("field NAME must not be null")
     );
 
+    cleanup(&path);
+}
+
+#[test]
+fn schema_checks_reject_invalid_candidates() {
+    let path = temporary_path();
+    cleanup(&path);
+    fs::write(&path, fixture()).unwrap();
+    fs::write(path.with_extension("txschema.json"), check_metadata()).unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    let invalid = table
+        .insert_record(
+            serde_json::json!({"ID": 3, "NAME": "Carol", "AGE": -1})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap_err();
+    assert!(
+        invalid
+            .to_string()
+            .contains("constraint violation: check 0 failed")
+    );
+
+    let id = table
+        .insert_record(
+            serde_json::json!({"ID": 3, "NAME": "Carol", "AGE": 30})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    assert_eq!(id, 3);
     cleanup(&path);
 }
 

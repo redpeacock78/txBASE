@@ -28,7 +28,10 @@ The current sidecar is versioned independently from DBF:
   "fields": {
     "ID": {"primary": true},
     "NAME": {"unique": true, "not_null": true}
-  }
+  },
+  "checks": [
+    {"AGE": {"$gte": 0}}
+  ]
 }
 ```
 
@@ -60,6 +63,7 @@ The current version accepts the following field properties:
 | `primary` | Implies `unique` and `not_null`; only one single-field primary key is accepted |
 | `unique` | Rejects a non-null value already used by another active record |
 | `not_null` | Rejects JSON `null` on insert, replace, patch, or recall |
+| `checks` | Rejects a candidate record unless every table-level query predicate matches |
 
 The sidecar's `encoding` property is not a field constraint.
 
@@ -77,6 +81,10 @@ Existing active records are checked when the sidecar is loaded, so an invalid pr
 Deleted records do not participate in uniqueness checks.
 
 `RECALL` checks the record against currently active records before removing its deletion marker.
+
+Each `checks` entry is a query predicate object using the same bounded comparison, membership,
+logical, and `$expr` rules as `filter`. Checks are validated when the sidecar is loaded and are
+evaluated for active records and every insert, replace, patch, and recall candidate.
 
 The current implementation compares scalar numeric values by numeric order, while strings and booleans use their JSON value semantics.
 
@@ -101,7 +109,6 @@ The current copy and WAL protocols do not claim one atomic multi-file commit for
 The sidecar does not yet implement:
 
 - Composite primary or unique keys.
-- `CHECK` expressions.
 - `FOREIGN KEY` references or cross-table validation.
 - `DEFAULT` expressions or generated values.
 - Collations or type declarations independent of DBF field descriptors.

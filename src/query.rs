@@ -26,6 +26,7 @@ pub use planner::QueryPlan;
 pub(crate) use predicate::matches_condition;
 pub(crate) use predicate::matches_filter;
 pub use stream::{QuerySnapshotStream, QueryStream, stream_query, stream_query_snapshot};
+pub(crate) use validation::validate_filter;
 
 #[cfg(test)]
 use crate::query_path::field_value;

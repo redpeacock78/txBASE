@@ -228,7 +228,7 @@ representable XBF subset to a DBF file and reports unsupported types or values a
 `XbfTable::dbf_export_report` inspects representability without writing and returns all discovered
 field/record issues plus whether a schema sidecar is required.
 The library API `XbfTable::to_dbf_with_schema` additionally returns sidecar JSON for representable
-`primary`, `unique`, and `not_null` constraints. `XbfTable::save_dbf_with_schema` and CLI
+`primary`, `unique`, `not_null`, and bounded table-level `checks` constraints. `XbfTable::save_dbf_with_schema` and CLI
 `xbf export --schema` journal the DBF, sibling `.txschema.json`, and memo-sidecar state through a
 recoverable `TXSE` export boundary. A later DBF read resumes an interrupted replacement and rejects
 targets changed by another writer; it does not promise one physically atomic snapshot to external
@@ -256,9 +256,10 @@ The explicit `Shift_JIS` override accepts ASCII, half-width Katakana, and JIS X 
 extensions decode as U+FFFD and are rejected on write.
 
 An optional `users.txschema.json` sidecar adds one-field `primary`, `unique`, and `not_null`
-constraints and can explicitly select one of the supported CJK codecs without changing legacy DBF bytes.
+constraints plus bounded table-level query-predicate `checks`, and can explicitly select one of the
+supported CJK codecs without changing legacy DBF bytes.
 Loaded active records and every insert, replace, patch, and recall are checked against it;
-`CHECK`, foreign keys, defaults, and composite keys remain future work.
+foreign keys, defaults, and composite keys remain future work.
 
 The implementation currently favors a readable DBF file plus separate WAL and memo sidecars.
 

@@ -1,6 +1,7 @@
 use super::codec::canonical_encoding_name;
 use super::{DbfError, DbfRecord, FieldDescriptor};
 use crate::json_order::compare_scalar_values;
+use crate::query::{matches_filter, validate_filter};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::cmp::Ordering;
@@ -20,6 +21,8 @@ pub(super) struct SchemaMetadata {
     encoding: Option<String>,
     #[serde(default)]
     fields: BTreeMap<String, FieldMetadata>,
+    #[serde(default)]
+    checks: Vec<Map<String, Value>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -54,6 +57,11 @@ impl SchemaMetadata {
                 DbfError::Invalid(format!("unsupported schema encoding override: {encoding}"))
             })?;
             metadata.encoding = Some(canonical.to_owned());
+        }
+        for (index, check) in metadata.checks.iter().enumerate() {
+            validate_filter(check, &format!("schema.checks[{index}]")).map_err(|error| {
+                DbfError::Invalid(format!("invalid schema check {index}: {error}"))
+            })?;
         }
         Ok(metadata)
     }
@@ -103,6 +111,7 @@ impl SchemaMetadata {
             "version": self.version,
             "encoding": self.encoding,
             "fields": self.fields,
+            "checks": self.checks,
         })
     }
 
@@ -118,6 +127,18 @@ impl SchemaMetadata {
         records: &[DbfRecord],
         excluded_index: Option<usize>,
     ) -> Result<(), DbfError> {
+        for (index, check) in self.checks.iter().enumerate() {
+            let matches = matches_filter(values, check).map_err(|error| {
+                DbfError::Invalid(format!(
+                    "schema check {index} could not be evaluated: {error}"
+                ))
+            })?;
+            if !matches {
+                return Err(DbfError::Invalid(format!(
+                    "constraint violation: check {index} failed"
+                )));
+            }
+        }
         for (name, metadata) in &self.fields {
             let value = values.get(name).unwrap_or(&Value::Null);
             if (metadata.not_null || metadata.primary) && value.is_null() {
