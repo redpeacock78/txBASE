@@ -155,9 +155,11 @@ pub(super) fn execute(
                             let Some(number) = value.as_number() else {
                                 continue;
                             };
-                            (number, field.as_str())
+                            (number.clone(), field.as_str())
                         }
-                        aggregation_plan::SumOperand::Literal(number) => (number, "literal"),
+                        aggregation_plan::SumOperand::Literal(number) => {
+                            (number.clone(), "literal")
+                        }
                     };
                     if let Some(value) = number
                         .as_i64()
