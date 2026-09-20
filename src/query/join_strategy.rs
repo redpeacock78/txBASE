@@ -47,10 +47,11 @@ fn choose_better(
     current: (JoinStrategy, usize, u8),
     candidate: (JoinStrategy, usize, u8),
 ) -> (JoinStrategy, usize, u8) {
-    (candidate.1, candidate.2)
-        .lt(&(current.1, current.2))
-        .then_some(candidate)
-        .unwrap_or(current)
+    if (candidate.1, candidate.2) < (current.1, current.2) {
+        candidate
+    } else {
+        current
+    }
 }
 
 fn hash_cost(left_count: usize, right_count: usize) -> usize {
