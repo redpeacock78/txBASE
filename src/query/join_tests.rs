@@ -49,7 +49,7 @@ fn catalog_with_posts() -> PathBuf {
 
 fn catalog_with_posts_and_comments() -> PathBuf {
     let root = catalog_with_posts();
-    let comments = DbfTable::from_bytes(&fixture()).unwrap();
+    let mut comments = DbfTable::from_bytes(&fixture()).unwrap();
     comments.save_with_wal(root.join("comments.dbf")).unwrap();
     root
 }
