@@ -94,19 +94,19 @@ fn reads_and_writes_a_pinned_upstream_euc_kr_fixture() {
     assert_eq!(table.header.version, 0x03);
     assert_eq!(table.header.language_driver, 0x4e);
     assert_eq!(table.records().len(), 16);
-    assert_eq!(table.fields[0].name, "광역시도코드");
-    assert_eq!(table.fields[1].name, "광역시도명");
+    assert_eq!(table.fields[0].name, "광역시코드");
+    assert_eq!(table.fields[1].name, "광역시명");
     assert_eq!(table.schema_json()["encoding"], "EUC-KR/CP949");
-    assert_eq!(table.active_record(1).unwrap().values["광역시도코드"], "11");
+    assert_eq!(table.active_record(1).unwrap().values["광역시코드"], "11");
     assert_eq!(
-        table.active_record(1).unwrap().values["광역시도명"],
+        table.active_record(1).unwrap().values["광역시명"],
         "서울특별시"
     );
 
     table
         .patch_record(
             1,
-            serde_json::json!({"광역시도명": "테스트"})
+            serde_json::json!({"광역시명": "테스트"})
                 .as_object()
                 .unwrap()
                 .clone(),
@@ -114,7 +114,7 @@ fn reads_and_writes_a_pinned_upstream_euc_kr_fixture() {
         .unwrap();
     let reloaded = DbfTable::from_bytes(&table.to_bytes()).unwrap();
     assert_eq!(
-        reloaded.active_record(1).unwrap().values["광역시도명"],
+        reloaded.active_record(1).unwrap().values["광역시명"],
         "테스트"
     );
 }
