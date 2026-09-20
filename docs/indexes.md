@@ -201,7 +201,9 @@ The range candidate lookup narrows the typed key domain and uses binary seeks fo
 
 It still materializes candidate record numbers and sorts them by physical DBF order before the normal filter pipeline.
 
-`IndexFile::load` still validates the sidecar by rebuilding expected entries from the current DBF, so the binary-seek contract does not yet claim an end-to-end speedup.
+`IndexFile::load` validates each active DBF record against the loaded sorted entries instead of rebuilding a second full entry vector.
+
+Freshness validation still reads the DBF and memo bytes, and the query executor still materializes candidate record numbers, so this is not a claim of zero-copy or end-to-end index I/O.
 
 Full cost-based index choice, collation-aware planning, and cross-table atomic commits require separate contracts.
 

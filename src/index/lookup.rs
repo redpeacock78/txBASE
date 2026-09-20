@@ -40,9 +40,9 @@ impl IndexFile {
             .ok_or_else(|| IndexError::Invalid(format!("index not found: {index_name}")))?;
         Ok(index
             .entries
-            .iter()
-            .find(|entry| ordering::compare_keys(&entry.key, &key) == std::cmp::Ordering::Equal)
-            .map(|entry| entry.records.clone())
+            .binary_search_by(|entry| ordering::compare_keys(&entry.key, &key))
+            .ok()
+            .map(|position| index.entries[position].records.clone())
             .unwrap_or_default())
     }
 
@@ -61,9 +61,9 @@ impl IndexFile {
             index.definition.name.clone(),
             index
                 .entries
-                .iter()
-                .find(|entry| ordering::compare_keys(&entry.key, &key) == std::cmp::Ordering::Equal)
-                .map(|entry| entry.records.clone())
+                .binary_search_by(|entry| ordering::compare_keys(&entry.key, &key))
+                .ok()
+                .map(|position| index.entries[position].records.clone())
                 .unwrap_or_default(),
         )))
     }

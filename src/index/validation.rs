@@ -71,20 +71,53 @@ pub(super) fn validate_for_table(
     table: &DbfTable,
 ) -> Result<(), IndexError> {
     validate_shape(index_file)?;
-    let definitions = index_file
-        .indexes
-        .iter()
-        .map(|index| index.definition.clone())
-        .collect::<Vec<_>>();
-    let expected = build_indexes(table, &definitions)?;
-    if expected != index_file.indexes {
-        return Err(IndexError::Invalid(
-            "index entries do not match the current DBF records".into(),
-        ));
+    let mut names = BTreeSet::new();
+    for index in &index_file.indexes {
+        validate_definition(&index.definition, Some(table), &mut names)?;
+        let indexed_records = index
+            .entries
+            .iter()
+            .map(|entry| entry.records.len())
+            .sum::<usize>();
+        if indexed_records != table.active_records().count() {
+            return Err(IndexError::Invalid(
+                "index entries do not match the current DBF records".into(),
+            ));
+        }
+        for record in table.active_records() {
+            let key = IndexKey::from_values(
+                index
+                    .definition
+                    .fields
+                    .iter()
+                    .map(|field| record.values.get(field))
+                    .collect(),
+            )?;
+            let Some(position) = index
+                .entries
+                .binary_search_by(|entry| {
+                    ordering::compare_index_keys(&entry.key, &key, &index.definition.directions)
+                })
+                .ok()
+            else {
+                return Err(IndexError::Invalid(
+                    "index entries do not match the current DBF records".into(),
+                ));
+            };
+            if index.entries[position]
+                .records
+                .binary_search(&record.number)
+                .is_err()
+            {
+                return Err(IndexError::Invalid(
+                    "index entries do not match the current DBF records".into(),
+                ));
+            }
+        }
     }
     if let Some(statistics) = index_file.statistics.as_ref() {
         let expected_statistics =
-            super::statistics::build(table.active_records().count(), &expected);
+            super::statistics::build(table.active_records().count(), &index_file.indexes);
         if !statistics.matches_expected(&expected_statistics) {
             return Err(IndexError::Invalid(
                 "collection statistics do not match the current DBF records".into(),

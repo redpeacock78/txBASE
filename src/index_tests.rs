@@ -207,6 +207,28 @@ fn direct_dbf_change_leaves_the_sidecar_stale_until_rebuild() {
 }
 
 #[test]
+fn rejects_index_entries_that_do_not_match_current_records() {
+    let path = temporary_dbf();
+    IndexFile::build(&path, vec![IndexDefinition::for_field("NAME")])
+        .unwrap()
+        .save(&path)
+        .unwrap();
+
+    let sidecar = sidecar_path(&path);
+    let mut document: Value = serde_json::from_slice(&fs::read(&sidecar).unwrap()).unwrap();
+    document["indexes"][0]["entries"][0]["records"] = json!([2]);
+    fs::write(&sidecar, serde_json::to_vec_pretty(&document).unwrap()).unwrap();
+
+    assert!(matches!(
+        IndexFile::load(&path),
+        Err(IndexError::Invalid(message))
+            if message.contains("index entries do not match the current DBF records")
+    ));
+
+    remove_table_files(&path);
+}
+
+#[test]
 fn rebuild_migrates_a_v1_sidecar() {
     let path = temporary_dbf();
     let sidecar = sidecar_path(&path);
