@@ -91,7 +91,11 @@ txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 
 応答は新しいカタログ表現 `ETag` も返します。
 
-強いタグまたは弱いタグが一致する `If-None-Match`、あるいは `*` はカタログ write lock の内側で評価し、DBF やサイドカーを変更せず `412 Precondition Failed` を返します。
+任意の `If-Match` と `If-None-Match` はカタログ write lock の内側で評価します。
+
+`If-Match` は現在の強いタグまたは `*` を要求し、弱いタグまたは一致しない値には `412 Precondition Failed` を返します。
+
+強いタグまたは弱いタグが一致する `If-None-Match`、あるいは `*` にも同じ応答を返し、DBF やサイドカーを変更しません。
 
 これは順序と識別の境界であり、MVCC の可視性ではありません。
 

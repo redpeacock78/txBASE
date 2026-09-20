@@ -56,7 +56,7 @@ txBASE は、定義された意味に従って HTTP メソッド名を使いま�
 | `QUERY /join`（カタログサーバー） | `Content-Type: application/json` と有界な結合文書 | `Accept-Query` 付きの結合済み JSON 結果 |
 | `POST /{table}/records`（カタログサーバー） | 既知のフィールドを持つ JSON オブジェクト | `201 Created` とテーブル修飾済み `Location` |
 | `PUT`、`PATCH`、`DELETE /{table}/records/{id}`（カタログサーバー） | 単一テーブルと同じ本文および前提条件規則 | 独立した名前付きテーブル更新 |
-| `POST /transaction`（カタログサーバー） | 名前付きテーブル更新操作を含む JSON オブジェクト | カタログジャーナルコミット後に新しいカタログ `ETag` 付きの `200`、または一致する `If-None-Match` に対する変更なしの `412` |
+| `POST /transaction`（カタログサーバー） | 名前付きテーブル更新操作を含む JSON オブジェクト | カタログジャーナルコミット後に新しいカタログ `ETag` 付きの `200`、または失敗した `If-Match` と一致する `If-None-Match` に対する変更なしの `412` |
 | `POST /records` | 既知のフィールドを持つ JSON オブジェクト | `201 Created` と `Location` |
 | `POST /transaction` | 空でない `operations` 配列を含む JSON オブジェクト | 一つのテーブルのアトミックスナップショットコミット後に `200` |
 | `PUT /records/{id}` | フィールドを置き換える JSON オブジェクト | 結果のレコード |
@@ -111,8 +111,10 @@ WAL 付きの成功した更新は `X-Txbase-Transaction-Id` も返します。
 
 `GET` と `HEAD /catalog` はカタログ表現を示す強い `ETag` を公開します。
 強いタグまたは弱いタグが一致する `If-None-Match`、あるいは `*` は、現在の `ETag` と本文なしの `304 Not Modified` を返します。
-catalog 全体の `POST /transaction` は `If-None-Match` を受け付けます。
-一致する条件は catalog write lock の内側で評価し、DBF やサイドカーを変更せず、現在の `ETag` を伴う `412 Precondition Failed` を返します。
+catalog 全体の `POST /transaction` は任意の `If-Match` と `If-None-Match` を受け付けます。
+条件は catalog write lock の内側で評価します。
+`If-Match` は現在の強いタグまたは `*` を要求し、弱いタグまたは一致しない値には、DBF やサイドカーを変更せず、現在の `ETag` を伴う `412 Precondition Failed` を返します。
+強いタグまたは弱いタグが一致する `If-None-Match`、あるいは `*` にも同じ応答を返します。
 一致しない条件はトランザクションを許可し、成功したコミットは新しいカタログ表現 `ETag` を返します。
 
 ## 3. PATCH
@@ -129,7 +131,7 @@ API は、文書の意味論または条件付きリクエストによって特�
 
 txBASE は `application/json` の通常フィールドパッチと、[更新モデル](mutation-model.md)で定義する `$set`、`$unset`、`$inc` の型付きサブセットを受け付けます。
 
-上記の状態変更経路に対する強いテーブルおよびカタログ表現タグと任意の `If-Match` 保護、読み取り、単一テーブル更新、catalog 全体のトランザクションに対する `If-None-Match` 検証を実装しています。
+上記の状態変更経路に対する強いテーブルおよびカタログ表現タグと、単一テーブル、名前付きテーブル、catalog 全体のトランザクションに対する任意の `If-Match` 保護および `If-None-Match` 検証を実装しています。
 
 JSON Patch と JSON Merge Patch のメディアタイプはまだ実装していません。
 

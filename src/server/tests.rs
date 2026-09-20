@@ -487,6 +487,17 @@ fn catalog_etag_guards_schema_reads_and_transactions() {
 
     let before = fs::read(root.join("users.dbf")).unwrap();
     let body = r#"{"operations":[{"method":"PATCH","path":"/users/records/1","body":{"$inc":{"AGE":1}}}]}"#;
+    let mut stale_match = TestRequest::new()
+        .with_method(Method::Post)
+        .with_path("/transaction")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-Match", "\"stale\""))
+        .with_body(body)
+        .into();
+    let response = super::catalog_transaction::response(&mut stale_match, &catalog);
+    assert_eq!(response.status_code(), StatusCode(412));
+    assert_eq!(fs::read(root.join("users.dbf")).unwrap(), before);
+
     let mut matching = TestRequest::new()
         .with_method(Method::Post)
         .with_path("/transaction")
@@ -530,6 +541,33 @@ fn catalog_etag_guards_schema_reads_and_transactions() {
             .unwrap()
             .values["AGE"],
         30
+    );
+
+    let mut current_match = TestRequest::new()
+        .with_method(Method::Post)
+        .with_path("/transaction")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-Match", &next_tag))
+        .with_body(body)
+        .into();
+    let response = super::catalog_transaction::response(&mut current_match, &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert_ne!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("ETag"))
+            .map(|header| header.value.as_str()),
+        Some(next_tag.as_str())
+    );
+    assert_eq!(
+        catalog
+            .open_table("users")
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["AGE"],
+        31
     );
 
     fs::remove_dir_all(root).unwrap();

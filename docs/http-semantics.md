@@ -56,7 +56,7 @@ The response does not authorize a method on a resource that its route rules woul
 | `QUERY /join` (catalog server) | `Content-Type: application/json` and a bounded join document | Joined JSON result with `Accept-Query` |
 | `POST /{table}/records` (catalog server) | JSON object with known fields | `201 Created`, table-qualified `Location` |
 | `PUT`/`PATCH`/`DELETE /{table}/records/{id}` (catalog server) | Same body and precondition rules as single-table routes | Independent named-table mutation |
-| `POST /transaction` (catalog server) | JSON object containing named-table mutation operations | `200` with the new catalog `ETag` after catalog-journal commit, or `412` without mutation for a matching `If-None-Match` |
+| `POST /transaction` (catalog server) | JSON object containing named-table mutation operations | `200` with the new catalog `ETag` after catalog-journal commit, or `412` without mutation for a failed `If-Match` or matching `If-None-Match` |
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |
 | `POST /transaction` | JSON object containing a non-empty `operations` array | `200` after one-table atomic snapshot commit |
 | `PUT /records/{id}` | JSON object replacing fields | Resulting record |
@@ -97,9 +97,11 @@ The `/records` collection and single-table transaction target are existing resou
 `GET` and `HEAD /catalog` expose a strong catalog representation `ETag`.
 A matching strong or weak `If-None-Match`, or `*`, returns `304 Not Modified` with the current
 `ETag` and no body.
-The catalog-wide `POST /transaction` accepts `If-None-Match`; a matching condition is evaluated
-under the catalog write lock and returns `412 Precondition Failed` with the current `ETag` without
-mutating any DBF or sidecar.
+The catalog-wide `POST /transaction` accepts optional `If-Match` and `If-None-Match` conditions.
+They are evaluated under the catalog write lock.
+`If-Match` requires the current strong tag or `*`; a weak or non-matching value returns `412
+Precondition Failed` with the current `ETag` without mutating any DBF or sidecar.
+A matching strong or weak `If-None-Match`, or `*`, has the same result.
 An unmatched condition permits the transaction, and a successful commit returns the new catalog
 representation `ETag`.
 

@@ -8,9 +8,10 @@ use std::fs;
 use std::path::Path;
 
 impl Catalog {
-    pub(crate) fn commit_operations_with_if_none_match(
+    pub(crate) fn commit_operations_with_preconditions(
         &self,
         operations: &[OperationIr],
+        if_match: Option<&str>,
         if_none_match: Option<&str>,
     ) -> Result<u64, CatalogTransactionError> {
         if operations.is_empty() {
@@ -21,11 +22,13 @@ impl Catalog {
         let _lock = self
             .acquire_write_lock()
             .map_err(CatalogTransactionError::Catalog)?;
-        if let Some(value) = if_none_match {
+        if if_match.is_some() || if_none_match.is_some() {
             let (_, tag) = self
                 .schema_representation_unlocked()
                 .map_err(CatalogTransactionError::Catalog)?;
-            if matches_if_none_match(value, &tag) {
+            if if_match.is_some_and(|value| !matches_if_match(value, &tag))
+                || if_none_match.is_some_and(|value| matches_if_none_match(value, &tag))
+            {
                 return Err(CatalogTransactionError::PreconditionFailed { tag });
             }
         }
@@ -134,6 +137,17 @@ fn matches_if_none_match(value: &str, current: &str) -> bool {
     }
     tags.iter()
         .any(|tag| tag.strip_prefix("W/").unwrap_or(tag) == current)
+}
+
+fn matches_if_match(value: &str, current: &str) -> bool {
+    let tags = value.split(',').map(str::trim).collect::<Vec<_>>();
+    if tags.len() == 1 && tags[0] == "*" {
+        return true;
+    }
+    if tags.iter().any(|tag| *tag == "*" || tag.starts_with("W/")) {
+        return false;
+    }
+    tags.contains(&current)
 }
 
 fn transaction_operation_path(path: &str) -> Option<(&str, String)> {

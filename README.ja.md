@@ -110,7 +110,7 @@ single-tableの状態変更には`If-None-Match`も付けられ、一致すれ�
 `If-Match`にcurrentなstrong tagまたは既存resourceに対する`*`以外を指定すると`412 Precondition Failed`となり、tableは変更されません。
 WAL-backed mutationは`X-Txbase-Transaction-Id`を返し、single-tableの`POST /transaction`では同じ値をJSONの`transaction_id`にも含めます。
 catalog serverの`POST /transaction`は新しいcatalog representation `ETag`も返します。
-一致する`If-None-Match`は`412 Precondition Failed`となり、DBFやsidecarを変更しません。
+`If-Match`と`If-None-Match`を任意で指定でき、条件に失敗すると`412 Precondition Failed`となり、DBFやsidecarを変更しません。
 
 ### Mutation
 

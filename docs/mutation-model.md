@@ -84,7 +84,9 @@ GET and HEAD provide `If-None-Match` cache validation, and single-table mutation
 
 The catalog-wide transaction route exposes a catalog representation `ETag`.
 
-Its `If-None-Match` condition is evaluated under the catalog write lock; a matching condition returns `412 Precondition Failed` without mutation, and a successful commit returns the new tag.
+Its optional `If-Match` and `If-None-Match` conditions are evaluated under the catalog write lock.
+`If-Match` requires the current strong tag or `*`, while a matching strong or weak `If-None-Match`, or `*`, rejects the write with `412 Precondition Failed` without mutation.
+A successful commit returns the new tag.
 
 JSON Patch and JSON Merge Patch media types are not implemented.
 

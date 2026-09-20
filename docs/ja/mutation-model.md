@@ -84,7 +84,11 @@ GET と HEAD は `If-None-Match` によるキャッシュ検証を提供し、�
 
 catalog 全体のトランザクション経路はカタログ表現 `ETag` を公開します。
 
-`If-None-Match` の条件は catalog write lock の内側で評価し、一致時は変更なしの `412 Precondition Failed` を返し、成功したコミットは新しいタグを返します。
+任意の `If-Match` と `If-None-Match` の条件は catalog write lock の内側で評価します。
+
+`If-Match` は現在の強いタグまたは `*` を要求し、強いタグまたは弱いタグが一致する `If-None-Match`、あるいは `*` は、変更なしの `412 Precondition Failed` を返します。
+
+成功したコミットは新しいタグを返します。
 
 JSON Patch と JSON Merge Patch のメディアタイプは未実装です。
 

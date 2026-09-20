@@ -84,9 +84,11 @@ DBF. `POST /transaction` accepts named-table mutation paths and commits all affe
 one catalog journal; an incomplete prepare is rolled back on the next catalog read. Successful
 catalog-journal commits advance a durable catalog transaction ID and return it in the JSON body
 and `X-Txbase-Transaction-Id` header. The response also returns the new catalog representation
-`ETag`. A matching strong or weak `If-None-Match`, or `*`, is evaluated under the catalog write
-lock and returns `412 Precondition Failed` without changing any DBF or sidecar. This is an
-ordering/identification boundary, not MVCC visibility.
+`ETag`. Optional `If-Match` and `If-None-Match` conditions are evaluated under the catalog write
+lock. `If-Match` requires the current strong tag or `*`; a weak or non-matching value returns
+`412 Precondition Failed`. A matching strong or weak `If-None-Match`, or `*`, returns the same
+status without changing any DBF or sidecar. This is an ordering/identification boundary, not
+MVCC visibility.
 The catalog is discovered once at server startup, while each request loads the named table through
 the existing recovery path. Named-table mutations do not add or remove tables.
 

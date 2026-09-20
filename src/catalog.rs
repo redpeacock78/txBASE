@@ -367,7 +367,7 @@ mod tests {
         let catalog = Catalog::from_path(&root).unwrap();
 
         let transaction_id = catalog
-            .commit_operations_with_if_none_match(
+            .commit_operations_with_preconditions(
                 &[
                     OperationIr {
                         method: OperationMethod::Post,
@@ -385,6 +385,7 @@ mod tests {
                         body: Some(json!({"$inc": {"AGE": 1}})),
                     },
                 ],
+                None,
                 None,
             )
             .unwrap();
@@ -424,7 +425,7 @@ mod tests {
         let catalog = Catalog::from_path(&root).unwrap();
 
         let error = catalog
-            .commit_operations_with_if_none_match(
+            .commit_operations_with_preconditions(
                 &[
                     OperationIr {
                         method: OperationMethod::Post,
@@ -442,6 +443,7 @@ mod tests {
                         body: Some(json!({"NAME": "never committed"})),
                     },
                 ],
+                None,
                 None,
             )
             .unwrap_err();
@@ -467,7 +469,7 @@ mod tests {
         let catalog = Catalog::from_path(&root).unwrap();
 
         let orphan = catalog
-            .commit_operations_with_if_none_match(
+            .commit_operations_with_preconditions(
                 &[OperationIr {
                     method: OperationMethod::Post,
                     path: "/posts/records".into(),
@@ -478,6 +480,7 @@ mod tests {
                         "ACTIVE": true
                     })),
                 }],
+                None,
                 None,
             )
             .unwrap_err();
@@ -495,7 +498,7 @@ mod tests {
         );
 
         catalog
-            .commit_operations_with_if_none_match(
+            .commit_operations_with_preconditions(
                 &[
                     OperationIr {
                         method: OperationMethod::Post,
@@ -519,16 +522,18 @@ mod tests {
                     },
                 ],
                 None,
+                None,
             )
             .unwrap();
 
         let delete_parent = catalog
-            .commit_operations_with_if_none_match(
+            .commit_operations_with_preconditions(
                 &[OperationIr {
                     method: OperationMethod::Delete,
                     path: "/users/records/1".into(),
                     body: None,
                 }],
+                None,
                 None,
             )
             .unwrap_err();

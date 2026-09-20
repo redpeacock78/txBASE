@@ -101,8 +101,9 @@ txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 single-table routes. Named-table mutations reuse single-table WAL/ETag behavior and commit one
 DBF at a time, including its `X-Txbase-Transaction-Id` response header. Catalog `POST /transaction`
 commits named-table mutations atomically through a catalog journal and returns its durable catalog
-commit ID and new catalog representation `ETag` in JSON and response headers. A matching
-`If-None-Match` is rejected with `412 Precondition Failed` without mutation; MVCC remains future work.
+commit ID and new catalog representation `ETag` in JSON and response headers. Catalog transactions
+accept optional `If-Match` and `If-None-Match` conditions and reject a failed condition with `412
+Precondition Failed` without mutation; MVCC remains future work.
 
 The single-table server also exposes `QUERY /explain`, which returns the selected table-scan or
 index plan for the same query document.
