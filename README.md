@@ -317,6 +317,7 @@ The transaction layer keeps its WAL beside the configured table path.
 Run the same checks used by CI:
 
 ```bash
+bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets --all-features

@@ -244,6 +244,7 @@ CIはUbuntu、macOS、Windowsで同じquality gateを実行します。
 ### Quality gate
 
 ```bash
+bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets --all-features
