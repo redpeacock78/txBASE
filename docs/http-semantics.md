@@ -38,7 +38,7 @@ They do not by themselves provide transaction isolation, deduplication, or a ret
 
 ## 2. Current txBASE routes
 
-`OPTIONS` returns `204 No Content`, an `Allow` header for the server surface, and `Accept-Query: "application/json"`.
+`OPTIONS` returns `204 No Content`, an `Allow` header for the server surface, `Accept-Query: "application/json"`, and `Accept-Patch: application/json, application/merge-patch+json`.
 
 The response does not authorize a method on a resource that its route rules would otherwise reject.
 
@@ -62,10 +62,10 @@ The response does not authorize a method on a resource that its route rules woul
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |
 | `POST /transaction` | JSON object containing a non-empty `operations` array | `200` after one-table atomic snapshot commit |
 | `PUT /records/{id}` | JSON object replacing fields | Resulting record |
-| `PATCH /records/{id}` | Plain field object or supported update document | Resulting record |
+| `PATCH /records/{id}` | `application/json` update document or `application/merge-patch+json` object | Resulting record |
 | `DELETE /records/{id}` | No JSON body | `204 No Content` |
 
-`PUT` and `PATCH` require the JSON media type for their request bodies.
+`PUT` requires `application/json`, while `PATCH` accepts `application/json` and `application/merge-patch+json`.
 
 Unknown fields, malformed JSON, unsupported update operators, and invalid field values are rejected before persistence.
 
@@ -121,11 +121,19 @@ For collision-sensitive patches, the RFC recommends conditional requests such as
 
 txBASE currently accepts `application/json` plain field patches and the typed `$set`, `$unset`, and `$inc` subset described in [the mutation model](mutation-model.md).
 
+It also accepts `application/merge-patch+json` for record `PATCH` requests.
+
+The merge-patch document must have an object root.
+
+Object members are merged recursively, while `null` removes a member and arrays or scalar values replace the current value.
+
+DBF records have a fixed scalar schema, so removing a known field is persisted as its normalized `null` value, and an object value for a scalar field is rejected.
+
 txBASE implements strong table and catalog representation tags, optional `If-Match` protection for
 the state-changing routes described above, and `If-None-Match` validation for reads, single-table
 mutations, and catalog-wide transactions.
 
-It does not yet implement JSON Patch or JSON Merge Patch media types.
+It does not yet implement the `application/json-patch+json` JSON Patch media type.
 
 The MongoDB-shaped update document is an application format inside the JSON body.
 
@@ -226,7 +234,7 @@ The following require explicit contracts before implementation:
 - `Content-Location` and cache-key rules for QUERY bodies.
 - Runtime-specific async traits for long-lived query streams.
 - CORS and authentication policy.
-- A standard patch media type in addition to the local update document.
+- The `application/json-patch+json` JSON Patch media type in addition to the local update document and JSON Merge Patch.
 
 ## Primary references
 

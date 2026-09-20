@@ -15,6 +15,7 @@ mod stream;
 mod transaction;
 
 const MAX_BODY: usize = 1024 * 1024;
+const JSON_MERGE_PATCH_MEDIA_TYPE: &str = "application/merge-patch+json";
 
 pub(super) enum ServerBody {
     Buffered(Cursor<Vec<u8>>),
@@ -171,7 +172,21 @@ fn read_json_object(
     accept_query: bool,
 ) -> Result<Map<String, Value>, HttpResponse> {
     let body = read_json_body(request, operation, accept_query)?;
-    let value = serde_json::from_slice::<Value>(&body).map_err(|parse_error| {
+    parse_json_object(&body, accept_query)
+}
+
+fn read_json_object_with_merge_patch(
+    request: &mut Request,
+    operation: &str,
+    accept_query: bool,
+) -> Result<(Map<String, Value>, bool), HttpResponse> {
+    let (body, is_merge_patch) =
+        read_json_body_with_options(request, operation, accept_query, true)?;
+    Ok((parse_json_object(&body, accept_query)?, is_merge_patch))
+}
+
+fn parse_json_object(body: &[u8], accept_query: bool) -> Result<Map<String, Value>, HttpResponse> {
+    let value = serde_json::from_slice::<Value>(body).map_err(|parse_error| {
         json_response(
             422,
             error("invalid_json", &format!("invalid JSON body: {parse_error}")),
@@ -192,26 +207,47 @@ fn read_json_body(
     operation: &str,
     accept_query: bool,
 ) -> Result<Vec<u8>, HttpResponse> {
+    read_json_body_with_options(request, operation, accept_query, false).map(|(body, _)| body)
+}
+
+fn read_json_body_with_options(
+    request: &mut Request,
+    operation: &str,
+    accept_query: bool,
+    allow_merge_patch: bool,
+) -> Result<(Vec<u8>, bool), HttpResponse> {
     let Some(content_type) = content_type(request) else {
+        let required = if allow_merge_patch {
+            "application/json or application/merge-patch+json"
+        } else {
+            "application/json"
+        };
         return Err(json_response(
             400,
             error(
                 "missing_content_type",
-                &format!("{operation} requires Content-Type: application/json"),
+                &format!("{operation} requires Content-Type: {required}"),
             ),
             accept_query,
         ));
     };
-    if !content_type.split(';').next().is_some_and(|media_type| {
-        media_type
-            .trim()
-            .eq_ignore_ascii_case(JSON_QUERY_MEDIA_TYPE)
-    }) {
+    let media_type = content_type.split(';').next().map(str::trim);
+    let is_json =
+        media_type.is_some_and(|media_type| media_type.eq_ignore_ascii_case(JSON_QUERY_MEDIA_TYPE));
+    let is_merge_patch = allow_merge_patch
+        && media_type
+            .is_some_and(|media_type| media_type.eq_ignore_ascii_case(JSON_MERGE_PATCH_MEDIA_TYPE));
+    if !is_json && !is_merge_patch {
+        let supported = if allow_merge_patch {
+            "application/json or application/merge-patch+json"
+        } else {
+            "application/json"
+        };
         return Err(json_response(
             415,
             error(
                 "unsupported_media_type",
-                "only application/json request content is supported",
+                &format!("only {supported} request content is supported"),
             ),
             accept_query,
         ));
@@ -236,7 +272,7 @@ fn read_json_body(
             accept_query,
         ));
     }
-    Ok(body)
+    Ok((body, is_merge_patch))
 }
 
 fn dbf_error_response(dbf_error: DbfError) -> HttpResponse {
@@ -290,6 +326,10 @@ pub(super) fn options_response(allow: &str) -> HttpResponse {
     empty_response(204)
         .with_header(header("Allow", allow))
         .with_header(header("Accept-Query", "\"application/json\""))
+        .with_header(header(
+            "Accept-Patch",
+            "application/json, application/merge-patch+json",
+        ))
 }
 
 pub(super) fn empty_response(status: u16) -> HttpResponse {

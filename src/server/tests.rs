@@ -102,6 +102,41 @@ fn mutation_endpoints_persist_and_delete_records() {
 }
 
 #[test]
+fn merge_patch_updates_known_fields_and_preserves_the_rest() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-server-merge-patch-{}.dbf",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&path);
+    fs::write(&path, fixture()).unwrap();
+    let mut table = DbfTable::from_path(&path).unwrap();
+    let mut request = TestRequest::new()
+        .with_method(Method::Patch)
+        .with_path("/records/1")
+        .with_header(header("Content-Type", JSON_MERGE_PATCH_MEDIA_TYPE))
+        .with_body(r#"{"NAME":"Alicia","AGE":null}"#)
+        .into();
+
+    assert_eq!(
+        update_response(&mut request, "/records/1", &mut table, &path, false).status_code(),
+        StatusCode(200)
+    );
+    let record = table.active_record(1).unwrap();
+    assert_eq!(record.values["NAME"], "Alicia");
+    assert_eq!(record.values["AGE"], Value::Null);
+    assert_eq!(record.values["ACTIVE"], true);
+    assert_eq!(
+        DbfTable::from_path(&path)
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["NAME"],
+        "Alicia"
+    );
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn transaction_endpoint_commits_multiple_mutations_once() {
     let path = std::env::temp_dir().join(format!(
         "txbase-server-transaction-{}.dbf",
@@ -238,6 +273,14 @@ fn options_advertises_supported_methods_and_query_media_type() {
             .find(|header| header.field.equiv("Accept-Query"))
             .map(|header| header.value.as_str()),
         Some("\"application/json\"")
+    );
+    assert_eq!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("Accept-Patch"))
+            .map(|header| header.value.as_str()),
+        Some("application/json, application/merge-patch+json")
     );
 }
 

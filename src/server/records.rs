@@ -1,10 +1,10 @@
 use super::{
     DbfTable, HttpResponse, dbf_error_response, empty_response, error, etag, header, json_response,
-    read_json_object,
+    read_json_object, read_json_object_with_merge_patch,
 };
 use crate::dbf::DbfRecord;
 use crate::xbase::{OperationIr, OperationMethod};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::path::Path;
 use tiny_http::Request;
 
@@ -138,9 +138,31 @@ pub(super) fn update_response_with_validator(
     if let Err(response) = etag::require_mutation_preconditions(request, table, true) {
         return response;
     }
-    let values = match read_json_object(request, if replace { "PUT" } else { "PATCH" }, false) {
-        Ok(values) => values,
-        Err(response) => return response,
+    let (values, is_merge_patch) = if replace {
+        match read_json_object(request, "PUT", false) {
+            Ok(values) => (values, false),
+            Err(response) => return response,
+        }
+    } else {
+        match read_json_object_with_merge_patch(request, "PATCH", false) {
+            Ok(values) => values,
+            Err(response) => return response,
+        }
+    };
+    let values = if is_merge_patch {
+        let Some(current) = table
+            .active_record(id)
+            .map(|record| record.values.clone())
+        else {
+            return json_response(
+                500,
+                error("storage_error", "record disappeared during update"),
+                false,
+            );
+        };
+        apply_merge_patch(current, values)
+    } else {
+        values
     };
     let operation = OperationIr {
         method: if replace {
@@ -177,6 +199,48 @@ pub(super) fn update_response_with_validator(
             error("storage_error", "updated record is unavailable"),
             false,
         ),
+    }
+}
+
+fn apply_merge_patch(current: Map<String, Value>, patch: Map<String, Value>) -> Map<String, Value> {
+    let known_fields = current.keys().cloned().collect::<Vec<_>>();
+    let unknown_null_fields = patch
+        .iter()
+        .filter(|(key, value)| value.is_null() && !current.contains_key(*key))
+        .map(|(key, _)| key.clone())
+        .collect::<Vec<_>>();
+    let mut target = Value::Object(current);
+    merge_patch_value(&mut target, Value::Object(patch));
+    let mut target = match target {
+        Value::Object(object) => object,
+        Value::Array(_) | Value::Bool(_) | Value::Null | Value::Number(_) | Value::String(_) => {
+            unreachable!("root merge patch remains an object")
+        }
+    };
+    for key in known_fields {
+        target.entry(key).or_insert(Value::Null);
+    }
+    for key in unknown_null_fields {
+        target.entry(key).or_insert(Value::Null);
+    }
+    target
+}
+
+fn merge_patch_value(target: &mut Value, patch: Value) {
+    let Value::Object(patch) = patch else {
+        *target = patch;
+        return;
+    };
+    if !target.is_object() {
+        *target = Value::Object(Map::new());
+    }
+    let target = target.as_object_mut().expect("target is an object");
+    for (key, value) in patch {
+        if value.is_null() {
+            target.remove(&key);
+        } else {
+            merge_patch_value(target.entry(key).or_insert(Value::Null), value);
+        }
     }
 }
 

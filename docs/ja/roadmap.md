@@ -26,7 +26,7 @@ HTTP、JSON、MCP、WASM はストレージ形式の上位にあるアクセス�
 - サポートする形式の DBT および FPT memo またはバイナリサイドカー経路。
 - 小さな MongoDB 風述語語彙による JSON クエリ実行。
 - 数値 `$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod` オペランドを含む、フィールド間比較リーフ上の有界 `$expr` 論理木。ただしテーブルスキャンの参照経路に留まる。
-- HTTP `GET`、`QUERY`、`POST`、`PUT`、`PATCH`、`DELETE` ルート。
+- 有界な JSON Merge Patch によるレコード更新を含む HTTP `GET`、`QUERY`、`POST`、`PUT`、`PATCH`、`DELETE` ルート。
 - `TXOP`、`TXTI`、`TXDP`、`TXDB`、`TXDM` 永続化経路を持つファイルまたはメモリ WAL 型。
 - WAL を変更せず、完全なレコード境界と切断された末尾を表示する読み取り専用 `wal inspect` コマンド。
 - 保持されたメモリまたはファイル WAL のコミット、ロールバック記録から `TransactionId` 列を再開する低レベルスナップショットトランザクションエンジンと、HTTP 更新境界へ公開する永続的な DBF 単一テーブル WAL コミット ID。

@@ -26,7 +26,7 @@ The repository currently provides:
 - DBT and FPT memo or binary sidecar paths for the supported formats.
 - JSON query execution with a small MongoDB-inspired predicate vocabulary.
 - Bounded `$expr` boolean trees over field-to-field comparison leaves, including numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` operands, that remain on the table-scan reference path.
-- HTTP `GET`, `QUERY`, `POST`, `PUT`, `PATCH`, and `DELETE` routes.
+- HTTP `GET`, `QUERY`, `POST`, `PUT`, `PATCH`, and `DELETE` routes, including bounded JSON Merge Patch for record updates.
 - File or memory WAL types with `TXOP`, `TXTI`, `TXDP`, `TXDB`, and `TXDM` persistence paths.
 - A read-only `wal inspect` command that reports complete record boundaries and torn tails without mutating the WAL.
 - A low-level snapshot transaction engine whose `TransactionId` sequence resumes from retained

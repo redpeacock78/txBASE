@@ -78,6 +78,14 @@ For collision-sensitive patches, the RFC recommends conditional requests such as
 
 txBASE accepts `application/json` plain field patches and the typed subset above.
 
+It also accepts `application/merge-patch+json` for record `PATCH` requests.
+
+The merge-patch document must have an object root.
+
+Object members are merged recursively, while `null` removes a member and arrays or scalar values replace the current value.
+
+DBF records have a fixed scalar schema, so removing a known field is persisted as its normalized `null` value, and an object value for a scalar field is rejected.
+
 It implements a strong table representation tag and optional `If-Match` protection for state-changing routes.
 
 GET and HEAD provide `If-None-Match` cache validation, and single-table mutation routes use the same condition with `412 Precondition Failed` when the weak comparison matches.
@@ -88,7 +96,7 @@ Its optional `If-Match` and `If-None-Match` conditions are evaluated under the c
 `If-Match` requires the current strong tag or `*`, while a matching strong or weak `If-None-Match`, or `*`, rejects the write with `412 Precondition Failed` without mutation.
 A successful commit returns the new tag.
 
-JSON Patch and JSON Merge Patch media types are not implemented.
+The `application/json-patch+json` JSON Patch media type is not implemented.
 
 The MongoDB-shaped update document is an application format inside the JSON body.
 
@@ -108,7 +116,7 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 
 The following require explicit contracts before implementation:
 
-- A standard patch media type in addition to the local update document.
+- The `application/json-patch+json` JSON Patch media type in addition to the local update document and JSON Merge Patch.
 - Broader multi-record mutation semantics and visibility rules.
 - Differential tests against a small mutation reference model.
 

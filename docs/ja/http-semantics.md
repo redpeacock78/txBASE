@@ -38,7 +38,7 @@ txBASE は、定義された意味に従って HTTP メソッド名を使いま�
 
 ## 2. 現在の txBASE ルート
 
-`OPTIONS` は `204 No Content`、サーバーの表面で対応するメソッドを示す `Allow` ヘッダー、`Accept-Query: "application/json"` を返します。
+`OPTIONS` は `204 No Content`、サーバーの表面で対応するメソッドを示す `Allow` ヘッダー、`Accept-Query: "application/json"`、`Accept-Patch: application/json, application/merge-patch+json` を返します。
 
 この応答は、ルート規則が通常拒否するリソース上のメソッドを許可するものではありません。
 
@@ -62,10 +62,10 @@ txBASE は、定義された意味に従って HTTP メソッド名を使いま�
 | `POST /records` | 既知のフィールドを持つ JSON オブジェクト | `201 Created` と `Location` |
 | `POST /transaction` | 空でない `operations` 配列を含む JSON オブジェクト | 一つのテーブルのアトミックスナップショットコミット後に `200` |
 | `PUT /records/{id}` | フィールドを置き換える JSON オブジェクト | 結果のレコード |
-| `PATCH /records/{id}` | 通常のフィールドオブジェクトまたはサポート対象の更新文書 | 結果のレコード |
+| `PATCH /records/{id}` | `application/json` の更新文書または `application/merge-patch+json` のオブジェクト | 結果のレコード |
 | `DELETE /records/{id}` | JSON 本文なし | `204 No Content` |
 
-`PUT` と `PATCH` の本文には JSON メディアタイプが必要です。
+`PUT` には `application/json` が必要で、`PATCH` は `application/json` と `application/merge-patch+json` を受け付けます。
 
 未知のフィールド、不正な JSON、未サポートの更新演算子、不正なフィールド値は、永続化前に拒否します。
 
@@ -133,9 +133,17 @@ API は、文書の意味論または条件付きリクエストによって特�
 
 txBASE は `application/json` の通常フィールドパッチと、[更新モデル](mutation-model.md)で定義する `$set`、`$unset`、`$inc` の型付きサブセットを受け付けます。
 
+レコードの `PATCH` には `application/merge-patch+json` も受け付けます。
+
+Merge Patch 文書のルートはオブジェクトでなければなりません。
+
+オブジェクトのメンバーは再帰的にマージし、`null` はメンバーを削除し、配列とスカラー値は現在値を置き換えます。
+
+DBF レコードは固定されたスキーマのスカラー値を持つため、既知のフィールドの削除は正規化された `null` 値として保存し、スカラー項目へのオブジェクト値は拒否します。
+
 上記の状態変更経路に対する強いテーブルおよびカタログ表現タグと、単一テーブル、名前付きテーブル、catalog 全体のトランザクションに対する任意の `If-Match` 保護および `If-None-Match` 検証を実装しています。
 
-JSON Patch と JSON Merge Patch のメディアタイプはまだ実装していません。
+`application/json-patch+json` の JSON Patch メディアタイプはまだ実装していません。
 
 MongoDB 風の更新文書は JSON 本文内のアプリケーション形式です。
 
@@ -241,7 +249,7 @@ HTTP の冪等性は DBF の書き込み経路をクラッシュ安全にはし�
 - QUERY 本文に対する `Content-Location` とキャッシュキーの規則。
 - 長寿命クエリストリーム向けのランタイム固有非同期トレイト。
 - CORS と認証方針。
-- ローカル更新文書に加える標準パッチメディアタイプ。
+- ローカル更新文書と JSON Merge Patch に加える `application/json-patch+json` の JSON Patch メディアタイプ。
 
 ## 主な参照先
 
