@@ -1,4 +1,5 @@
 use super::super::{CLASSIC_DESCRIPTOR_SIZE, DbfError, FieldDescriptor, NullFlagBits};
+use super::decode::text_with_encoding;
 use serde_json::{Map, Value};
 use std::collections::BTreeSet;
 
@@ -7,6 +8,8 @@ pub fn parse_fields(
     start: usize,
     end: usize,
     descriptor_size: usize,
+    language_driver: u8,
+    encoding_override: Option<&str>,
 ) -> Result<Vec<FieldDescriptor>, DbfError> {
     if (end - start) % descriptor_size != 0 {
         return Err(DbfError::Invalid(
@@ -28,7 +31,7 @@ pub fn parse_fields(
             .iter()
             .position(|byte| *byte == 0)
             .unwrap_or(name_size);
-        let name = String::from_utf8_lossy(&descriptor[..name_end])
+        let name = text_with_encoding(&descriptor[..name_end], language_driver, encoding_override)
             .trim()
             .to_owned();
         if name.is_empty() || !names.insert(name.clone()) {

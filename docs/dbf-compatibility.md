@@ -161,6 +161,10 @@ values. Pinned explicit-codec byte fixtures cover DBF record decoding and write 
 all eight supported explicit codec names. Query sorting has a bounded Unicode-lowercase mode; locale-aware
 CJK collation and broader upstream CJK fixtures remain future work.
 
+Classic field descriptor names use the same effective codec as character values, so CJK column names
+remain usable as JSON keys and mutation targets. The descriptor width limit remains a byte limit;
+XBF export still requires ASCII field names.
+
 ## 5. Persistence and recovery
 
 DBF compatibility is coupled to the mutation boundary because a memo pointer and its sidecar payload must agree after a crash.

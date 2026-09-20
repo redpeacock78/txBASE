@@ -9,6 +9,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[cfg(test)]
+mod cjk_fields_tests;
+#[cfg(test)]
 mod cjk_tests;
 mod codec;
 mod codepages;

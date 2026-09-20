@@ -115,7 +115,14 @@ impl DbfTable {
             .find(|offset| bytes[*offset] == FIELD_TERMINATOR)
             .ok_or_else(|| DbfError::Invalid("field descriptor terminator is missing".into()))?;
 
-        let fields = parse_fields(bytes, descriptor_start, terminator, descriptor_size)?;
+        let fields = parse_fields(
+            bytes,
+            descriptor_start,
+            terminator,
+            descriptor_size,
+            header.language_driver,
+            encoding_override,
+        )?;
         let flag_layout = null_flag_layout(&fields);
         let system_field = system_field_index(&fields);
         let foxpro_table = matches!(header.version, 0x30..=0x32);

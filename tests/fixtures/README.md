@@ -45,3 +45,9 @@ round-trip write remain independently reproducible.
 supported explicit CJK codec names and their decoded values. The DBF test
 injects each byte sequence into the same record shape before reading and
 writing it through the selected override.
+
+`cjk-field-name-gbk.dbf.hex` is a generated minimal Visual FoxPro-shaped DBF
+whose field descriptor name and record value are both GBK-encoded. It proves
+that CJK descriptor names use the effective codec and remain usable for JSON
+reads and mutations. The descriptor name is intentionally short enough for the
+classic byte-width limit.

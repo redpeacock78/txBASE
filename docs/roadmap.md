@@ -186,6 +186,10 @@ and write round-trips for all eight supported explicit codec names. The query la
 `unicode-lowercase` sort collation; locale-aware CJK collation and broader upstream CJK fixtures
 remain future work.
 
+Classic DBF field descriptor names now use the effective codec as well, so CJK column names remain
+usable for JSON access and mutations. The descriptor limit is still measured in bytes, and XBF
+export continues to require ASCII field names.
+
 An override must be visible in schema or command output so a reader can reproduce the same interpretation.
 
 ## 6. Phase 4: native XBF
