@@ -70,8 +70,20 @@ fn missing_or_non_numeric_expression_fields_do_not_match() {
     });
     let non_numeric = json!({"$expr": {"$eq": [{"$subtract": ["$NAME", 1]}, 0]}});
 
-    assert!(!matches_filter(&json!({"VALUE": 1}), missing.as_object().unwrap()).unwrap());
-    assert!(!matches_filter(&json!({"NAME": "one"}), non_numeric.as_object().unwrap()).unwrap());
+    assert!(
+        !matches_filter(
+            json!({"VALUE": 1}).as_object().unwrap(),
+            missing.as_object().unwrap()
+        )
+        .unwrap()
+    );
+    assert!(
+        !matches_filter(
+            json!({"NAME": "one"}).as_object().unwrap(),
+            non_numeric.as_object().unwrap()
+        )
+        .unwrap()
+    );
 }
 
 #[test]
@@ -80,7 +92,8 @@ fn rejects_numeric_expression_results_that_do_not_fit_json() {
         "$expr": {"$eq": [{"$add": [u64::MAX, 1]}, 0]}
     });
 
-    let error = matches_filter(&json!({}), filter.as_object().unwrap()).unwrap_err();
+    let error =
+        matches_filter(json!({}).as_object().unwrap(), filter.as_object().unwrap()).unwrap_err();
     assert!(error.to_string().contains("does not fit JSON"));
 }
 
