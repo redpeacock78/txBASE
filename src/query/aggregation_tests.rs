@@ -65,6 +65,25 @@ fn counts_filtered_records_with_a_count_stage() {
 }
 
 #[test]
+fn returns_distinct_values_after_matching() {
+    let table = table_with_two_active_records();
+    let request = parse(
+        br#"{
+            "aggregate": [
+                {"$match": {"AGE": {"$gte": 0}}},
+                {"$distinct": "$ACTIVE"}
+            ]
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        execute_query(&table, &request).unwrap(),
+        vec![json!(false), json!(true)]
+    );
+}
+
+#[test]
 fn groups_numeric_average_and_returns_null_for_missing_values() {
     let table = table_with_two_active_records();
     let request = parse(
@@ -222,6 +241,9 @@ fn rejects_unsupported_aggregation_combinations() {
         br#"{"aggregate":[{"$count":"total.value"}]}"#.as_slice(),
         br#"{"aggregate":[{"$count":"total"},{"$match":{}}]}"#.as_slice(),
         br#"{"aggregate":[{"$count":"total"},{"$group":{"_id":null}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$distinct":"ACTIVE"}]}"#.as_slice(),
+        br#"{"aggregate":[{"$distinct":"$ACTIVE"},{"$limit":1}]}"#.as_slice(),
+        br#"{"aggregate":[{"$distinct":"$ACTIVE"},{"$distinct":"$AGE"}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":"AGE"}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"average":{"$avg":"AGE"}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$match":{}}]}"#.as_slice(),

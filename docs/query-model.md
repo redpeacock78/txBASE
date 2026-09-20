@@ -49,6 +49,17 @@ A count-only pipeline may end after its optional `$match` stages with one termin
 }
 ```
 
+A distinct pipeline may end after its optional `$match` stages with one terminal `$distinct` stage:
+
+```json
+{
+  "aggregate": [
+    {"$match": {"ACTIVE": true}},
+    {"$distinct": "$COUNTRY"}
+  ]
+}
+```
+
 An optional final `$limit` may follow `$sort` (or `$group` when sorting is omitted):
 
 ```json
@@ -126,7 +137,7 @@ It remains pull-based and does not provide an asynchronous backpressure protocol
 
 ## 2. Bounded aggregation
 
-The query document can contain one terminal `$count` stage or one blocking `$group` stage after
+The query document can contain one terminal `$count` or `$distinct` stage, or one blocking `$group` stage after
 `filter` and zero or more preceding `$match` stages:
 
 ```json
@@ -145,7 +156,7 @@ The query document can contain one terminal `$count` stage or one blocking `$gro
 ```
 
 The current aggregation boundary accepts zero or more `$match` stages followed by either one
-terminal `$count` stage or one `$group` stage. Group output may have one optional `$project` stage,
+terminal `$count` stage, one terminal `$distinct` stage, or one `$group` stage. Group output may have one optional `$project` stage,
 at most one final `$sort` stage, and at most one final `$limit` stage.
 `_id` is either `null` or one dotted field reference.
 The supported accumulators are `$count: {}`, `$sum: "$FIELD"`, `$min: "$FIELD"`, and
@@ -173,11 +184,13 @@ projection, skip, limit, or cursor pagination.
 Without `$sort`, group output order is not part of the contract, although the current implementation
 emits a deterministic key order. `$sort` uses the existing JSON sort ordering and stable ties.
 `$limit` accepts a non-negative integer and truncates the materialized group result after sorting.
-`$match` stages use the same predicate rules as the top-level `filter` and must precede `$group` or
-`$count`.
+`$match` stages use the same predicate rules as the top-level `filter` and must precede `$group`,
+`$count`, or `$distinct`.
 `$count` emits one document containing the named non-negative integer field, including zero when no
-records match. It must be terminal and cannot be combined with group-output stages. Stages after
-`$limit`, additional grouping or count stages, and expression operands remain unsupported.
+records match. `$distinct` takes one field reference and emits the unique field values as a JSON array;
+missing fields and explicit `null` share one `null` value. Both stages are terminal and cannot be combined
+with group-output stages. Distinct output is capped at 10,000 values. Stages after `$limit`, additional
+grouping, count, or distinct stages, and expression operands remain unsupported.
 
 MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as
 `$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).

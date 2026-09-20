@@ -4,9 +4,11 @@ use crate::query_path::field_value;
 use indexmap::IndexMap;
 use serde_json::{Map, Value};
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map::Entry};
 
 pub(super) const MAX_GROUPS: usize = 10_000;
+// ponytail: bound distinct materialization at the existing query scale; add spill-to-disk only if larger reports become required.
+pub(super) const MAX_DISTINCT_VALUES: usize = 10_000;
 pub(super) use super::aggregation_plan::validate;
 
 #[derive(Debug)]
@@ -46,6 +48,27 @@ pub(super) fn execute(
         let mut output = Map::new();
         output.insert(field.clone(), Value::Number(count.into()));
         return Ok(vec![Value::Object(output)]);
+    }
+
+    if let Some(field) = &plan.distinct {
+        let mut values = BTreeMap::new();
+        let mut distinct_count = 0;
+        for record in records {
+            let value = field_value(&record.values, field).unwrap_or(Value::Null);
+            let key = serde_json::to_string(&value).map_err(|error| {
+                QueryError::Invalid(format!("distinct value encoding failed: {error}"))
+            })?;
+            if let Entry::Vacant(entry) = values.entry(key) {
+                if distinct_count >= MAX_DISTINCT_VALUES {
+                    return Err(QueryError::Invalid(format!(
+                        "aggregate distinct value count exceeds {MAX_DISTINCT_VALUES}"
+                    )));
+                }
+                entry.insert(value);
+                distinct_count += 1;
+            }
+        }
+        return Ok(values.into_values().collect());
     }
 
     let spec = plan

@@ -14,6 +14,7 @@ pub(super) struct AggregationPlan {
     pub(super) matches: Vec<Map<String, Value>>,
     pub(super) group: Option<GroupSpec>,
     pub(super) count: Option<String>,
+    pub(super) distinct: Option<String>,
     pub(super) projection: Option<BTreeMap<String, i8>>,
     pub(super) sort: Option<IndexMap<String, i8>>,
     pub(super) limit: Option<u64>,
@@ -64,6 +65,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
     let mut matches = Vec::new();
     let mut group = None;
     let mut count = None;
+    let mut distinct = None;
     let mut projection = None;
     let mut sort = None;
     let mut limit = None;
@@ -75,16 +77,21 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
         }
         let (operator, value) = stage.iter().next().expect("one aggregate operator");
         match operator.as_str() {
-            "$match" if group.is_none() && count.is_none() => {
+            "$match" if group.is_none() && count.is_none() && distinct.is_none() => {
                 let filter = value.as_object().ok_or_else(|| {
                     QueryError::Invalid(format!("aggregate stage {index}.$match must be an object"))
                 })?;
                 validation::validate_filter(filter, &format!("aggregate[{index}].$match"))?;
                 matches.push(filter.clone());
             }
-            "$group" if group.is_none() && count.is_none() => group = Some(parse_group(value)?),
-            "$count" if group.is_none() && count.is_none() => {
+            "$group" if group.is_none() && count.is_none() && distinct.is_none() => {
+                group = Some(parse_group(value)?);
+            }
+            "$count" if group.is_none() && count.is_none() && distinct.is_none() => {
                 count = Some(parse_count(value, index)?);
+            }
+            "$distinct" if group.is_none() && count.is_none() && distinct.is_none() => {
+                distinct = Some(parse_distinct(value, index)?);
             }
             "$project"
                 if group.is_some() && projection.is_none() && sort.is_none() && limit.is_none() =>
@@ -99,7 +106,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
             }
             "$match" => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate stage {index}.$match must precede $group or $count"
+                    "aggregate stage {index}.$match must precede $group, $count, or $distinct"
                 )));
             }
             "$group" => {
@@ -122,6 +129,11 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
                     "aggregate stage {index}.$limit must follow $group and appear once"
                 )));
             }
+            "$distinct" => {
+                return Err(QueryError::Invalid(
+                    "aggregate supports only one terminal $distinct stage".into(),
+                ));
+            }
             _ => {
                 return Err(QueryError::Invalid(format!(
                     "unsupported aggregate stage {operator}"
@@ -130,15 +142,16 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
         }
     }
 
-    if group.is_none() && count.is_none() {
+    if group.is_none() && count.is_none() && distinct.is_none() {
         return Err(QueryError::Invalid(
-            "aggregate requires a $group or $count stage".into(),
+            "aggregate requires a $group, $count, or $distinct stage".into(),
         ));
     }
     Ok(AggregationPlan {
         matches,
         group,
         count,
+        distinct,
         projection,
         sort,
         limit,
@@ -157,6 +170,15 @@ fn parse_count(value: &Value, index: usize) -> Result<String, QueryError> {
         )));
     }
     Ok(field.to_owned())
+}
+
+fn parse_distinct(value: &Value, index: usize) -> Result<String, QueryError> {
+    let Some(field) = value.as_str() else {
+        return Err(QueryError::Invalid(format!(
+            "aggregate stage {index}.$distinct must be a field reference"
+        )));
+    };
+    field_reference(field, &format!("aggregate stage {index}.$distinct"))
 }
 
 fn parse_projection(value: &Value, index: usize) -> Result<BTreeMap<String, i8>, QueryError> {

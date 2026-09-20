@@ -58,7 +58,7 @@ curl -i -X QUERY \
   http://127.0.0.1:8080/records
 ```
 
-The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `page_size`, `cursor`, and a bounded `aggregate` pipeline with `$match`, `$count`, `$group`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$and`, `$or`, `$not`, and bounded `$expr` boolean trees over field comparisons.
+The current query surface is `filter`, `sort`, `projection`, `skip`, `limit`, `page_size`, `cursor`, and a bounded `aggregate` pipeline with `$match`, `$count`, `$distinct`, `$group`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$and`, `$or`, `$not`, and bounded `$expr` boolean trees over field comparisons.
 
 `page_size` enables a cursor response. Without `sort`, the cursor follows physical record order;
 with `sort`, it is a keyset token and the next request repeats the same sort definition.
@@ -75,7 +75,7 @@ loaded table, so later mutations of the source table do not change the stream's 
 Both APIs reject sort, aggregate, page-size, and cursor controls, which need a blocking or
 resumable result boundary; an asynchronous backpressure protocol remains future work.
 
-`aggregate` currently accepts either one terminal `$count` stage or one `$group` stage with `$count`, integer `$sum`, `$avg`, `$min`, and `$max`, optionally preceded by bounded `$match` stages. Group output may be followed by one `$project`, `$sort`, and `$limit`; top-level sort, projection, pagination, and limit controls remain incompatible. `$project` reuses inclusion/exclusion projection rules and must precede `$sort`/`$limit`. `$avg` ignores missing, null, and nonnumeric values and returns null when a group has no numeric input.
+`aggregate` currently accepts one terminal `$count` or `$distinct` stage, or one `$group` stage with `$count`, integer `$sum`, `$avg`, `$min`, and `$max`, optionally preceded by bounded `$match` stages. `$distinct` takes a field reference such as `"$ACTIVE"` and returns a deterministic array of unique values, with missing values represented as `null`. Group output may be followed by one `$project`, `$sort`, and `$limit`; top-level sort, projection, pagination, and limit controls remain incompatible. `$project` reuses inclusion/exclusion projection rules and must precede `$sort`/`$limit`. `$avg` ignores missing, null, and nonnumeric values and returns null when a group has no numeric input.
 
 The library also exposes one bounded local `inner`, `left`, `right`, `semi`, or `anti` equality join, plus a bounded `cross` join, over two catalog tables.
 It accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,
