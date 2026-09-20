@@ -105,6 +105,35 @@ fn left_join_keeps_unmatched_left_record_and_inner_join_drops_it() {
 }
 
 #[test]
+fn right_join_keeps_unmatched_right_record() {
+    let root = catalog_with_posts();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let request = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "right",
+            "table": "posts",
+            "on": {
+              "users.ID": {"$eq": {"$field": "posts.ID"}}
+            }
+          },
+          "projection": {"users.NAME": 1, "posts.NAME": 1}
+        }"#,
+    )
+    .unwrap();
+
+    let rows = execute(&catalog, &request).unwrap();
+    let other = json!("Other");
+    assert!(
+        rows.iter().any(|row| {
+            row.get("posts.NAME") == Some(&other) && row.get("users.NAME").is_none()
+        })
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn semi_and_anti_join_emit_only_matching_or_unmatched_left_rows() {
     let root = catalog_with_posts();
     let catalog = Catalog::from_path(&root).unwrap();

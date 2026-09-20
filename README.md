@@ -77,7 +77,7 @@ resumable result boundary; an asynchronous backpressure protocol remains future 
 
 `aggregate` currently accepts either one terminal `$count` stage or one `$group` stage with `$count`, integer `$sum`, `$avg`, `$min`, and `$max`, optionally preceded by bounded `$match` stages. Group output may be followed by one `$project`, `$sort`, and `$limit`; top-level sort, projection, pagination, and limit controls remain incompatible. `$project` reuses inclusion/exclusion projection rules and must precede `$sort`/`$limit`. `$avg` ignores missing, null, and nonnumeric values and returns null when a group has no numeric input.
 
-The library also exposes one bounded local `inner`, `left`, `semi`, or `anti` equality join, plus a bounded `cross` join, over two catalog tables.
+The library also exposes one bounded local `inner`, `left`, `right`, `semi`, or `anti` equality join, plus a bounded `cross` join, over two catalog tables.
 It accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,
 supports multiple equality conditions, and is capped at 100,000 output rows.
 `semi` and `anti` emit only qualified left-table fields, based on whether a right-side match exists.

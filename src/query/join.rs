@@ -15,6 +15,7 @@ pub const MAX_JOIN_ROWS: usize = 100_000;
 pub enum JoinType {
     Inner,
     Left,
+    Right,
     Semi,
     Anti,
     Cross,
@@ -124,7 +125,31 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
         let mut output = Vec::new();
         for &left_record in &left_records {
             for &right_record in &right_records {
-                emit(&mut output, request, left_record, Some(right_record))?;
+                emit(&mut output, request, Some(left_record), Some(right_record))?;
+            }
+        }
+        return Ok(output);
+    }
+
+    if let JoinType::Right = &request.join.kind {
+        let mut left_by_key = BTreeMap::<String, Vec<&DbfRecord>>::new();
+        for &record in &left_records {
+            let Some(key) = encoded_key(&record.values, &local_fields)? else {
+                continue;
+            };
+            left_by_key.entry(key).or_default().push(record);
+        }
+
+        let mut output = Vec::new();
+        for &right_record in &right_records {
+            let matches = encoded_key(&right_record.values, &foreign_fields)?
+                .and_then(|key| left_by_key.get(&key));
+            if let Some(matches) = matches {
+                for left_record in matches {
+                    emit(&mut output, request, Some(left_record), Some(right_record))?;
+                }
+            } else {
+                emit(&mut output, request, None, Some(right_record))?;
             }
         }
         return Ok(output);
@@ -147,24 +172,24 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
             JoinType::Inner => {
                 if let Some(matches) = matches {
                     for right_record in matches {
-                        emit(&mut output, request, left_record, Some(right_record))?;
+                        emit(&mut output, request, Some(left_record), Some(right_record))?;
                     }
                 }
             }
             JoinType::Left => {
                 if let Some(matches) = matches {
                     for right_record in matches {
-                        emit(&mut output, request, left_record, Some(right_record))?;
+                        emit(&mut output, request, Some(left_record), Some(right_record))?;
                     }
                 }
                 if !had_matches {
-                    emit(&mut output, request, left_record, None)?;
+                    emit(&mut output, request, Some(left_record), None)?;
                 }
             }
-            JoinType::Semi if had_matches => emit(&mut output, request, left_record, None)?,
-            JoinType::Anti if !had_matches => emit(&mut output, request, left_record, None)?,
+            JoinType::Semi if had_matches => emit(&mut output, request, Some(left_record), None)?,
+            JoinType::Anti if !had_matches => emit(&mut output, request, Some(left_record), None)?,
             JoinType::Semi | JoinType::Anti => {}
-            JoinType::Cross => unreachable!("cross joins return before key lookup"),
+            JoinType::Right | JoinType::Cross => unreachable!("join type handled above"),
         }
     }
     Ok(output)
@@ -264,11 +289,13 @@ fn encoded_key(
 fn emit(
     output: &mut Vec<Value>,
     request: &JoinRequest,
-    left: &DbfRecord,
+    left: Option<&DbfRecord>,
     right: Option<&DbfRecord>,
 ) -> Result<(), JoinError> {
     let mut values = Map::new();
-    add_qualified_values(&mut values, &request.from, &left.values);
+    if let Some(left) = left {
+        add_qualified_values(&mut values, &request.from, &left.values);
+    }
     if let Some(right) = right {
         add_qualified_values(&mut values, &request.join.table, &right.values);
     }

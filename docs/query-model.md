@@ -215,17 +215,18 @@ between two catalog tables:
 ```
 
 `join.parse` validates this JSON and `join::execute` loads the named tables from a `Catalog`.
-The current join types are `inner`, `left`, `semi`, `anti`, and `cross`.
+The current join types are `inner`, `left`, `right`, `semi`, `anti`, and `cross`.
 The result is a flat JSON object whose keys are qualified as `table.field`.
 An unmatched left row is retained without right-table fields.
+An unmatched right row is retained without left-table fields for a `right` join.
 `semi` emits one left row when at least one right row matches, while `anti` emits one left row
 when no right row matches; neither type emits right-table fields.
 `cross` accepts an empty `on` object and emits every left/right pair.
 Its candidate pair count is capped at 100,000 before filtering.
 Missing and explicit `null` join keys do not match.
 
-The implementation builds one in-memory equality map for the right table and rejects a result
-larger than 100,000 rows.
+The implementation builds one in-memory equality map for the right table, or the left table for a
+`right` join, and rejects a result larger than 100,000 rows.
 This is a bounded nested execution boundary, not a cost-based planner or a streaming executor.
 The single-table HTTP server does not expose joins. The catalog server exposes the same
 read-only boundary at `QUERY /join`; cross-table writes and transactions remain outside this

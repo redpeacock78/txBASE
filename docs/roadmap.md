@@ -34,7 +34,7 @@ The repository currently provides:
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - Strong table representation ETags on successful reads, GET/HEAD If-None-Match validation, and optional If-Match protection for single-table mutations and transactions.
 - A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` stage or one `$group` stage using `$count`, integer `$sum`, numeric `$avg`, `$min`, and `$max`, plus final `$sort` and `$limit` stages over group output.
-- A bounded local `inner`, `left`, `semi`, or `anti` equality join plus a bounded `cross` join over two catalog tables with qualified filtering and projection.
+- A bounded local `inner`, `left`, `right`, `semi`, or `anti` equality join plus a bounded `cross` join over two catalog tables with qualified filtering and projection.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
@@ -116,7 +116,8 @@ The current record scan remains the reference execution path while the query mod
 - Full range, histogram-based, and mixed-direction compound cost planning.
 
 The first join slice is local and bounded.
-It implements one or more equality conditions and uses an in-memory right-side map.
+It implements one or more equality conditions and uses an in-memory right-side map, or a
+left-side map for a right join.
 Future join work must define planner selection, streaming, multiple joins, and broader null or
 missing field semantics before adding broader query surfaces.
 
