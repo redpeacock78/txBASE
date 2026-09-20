@@ -59,6 +59,7 @@ fn schema_export_commits_dbf_and_schema_together() {
 
     let loaded = DbfTable::from_path(&destination).unwrap();
     assert!(loaded.records()[0].deleted);
+    assert_eq!(loaded.transaction_id(), Some(1));
     assert_eq!(
         fs::read(destination.with_extension("txschema.json")).unwrap(),
         schema
@@ -103,8 +104,11 @@ fn schema_export_read_recovers_after_dbf_replacement() {
     table.delete_record(1).unwrap();
     let new_bytes = table.to_bytes();
     let schema = schema_bytes();
+    let old_state = super::persistence::transaction_state_bytes(1).unwrap();
+    let new_state = super::persistence::transaction_state_bytes(2).unwrap();
 
     let directory = schema_export::test_transaction_directory(&destination);
+    fs::write(destination.with_extension("txbase.state"), &old_state).unwrap();
     fs::create_dir(&directory).unwrap();
     schema_export::test_write_file(&schema_export::test_stage_path(&directory, 0), &new_bytes)
         .unwrap();
@@ -112,12 +116,17 @@ fn schema_export_read_recovers_after_dbf_replacement() {
         .unwrap();
     schema_export::test_write_file(&schema_export::test_base_path(&directory, 0), &old_bytes)
         .unwrap();
-    schema_export::test_write_journal(&destination, 1).unwrap();
+    schema_export::test_write_file(&schema_export::test_stage_path(&directory, 6), &new_state)
+        .unwrap();
+    schema_export::test_write_file(&schema_export::test_base_path(&directory, 6), &old_state)
+        .unwrap();
+    schema_export::test_write_journal(&destination, 1 | (1 << 6)).unwrap();
     fs::write(&destination, &new_bytes).unwrap();
 
     let loaded = DbfTable::from_path(&destination).unwrap();
 
     assert!(loaded.records()[0].deleted);
+    assert_eq!(loaded.transaction_id(), Some(2));
     assert_eq!(
         fs::read(destination.with_extension("txschema.json")).unwrap(),
         schema

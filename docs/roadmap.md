@@ -186,7 +186,7 @@ An override must be visible in schema or command output so a reader can reproduc
 
 XBF is a separately versioned native format, not a silent DBF extension.
 
-The v1 wire contract is drafted in [XBF v1 format draft](xbf.md). A bounded codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, representability reporting, durable snapshot path, generation-checked full-snapshot WAL recovery, and a journaled `TXSE` schema-preserving file export exist for that draft. `TXSE` records base bytes, recovers interrupted DBF/schema/memo-sidecar replacement on the next DBF read, and rejects external target changes. Strict multi-file reader atomicity and object-storage commit semantics remain future work.
+The v1 wire contract is drafted in [XBF v1 format draft](xbf.md). A bounded codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, representability reporting, durable snapshot path, generation-checked full-snapshot WAL recovery, and a journaled `TXSE` schema-preserving file export exist for that draft. `TXSE` records base bytes, recovers interrupted DBF/schema/memo-sidecar/transaction-state replacement on the next DBF read, and rejects external target changes. Strict multi-file reader atomicity and object-storage commit semantics remain future work.
 
 The proposed magic is `TXBF`.
 

@@ -20,8 +20,8 @@ table; it does not claim full DBF schema or type compatibility.
 preserves representable `primary`, `unique`, and `not_null` constraints for a
 caller-managed sidecar.
 `save_dbf_with_schema` stages that DBF and sidecar, validates them, and commits
-the desired DBF, schema, and memo-sidecar state through a durable `TXSE`
-journal. The journal records exact base bytes, applies the DBF and schema with
+the desired DBF, schema, memo-sidecar, and durable `.txbase.state` state through a durable `TXSE`
+journal. The journal records exact base bytes, applies the DBF, schema, and transaction state with
 per-file sync-and-replace, removes stale memo variants, and lets normal DBF
 reads resume an interrupted export. Recovery rejects a target changed by
 another writer instead of overwriting it. This is a crash-recovery and

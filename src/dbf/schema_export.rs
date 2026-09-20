@@ -1,4 +1,5 @@
 use super::lock::TableLock;
+use super::persistence::{next_transaction_id, read_transaction_state, transaction_state_bytes};
 use super::schema_metadata::{SchemaMetadata, schema_metadata_path};
 use super::{DbfError, DbfTable, sync_parent_directory};
 use crate::transaction::{FileWal, Wal};
@@ -9,9 +10,10 @@ use std::path::{Path, PathBuf};
 const JOURNAL_MAGIC: [u8; 4] = *b"TXSE";
 const JOURNAL_VERSION: u16 = 1;
 const JOURNAL_RECORD_SIZE: usize = 8;
-const TARGET_COUNT: usize = 6;
+const TARGET_COUNT: usize = 7;
 const DBF_TARGET: usize = 0;
 const SCHEMA_TARGET: usize = 1;
+const STATE_TARGET: usize = 6;
 
 pub(crate) fn commit_schema_export(
     path: &Path,
@@ -24,12 +26,15 @@ pub(crate) fn commit_schema_export(
 
     let dbf_bytes = table.to_bytes();
     validate_staged_export(&dbf_bytes, schema_bytes)?;
+    let transaction_id = next_transaction_id(read_transaction_state(path)?)?;
+    let state_bytes = transaction_state_bytes(transaction_id)?;
     let directory = transaction_directory(path);
     remove_directory_if_exists(&directory)?;
     fs::create_dir(&directory)?;
 
     write_file(&stage_path(&directory, DBF_TARGET), &dbf_bytes)?;
     write_file(&stage_path(&directory, SCHEMA_TARGET), schema_bytes)?;
+    write_file(&stage_path(&directory, STATE_TARGET), &state_bytes)?;
     let flags = capture_bases(path, &directory)?;
     write_journal(path, flags)?;
     recover_schema_export_locked(path)?;
@@ -72,6 +77,7 @@ fn apply_export(path: &Path, flags: u16) -> Result<(), DbfError> {
     let directory = transaction_directory(path);
     let dbf_bytes = fs::read(stage_path(&directory, DBF_TARGET))?;
     let schema_bytes = fs::read(stage_path(&directory, SCHEMA_TARGET))?;
+    let state_bytes = read_optional(&stage_path(&directory, STATE_TARGET))?;
     validate_staged_export(&dbf_bytes, &schema_bytes)?;
 
     let targets = target_paths(path);
@@ -82,9 +88,13 @@ fn apply_export(path: &Path, flags: u16) -> Result<(), DbfError> {
         None,
         None,
         None,
+        state_bytes.as_deref(),
     ];
     let mut replace = [false; TARGET_COUNT];
     for (index, target) in targets.iter().enumerate() {
+        if index == STATE_TARGET && state_bytes.is_none() {
+            continue;
+        }
         let current = read_optional(target)?;
         let base = if flags & (1 << index) != 0 {
             Some(fs::read(base_path(&directory, index))?)
@@ -179,6 +189,7 @@ fn target_paths(path: &Path) -> [PathBuf; TARGET_COUNT] {
         path.with_extension("DBT"),
         path.with_extension("fpt"),
         path.with_extension("FPT"),
+        super::persistence::transaction_state_path(path),
     ]
 }
 
@@ -194,6 +205,7 @@ fn stage_path(directory: &Path, index: usize) -> PathBuf {
     directory.join(match index {
         DBF_TARGET => "dbf",
         SCHEMA_TARGET => "schema",
+        STATE_TARGET => "state",
         _ => "unused",
     })
 }

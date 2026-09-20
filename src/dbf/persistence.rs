@@ -46,6 +46,11 @@ pub(super) fn read_transaction_state(path: &Path) -> Result<Option<u64>, DbfErro
 }
 
 pub(super) fn write_transaction_state(path: &Path, transaction_id: u64) -> Result<(), DbfError> {
+    let bytes = transaction_state_bytes(transaction_id)?;
+    save_bytes_to(&transaction_state_path(path), &bytes, "txbase.state.tmp")
+}
+
+pub(super) fn transaction_state_bytes(transaction_id: u64) -> Result<Vec<u8>, DbfError> {
     if transaction_id == 0 {
         return Err(DbfError::Invalid(
             "transaction state ID must be positive".into(),
@@ -54,7 +59,7 @@ pub(super) fn write_transaction_state(path: &Path, transaction_id: u64) -> Resul
     let mut bytes = TRANSACTION_STATE_MAGIC.to_vec();
     bytes.push(TRANSACTION_STATE_VERSION);
     bytes.extend_from_slice(&transaction_id.to_le_bytes());
-    save_bytes_to(&transaction_state_path(path), &bytes, "txbase.state.tmp")
+    Ok(bytes)
 }
 
 pub(super) fn next_transaction_id(current: Option<u64>) -> Result<u64, DbfError> {

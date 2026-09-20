@@ -237,8 +237,8 @@ representable XBF subset to a DBF file and reports unsupported types or values a
 field/record issues plus whether a schema sidecar is required.
 The library API `XbfTable::to_dbf_with_schema` additionally returns sidecar JSON for representable
 `primary`, `unique`, `not_null`, and bounded table-level `checks` constraints. `XbfTable::save_dbf_with_schema` and CLI
-`xbf export --schema` journal the DBF, sibling `.txschema.json`, and memo-sidecar state through a
-recoverable `TXSE` export boundary. A later DBF read resumes an interrupted replacement and rejects
+`xbf export --schema` journal the DBF, sibling `.txschema.json`, memo-sidecar state, and durable
+`.txbase.state` commit ID through a recoverable `TXSE` export boundary. A later DBF read resumes an interrupted replacement and rejects
 targets changed by another writer; it does not promise one physically atomic snapshot to external
 legacy readers.
 
