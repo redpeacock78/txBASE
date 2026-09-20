@@ -31,13 +31,19 @@ pub(super) struct AccumulatorSpec {
 pub(super) enum AccumulatorKind {
     Count,
     Average(String),
-    Sum(String),
+    Sum(SumOperand),
     Min(String),
     Max(String),
     First(String),
     Last(String),
     Push(String),
     AddToSet(String),
+}
+
+#[derive(Debug, Clone)]
+pub(super) enum SumOperand {
+    Field(String),
+    Literal(serde_json::Number),
 }
 
 pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
@@ -318,12 +324,9 @@ fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
                 })?,
                 &format!("$group.{name}.$avg"),
             )?),
-            "$sum" => AccumulatorKind::Sum(field_reference(
-                operand.as_str().ok_or_else(|| {
-                    QueryError::Invalid(format!("$group.{name}.$sum must be a field reference"))
-                })?,
-                &format!("$group.{name}.$sum"),
-            )?),
+            "$sum" => {
+                AccumulatorKind::Sum(parse_sum_operand(operand, &format!("$group.{name}.$sum"))?)
+            }
             "$min" | "$max" | "$first" | "$last" | "$push" | "$addToSet" => {
                 let field = field_reference(
                     operand.as_str().ok_or_else(|| {
@@ -372,4 +375,14 @@ fn field_reference(value: &str, path: &str) -> Result<String, QueryError> {
         )));
     }
     Ok(field.to_owned())
+}
+
+fn parse_sum_operand(value: &Value, path: &str) -> Result<SumOperand, QueryError> {
+    match value {
+        Value::String(value) => Ok(SumOperand::Field(field_reference(value, path)?)),
+        Value::Number(value) => Ok(SumOperand::Literal(value.clone())),
+        _ => Err(QueryError::Invalid(format!(
+            "{path} must be a field reference or numeric literal"
+        ))),
+    }
 }

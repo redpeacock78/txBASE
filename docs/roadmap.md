@@ -38,7 +38,7 @@ The repository currently provides:
 - A durable catalog-journal commit ID for multi-table mutation transactions.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
-- A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, numeric `$sum`, numeric `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, plus final `$sort` and `$limit` stages over group output.
+- A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, numeric field-reference or literal `$sum`, numeric `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, plus final `$sort` and `$limit` stages over group output.
 - A bounded local `inner`, `left`, `right`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
@@ -143,7 +143,7 @@ Distributed joins and distributed transactions remain later features.
 Aggregation must define missing, null, numeric overflow, and memory-limit behavior before it is added to the HTTP API.
 
 The current aggregation slice also permits one terminal `$count` or `$distinct` stage, or one `$group` with
-`$count`, `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, bounded group-output `$match` stages and a bounded `$project` before the final sort and limit. It reuses the
+`$count`, field-reference or literal `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, bounded group-output `$match` stages and a bounded `$project` before the final sort and limit. It reuses the
 existing include/exclude projection contract.
 
 The planner explanation boundary is implemented by `explain_query_at` and `QUERY /explain`.

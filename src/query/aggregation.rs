@@ -142,16 +142,22 @@ pub(super) fn execute(
                 }
                 (
                     AccumulatorState::Sum { integer, floating },
-                    aggregation_plan::AccumulatorKind::Sum(field),
+                    aggregation_plan::AccumulatorKind::Sum(operand),
                 ) => {
-                    let Some(value) = field_value(&record.values, field) else {
-                        continue;
-                    };
-                    if value.is_null() {
-                        continue;
-                    }
-                    let Some(number) = value.as_number() else {
-                        continue;
+                    let (number, operand_name) = match operand {
+                        aggregation_plan::SumOperand::Field(field) => {
+                            let Some(value) = field_value(&record.values, field) else {
+                                continue;
+                            };
+                            if value.is_null() {
+                                continue;
+                            }
+                            let Some(number) = value.as_number() else {
+                                continue;
+                            };
+                            (number, field.as_str())
+                        }
+                        aggregation_plan::SumOperand::Literal(number) => (number, "literal"),
                     };
                     if let Some(value) = number
                         .as_i64()
@@ -159,7 +165,7 @@ pub(super) fn execute(
                         .or_else(|| number.as_u64().map(i128::from))
                     {
                         if let Some(total) = floating {
-                            *total = add_floating_sum(*total, value as f64, field)?;
+                            *total = add_floating_sum(*total, value as f64, operand_name)?;
                         } else {
                             *integer = integer.checked_add(value).ok_or_else(|| {
                                 QueryError::Invalid("aggregate $sum overflows i128".into())
@@ -168,12 +174,12 @@ pub(super) fn execute(
                     } else {
                         let value = number.as_f64().ok_or_else(|| {
                             QueryError::Invalid(format!(
-                                "aggregate $sum field {field} must contain a finite JSON number"
+                                "aggregate $sum operand {operand_name} must contain a finite JSON number"
                             ))
                         })?;
-                        let total = add_floating_sum(*integer as f64, value, field)?;
+                        let total = add_floating_sum(*integer as f64, value, operand_name)?;
                         *floating = Some(total);
-                    }
+                    };
                 }
                 (AccumulatorState::Min(current), aggregation_plan::AccumulatorKind::Min(field)) => {
                     update_extreme(current, record, field, true)?;

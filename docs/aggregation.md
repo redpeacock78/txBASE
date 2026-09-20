@@ -29,7 +29,7 @@ Group output may have zero or more `$match` stages, followed by one optional `$p
 
 `_id` is either `null` or one dotted field reference.
 
-Supported accumulators are `$count: {}`, numeric `$sum: "$FIELD"`, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, `$last: "$FIELD"`, `$push: "$FIELD"`, and `$addToSet: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
+Supported accumulators are `$count: {}`, numeric `$sum: "$FIELD"` or a numeric literal, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, `$last: "$FIELD"`, `$push: "$FIELD"`, and `$addToSet: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
 
 The filter runs before grouping.
 
@@ -48,6 +48,8 @@ A missing group field becomes `null`.
 Missing and explicit `null` values therefore share a group.
 
 Missing, `null`, and nonnumeric `$sum` inputs contribute zero.
+
+A numeric `$sum` literal contributes once for each input record.
 
 All-integral `$sum` inputs preserve an integer JSON result.
 

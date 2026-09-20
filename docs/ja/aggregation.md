@@ -29,7 +29,7 @@ txBASE は、フィルターに使う同じ JSON クエリ文書上の有界パ�
 
 `_id` は `null` または一つのドット区切りフィールド参照です。
 
-サポートするアキュムレータは `$count: {}`、数値の `$sum: "$FIELD"`、`$min: "$FIELD"`、`$max: "$FIELD"`、`$first: "$FIELD"`、`$last: "$FIELD"`、`$push: "$FIELD"`、`$addToSet: "$FIELD"`、および有限な JSON 数値に対する `$avg: "$FIELD"` です。
+サポートするアキュムレータは `$count: {}`、数値の `$sum: "$FIELD"` または数値リテラル、`$min: "$FIELD"`、`$max: "$FIELD"`、`$first: "$FIELD"`、`$last: "$FIELD"`、`$push: "$FIELD"`、`$addToSet: "$FIELD"`、および有限な JSON 数値に対する `$avg: "$FIELD"` です。
 
 フィルターはグループ化より前に実行します。
 
@@ -48,6 +48,8 @@ txBASE は、フィルターに使う同じ JSON クエリ文書上の有界パ�
 そのため欠損値と明示的な `null` は同じグループになります。
 
 欠損、`null`、数値以外の `$sum` 入力は 0 として扱います。
+
+数値の `$sum` リテラルは入力レコードごとに一度加算します。
 
 `$sum` の数値入力がすべて整数なら、結果も JSON の整数になります。
 

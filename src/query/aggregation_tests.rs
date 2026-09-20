@@ -64,6 +64,38 @@ fn sums_fractional_and_integer_numbers() {
 }
 
 #[test]
+fn sums_numeric_literals_for_each_input_record() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"VALUE": 10}).as_object().unwrap().clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"VALUE": 20}).as_object().unwrap().clone(),
+    };
+    let records = [&first, &second];
+    let stages = vec![
+        json!({
+            "$group": {
+                "_id": null,
+                "fixed": {"$sum": 2},
+                "fractional": {"$sum": 0.5}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        super::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({"_id": null, "fixed": 4, "fractional": 1.0})]
+    );
+}
+
+#[test]
 fn counts_filtered_records_with_a_count_stage() {
     let table = table_with_two_active_records();
     let request = parse(
@@ -428,6 +460,7 @@ fn rejects_unsupported_aggregation_combinations() {
         br#"{"aggregate":[{"$distinct":"$ACTIVE"},{"$limit":1}]}"#.as_slice(),
         br#"{"aggregate":[{"$distinct":"$ACTIVE"},{"$distinct":"$AGE"}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":"AGE"}}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":true}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"average":{"$avg":"AGE"}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$project":{"_id":1}},{"$match":{}}]}"#
             .as_slice(),
