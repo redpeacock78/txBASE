@@ -317,14 +317,11 @@ This prevents XBF from becoming a second unrelated database implementation.
 
 The draft codec, snapshot writer, and generation-checked full-snapshot WAL currently have a deterministic fixture
 covering every non-reserved v1 type, corruption checks, constraint checks,
-explicit size limits, a malformed-header corpus, and a sync-and-reload path
+explicit size limits, a malformed-header corpus, deterministic malformed
+section, directory, UTF-8, and payload cases, and a sync-and-reload path
 round trip. Before XBF is advertised as a complete supported format, the
 repository still needs:
 
-- Malformed section, directory, UTF-8, and payload corpora.
-- Round-trip tests for DBF to XBF and representability failures for XBF to DBF.
-- Crash and recovery tests for the snapshot, `.xwl` generation boundary, and
-  `TXSE` schema-export journal.
 - A strict externally visible atomic snapshot contract for legacy readers; the
   current `TXSE` protocol deliberately provides recoverability and conflict
   detection rather than multi-file reader atomicity.

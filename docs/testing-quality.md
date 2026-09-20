@@ -64,7 +64,7 @@ The current Rust test layout is already split by ownership:
 | DBF mutation | `src/dbf/tests/mutation.rs`, `mutation_model_tests.rs`, `writer_tests.rs` |
 | Persistence | `src/dbf/tests/persistence.rs`, `recovery_fault_tests.rs`, `src/dbf/recovery.rs` |
 | Maintenance | `src/dbf/tests/maintenance.rs`, `src/dbf/schema.rs`, `src/dbf/maintenance.rs` |
-| Malformed input | `src/dbf/malformed_tests.rs`, `src/dbf/parser_fuzz_tests.rs`, `src/query/malformed_tests.rs`, `src/transaction/malformed_tests.rs` |
+| Malformed input | `src/dbf/malformed_tests.rs`, `src/dbf/parser_fuzz_tests.rs`, `src/query/malformed_tests.rs`, `src/transaction/malformed_tests.rs`, `src/xbf/malformed_tests.rs`, `tests/corpus/xbf/` |
 | Query and HTTP | `src/query/tests.rs`, `src/query/cursor_tests.rs`, `src/query/aggregation_tests.rs`, `src/server/tests.rs`, `src/server/catalog_tests.rs`, `src/server/range.rs` |
 | Transactions | `src/transaction/tests.rs`, `src/transaction/malformed_tests.rs`, `src/server/tests.rs`, `src/server/catalog_tests.rs` |
 
