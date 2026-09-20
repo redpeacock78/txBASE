@@ -276,6 +276,8 @@ EUC-KR/CP949, and Big5/CP950.
 Malformed reads use U+FFFD and writes reject unmappable or over-width values.
 The explicit `Shift_JIS` override accepts ASCII, half-width Katakana, and JIS X 0208; CP932
 extensions decode as U+FFFD and are rejected on write.
+Pinned DBF fixtures cover the four declared CJK drivers, and pinned explicit-codec byte fixtures
+cover DBF record decoding and write round-trips for the four explicit overrides.
 
 An optional `users.txschema.json` sidecar adds one-field `primary`, `unique`, and `not_null`
 constraints, bounded composite `unique` keys, scalar `default` values for omitted inserts, and

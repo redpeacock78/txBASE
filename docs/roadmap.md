@@ -179,8 +179,9 @@ Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP; none of the latter four claims a DB
 mapping.
 Schema output exposes declared and effective names plus the interpretation source.
 Strict Shift_JIS accepts ASCII, half-width Katakana, and JIS X 0208, while CP932 extensions are
-replaced on read or rejected on write. Pinned byte fixtures cover the four declared CJK drivers
-and round-trip their multibyte record values. The query layer now has a bounded
+replaced on read or rejected on write. Pinned DBF fixtures cover the four declared CJK drivers
+and round-trip their multibyte record values. Pinned explicit-codec byte fixtures cover DBF record
+decoding and write round-trips for the four explicit overrides. The query layer now has a bounded
 `unicode-lowercase` sort collation; locale-aware CJK collation and broader upstream external
 fixtures remain future work.
 
