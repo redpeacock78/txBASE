@@ -160,7 +160,10 @@ declared-driver codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP.
 Pinned DBF fixtures cover the four declared CJK drivers and round-trip their multibyte record
 values. Pinned explicit-codec byte fixtures cover DBF record decoding and write round-trips for
 all eight supported explicit codec names. Query sorting has a bounded Unicode-lowercase mode; locale-aware
-CJK collation and broader upstream CJK fixtures remain future work.
+CJK collation and additional broader upstream CJK fixtures remain future work.
+
+An upstream JavaDBF GBK fixture also covers three GBK-encoded CJK field names and 28 real records,
+including a read, mutation, and byte round-trip.
 
 Classic field descriptor names use the same effective codec as character values, so CJK column names
 remain usable as JSON keys and mutation targets. The descriptor width limit remains a byte limit;

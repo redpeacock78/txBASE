@@ -51,3 +51,15 @@ whose field descriptor name and record value are both GBK-encoded. It proves
 that CJK descriptor names use the effective codec and remain usable for JSON
 reads and mutations. The descriptor name is intentionally short enough for the
 classic byte-width limit.
+
+`external-javadbf-gbk.dbf.hex` is a whitespace-separated hex encoding of the
+upstream `gbk.dbf` fixture from JavaDBF. It contains three GBK-encoded CJK field
+names and 28 real records. The source is pinned to commit
+`9d739eb434f48a1d2711e5783932389a813a2808`:
+https://github.com/albfernandez/javadbf/tree/9d739eb434f48a1d2711e5783932389a813a2808
+
+The upstream repository is identified as LGPL-3.0; see the
+[GNU LGPL v3](https://www.gnu.org/licenses/lgpl-3.0.html). This repository
+includes only the fixture bytes as third-party test data, not JavaDBF source
+code. The fixture SHA-256 is
+`661e3f5c7281fae001fa91245df7281d241200169634939ef7ef97123b35d9bc`.

@@ -183,8 +183,11 @@ replaced on read or rejected on write. Pinned DBF fixtures cover the four declar
 and round-trip their multibyte record values. An upstream Visual FoxPro Windows-1251 fixture also
 round-trips Cyrillic record values. Pinned explicit-codec byte fixtures cover DBF record decoding
 and write round-trips for all eight supported explicit codec names. The query layer now has a bounded
-`unicode-lowercase` sort collation; locale-aware CJK collation and broader upstream CJK fixtures
-remain future work.
+`unicode-lowercase` sort collation; locale-aware CJK collation and additional broader upstream CJK
+fixtures remain future work.
+
+An upstream JavaDBF GBK fixture now covers three GBK-encoded CJK field names and 28 real records,
+including a read, mutation, and byte round-trip.
 
 Classic DBF field descriptor names now use the effective codec as well, so CJK column names remain
 usable for JSON access and mutations. The descriptor limit is still measured in bytes, and XBF
