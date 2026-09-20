@@ -91,7 +91,7 @@ Visual FoxPro の nullable テーブルは内部で `_NullFlags` を使います
 
 言語ドライバーのバイトは、文字バイトをどう解釈するかを宣言します。
 
-txBASE は `src/dbf/codec.rs` と `src/dbf/codec_cjk.rs` が実装するコードページを現在サポートします。
+txBASE は `src/dbf/codepages.rs`、`src/dbf/codec.rs`、`src/dbf/codec_cjk.rs` が実装するコードページを現在サポートします。
 
 これには、サポートするドライバー ID が使う CP437、CP850、CP852、CP866、Windows-1250、Windows-1251、Windows-1252、Windows-1253、Windows-1254、Windows-1255、Windows-1256 の対応が含まれます。
 
