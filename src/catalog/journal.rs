@@ -8,6 +8,9 @@ use std::path::{Path, PathBuf};
 const CATALOG_LOCK: &str = ".txbase.catalog.lock";
 const JOURNAL_DIR: &str = ".txbase.catalog.txn";
 const MANIFEST: &str = "manifest.json";
+const TRANSACTION_STATE: &str = ".txbase.catalog.state";
+const TRANSACTION_STATE_MAGIC: &[u8; 4] = b"TXCS";
+const TRANSACTION_STATE_VERSION: u8 = 1;
 
 pub(crate) struct CatalogReadLock {
     _file: File,
@@ -46,18 +49,35 @@ struct ManifestChange {
 pub(crate) fn read_lock(root: &Path) -> Result<CatalogReadLock, CatalogError> {
     recover(root)?;
     let file = open_lock(root, false)?;
+    read_transaction_id_locked(root)?;
     Ok(CatalogReadLock { _file: file })
 }
 
 pub(crate) fn write_lock(root: &Path) -> Result<CatalogWriteLock, CatalogError> {
     let file = open_lock(root, true)?;
     recover_locked(root)?;
+    read_transaction_id_locked(root)?;
     Ok(CatalogWriteLock { _file: file })
 }
 
-pub(crate) fn commit(root: &Path, changes: Vec<FileChange>) -> Result<(), CatalogError> {
+pub(crate) fn transaction_id(root: &Path) -> Result<Option<u64>, CatalogError> {
+    let _lock = read_lock(root)?;
+    read_transaction_id_locked(root)
+}
+
+pub(crate) fn read_transaction_id_locked(root: &Path) -> Result<Option<u64>, CatalogError> {
+    let path = root.join(TRANSACTION_STATE);
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    decode_transaction_id(&bytes).map(Some)
+}
+
+pub(crate) fn commit(root: &Path, mut changes: Vec<FileChange>) -> Result<u64, CatalogError> {
     if changes.is_empty() {
-        return Ok(());
+        return Ok(read_transaction_id_locked(root)?.unwrap_or(0));
     }
     let journal = root.join(JOURNAL_DIR);
     if journal.exists() {
@@ -65,6 +85,15 @@ pub(crate) fn commit(root: &Path, changes: Vec<FileChange>) -> Result<(), Catalo
             "catalog transaction journal already exists".into(),
         ));
     }
+
+    let state_path = root.join(TRANSACTION_STATE);
+    let state_before = read_optional(&state_path)?;
+    let transaction_id = next_transaction_id(state_before.as_deref())?;
+    changes.push(FileChange {
+        target: state_path,
+        before: state_before,
+        after: Some(transaction_state_bytes(transaction_id)),
+    });
 
     let mut targets = BTreeSet::new();
     for change in &changes {
@@ -135,7 +164,61 @@ pub(crate) fn commit(root: &Path, changes: Vec<FileChange>) -> Result<(), Catalo
     result?;
     let _ = fs::remove_dir_all(&journal);
     sync_directory(root)?;
-    Ok(())
+    Ok(transaction_id)
+}
+
+fn next_transaction_id(state: Option<&[u8]>) -> Result<u64, CatalogError> {
+    state
+        .map(decode_transaction_id)
+        .transpose()?
+        .unwrap_or(0)
+        .checked_add(1)
+        .ok_or_else(|| CatalogError::Invalid("catalog transaction ID exhausted".into()))
+}
+
+fn decode_transaction_id(bytes: &[u8]) -> Result<u64, CatalogError> {
+    let Some(body) = bytes.strip_prefix(TRANSACTION_STATE_MAGIC) else {
+        return Err(CatalogError::Invalid(
+            "catalog transaction state header is invalid".into(),
+        ));
+    };
+    if body.len() != 9 {
+        return Err(CatalogError::Invalid(
+            "catalog transaction state payload is truncated".into(),
+        ));
+    }
+    if body[0] != TRANSACTION_STATE_VERSION {
+        return Err(CatalogError::Invalid(format!(
+            "unknown catalog transaction state version {}",
+            body[0]
+        )));
+    }
+    let transaction_id = u64::from_le_bytes(
+        body[1..9]
+            .try_into()
+            .expect("catalog transaction state payload is fixed length"),
+    );
+    if transaction_id == 0 {
+        return Err(CatalogError::Invalid(
+            "catalog transaction ID must be positive".into(),
+        ));
+    }
+    Ok(transaction_id)
+}
+
+fn transaction_state_bytes(transaction_id: u64) -> Vec<u8> {
+    let mut bytes = TRANSACTION_STATE_MAGIC.to_vec();
+    bytes.push(TRANSACTION_STATE_VERSION);
+    bytes.extend_from_slice(&transaction_id.to_le_bytes());
+    bytes
+}
+
+fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, CatalogError> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn recover(root: &Path) -> Result<(), CatalogError> {
@@ -307,8 +390,10 @@ mod tests {
         fs::create_dir(journal.join("after")).unwrap();
         write_synced(&journal.join("before/0"), b"users-before").unwrap();
         write_synced(&journal.join("before/1"), b"posts-before").unwrap();
+        write_synced(&journal.join("before/2"), &transaction_state_bytes(1)).unwrap();
         write_synced(&journal.join("after/0"), b"users-after").unwrap();
         write_synced(&journal.join("after/1"), b"posts-after").unwrap();
+        write_synced(&journal.join("after/2"), &transaction_state_bytes(2)).unwrap();
         write_manifest(
             &journal,
             &Manifest {
@@ -324,6 +409,11 @@ mod tests {
                         before: Some("1".into()),
                         after: Some("1".into()),
                     },
+                    ManifestChange {
+                        target: TRANSACTION_STATE.into(),
+                        before: Some("2".into()),
+                        after: Some("2".into()),
+                    },
                 ],
             },
         )
@@ -335,12 +425,14 @@ mod tests {
         let root = temporary_root();
         fs::write(root.join("users.dbf"), b"users-after").unwrap();
         fs::write(root.join("posts.dbf"), b"posts-before").unwrap();
+        fs::write(root.join(TRANSACTION_STATE), transaction_state_bytes(2)).unwrap();
         prepared_journal(&root, Phase::Prepared);
 
         recover(&root).unwrap();
 
         assert_eq!(fs::read(root.join("users.dbf")).unwrap(), b"users-before");
         assert_eq!(fs::read(root.join("posts.dbf")).unwrap(), b"posts-before");
+        assert_eq!(read_transaction_id_locked(&root).unwrap(), Some(1));
         assert!(!root.join(JOURNAL_DIR).exists());
         fs::remove_dir_all(root).unwrap();
     }
@@ -350,13 +442,32 @@ mod tests {
         let root = temporary_root();
         fs::write(root.join("users.dbf"), b"users-before").unwrap();
         fs::write(root.join("posts.dbf"), b"posts-before").unwrap();
+        fs::write(root.join(TRANSACTION_STATE), transaction_state_bytes(1)).unwrap();
         prepared_journal(&root, Phase::Committed);
 
         recover(&root).unwrap();
 
         assert_eq!(fs::read(root.join("users.dbf")).unwrap(), b"users-after");
         assert_eq!(fs::read(root.join("posts.dbf")).unwrap(), b"posts-after");
+        assert_eq!(read_transaction_id_locked(&root).unwrap(), Some(2));
         assert!(!root.join(JOURNAL_DIR).exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_a_malformed_catalog_transaction_state() {
+        let root = temporary_root();
+        fs::write(root.join(TRANSACTION_STATE), b"not a catalog state").unwrap();
+
+        let error = match read_lock(&root) {
+            Ok(_) => panic!("malformed catalog state was accepted"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("catalog transaction state header is invalid")
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

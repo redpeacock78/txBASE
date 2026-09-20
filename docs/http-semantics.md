@@ -171,8 +171,9 @@ transaction IDs, or MVCC visibility.
 The catalog server's `POST /transaction` accepts `/table/records` and
 `/table/records/{id}` mutation paths. It prepares every affected table under one catalog lock,
 commits the DBF and changed sidecars through a directory journal, and rolls back an incomplete
-prepare on the next catalog read. It provides cross-table atomic commit and crash recovery, but
-does not provide a catalog-wide transaction ID or MVCC visibility.
+prepare on the next catalog read. It provides cross-table atomic commit and crash recovery, and
+returns a durable catalog-journal transaction ID in JSON and `X-Txbase-Transaction-Id`. The ID is
+an ordering/identification boundary; it does not provide MVCC visibility.
 
 The table lock serializes save paths, and a stale independently loaded table is rejected.
 

@@ -11,7 +11,7 @@ impl Catalog {
     pub(crate) fn commit_operations(
         &self,
         operations: &[OperationIr],
-    ) -> Result<(), CatalogTransactionError> {
+    ) -> Result<u64, CatalogTransactionError> {
         if operations.is_empty() {
             return Err(CatalogTransactionError::Invalid(
                 "operations must not be empty".into(),

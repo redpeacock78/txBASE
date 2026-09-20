@@ -53,6 +53,10 @@ catalog.verify()?;
 
 `schema_json` loads every discovered table and returns its name, filename, and DBF schema.
 
+`transaction_id` returns the last durable catalog-journal commit ID, if one exists. The ID is
+advanced only by the multi-table `POST /transaction` journal boundary; independent named-table
+mutations retain their per-table DBF transaction IDs.
+
 `verify` loads and verifies every discovered table, reporting the table name when a table fails.
 
 The bounded local join boundary is separate from catalog discovery.
@@ -75,8 +79,10 @@ single-table `QUERY /explain`. `QUERY /join` accepts the same JSON join document
 `POST /{table}/records` and `PUT`/`PATCH`/`DELETE /{table}/records/{id}` reuse the single-table
 mutation, WAL, ETag, validation, and constraint behavior. Each request commits only its named
 DBF. `POST /transaction` accepts named-table mutation paths and commits all affected DBFs under
-one catalog journal; an incomplete prepare is rolled back on the next catalog read. The catalog
-does not provide catalog-wide transaction IDs or MVCC visibility.
+one catalog journal; an incomplete prepare is rolled back on the next catalog read. Successful
+catalog-journal commits advance a durable catalog transaction ID and return it in the JSON body
+and `X-Txbase-Transaction-Id` header. This is an ordering/identification boundary, not MVCC
+visibility.
 The catalog is discovered once at server startup, while each request loads the named table through
 the existing recovery path. Named-table mutations do not add or remove tables.
 
@@ -103,6 +109,7 @@ The catalog output has this shape:
 ```json
 {
   "format": "txbase-catalog",
+  "transaction_id": null,
   "tables": [
     {
       "name": "users",
@@ -125,6 +132,10 @@ named-table reads and mutations.
 
 It provides a cross-table atomic transaction boundary for named record mutations.
 
+The catalog journal persists a monotonically increasing commit ID in
+`.txbase.catalog.state`. Recovery rolls that state back with a prepared journal or reapplies it
+with a committed journal. It does not provide historical row versions or MVCC visibility.
+
 When a field sidecar declares `references: "TABLE.FIELD"`, catalog named-table mutations and
 catalog transactions validate non-null child values against active rows in the referenced table.
 They reject parent updates or logical deletes that would leave a child dangling; nulls are allowed
@@ -138,4 +149,4 @@ It does not infer relationships from field names.
 The local join supports `inner`, `left`, `right`, `semi`, and `anti` equality joins plus a bounded
 `cross` join, with a hard result bound.
 It does not provide a cost-based planner, streaming backpressure, planner-selected join strategies,
-catalog-wide transaction IDs, or MVCC visibility.
+or MVCC visibility.

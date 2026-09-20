@@ -160,6 +160,10 @@ impl Catalog {
         &self.root
     }
 
+    pub fn transaction_id(&self) -> Result<Option<u64>, CatalogError> {
+        journal::transaction_id(&self.root)
+    }
+
     pub fn table_names(&self) -> Vec<String> {
         self.tables.keys().cloned().collect()
     }
@@ -194,6 +198,7 @@ impl Catalog {
     }
 
     fn schema_json_unlocked(&self) -> Result<Value, CatalogError> {
+        let transaction_id = journal::read_transaction_id_locked(&self.root)?;
         let mut tables = Vec::with_capacity(self.tables.len());
         for entry in self.tables() {
             let table = self.open_table_unlocked(entry.name())?;
@@ -205,6 +210,7 @@ impl Catalog {
         }
         Ok(json!({
             "format": "txbase-catalog",
+            "transaction_id": transaction_id,
             "tables": tables,
         }))
     }
@@ -336,7 +342,7 @@ mod tests {
         fs::write(root.join("posts.dbf"), fixture()).unwrap();
         let catalog = Catalog::from_path(&root).unwrap();
 
-        catalog
+        let transaction_id = catalog
             .commit_operations(&[
                 OperationIr {
                     method: OperationMethod::Post,
@@ -355,16 +361,21 @@ mod tests {
                 },
             ])
             .unwrap();
+        assert_eq!(transaction_id, 1);
+        assert_eq!(catalog.transaction_id().unwrap(), Some(1));
+        assert_eq!(catalog.schema_json().unwrap()["transaction_id"], 1);
+        let reloaded = Catalog::from_path(&root).unwrap();
+        assert_eq!(reloaded.transaction_id().unwrap(), Some(1));
 
         assert!(
-            catalog
+            reloaded
                 .open_table("users")
                 .unwrap()
                 .active_record(3)
                 .is_some()
         );
         assert_eq!(
-            catalog
+            reloaded
                 .open_table("posts")
                 .unwrap()
                 .active_record(1)

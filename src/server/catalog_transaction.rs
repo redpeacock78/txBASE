@@ -1,4 +1,4 @@
-use super::{HttpResponse, error, json_response, read_json_body};
+use super::{HttpResponse, error, header, json_response, read_json_body};
 use crate::catalog::{Catalog, CatalogTransactionError};
 use crate::xbase::OperationIr;
 use serde::Deserialize;
@@ -38,14 +38,19 @@ pub(super) fn response(request: &mut Request, catalog: &Catalog) -> HttpResponse
     };
 
     match catalog.commit_operations(&transaction.operations) {
-        Ok(()) => json_response(
+        Ok(transaction_id) => json_response(
             200,
             json!({
                 "committed": true,
                 "operations": transaction.operations.len(),
+                "transaction_id": transaction_id,
             }),
             false,
-        ),
+        )
+        .with_header(header(
+            "X-Txbase-Transaction-Id",
+            &transaction_id.to_string(),
+        )),
         Err(CatalogTransactionError::Invalid(message)) => {
             json_response(422, error("invalid_transaction", &message), false)
         }

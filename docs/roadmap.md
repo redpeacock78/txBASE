@@ -34,6 +34,7 @@ The repository currently provides:
 - Startup recovery, stale-snapshot rejection, and an Ubuntu/macOS/Windows CI gate.
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
+- A durable catalog-journal commit ID for multi-table mutation transactions.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - Strong table representation ETags on successful reads, GET/HEAD If-None-Match validation, and optional If-Match protection for single-table mutations and transactions.
 - A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, integer `$sum`, numeric `$avg`, `$min`, and `$max`, plus final `$sort` and `$limit` stages over group output.
@@ -48,7 +49,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, planner-selected join strategies, catalog-wide transaction IDs or MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, planner-selected join strategies, catalog-wide MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -77,11 +78,11 @@ The catalog currently derives table identity from direct-child DBF filenames and
 It provides table discovery, named table loading, schema output, per-table verification, and
 independent named-table HTTP mutations that reuse the single-table persistence boundary.
 
-It does not yet provide relationships, cross-table index coordination, catalog-wide transaction IDs, or MVCC visibility.
+It does not yet provide relationships, cross-table index coordination, or MVCC visibility.
 
 The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact equality and range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support a full cost model, collation-aware index keys, catalog-wide transaction IDs, or MVCC visibility.
+It does not yet support a full cost model, collation-aware index keys, catalog-wide MVCC visibility, or historical row versions.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
@@ -104,9 +105,9 @@ A multi-record transaction is not complete until commit, rollback, crash recover
 
 The single-table transaction slice covers one DBF table through one snapshot/WAL persistence path.
 The catalog transaction slice prepares named operations across multiple DBFs under a catalog
-lock, commits DBF and changed-sidecar images through a directory journal, and recovers an
-incomplete prepare before the next catalog read. Transaction IDs and MVCC visibility remain
-future work.
+lock, commits DBF and changed-sidecar images through a directory journal, persists a catalog
+journal commit ID, and recovers an incomplete prepare before the next catalog read. The ID is an
+ordering/identification boundary; historical row versions and MVCC visibility remain future work.
 
 The lower-level `TransactionManager` is separate from those DBF persistence paths. Its
 `TransactionId` allocator resumes after reopening a WAL that retains completed transaction

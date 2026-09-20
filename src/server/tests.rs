@@ -399,6 +399,17 @@ fn catalog_server_transaction_commits_multiple_named_tables() {
 
     let response = super::catalog_transaction::response(&mut request, &catalog);
     assert_eq!(response.status_code(), StatusCode(200));
+    assert_eq!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("X-Txbase-Transaction-Id"))
+            .map(|header| header.value.as_str()),
+        Some("1")
+    );
+    let mut body = String::new();
+    response.into_reader().read_to_string(&mut body).unwrap();
+    assert!(body.contains(r#""transaction_id":1"#));
     assert!(
         catalog
             .open_table("users")

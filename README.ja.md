@@ -36,7 +36,7 @@ cargo run -- --serve-catalog path/to/database
 
 `GET /catalog`でschema、`GET`/`HEAD /{table}/records[/{id}]`でnamed tableを読み取れます。
 `POST /{table}/records`と`PUT`/`PATCH`/`DELETE /{table}/records/{id}`は、single-table serverと同じWAL/ETag semanticsで一つのDBFを更新します。
-`QUERY /{table}/records`と`QUERY /{table}/explain`はsingle-table serverと同じquery documentを受け付け、`QUERY /join`はbounded joinを返します。named-table mutationはsingle-tableと同じ`X-Txbase-Transaction-Id`を返します。catalog serverの`POST /transaction`はnamed-table mutationをcatalog journalで複数DBFへatomicにcommitしますが、catalog-wide transaction IDとMVCC visibilityは未実装です。
+`QUERY /{table}/records`と`QUERY /{table}/explain`はsingle-table serverと同じquery documentを受け付け、`QUERY /join`はbounded joinを返します。named-table mutationはsingle-tableと同じ`X-Txbase-Transaction-Id`を返します。catalog serverの`POST /transaction`はnamed-table mutationをcatalog journalで複数DBFへatomicにcommitし、durableなcatalog transaction IDをJSONと`X-Txbase-Transaction-Id`で返します。historical row versionとMVCC visibilityは未実装です。
 
 single-table serverの`QUERY /explain`は、同じquery documentに対するtable scanまたはindex
 planを構造化JSONで返します。
@@ -118,7 +118,7 @@ WAL-backed mutationは`X-Txbase-Transaction-Id`を返し、single-tableの`POST 
 複数のrecord mutationは`POST /transaction`で一つのDBFに対してまとめてcommitできます。
 全operationをprivate copyに適用してから、一回のsnapshot/WAL boundaryで保存します。
 operationが失敗した場合はcopyを破棄し、元のDBFを変更しません。
-commit IDは`.txbase.state` sidecarに保存され、再起動またはWAL復旧後も継続します。cross-table atomicity、catalog-wide transaction ID、MVCC visibilityは未実装です。
+commit IDは`.txbase.state` sidecarに保存され、再起動またはWAL復旧後も継続します。cross-table atomicityはcatalog journalが担当し、catalog journalのcommit IDは`.txbase.catalog.state`に保存されます。historical row versionとMVCC visibilityは未実装です。
 
 path-loaded mutationは、可能なら`TXDP` byte-range deltaを使います。
 
@@ -188,7 +188,7 @@ recoverableな`TXSE` export boundaryでjournal化します。途中で停止し�
 path-aware plannerは、複数のsingle-field indexが有効なdirect equality filterであれば候補recordをintersectionできます。
 
 catalog joinは`txbase::query::join::parse`と`execute`から使います。
-複数join、cost-based planner、backpressure付きのstreaming、catalog-wide transaction ID、MVCC visibilityは未実装です。
+複数join、cost-based planner、backpressure付きのstreaming、historical row version、MVCC visibilityは未実装です。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt`、`.txschema.json`、`.txbase.state`、有効な`.txidx` sidecarもコピーします。
 sourceのindexがstaleまたは壊れている場合は拒否し、sourceにindexがなければdestinationの古いindexを削除します。
