@@ -124,18 +124,10 @@ impl DbfTable {
                 "DBF changed since the table was loaded".into(),
             ));
         }
-        if let Some(expected_memo) = &source.memo {
-            let Some(memo_path) = find_memo_path(path) else {
-                return Err(DbfError::Invalid(
-                    "memo sidecar changed since the table was loaded".into(),
-                ));
-            };
-            let current_memo = fs::read(memo_path)?;
-            if current_memo.as_slice() != expected_memo.as_slice() {
-                return Err(DbfError::Invalid(
-                    "memo sidecar changed since the table was loaded".into(),
-                ));
-            }
+        if find_memo_path(path).map(fs::read).transpose()? != source.memo {
+            return Err(DbfError::Invalid(
+                "memo sidecar changed since the table was loaded".into(),
+            ));
         }
         if schema_metadata_bytes(path)? != source.schema {
             return Err(DbfError::Invalid(
@@ -224,7 +216,7 @@ impl DbfTable {
         prepared.source = Some(PersistedState {
             path: path.to_path_buf(),
             dbf: prepared.bytes.clone(),
-            memo: prepared.memo.as_ref().map(|memo| memo.bytes.clone()),
+            memo: find_memo_path(path).map(fs::read).transpose()?,
             schema: schema_metadata_bytes(path)?,
             transaction_id: Some(transaction_id),
         });

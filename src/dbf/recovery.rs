@@ -44,7 +44,7 @@ impl DbfTable {
         table.source = Some(PersistedState {
             path: path.to_path_buf(),
             dbf,
-            memo: table.memo.as_ref().map(|memo| memo.bytes.clone()),
+            memo: find_memo_path(path).map(fs::read).transpose()?,
             schema: schema.map(|(_, bytes)| bytes),
             transaction_id,
         });

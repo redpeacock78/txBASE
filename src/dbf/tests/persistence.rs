@@ -178,6 +178,37 @@ fn rejects_stale_memo_sidecar_before_save() {
 }
 
 #[test]
+fn rejects_a_new_memo_sidecar_before_save() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-new-memo-sidecar-{}.dbf",
+        std::process::id()
+    ));
+    let memo_path = path.with_extension("dbt");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&memo_path);
+    fs::write(&path, fixture()).unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"AGE": 31}).as_object().unwrap().clone(),
+        )
+        .unwrap();
+    fs::write(&memo_path, b"new sidecar").unwrap();
+
+    let error = table.save_with_wal(&path).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("memo sidecar changed since the table was loaded")
+    );
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(memo_path).unwrap();
+}
+
+#[test]
 fn rejects_an_invalid_index_before_saving_the_dbf() {
     let path = std::env::temp_dir().join(format!(
         "txbase-invalid-index-save-{}.dbf",
