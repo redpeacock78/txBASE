@@ -38,7 +38,7 @@ cargo run -- --serve-catalog path/to/database
 
 `GET /catalog`でschema、`GET`/`HEAD /{table}/records[/{id}]`でnamed tableを読み取れます。
 `POST /{table}/records`と`PUT`/`PATCH`/`DELETE /{table}/records/{id}`は、single-table serverと同じWAL/ETag semanticsで一つのDBFを更新します。
-`QUERY /{table}/records`と`QUERY /{table}/explain`はsingle-table serverと同じquery documentを受け付け、`QUERY /join`はbounded joinを返します。named-table mutationはsingle-tableと同じ`X-Txbase-Transaction-Id`を返します。catalog serverの`POST /transaction`はnamed-table mutationをcatalog journalで複数DBFへatomicにcommitし、durableなcatalog transaction IDをJSONと`X-Txbase-Transaction-Id`で返します。historical row versionとMVCC visibilityは未実装です。
+`QUERY /{table}/records`と`QUERY /{table}/explain`はsingle-table serverと同じquery documentを受け付けます。`QUERY /{table}/records/stream`はsingle-tableのstream routeと同じfilter、projection、skip、limitを有界NDJSONで返します。`QUERY /join`はbounded joinを返します。named-table mutationはsingle-tableと同じ`X-Txbase-Transaction-Id`を返します。catalog serverの`POST /transaction`はnamed-table mutationをcatalog journalで複数DBFへatomicにcommitし、durableなcatalog transaction IDをJSONと`X-Txbase-Transaction-Id`で返します。historical row versionとMVCC visibilityは未実装です。
 
 single-table serverの`QUERY /explain`は、同じquery documentに対するtable scanまたはindex
 planを構造化JSONで返します。
@@ -77,7 +77,7 @@ table変更後に再利用すると、snapshotを混ぜずにinvalid-queryとし
 libraryの`query::stream_query`は、matching record全体をmaterializeせずにfilter、projection、skip、limitを適用するborrowed iteratorです。
 sort、aggregate、page-size、cursorはblockingまたはresume boundaryを必要とするため拒否します。
 `query::stream_query_snapshot`はloaded tableのcloneを保持するため、元tableへの後続mutationから独立したpull-based iteratorです。
-`query::stream_query_bounded`はそのsnapshot iteratorをboundedな標準library channelの背後で動かし、consumerが読み取らない間はproducerを停止します。consumerをdropするとproducerも停止します。runtime固有のasync traitとHTTP chunked streamingは未実装です。
+`query::stream_query_bounded`はそのsnapshot iteratorをboundedな標準library channelの背後で動かし、consumerが読み取らない間はproducerを停止します。consumerをdropするとproducerも停止します。`QUERY /records/stream`はこのstreamを`application/x-ndjson`で返し、HTTP/1.1ではchunked transferを使います。runtime固有のasync traitは未実装です。
 
 `aggregate`は、0個以上の`$match` stageの後に一つの終端`$count`または`$distinct` stage、または一つの`$group` stageを使えます。
 `$group`の後には一つの`$project`、最後の`$sort`、最後の`$limit`を置けます。
@@ -195,7 +195,7 @@ recoverableな`TXSE` export boundaryでjournal化します。途中で停止し�
 path-aware plannerは、複数のsingle-field indexが有効なdirect equality filterであれば候補recordをintersectionできます。
 
 catalog joinは`txbase::query::join::parse`と`execute`から使います。
-複数joinは実装済みですが、planner-selected join strategy、cost-based planner、backpressure付きのruntime固有streaming、historical row version、MVCC visibilityは未実装です。
+複数joinは実装済みですが、planner-selected join strategy、cost-based planner、runtime固有のasync stream trait、historical row version、MVCC visibilityは未実装です。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt`、`.txschema.json`、`.txbase.state`、有効な`.txidx` sidecarもコピーします。
 sourceのindexがstaleまたは壊れている場合は拒否し、sourceにindexがなければdestinationの古いindexを削除します。
@@ -289,7 +289,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
 一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
-full cost model、collation-aware planning、backpressure付きのstreaming、追加のaggregation stage、cross-table constraint、追加のCJK encodingはroadmapで検討します。
+full cost model、collation-aware planning、runtime固有のasync stream trait、追加のaggregation stage、cross-table constraint、追加のCJK encodingはroadmapで検討します。
 XBFのwire contractは[XBF v1 format draft](docs/ja/xbf.md)に記載しています。draftのcodec、DBFからXBFへの変換、限定されたXBFからDBFへのexport、schema sidecar付きjournal export、durable snapshot path、generation付きfull-snapshot WAL recoveryを提供します。strictな複数file reader atomicityとobject-storage commitは未対応です。
 
 ## License

@@ -50,7 +50,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index model, runtime-specific async traits or HTTP streaming, planner-selected join strategies, catalog-wide MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, runtime-specific async traits, planner-selected join strategies, catalog-wide MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -61,7 +61,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - Schema introspection.
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
-- Runtime-specific async traits and HTTP chunked streaming for long-lived streams.
+- Runtime-specific async traits for long-lived streams.
 - Transaction IDs and independently visible multi-record snapshots.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
@@ -100,7 +100,9 @@ materializing matching records.
 caller consumes the pull-based iterator.
 `query::stream_query_bounded` runs the same snapshot iterator behind a bounded standard-library
 channel, so the producer blocks on a full channel and stops when the consumer is dropped.
-Runtime-specific async traits and HTTP streaming remain later contracts.
+The HTTP servers expose `/records/stream` and `/{table}/records/stream` as bounded NDJSON chunked
+responses over this stream.
+Runtime-specific async traits remain a later contract.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 

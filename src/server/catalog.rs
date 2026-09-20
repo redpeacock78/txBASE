@@ -106,7 +106,7 @@ pub(super) fn table_query_response(
     let Some((name, local_path)) = record_route(path) else {
         return json_response(404, error("not_found", "resource not found"), false);
     };
-    if local_path != "/records" {
+    if !matches!(local_path.as_str(), "/records" | "/records/stream") {
         return json_response(404, error("not_found", "resource not found"), false);
     }
     let Some(dbf_path) = catalog.table_path(name) else {
@@ -132,7 +132,11 @@ pub(super) fn table_query_response(
             );
         }
     };
-    query_response_at(request, &local_path, &table, dbf_path)
+    if local_path == "/records/stream" {
+        super::stream::response(request, &table)
+    } else {
+        query_response_at(request, &local_path, &table, dbf_path)
+    }
 }
 
 pub(super) fn table_mutation_response(
@@ -252,6 +256,9 @@ fn record_route(path: &str) -> Option<(&str, String)> {
     let segments = path.strip_prefix('/')?.split('/').collect::<Vec<_>>();
     match segments.as_slice() {
         [table, "records"] if !table.is_empty() => Some((table, String::from("/records"))),
+        [table, "records", "stream"] if !table.is_empty() => {
+            Some((table, String::from("/records/stream")))
+        }
         [table, "records", record] if !table.is_empty() && !record.is_empty() => {
             Some((table, format!("/records/{record}")))
         }

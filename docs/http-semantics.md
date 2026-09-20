@@ -48,10 +48,12 @@ The response does not authorize a method on a resource that its route rules woul
 | `GET /records/{id}` | One-based physical DBF record number | One active record or `404` |
 | `HEAD /records` and `HEAD /records/{id}` | Same target selection as `GET` | Same status and representation headers without response content |
 | `QUERY /records` | `Content-Type: application/json` and a query document | Filtered JSON result with `Accept-Query`; paged queries return `records` and `cursor` |
+| `QUERY /records/stream` | `Content-Type: application/json` and a stream-compatible query document | Chunked `application/x-ndjson`, one record per line |
 | `QUERY /explain` | `Content-Type: application/json` and a query document | Selected table-scan or index plan with `Accept-Query` |
 | `GET /catalog` and `HEAD /catalog` (catalog server) | No JSON body | Discovered table schemas with a strong catalog `ETag`; conditional requests may return `304` |
 | `GET`/`HEAD /{table}/records[/{id}]` (catalog server) | No JSON body | Named-table records |
 | `QUERY /{table}/records` (catalog server) | `Content-Type: application/json` and a query document | Filtered named-table records with `Accept-Query` |
+| `QUERY /{table}/records/stream` (catalog server) | `Content-Type: application/json` and a stream-compatible query document | Chunked `application/x-ndjson`, one named-table record per line |
 | `QUERY /{table}/explain` (catalog server) | `Content-Type: application/json` and a query document | Named-table query plan with `Accept-Query` |
 | `QUERY /join` (catalog server) | `Content-Type: application/json` and a bounded join document | Joined JSON result with `Accept-Query` |
 | `POST /{table}/records` (catalog server) | JSON object with known fields | `201 Created`, table-qualified `Location` |
@@ -174,6 +176,22 @@ Reusing an emitted cursor after the table changes returns `422` instead of mixin
 different representations. Legacy untagged cursors remain accepted for compatibility, and
 neither form can be combined with `skip`.
 
+`QUERY /records/stream` and `QUERY /{table}/records/stream` use the same JSON request document as
+the pull-based query route but only allow `filter`, `projection`, `skip`, and `limit`.
+
+The successful response has media type `application/x-ndjson` and emits one compact JSON record
+per line without a wrapper array or cursor.
+
+The server omits `Content-Length`, so HTTP/1.1 uses chunked transfer while a bounded snapshot
+producer supplies records through a fixed-capacity channel.
+
+Malformed input is rejected before streaming with the existing `400`, `415`, or `422` boundary.
+
+The stream has no ETag, byte-range, or resume-token contract.
+
+If evaluation fails after the response headers are sent, the connection terminates and the client
+must retry the complete query.
+
 ## 5. Persistence and retries
 
 HTTP idempotence does not make the DBF write path crash-safe.
@@ -206,7 +224,7 @@ Clients must not infer exactly-once effects from a successful TCP exchange alone
 The following require explicit contracts before implementation:
 
 - `Content-Location` and cache-key rules for QUERY bodies.
-- HTTP streaming and backpressure.
+- Runtime-specific async traits for long-lived query streams.
 - CORS and authentication policy.
 - A standard patch media type in addition to the local update document.
 

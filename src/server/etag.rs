@@ -43,7 +43,9 @@ pub(super) fn not_modified_for_tag(
         return None;
     }
     Some(with_tag(
-        Response::from_data(Vec::<u8>::new()).with_status_code(304),
+        Response::from_data(Vec::<u8>::new())
+            .with_status_code(304)
+            .boxed(),
         tag,
     ))
 }

@@ -141,7 +141,7 @@ The following require separate public contracts:
 1. Full expression evaluation and cost-based index choice with explicit missing, null, collation, and compound-range rules.
 2. Additional aggregation stages and accumulators with bounded memory behavior.
 3. Planner-selected join strategies and broader join semantics.
-4. Runtime-specific async traits and HTTP chunked streaming for long-lived streams.
+4. Runtime-specific async traits for long-lived streams.
 5. Differential tests against a small reference evaluator.
 
 Until those contracts exist, the record scan remains the simpler reference execution model.

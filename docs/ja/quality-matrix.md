@@ -71,13 +71,14 @@ cargo test --all-targets --all-features
 | HTTP-004 | GET と HEAD ルートが弱い比較、存在するリソースのワイルドカード、本文なしの 304、現在の ETag を伴う If-None-Match を尊重する。 | `src/server.rs`; `src/server/etag.rs`; `src/server/etag_tests.rs`; `docs/http-semantics.md` | `if_none_match_returns_not_modified_for_current_representation`; `head_reuses_record_headers_and_conditional_status` | Boundary |
 | HTTP-005 | GET と HEAD のレコードルートがステータスと表現ヘッダーを共有し、HEAD は本文を送らず同じ条件付き ETag ステータスを使う。 | `src/server.rs`; `src/server/records.rs`; `src/server/etag_tests.rs`; `docs/http-semantics.md` | `head_reuses_record_headers_and_conditional_status` | Boundary |
 | HTTP-006 | カタログスキーマの GET と HEAD ルートが強い表現 ETag と弱い If-None-Match による 304 を公開し、カタログトランザクションがカタログ write lock 内で If-Match と If-None-Match を評価し、条件失敗時は変更なしの 412 を返し、コミット後は新しい ETag を返す。 | `src/catalog.rs`; `src/catalog/transaction.rs`; `src/server/catalog.rs`; `src/server/catalog_transaction.rs`; `src/server/etag.rs`; `src/server/tests.rs`; `docs/ja/catalog.md`; `docs/ja/http-semantics.md` | `catalog_etag_guards_schema_reads_and_transactions` | Boundary |
+| HTTP-007 | 単一テーブルと名前付きテーブルのストリームルートが、filter、projection、skip、limit だけを持つ JSON クエリ文書を受け付け、`Content-Length` なしで `application/x-ndjson` の一行一レコードを返し、有界スナップショット生成側による HTTP/1.1 chunked transfer を使う。 | `src/server/stream.rs`; `src/server.rs`; `src/server/catalog.rs`; `docs/ja/http-semantics.md` | `query_stream_endpoint_returns_chunked_ndjson`; `query_stream_endpoint_rejects_blocking_controls_before_streaming`; カタログストリームルートの確認 | Current |
 | CI-001 | フォーマット、lint、全ターゲットテストを、サポートする全 CI OS で必須にする。 | `.github/workflows/ci.yml` | GitHub Actions のマトリクス実行 | Current |
 
 ## 明示的に残るギャップ
 
 次の話題には文書または設計メモがありますが、マトリクスで現在の実装とは主張していません。
 
-- 長寿命ストリーム向けのランタイム固有非同期トレイトと HTTP チャンクストリーミング。
+- 長寿命ストリーム向けのランタイム固有非同期トレイト。
 - 完全なコストベースプランナー、プランナーが選択する結合戦略、有界な `$match`、`$count`、`$distinct`、`$group`、グループ出力 `$project` を超える集約ステージ。
 - カタログ全体の MVCC 可視性と過去の行バージョン。
 - ロケール対応 CJK 照合と、より広い上流外部フィクスチャ。

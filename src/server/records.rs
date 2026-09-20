@@ -223,7 +223,9 @@ pub(super) fn delete_response_with_validator(
         return response;
     }
     etag::with_transaction(
-        Response::from_string(String::new()).with_status_code(204),
+        Response::from_string(String::new())
+            .with_status_code(204)
+            .boxed(),
         table,
     )
 }

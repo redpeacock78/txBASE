@@ -70,13 +70,14 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 | HTTP-004 | GET and HEAD routes honor If-None-Match with weak comparison, existing-resource wildcard semantics, 304 without a body, and the current ETag. | `src/server.rs`; `src/server/etag.rs`; `src/server/etag_tests.rs`; `docs/http-semantics.md` | `if_none_match_returns_not_modified_for_current_representation`; `head_reuses_record_headers_and_conditional_status` | Boundary |
 | HTTP-005 | GET and HEAD record routes share status and representation headers; HEAD uses the same conditional ETag status without sending response content. | `src/server.rs`; `src/server/records.rs`; `src/server/etag_tests.rs`; `docs/http-semantics.md` | `head_reuses_record_headers_and_conditional_status` | Boundary |
 | HTTP-006 | Catalog schema GET and HEAD routes expose a strong representation ETag and weak If-None-Match 304 behavior; catalog transactions evaluate If-Match and If-None-Match under the catalog write lock, return 412 without mutation on a failed condition, and return a new ETag after commit. | `src/catalog.rs`; `src/catalog/transaction.rs`; `src/server/catalog.rs`; `src/server/catalog_transaction.rs`; `src/server/etag.rs`; `src/server/tests.rs`; `docs/catalog.md`; `docs/http-semantics.md` | `catalog_etag_guards_schema_reads_and_transactions` | Boundary |
+| HTTP-007 | Single-table and named-table stream routes accept JSON query documents with only filter, projection, skip, and limit, return one record per `application/x-ndjson` line without a content length, and use HTTP/1.1 chunked transfer with a bounded snapshot producer. | `src/server/stream.rs`; `src/server.rs`; `src/server/catalog.rs`; `docs/http-semantics.md` | `query_stream_endpoint_returns_chunked_ndjson`; `query_stream_endpoint_rejects_blocking_controls_before_streaming`; catalog stream route check | Current |
 | CI-001 | Formatting, lint, and all-target tests are required on all supported CI operating systems. | `.github/workflows/ci.yml` | GitHub Actions matrix run | Current |
 
 ## Gaps that remain explicit
 
 The following topics have documentation or design notes but do not have a current implementation claim in the matrix:
 
-- runtime-specific async traits and HTTP chunked streaming for long-lived streams;
+- runtime-specific async traits for long-lived streams;
 - a full cost-based planner, planner-selected join strategies, and aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, and group-output `$project`;
 - catalog-wide MVCC visibility and historical row versions;
 - locale-aware CJK collation and broader upstream external fixtures;

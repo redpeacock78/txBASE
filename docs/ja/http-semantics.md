@@ -48,10 +48,12 @@ txBASE は、定義された意味に従って HTTP メソッド名を使いま�
 | `GET /records/{id}` | 1 始まりの物理 DBF レコード番号 | アクティブな一つのレコード、または `404` |
 | `HEAD /records` と `HEAD /records/{id}` | `GET` と同じ対象選択 | 本文なしで同じステータスと表現ヘッダー |
 | `QUERY /records` | `Content-Type: application/json` とクエリ文書 | `Accept-Query` 付きのフィルター済み JSON。ページング時は `records` と `cursor` |
+| `QUERY /records/stream` | `Content-Type: application/json` とストリーム対応クエリ文書 | 一行一レコードの chunked `application/x-ndjson` |
 | `QUERY /explain` | `Content-Type: application/json` とクエリ文書 | `Accept-Query` 付きのテーブルスキャンまたはインデックス計画 |
 | `GET /catalog` と `HEAD /catalog`（カタログサーバー） | JSON 本文なし | 強いカタログ `ETag` 付きの検出したテーブルスキーマ。条件付きリクエストは `304` を返すことがある |
 | `GET`、`HEAD /{table}/records[/{id}]`（カタログサーバー） | JSON 本文なし | 名前付きテーブルのレコード |
 | `QUERY /{table}/records`（カタログサーバー） | `Content-Type: application/json` とクエリ文書 | `Accept-Query` 付きの名前付きテーブルのレコード |
+| `QUERY /{table}/records/stream`（カタログサーバー） | `Content-Type: application/json` とストリーム対応クエリ文書 | 一行一レコードの chunked `application/x-ndjson` |
 | `QUERY /{table}/explain`（カタログサーバー） | `Content-Type: application/json` とクエリ文書 | `Accept-Query` 付きの名前付きテーブルのクエリ計画 |
 | `QUERY /join`（カタログサーバー） | `Content-Type: application/json` と有界な結合文書 | `Accept-Query` 付きの結合済み JSON 結果 |
 | `POST /{table}/records`（カタログサーバー） | 既知のフィールドを持つ JSON オブジェクト | `201 Created` とテーブル修飾済み `Location` |
@@ -186,6 +188,22 @@ txBASE は `Accept-Query: "application/json"` を通知し、JSON クエリ文�
 
 どちらの形式も `skip` と併用できません。
 
+`QUERY /records/stream` と `QUERY /{table}/records/stream` は、pull 型クエリルートと同じ JSON リクエスト文書を使います。
+
+ただし、許可する制御は `filter`、`projection`、`skip`、`limit` だけです。
+
+成功した応答のメディアタイプは `application/x-ndjson` です。
+
+ラッパー配列または cursor を使わず、コンパクトな JSON レコードを一行ずつ返します。
+
+サーバーは `Content-Length` を省略するため、HTTP/1.1 では固定容量チャネルを使う有界スナップショット生成側から chunked transfer で返します。
+
+不正な入力はストリーミング開始前に既存の `400`、`415`、`422` 境界で拒否します。
+
+ストリームには ETag、バイト範囲、resume token の契約がありません。
+
+応答ヘッダー送信後の評価に失敗した場合は接続を終了し、クライアントはクエリ全体を再試行しなければなりません。
+
 ## 5. 永続化と再試行
 
 HTTP の冪等性は DBF の書き込み経路をクラッシュ安全にはしません。
@@ -221,7 +239,7 @@ HTTP の冪等性は DBF の書き込み経路をクラッシュ安全にはし�
 実装前に次の項目には明示的な契約が必要です。
 
 - QUERY 本文に対する `Content-Location` とキャッシュキーの規則。
-- HTTP ストリーミングとバックプレッシャー。
+- 長寿命クエリストリーム向けのランタイム固有非同期トレイト。
 - CORS と認証方針。
 - ローカル更新文書に加える標準パッチメディアタイプ。
 

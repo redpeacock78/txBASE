@@ -1,9 +1,9 @@
 use crate::dbf::{DbfError, DbfTable};
 use crate::query::{self, JSON_QUERY_MEDIA_TYPE};
 use serde_json::{Map, Value, json};
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::path::Path;
-use tiny_http::{Header, Method, Request, Response, Server};
+use tiny_http::{Header, Method, Request, Response, ResponseBox, Server};
 
 mod catalog;
 mod catalog_transaction;
@@ -11,10 +11,11 @@ mod etag;
 mod explain;
 mod range;
 mod records;
+mod stream;
 mod transaction;
 
 const MAX_BODY: usize = 1024 * 1024;
-type HttpResponse = Response<Cursor<Vec<u8>>>;
+type HttpResponse = ResponseBox;
 
 use range::query_result_response;
 use records::{delete_response, get_response, post_response, update_response};
@@ -97,6 +98,9 @@ fn query_response_with_path(
     table: &DbfTable,
     dbf_path: Option<&Path>,
 ) -> HttpResponse {
+    if path == "/records/stream" {
+        return stream::response(request, table);
+    }
     if path != "/records" {
         return json_response(404, error("not_found", "resource not found"), false);
     }
@@ -245,7 +249,7 @@ fn json_bytes_response(status: u16, body: Vec<u8>, accept_query: bool) -> HttpRe
     if accept_query {
         response = response.with_header(header("Accept-Query", "\"application/json\""));
     }
-    response
+    response.boxed()
 }
 
 pub(super) fn options_response(allow: &str) -> HttpResponse {
@@ -253,6 +257,7 @@ pub(super) fn options_response(allow: &str) -> HttpResponse {
         .with_status_code(204)
         .with_header(header("Allow", allow))
         .with_header(header("Accept-Query", "\"application/json\""))
+        .boxed()
 }
 
 fn header(name: &str, value: &str) -> Header {

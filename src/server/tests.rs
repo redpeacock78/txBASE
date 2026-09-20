@@ -4,7 +4,7 @@ use crate::xbase::{OperationIr, OperationMethod};
 use std::fs;
 use std::io::Read;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tiny_http::{Method, StatusCode, TestRequest};
+use tiny_http::{HTTPVersion, Method, StatusCode, TestRequest};
 
 static NEXT_CATALOG_ID: AtomicUsize = AtomicUsize::new(0);
 
@@ -55,6 +55,15 @@ fn query_request(body: &'static str, content_type: Option<&'static str>) -> Requ
             .into(),
         None => request.into(),
     }
+}
+
+fn stream_query_request(body: &'static str) -> Request {
+    TestRequest::new()
+        .with_method("QUERY".parse().unwrap())
+        .with_path("/records/stream")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_body(body)
+        .into()
 }
 
 fn ranged_query_request(body: &'static str, range: &'static str) -> Request {
@@ -200,6 +209,40 @@ fn query_endpoint_enforces_json_boundary_and_executes() {
 }
 
 #[test]
+fn query_stream_endpoint_returns_chunked_ndjson() {
+    let table = DbfTable::from_bytes(&fixture()).unwrap();
+    let mut request =
+        stream_query_request(r#"{"filter":{"NAME":"Alice"},"projection":{"NAME":1}}"#);
+    let response = query_response(&mut request, "/records/stream", &table);
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert_eq!(response.data_length(), None);
+    assert_eq!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("Content-Type"))
+            .map(|header| header.value.as_str()),
+        Some("application/x-ndjson")
+    );
+
+    let mut wire = Vec::new();
+    response
+        .raw_print(&mut wire, HTTPVersion(1, 1), &[], false, None)
+        .unwrap();
+    let wire = String::from_utf8(wire).unwrap();
+    assert!(wire.contains("Transfer-Encoding: chunked\r\n"));
+    assert!(wire.ends_with("{\"NAME\":\"Alice\"}\n\r\n0\r\n\r\n"));
+}
+
+#[test]
+fn query_stream_endpoint_rejects_blocking_controls_before_streaming() {
+    let table = DbfTable::from_bytes(&fixture()).unwrap();
+    let mut request = stream_query_request(r#"{"sort":{"AGE":1}}"#);
+    let response = query_response(&mut request, "/records/stream", &table);
+    assert_eq!(response.status_code(), StatusCode(422));
+}
+
+#[test]
 fn options_advertises_supported_methods_and_query_media_type() {
     let response = options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY");
     assert_eq!(response.status_code(), StatusCode(204));
@@ -274,6 +317,30 @@ fn catalog_server_reads_named_tables_through_record_routes() {
     let mut body = String::new();
     response.into_reader().read_to_string(&mut body).unwrap();
     assert!(body.contains("Alice"));
+
+    let mut stream_query = TestRequest::new()
+        .with_method("QUERY".parse().unwrap())
+        .with_path("/left/records/stream")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_body(r#"{"projection":{"NAME":1},"limit":1}"#)
+        .into();
+    let response =
+        super::catalog::table_query_response(&mut stream_query, "/left/records/stream", &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert_eq!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("Content-Type"))
+            .map(|header| header.value.as_str()),
+        Some("application/x-ndjson")
+    );
+    let mut stream_body = String::new();
+    response
+        .into_reader()
+        .read_to_string(&mut stream_body)
+        .unwrap();
+    assert_eq!(stream_body.lines().count(), 1);
 
     let get_record = TestRequest::new()
         .with_method(Method::Get)

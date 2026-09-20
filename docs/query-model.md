@@ -161,7 +161,31 @@ The producer blocks while the channel is full, and dropping the consumer cancels
 
 It remains an in-process pull consumer.
 
-Runtime-specific async traits and HTTP chunked streaming are separate future boundaries.
+The single-table server exposes `QUERY /records/stream`, and the catalog server exposes
+`QUERY /{table}/records/stream`.
+
+Both routes accept the same JSON query document but only permit `filter`, `projection`, `skip`,
+and `limit` controls.
+
+Each successful response uses `application/x-ndjson` and emits one compact JSON record per line.
+
+The response omits `Content-Length`, so HTTP/1.1 clients receive chunked transfer data as the
+bounded producer makes records available.
+
+The server clones the table before starting the producer and uses the same positive-capacity
+channel as `query::stream_query_bounded`.
+
+Dropping the client connection stops the producer when the response reader is dropped.
+
+Malformed request input is rejected with the normal `400`, `415`, or `422` response before the
+stream starts.
+
+There is no resume token, ETag, or byte-range contract for a stream.
+
+If evaluation fails after headers are sent, the response terminates and the client must retry the
+whole query.
+
+Runtime-specific async traits remain a separate future boundary.
 
 ## 2. Bounded aggregation
 

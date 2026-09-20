@@ -74,7 +74,8 @@ txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 body. `GET` or `HEAD /{table}/records`
 and `/{table}/records/{id}` reuse the single-table record response semantics, including the
 current representation `ETag`. `QUERY /{table}/records` accepts the same JSON query document as
-the single-table route, and `QUERY /{table}/explain` returns the same selected plan as the
+the single-table route. `QUERY /{table}/records/stream` exposes the bounded `application/x-ndjson`
+stream for filter, projection, skip, and limit. `QUERY /{table}/explain` returns the same selected plan as the
 single-table `QUERY /explain`. `QUERY /join` accepts the same JSON join document as
 `query::join::parse`, returns a JSON array, and retains the 100,000-row per-stage join bound.
 
@@ -154,5 +155,5 @@ It does not infer relationships from field names.
 
 The local join supports `inner`, `left`, `right`, `semi`, and `anti` equality joins plus a bounded
 `cross` join, with a hard result bound.
-It does not provide a cost-based planner, streaming backpressure, planner-selected join strategies,
-or MVCC visibility.
+It does not provide a cost-based planner, runtime-specific async stream traits,
+planner-selected join strategies, or MVCC visibility.

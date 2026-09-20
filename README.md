@@ -78,7 +78,9 @@ loaded table, so later mutations of the source table do not change the stream's 
 `query::stream_query_bounded` runs that snapshot iterator behind a bounded standard-library
 channel. The producer blocks when the channel is full and stops when the consumer is dropped.
 Both APIs reject sort, aggregate, page-size, and cursor controls, which need a blocking or
-resumable result boundary. Runtime-specific async traits and HTTP chunked streaming remain future work.
+resumable result boundary. `QUERY /records/stream` and catalog `QUERY /{table}/records/stream`
+reuse the bounded snapshot stream and return one record per `application/x-ndjson` line over
+HTTP/1.1 chunked transfer. Runtime-specific async traits remain future work.
 
 `aggregate` currently accepts one terminal `$count` or `$distinct` stage, or one `$group` stage with `$count`, integer `$sum`, `$avg`, `$min`, and `$max`, optionally preceded by bounded `$match` stages. `$distinct` takes a field reference such as `"$ACTIVE"` and returns a deterministic array of unique values, with missing values represented as `null`. Group output may be followed by one `$project`, `$sort`, and `$limit`; top-level sort, projection, pagination, and limit controls remain incompatible. `$project` reuses inclusion/exclusion projection rules and must precede `$sort`/`$limit`. `$avg` ignores missing, null, and nonnumeric values and returns null when a group has no numeric input.
 
@@ -98,7 +100,8 @@ txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 ```
 
 `QUERY /{table}/records` and `QUERY /{table}/explain` accept the same query document as the
-single-table routes. Named-table mutations reuse single-table WAL/ETag behavior and commit one
+single-table routes. `QUERY /{table}/records/stream` returns the same filter/projection/skip/limit
+stream as the single-table stream route. Named-table mutations reuse single-table WAL/ETag behavior and commit one
 DBF at a time, including its `X-Txbase-Transaction-Id` response header. Catalog `POST /transaction`
 commits named-table mutations atomically through a catalog journal and returns its durable catalog
 commit ID and new catalog representation `ETag` in JSON and response headers. Catalog transactions
@@ -365,7 +368,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming backpressure, planner-selected joins, additional aggregation stages, catalog-wide MVCC, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
+Later phases may add runtime-specific async stream traits, a full cost-based index choice, planner-selected joins, additional aggregation stages, catalog-wide MVCC, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

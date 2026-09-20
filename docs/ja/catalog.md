@@ -75,7 +75,11 @@ txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 
 `GET` または `HEAD /{table}/records` と `/{table}/records/{id}` は、現在の表現 `ETag` を含む単一テーブルのレコード応答意味論を再利用します。
 
-`QUERY /{table}/records` は単一テーブル経路と同じ JSON クエリ文書を受け付け、`QUERY /{table}/explain` は単一テーブルの `QUERY /explain` と同じ選択済み計画を返します。
+`QUERY /{table}/records` は単一テーブル経路と同じ JSON クエリ文書を受け付けます。
+
+`QUERY /{table}/records/stream` は `filter`、`projection`、`skip`、`limit` に対応する有界 `application/x-ndjson` ストリームを公開します。
+
+`QUERY /{table}/explain` は単一テーブルの `QUERY /explain` と同じ選択済み計画を返します。
 
 `QUERY /join` は `query::join::parse` と同じ JSON 結合文書を受け付け、JSON 配列を返し、結合ステージごとに 100,000 行の上限を維持します。
 
