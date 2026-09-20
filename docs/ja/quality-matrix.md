@@ -31,7 +31,7 @@ cargo test --all-targets --all-features
 | ID | 契約 | 実装またはフィクスチャの証拠 | 決定的な検査 | 状態 |
 | --- | --- | --- | --- | --- |
 | DBF-001 | 宣言済みヘッダー、記述子、レコード長、削除マーカーを境界検査する。 | `src/dbf/parser.rs`; `tests/corpus/dbf/` | `src/dbf/malformed_tests.rs::rejects_malformed_dbf_corpus` と形式テスト | Current |
-| DBF-002 | サポートする dBASE III、dBASE IV、Visual FoxPro のフィクスチャが宣言されたフィールド境界を往復する。 | `tests/fixtures/external-*.dbf.hex`; `src/dbf/compatibility_tests.rs` | `reads_and_writes_a_pinned_external_*_fixture` | Current |
+| DBF-002 | 上流の Windows-1251 テーブルを含む、サポートする dBASE III、dBASE IV、Visual FoxPro のフィクスチャが宣言されたフィールド境界を往復する。 | `tests/fixtures/external-*.dbf.hex`; `src/dbf/compatibility_tests.rs` | `reads_and_writes_a_pinned_external_*_fixture`; `reads_and_writes_a_pinned_external_cp1251_fixture` | Current |
 | DBF-003 | 宣言済みCJKドライバーとサポートする八つの明示コーデック名が、バイト幅検査、置換読み取り、書き込み拒否、宣言値と実効値の可視化を使う。 | `src/dbf/codec_cjk.rs`; `src/dbf/schema.rs`; `src/dbf/cjk_tests.rs`; `src/dbf/schema_encoding_tests.rs`; `tests/fixtures/cjk-*.dbf.hex`; `tests/fixtures/cjk-explicit-codecs.json` | `reads_and_writes_pinned_cjk_driver_fixtures`; `decodes_and_encodes_declared_cjk_drivers`; `reads_pinned_explicit_cjk_codec_bytes_from_a_dbf_record`; `explicit_euc_jp_and_gb18030_overrides_round_trip`; `explicit_iso_2022_jp_override_round_trips_jis_text`; `strict_shift_jis_override_round_trips_jis_text`; `strict_shift_jis_rejects_cp932_extensions`; `accepts_strict_shift_jis_as_an_explicit_override`; `accepts_iso_2022_jp_as_an_explicit_override` | Current |
 | MEM-001 | DBT と FPT のポインター、ブロックサイズ、終端、壊れたサイドカーを選択された memo 形式の範囲内で扱う。 | `src/dbf/memo_file.rs`; `src/dbf/memo_value.rs`; `tests/corpus/memo/` | `src/dbf/tests/memo.rs`、`memo_foxpro.rs`、`malformed_memo_tests.rs` | Current |
 | MUT-001 | レコード更新がメモリ内モデルを保ち、未知または曖昧な書き込みを拒否し、不透明フィールドを保持する。 | `src/dbf/mutation.rs`; `src/dbf/mutation_model_tests.rs` | `generated_mutation_sequence_matches_reference_model` と更新テスト | Current |
@@ -82,7 +82,7 @@ cargo test --all-targets --all-features
 - 長寿命ストリーム向けのランタイム固有非同期トレイト。
 - 完全なコストベースプランナー、完全なインデックス対応またはコストベースのマージ結合戦略、入力およびグループ出力の有界 `$match`、`$count`、`$distinct`、`$group`、グループ出力 `$project` を超える集約ステージ。
 - カタログ全体の MVCC 可視性と過去の行バージョン。
-- ロケール対応 CJK 照合と、より広い上流外部フィクスチャ。
+- ロケール対応 CJK 照合と、より広い上流 CJK フィクスチャ。
 - スキーマを保つ XBF から DBF へのエクスポートにおける厳密な複数ファイル読み取りアトミック性、オブジェクトストレージのマニフェスト、WASM ホスティング、分散レプリケーション。
 
 これらのいずれかを Current にする前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。

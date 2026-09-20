@@ -26,6 +26,15 @@ The source is pinned to commit
 https://github.com/LindsayBradford/go-dbf/tree/133325662f853ba7e7ad4676f7633adbd7a41b27/testdata
 and is distributed under the upstream Apache-2.0 license.
 
+external-cp1251-test.dbf.hex is the upstream cp1251.dbf Visual FoxPro fixture
+from the independent Ruby dbf reader fixtures. It exercises real Windows-1251
+record values rather than a generated one-byte probe.
+
+The source is pinned to commit
+6b6547384439fd009815d20112b22c58eee83503:
+https://github.com/infused/dbf/blob/6b6547384439fd009815d20112b22c58eee83503/spec/fixtures/cp1251.dbf
+and is distributed under the upstream MIT license.
+
 The `cjk-cp932.dbf.hex`, `cjk-gbk.dbf.hex`, `cjk-euc-kr.dbf.hex`, and
 `cjk-big5.dbf.hex` files are pinned byte fixtures for the four Visual FoxPro
 CJK language-driver identifiers. They keep the encoded text in the DBF record

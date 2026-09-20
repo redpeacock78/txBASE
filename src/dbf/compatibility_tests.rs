@@ -192,3 +192,58 @@ fn reads_and_writes_a_pinned_external_dbase3_fixture() {
     fs::remove_file(path).unwrap();
     fs::remove_file(lock_path).unwrap();
 }
+
+#[test]
+fn reads_and_writes_a_pinned_external_cp1251_fixture() {
+    let path =
+        std::env::temp_dir().join(format!("txbase-external-cp1251-{}.dbf", std::process::id()));
+    let lock_path = path.with_extension("txbase.lock");
+    let wal_path = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&lock_path);
+    let _ = fs::remove_file(&wal_path);
+    fs::write(
+        &path,
+        decode_hex_fixture(include_str!(
+            "../../tests/fixtures/external-cp1251-test.dbf.hex"
+        )),
+    )
+    .unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    assert_eq!(table.header.version, 0x30);
+    assert_eq!(table.header.language_driver, 0xc9);
+    assert_eq!(table.schema_json()["encoding"], "Windows-1251");
+    assert_eq!(table.records().len(), 4);
+    assert_eq!(
+        table.active_record(1).unwrap().values["NAME"],
+        "амбулаторно-поликлиническое"
+    );
+    assert_eq!(table.active_record(2).unwrap().values["NAME"], "больничное");
+    assert_eq!(table.active_record(3).unwrap().values["NAME"], "НИИ");
+    assert_eq!(
+        table.active_record(4).unwrap().values["NAME"],
+        "образовательное медицинское учреждение"
+    );
+
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "перезаписано"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    table.save_with_wal(&path).unwrap();
+
+    let reread = DbfTable::from_path(&path).unwrap();
+    assert_eq!(
+        reread.active_record(1).unwrap().values["NAME"],
+        "перезаписано"
+    );
+    assert!(!wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(lock_path).unwrap();
+}

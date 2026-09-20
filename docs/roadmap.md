@@ -167,7 +167,7 @@ The phase must preserve DBF byte widths and reject ambiguous or unrepresentable 
 - CP949 and EUC-KR.
 - Explicit encoding overrides.
 - Collation.
-- Additional upstream external fixtures.
+- Additional upstream CJK fixtures.
 
 Every encoding needs a declared name, byte-width rule, round-trip fixture, invalid-byte behavior, and comparison policy.
 
@@ -180,10 +180,11 @@ mapping.
 Schema output exposes declared and effective names plus the interpretation source.
 Strict Shift_JIS accepts ASCII, half-width Katakana, and JIS X 0208, while CP932 extensions are
 replaced on read or rejected on write. Pinned DBF fixtures cover the four declared CJK drivers
-and round-trip their multibyte record values. Pinned explicit-codec byte fixtures cover DBF record
-decoding and write round-trips for all eight supported explicit codec names. The query layer now has a bounded
-`unicode-lowercase` sort collation; locale-aware CJK collation and broader upstream external
-fixtures remain future work.
+and round-trip their multibyte record values. An upstream Visual FoxPro Windows-1251 fixture also
+round-trips Cyrillic record values. Pinned explicit-codec byte fixtures cover DBF record decoding
+and write round-trips for all eight supported explicit codec names. The query layer now has a bounded
+`unicode-lowercase` sort collation; locale-aware CJK collation and broader upstream CJK fixtures
+remain future work.
 
 An override must be visible in schema or command output so a reader can reproduce the same interpretation.
 

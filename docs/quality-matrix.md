@@ -30,7 +30,7 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 | ID | Contract | Implementation or fixture evidence | Deterministic check | Status |
 | --- | --- | --- | --- | --- |
 | DBF-001 | Declared headers, descriptors, record lengths, and deletion markers are bounds-checked. | `src/dbf/parser.rs`; `tests/corpus/dbf/` | `src/dbf/malformed_tests.rs::rejects_malformed_dbf_corpus` and format tests | Current |
-| DBF-002 | Supported dBASE III, dBASE IV, and Visual FoxPro fixtures round-trip through the declared field boundary. | `tests/fixtures/external-*.dbf.hex`; `src/dbf/compatibility_tests.rs` | `reads_and_writes_a_pinned_external_*_fixture` | Current |
+| DBF-002 | Supported dBASE III, dBASE IV, and Visual FoxPro fixtures, including an upstream Windows-1251 table, round-trip through the declared field boundary. | `tests/fixtures/external-*.dbf.hex`; `src/dbf/compatibility_tests.rs` | `reads_and_writes_a_pinned_external_*_fixture`; `reads_and_writes_a_pinned_external_cp1251_fixture` | Current |
 | DBF-003 | Declared CJK drivers and all eight supported explicit codec names use byte-width validation, replacement reads, rejecting writes, and visible declared/effective metadata. | `src/dbf/codec_cjk.rs`; `src/dbf/schema.rs`; `src/dbf/cjk_tests.rs`; `src/dbf/schema_encoding_tests.rs`; `tests/fixtures/cjk-*.dbf.hex`; `tests/fixtures/cjk-explicit-codecs.json` | `reads_and_writes_pinned_cjk_driver_fixtures`; `decodes_and_encodes_declared_cjk_drivers`; `reads_pinned_explicit_cjk_codec_bytes_from_a_dbf_record`; `explicit_euc_jp_and_gb18030_overrides_round_trip`; `explicit_iso_2022_jp_override_round_trips_jis_text`; `strict_shift_jis_override_round_trips_jis_text`; `strict_shift_jis_rejects_cp932_extensions`; `accepts_strict_shift_jis_as_an_explicit_override`; `accepts_iso_2022_jp_as_an_explicit_override` | Current |
 | MEM-001 | DBT and FPT pointers, block sizes, terminators, and malformed sidecars are handled within the selected memo format. | `src/dbf/memo_file.rs`; `src/dbf/memo_value.rs`; `tests/corpus/memo/` | `src/dbf/tests/memo.rs`, `memo_foxpro.rs`, and `malformed_memo_tests.rs` | Current |
 | MUT-001 | Record mutations preserve the in-memory model, reject unknown or ambiguous writes, and keep opaque fields intact. | `src/dbf/mutation.rs`; `src/dbf/mutation_model_tests.rs` | `generated_mutation_sequence_matches_reference_model` and mutation tests | Current |
@@ -81,7 +81,7 @@ The following topics have documentation or design notes but do not have a curren
 - runtime-specific async traits for long-lived streams;
 - a full cost-based planner, full index-aware or cost-based merge join strategies, and aggregation stages beyond bounded input and group-output `$match`, `$count`, `$distinct`, `$group`, and group-output `$project`;
 - catalog-wide MVCC visibility and historical row versions;
-- locale-aware CJK collation and broader upstream external fixtures;
+- locale-aware CJK collation and broader upstream CJK fixtures;
 - Strict multi-file reader atomicity for schema-preserving XBF-to-DBF export, object-storage manifests, WASM hosting, and distributed replication.
 
 Before one of these becomes current, add its public contract, malformed-input behavior, crash or retry behavior, fixture or deterministic test, and a row here.
