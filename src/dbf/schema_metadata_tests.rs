@@ -64,6 +64,18 @@ fn default_metadata() -> Vec<u8> {
     .unwrap()
 }
 
+fn composite_metadata() -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {},
+        "constraints": {
+            "unique": [["NAME", "AGE"]]
+        }
+    }))
+    .unwrap()
+}
+
 fn encoding_metadata(name: &str) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({
         "format": "txbase-schema",
@@ -179,6 +191,40 @@ fn schema_defaults_fill_missing_insert_fields() {
             .to_string()
             .contains("field NAME must not be null")
     );
+    cleanup(&path);
+}
+
+#[test]
+fn composite_unique_constraints_reject_duplicate_keys() {
+    let path = temporary_path();
+    cleanup(&path);
+    fs::write(&path, fixture()).unwrap();
+    fs::write(path.with_extension("txschema.json"), composite_metadata()).unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    let duplicate = table
+        .insert_record(
+            serde_json::json!({"ID": 3, "NAME": "Alice", "AGE": 29})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap_err();
+    assert!(
+        duplicate
+            .to_string()
+            .contains("duplicate composite value for fields NAME, AGE")
+    );
+
+    let id = table
+        .insert_record(
+            serde_json::json!({"ID": 3, "NAME": "Alice", "AGE": 30})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    assert_eq!(id, 3);
     cleanup(&path);
 }
 

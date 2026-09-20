@@ -5,7 +5,7 @@ use crate::query::{matches_filter, validate_filter};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -23,6 +23,8 @@ pub(super) struct SchemaMetadata {
     fields: BTreeMap<String, FieldMetadata>,
     #[serde(default)]
     checks: Vec<Map<String, Value>>,
+    #[serde(default)]
+    constraints: ConstraintMetadata,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -36,6 +38,15 @@ struct FieldMetadata {
     not_null: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     default: Option<Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConstraintMetadata {
+    #[serde(default)]
+    primary: Vec<String>,
+    #[serde(default)]
+    unique: Vec<Vec<String>>,
 }
 
 impl SchemaMetadata {
@@ -69,7 +80,7 @@ impl SchemaMetadata {
     }
 
     pub(super) fn validate_fields(&self, fields: &[FieldDescriptor]) -> Result<(), DbfError> {
-        let mut primary = false;
+        let mut field_primary = false;
         for (name, metadata) in &self.fields {
             if !fields
                 .iter()
@@ -86,12 +97,23 @@ impl SchemaMetadata {
                     )));
                 }
             }
-            if metadata.primary && primary {
+            if metadata.primary && field_primary {
                 return Err(DbfError::Invalid(
                     "composite primary keys are not supported by this schema version".into(),
                 ));
             }
-            primary |= metadata.primary;
+            field_primary |= metadata.primary;
+        }
+        if !self.constraints.primary.is_empty() {
+            if field_primary {
+                return Err(DbfError::Invalid(
+                    "schema primary constraints cannot mix field and composite definitions".into(),
+                ));
+            }
+            validate_key_fields(&self.constraints.primary, fields, "constraints.primary", 2)?;
+        }
+        for (index, key) in self.constraints.unique.iter().enumerate() {
+            validate_key_fields(key, fields, &format!("constraints.unique[{index}]"), 2)?;
         }
         Ok(())
     }
@@ -131,6 +153,7 @@ impl SchemaMetadata {
             "encoding": self.encoding,
             "fields": self.fields,
             "checks": self.checks,
+            "constraints": self.constraints,
         })
     }
 
@@ -180,8 +203,84 @@ impl SchemaMetadata {
                 }
             }
         }
+        for name in &self.constraints.primary {
+            let value = values.get(name).unwrap_or(&Value::Null);
+            if value.is_null() {
+                return Err(DbfError::Invalid(format!(
+                    "constraint violation: field {name} must not be null"
+                )));
+            }
+        }
+        if !self.constraints.primary.is_empty() {
+            validate_composite_unique(&self.constraints.primary, values, records, excluded_index)?;
+        }
+        for key in &self.constraints.unique {
+            validate_composite_unique(key, values, records, excluded_index)?;
+        }
         Ok(())
     }
+}
+
+fn validate_key_fields(
+    key: &[String],
+    fields: &[FieldDescriptor],
+    path: &str,
+    minimum: usize,
+) -> Result<(), DbfError> {
+    if key.len() < minimum {
+        return Err(DbfError::Invalid(format!(
+            "{path} must contain at least {minimum} fields"
+        )));
+    }
+    let mut seen = BTreeSet::new();
+    for name in key {
+        if !seen.insert(name) {
+            return Err(DbfError::Invalid(format!(
+                "{path} contains duplicate field {name}"
+            )));
+        }
+        if !fields
+            .iter()
+            .any(|field| !field.is_system() && field.name == *name)
+        {
+            return Err(DbfError::Invalid(format!(
+                "schema metadata refers to unknown field {name}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_composite_unique(
+    fields: &[String],
+    values: &Map<String, Value>,
+    records: &[DbfRecord],
+    excluded_index: Option<usize>,
+) -> Result<(), DbfError> {
+    if fields
+        .iter()
+        .any(|field| values.get(field).unwrap_or(&Value::Null).is_null())
+    {
+        return Ok(());
+    }
+    // ponytail: scan active records for bounded local constraints; add a tuple index if this grows.
+    for (index, record) in records.iter().enumerate() {
+        if record.deleted || excluded_index == Some(index) {
+            continue;
+        }
+        let matches = fields.iter().all(|field| {
+            let value = values.get(field).unwrap_or(&Value::Null);
+            let other = record.values.get(field).unwrap_or(&Value::Null);
+            !other.is_null() && values_equal(value, other)
+        });
+        if matches {
+            return Err(DbfError::Invalid(format!(
+                "constraint violation: duplicate composite value for fields {}",
+                fields.join(", ")
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn values_equal(left: &Value, right: &Value) -> bool {

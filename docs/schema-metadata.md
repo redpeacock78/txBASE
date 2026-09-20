@@ -27,10 +27,13 @@ The current sidecar is versioned independently from DBF:
   "version": 1,
   "fields": {
     "ID": {"primary": true},
-    "NAME": {"unique": true, "not_null": true, "default": "Unknown"}
+    "NAME": {"not_null": true, "default": "Unknown"}
   },
   "checks": [
     {"AGE": {"$gte": 0}}
+  ],
+  "constraints": {
+    "unique": [["NAME", "AGE"]]
   ]
 }
 ```
@@ -64,7 +67,16 @@ The current version accepts the following field properties:
 | `unique` | Rejects a non-null value already used by another active record |
 | `not_null` | Rejects JSON `null` on insert, replace, patch, or recall |
 | `default` | Supplies a scalar value when the field is omitted from an insert |
-| `checks` | Rejects a candidate record unless every table-level query predicate matches |
+
+The optional root `checks` array rejects a candidate record unless every table-level query
+predicate matches.
+
+The optional root `constraints` object accepts bounded composite keys:
+
+| Property | Behavior |
+| --- | --- |
+| `primary` | Requires two or more field names; all values must be non-null and the tuple must be unique |
+| `unique` | Accepts arrays of two or more field names; a non-null tuple may not repeat among active records |
 
 The sidecar's `encoding` property is not a field constraint.
 
@@ -80,6 +92,9 @@ Constraint checks run before the in-memory record is changed.
 Scalar `default` values are applied only to fields omitted from an insert. An explicit JSON `null`
 is not replaced, and replace, patch, and recall use the candidate values they already produce.
 Defaults are applied before `not_null`, uniqueness, and `checks` validation.
+
+Composite unique constraints use the existing scalar comparison rules. A tuple containing a null
+value does not participate in uniqueness, matching the existing single-field unique behavior.
 
 Existing active records are checked when the sidecar is loaded, so an invalid pre-existing DBF is not silently accepted as a valid constrained table.
 
@@ -113,13 +128,13 @@ The current copy and WAL protocols do not claim one atomic multi-file commit for
 
 The sidecar does not yet implement:
 
-- Composite primary or unique keys.
+- Composite primary keys.
 - `FOREIGN KEY` references or cross-table validation.
 - Collations or type declarations independent of DBF field descriptors.
 - A schema migration or metadata-edit command.
 - Automatic selection between a DBF language driver and an override.
 
-Composite and cross-table constraints need broader metadata, migration, and recovery rules before they can be added safely.
+Composite primary and cross-table constraints need broader metadata, migration, and recovery rules before they can be added safely.
 
 SQLite's official [`CREATE TABLE` reference](https://sqlite.org/lang_createtable.html) distinguishes `NOT NULL`, `CHECK`, `UNIQUE`, `PRIMARY KEY`, and `FOREIGN KEY` constraints and documents their write-time behavior.
 
