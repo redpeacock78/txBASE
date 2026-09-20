@@ -16,12 +16,13 @@ mod transaction;
 
 const MAX_BODY: usize = 1024 * 1024;
 
-enum ServerBody {
+pub(super) enum ServerBody {
     Buffered(Cursor<Vec<u8>>),
     Stream(Box<dyn Read + Send>),
 }
 
 impl ServerBody {
+    #[cfg(test)]
     fn into_inner(self) -> Vec<u8> {
         match self {
             Self::Buffered(body) => body.into_inner(),
