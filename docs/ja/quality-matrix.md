@@ -57,6 +57,7 @@ cargo test --all-targets --all-features
 | QRY-004 | 借用型および所有型スナップショットクエリストリームが filter、projection、skip、limit を段階的に適用し、ブロッキングまたは再開可能な制御を拒否する。 | `src/query/stream.rs`; `src/query/stream_tests.rs` | `streams_filtered_projected_records_with_bounded_controls`; `snapshot_stream_is_independent_of_later_table_mutations`; `streaming_rejects_blocking_and_resume_controls` | Boundary |
 | QRY-005 | 文書化した Unicode 小文字化照合が文字列順を変え、ソートカーソルを同じ照合へ結び付け、互換しないインデックス順を避ける。 | `src/query/ordering.rs`; `src/query/pagination.rs`; `src/query/planner.rs`; `src/query/tests.rs`; `src/query/cursor_tests.rs` | `supports_unicode_lowercase_collation_for_sort_keys`; `sorted_cursor_keeps_collation_in_its_boundary`; プランナーの照合フォールバック | Boundary |
 | QRY-006 | 有界スナップショットストリームが複製したテーブルを正の容量の標準ライブラリチャネルの背後で実行し、チャネル満杯時に生成側を停止し、項目順を保ち、消費側キャンセル後に停止する。ランタイム固有非同期トレイトは境界外とする。 | `src/query/stream.rs`; `src/query/stream_tests.rs`; `docs/ja/query-model.md` | `bounded_snapshot_stream_keeps_a_fixed_snapshot`; `bounded_stream_requires_positive_capacity` | Boundary |
+| QRY-007 | 等値結合が候補ペア 64 以下では `NestedLoop` を、それ以外では `Hash` を選び、文書化した外側行の順序と結合意味論を保つ。 | `src/query/join_strategy.rs`; `src/query/join.rs`; `src/query/join_pipeline.rs`; `docs/ja/query-model.md` | `chooses_nested_loop_for_small_join_inputs`; `chooses_hash_for_large_join_inputs`; 結合出力と連鎖ステージのテスト | Boundary |
 | CAT-001 | カタログが直下の DBF ファイルだけを検出し、テーブルごとのロードまたは検証失敗を報告する。 | `src/catalog.rs`; `docs/catalog.md` | `cargo test --all-targets --all-features` のカタログおよび結合ケース | Current |
 | CAT-002 | カタログサーバーが検出済みスキーマと有界読み取り専用結合を公開し、テーブル間更新を明示的なトランザクション経路に保つ。 | `src/server/catalog.rs`; `docs/catalog.md`; `docs/http-semantics.md` | `catalog_server_query_join_executes_and_exposes_schema` | Boundary |
 | CAT-003 | カタログサーバーが名前付きテーブルの GET、HEAD、QUERY、POST、PUT、PATCH、DELETE ルートを公開し、単一テーブルのレコード、ETag、クエリ、更新意味論を再利用する。 | `src/server/catalog.rs`; `src/server/records.rs`; `docs/catalog.md`; `docs/http-semantics.md` | `catalog_server_reads_named_tables_through_record_routes`; `catalog_server_mutates_named_tables_with_single_table_semantics` | Boundary |
@@ -79,7 +80,7 @@ cargo test --all-targets --all-features
 次の話題には文書または設計メモがありますが、マトリクスで現在の実装とは主張していません。
 
 - 長寿命ストリーム向けのランタイム固有非同期トレイト。
-- 完全なコストベースプランナー、プランナーが選択する結合戦略、有界な `$match`、`$count`、`$distinct`、`$group`、グループ出力 `$project` を超える集約ステージ。
+- 完全なコストベースプランナー、インデックス対応またはマージ結合戦略、有界な `$match`、`$count`、`$distinct`、`$group`、グループ出力 `$project` を超える集約ステージ。
 - カタログ全体の MVCC 可視性と過去の行バージョン。
 - ロケール対応 CJK 照合と、より広い上流外部フィクスチャ。
 - スキーマを保つ XBF から DBF へのエクスポートにおける厳密な複数ファイル読み取りアトミック性、オブジェクトストレージのマニフェスト、WASM ホスティング、分散レプリケーション。

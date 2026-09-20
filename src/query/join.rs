@@ -137,6 +137,18 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
     }
 
     if let JoinType::Right = &request.join.kind {
+        if matches!(
+            super::join_strategy::choose(left_records.len(), right_records.len()),
+            super::join_strategy::JoinStrategy::NestedLoop
+        ) {
+            return super::join_nested::execute_right_join(
+                &left_records,
+                &right_records,
+                request,
+                &local_fields,
+                &foreign_fields,
+            );
+        }
         let mut left_by_key = BTreeMap::<String, Vec<&DbfRecord>>::new();
         for &record in &left_records {
             let Some(key) = encoded_key(&record.values, &local_fields)? else {
@@ -158,6 +170,19 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
             }
         }
         return Ok(output);
+    }
+
+    if matches!(
+        super::join_strategy::choose(left_records.len(), right_records.len()),
+        super::join_strategy::JoinStrategy::NestedLoop
+    ) {
+        return super::join_nested::execute_join(
+            &left_records,
+            &right_records,
+            request,
+            &local_fields,
+            &foreign_fields,
+        );
     }
 
     let mut right_by_key = BTreeMap::<String, Vec<&DbfRecord>>::new();

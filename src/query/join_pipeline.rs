@@ -108,6 +108,18 @@ fn apply_stage(
     }
 
     if matches!(&spec.kind, JoinType::Right) {
+        if matches!(
+            super::join_strategy::choose(left.len(), right.len()),
+            super::join_strategy::JoinStrategy::NestedLoop
+        ) {
+            return super::join_nested::execute_right_stage(
+                &left,
+                right,
+                spec,
+                &local_fields,
+                &foreign_fields,
+            );
+        }
         let mut left_by_key = BTreeMap::<String, Vec<usize>>::new();
         for (index, left_row) in left.iter().enumerate() {
             let Some(key) = encoded_key(left_row, &local_fields)? else {
@@ -129,6 +141,19 @@ fn apply_stage(
             }
         }
         return Ok(output);
+    }
+
+    if matches!(
+        super::join_strategy::choose(left.len(), right.len()),
+        super::join_strategy::JoinStrategy::NestedLoop
+    ) {
+        return super::join_nested::execute_stage(
+            &left,
+            right,
+            spec,
+            &local_fields,
+            &foreign_fields,
+        );
     }
 
     let mut right_by_key = BTreeMap::<String, Vec<usize>>::new();
@@ -182,7 +207,7 @@ fn stage_fields(spec: &JoinSpec) -> (Vec<String>, Vec<String>) {
         .unzip()
 }
 
-fn encoded_key(
+pub(super) fn encoded_key(
     values: &Map<String, Value>,
     fields: &[String],
 ) -> Result<Option<String>, JoinError> {
@@ -224,7 +249,7 @@ fn qualified_values(table: &str, values: &Map<String, Value>) -> Map<String, Val
         .collect()
 }
 
-fn push_combined(
+pub(super) fn push_combined(
     output: &mut Vec<Map<String, Value>>,
     left: Option<&Map<String, Value>>,
     right: Option<&Map<String, Value>>,

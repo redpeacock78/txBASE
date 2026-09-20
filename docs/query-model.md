@@ -326,7 +326,11 @@ Its candidate pair count is capped at 100,000 before filtering.
 
 Missing and explicit `null` join keys do not match.
 
-The implementation builds one in-memory equality map for the right table, or the left table for a `right` join.
+The equality-join planner selects `NestedLoop` when the left and right active-row counts have at most 64 candidate pairs.
+
+For larger inputs it selects `Hash` and builds one in-memory equality map for the right table, or the left table for a `right` join.
+
+The selector preserves left-major output order for non-right joins and right-major output order for right joins.
 
 It rejects a result larger than 100,000 rows.
 
@@ -338,7 +342,7 @@ Table names cannot repeat, and the total stage count is capped at eight.
 
 Every intermediate result is capped at 100,000 rows.
 
-This is a bounded nested execution boundary, not a cost-based planner or a streaming executor.
+This is a bounded cardinality-based strategy selector, not a full cost-based planner, an index nested-loop planner, or a streaming executor.
 
 The single-table HTTP server does not expose joins.
 

@@ -195,7 +195,9 @@ recoverableな`TXSE` export boundaryでjournal化します。途中で停止し�
 path-aware plannerは、複数のsingle-field indexが有効なdirect equality filterであれば候補recordをintersectionできます。
 
 catalog joinは`txbase::query::join::parse`と`execute`から使います。
-複数joinは実装済みですが、planner-selected join strategy、cost-based planner、runtime固有のasync stream trait、historical row version、MVCC visibilityは未実装です。
+複数joinは実装済みです。
+等値結合は候補pairが64以下ならnested-loop、それより大きければhash strategyを選びます。
+index-awareまたはmerge join planning、full cost-based planner、runtime固有のasync stream trait、historical row version、MVCC visibilityは未実装です。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt`、`.txschema.json`、`.txbase.state`、有効な`.txidx` sidecarもコピーします。
 sourceのindexがstaleまたは壊れている場合は拒否し、sourceにindexがなければdestinationの古いindexを削除します。
