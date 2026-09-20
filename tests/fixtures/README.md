@@ -31,3 +31,8 @@ The `cjk-cp932.dbf.hex`, `cjk-gbk.dbf.hex`, `cjk-euc-kr.dbf.hex`, and
 CJK language-driver identifiers. They keep the encoded text in the DBF record
 area so the driver declaration, byte decoding, byte-width validation, and
 round-trip write remain independently reproducible.
+
+`cjk-explicit-codecs.json` contains pinned record-field bytes for all eight
+supported explicit CJK codec names and their decoded values. The DBF test
+injects each byte sequence into the same record shape before reading and
+writing it through the selected override.

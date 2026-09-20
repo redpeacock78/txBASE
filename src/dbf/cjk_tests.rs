@@ -140,6 +140,7 @@ fn reads_pinned_explicit_cjk_codec_bytes_from_a_dbf_record() {
         "../../tests/fixtures/cjk-explicit-codecs.json"
     ))
     .unwrap();
+    assert_eq!(cases.len(), 8);
 
     for case in cases {
         let encoding = case["encoding"].as_str().unwrap();

@@ -181,7 +181,7 @@ Schema output exposes declared and effective names plus the interpretation sourc
 Strict Shift_JIS accepts ASCII, half-width Katakana, and JIS X 0208, while CP932 extensions are
 replaced on read or rejected on write. Pinned DBF fixtures cover the four declared CJK drivers
 and round-trip their multibyte record values. Pinned explicit-codec byte fixtures cover DBF record
-decoding and write round-trips for the four explicit overrides. The query layer now has a bounded
+decoding and write round-trips for all eight supported explicit codec names. The query layer now has a bounded
 `unicode-lowercase` sort collation; locale-aware CJK collation and broader upstream external
 fixtures remain future work.
 

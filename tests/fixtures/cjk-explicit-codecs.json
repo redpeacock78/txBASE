@@ -1,5 +1,25 @@
 [
   {
+    "encoding": "Windows-31J/CP932",
+    "value": "日本",
+    "bytes": "93 fa 96 7b"
+  },
+  {
+    "encoding": "GBK/CP936",
+    "value": "中文",
+    "bytes": "d6 d0 ce c4"
+  },
+  {
+    "encoding": "EUC-KR/CP949",
+    "value": "한국",
+    "bytes": "c7 d1 b1 b9"
+  },
+  {
+    "encoding": "Big5/CP950",
+    "value": "中文",
+    "bytes": "a4 a4 a4 e5"
+  },
+  {
     "encoding": "EUC-JP",
     "value": "日本",
     "bytes": "c6 fc cb dc"
