@@ -82,7 +82,7 @@ fn catalog_with_many_indexed_posts_and_comments() -> PathBuf {
     for _ in 0..80 {
         comments
             .insert_record(
-                json!({"ID": 1, "NAME": "Indexed comment", "AGE": 1, "ACTIVE": true})
+                json!({"ID": 1, "NAME": "Comment", "AGE": 1, "ACTIVE": true})
                     .as_object()
                     .unwrap()
                     .clone(),
