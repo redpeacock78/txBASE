@@ -126,6 +126,51 @@ fn explicit_euc_jp_and_gb18030_overrides_round_trip() {
 }
 
 #[test]
+fn reads_pinned_explicit_cjk_codec_bytes_from_a_dbf_record() {
+    let source = DbfTable::from_bytes(&fixture()).unwrap();
+    let name_field = source
+        .fields
+        .iter()
+        .find(|field| field.name == "NAME")
+        .unwrap();
+    let record_start = usize::from(source.header.header_length);
+    let name_start = record_start + name_field.offset;
+    let name_end = name_start + usize::from(name_field.length);
+    let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+        "../../tests/fixtures/cjk-explicit-codecs.json"
+    ))
+    .unwrap();
+
+    for case in cases {
+        let encoding = case["encoding"].as_str().unwrap();
+        let expected = case["value"].as_str().unwrap();
+        let encoded = decode_hex_fixture(case["bytes"].as_str().unwrap());
+        assert!(encoded.len() <= name_field.length as usize);
+
+        let mut bytes = fixture();
+        bytes[29] = 0;
+        bytes[name_start..name_end].fill(b' ');
+        bytes[name_start..name_start + encoded.len()].copy_from_slice(&encoded);
+
+        let mut table = DbfTable::from_bytes_with_encoding(&bytes, Some(encoding)).unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["NAME"], expected);
+        table
+            .patch_record(
+                1,
+                serde_json::json!({"NAME": expected})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+        assert_eq!(
+            &table.to_bytes()[name_start..name_start + encoded.len()],
+            encoded.as_slice()
+        );
+    }
+}
+
+#[test]
 fn explicit_iso_2022_jp_override_round_trips_jis_text() {
     let mut table = DbfTable::from_bytes_with_encoding(&fixture(), Some("ISO-2022-JP")).unwrap();
     assert_eq!(table.schema_json()["encoding_override"], "ISO-2022-JP");

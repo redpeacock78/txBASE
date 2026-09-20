@@ -153,9 +153,10 @@ The same caution applies to EUC-JP, GBK, GB18030, Big5, and Korean encodings.
 
 The current override slice covers both explicit invocation and sidecar selection for the four
 declared-driver codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP.
-Pinned byte fixtures cover the four declared CJK drivers and round-trip their multibyte record
-values. Query sorting has a bounded Unicode-lowercase mode; locale-aware CJK collation and
-broader upstream external fixtures remain future work.
+Pinned DBF fixtures cover the four declared CJK drivers and round-trip their multibyte record
+values. Pinned explicit-codec byte fixtures cover DBF record decoding and write round-trips for
+the four explicit overrides. Query sorting has a bounded Unicode-lowercase mode; locale-aware
+CJK collation and broader upstream external fixtures remain future work.
 
 ## 5. Persistence and recovery
 

@@ -1,0 +1,22 @@
+[
+  {
+    "encoding": "EUC-JP",
+    "value": "日本",
+    "bytes": "c6 fc cb dc"
+  },
+  {
+    "encoding": "GB18030",
+    "value": "中文",
+    "bytes": "d6 d0 ce c4"
+  },
+  {
+    "encoding": "Shift_JIS",
+    "value": "日本",
+    "bytes": "93 fa 96 7b"
+  },
+  {
+    "encoding": "ISO-2022-JP",
+    "value": "日本",
+    "bytes": "1b 24 42 46 7c 4b 5c 1b 28 42"
+  }
+]
