@@ -72,6 +72,7 @@ fn schema_export_commits_dbf_and_schema_together() {
             .is_empty()
     );
     assert!(!schema_export::test_journal_path(&destination).exists());
+    assert!(!schema_export::test_transaction_directory(&destination).exists());
 
     cleanup(&destination);
 }

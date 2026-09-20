@@ -36,6 +36,7 @@ pub(crate) fn commit_schema_export(
     write_file(&stage_path(&directory, SCHEMA_TARGET), schema_bytes)?;
     write_file(&stage_path(&directory, STATE_TARGET), &state_bytes)?;
     let flags = capture_bases(path, &directory)?;
+    sync_directory(&directory)?;
     write_journal(path, flags)?;
     recover_schema_export_locked(path)?;
     let _ = crate::index::refresh_if_present(path, table);
@@ -68,8 +69,8 @@ pub(super) fn recover_schema_export_locked(path: &Path) -> Result<bool, DbfError
     journal.clear().map_err(super::transaction_error)?;
     drop(journal);
     remove_file_if_exists(&journal_path)?;
+    remove_directory_if_exists(&transaction_directory(path))?;
     sync_parent_directory(path)?;
-    let _ = fs::remove_dir_all(transaction_directory(path));
     Ok(true)
 }
 
@@ -224,6 +225,17 @@ fn write_file(path: &Path, bytes: &[u8]) -> Result<(), DbfError> {
     let mut file = File::create(path)?;
     file.write_all(bytes)?;
     file.sync_all()?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn sync_directory(path: &Path) -> Result<(), DbfError> {
+    File::open(path)?.sync_all()?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_path: &Path) -> Result<(), DbfError> {
     Ok(())
 }
 
