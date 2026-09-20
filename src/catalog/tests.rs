@@ -73,6 +73,31 @@ fn schema_and_verify_cover_every_discovered_table() {
 }
 
 #[test]
+fn representation_tag_is_stable_and_changes_with_catalog_schema() {
+    let schema = json!({
+        "format": "txbase-catalog",
+        "transaction_id": null,
+        "tables": []
+    });
+    let same_schema = json!({
+        "format": "txbase-catalog",
+        "transaction_id": null,
+        "tables": []
+    });
+    let changed_schema = json!({
+        "format": "txbase-catalog",
+        "transaction_id": 1,
+        "tables": []
+    });
+
+    let tag = super::representation_tag(&schema);
+    assert_eq!(tag, super::representation_tag(&same_schema));
+    assert_ne!(tag, super::representation_tag(&changed_schema));
+    assert!(tag.starts_with("\"txbase-catalog-"));
+    assert!(tag.ends_with('"'));
+}
+
+#[test]
 fn commits_named_operations_across_tables() {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();
