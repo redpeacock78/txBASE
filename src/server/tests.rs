@@ -200,6 +200,28 @@ fn query_endpoint_enforces_json_boundary_and_executes() {
 }
 
 #[test]
+fn options_advertises_supported_methods_and_query_media_type() {
+    let response = options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY");
+    assert_eq!(response.status_code(), StatusCode(204));
+    assert_eq!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("Allow"))
+            .map(|header| header.value.as_str()),
+        Some("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY")
+    );
+    assert_eq!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("Accept-Query"))
+            .map(|header| header.value.as_str()),
+        Some("\"application/json\"")
+    );
+}
+
+#[test]
 fn catalog_server_query_join_executes_and_exposes_schema() {
     let root = temporary_catalog();
     fs::write(root.join("left.dbf"), fixture()).unwrap();

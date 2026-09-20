@@ -36,7 +36,9 @@ pub fn serve_catalog(root: impl AsRef<Path>, bind: &str) -> Result<(), String> {
 fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
     let path = request.url().split('?').next().unwrap_or("/").to_owned();
     let is_query = request.method().as_str() == "QUERY";
-    let response = if matches!(request.method(), Method::Get | Method::Head) {
+    let response = if request.method().as_str() == "OPTIONS" {
+        options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY")
+    } else if matches!(request.method(), Method::Get | Method::Head) {
         get_response(&request, &path, table)
     } else if is_query {
         if path == "/explain" {
@@ -61,13 +63,13 @@ fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
             405,
             error(
                 "method_not_allowed",
-                "only GET, HEAD, POST, PUT, PATCH, DELETE, and QUERY are available",
+                "only GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, and QUERY are available",
             ),
             true,
         )
         .with_header(header(
             "Allow",
-            "GET, HEAD, POST, PUT, PATCH, DELETE, QUERY",
+            "GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY",
         ))
     };
     if let Err(error) = request.respond(response) {
@@ -244,6 +246,13 @@ fn json_bytes_response(status: u16, body: Vec<u8>, accept_query: bool) -> HttpRe
         response = response.with_header(header("Accept-Query", "\"application/json\""));
     }
     response
+}
+
+pub(super) fn options_response(allow: &str) -> HttpResponse {
+    Response::from_data(Vec::new())
+        .with_status_code(204)
+        .with_header(header("Allow", allow))
+        .with_header(header("Accept-Query", "\"application/json\""))
 }
 
 fn header(name: &str, value: &str) -> Header {

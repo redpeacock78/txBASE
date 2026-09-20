@@ -3,8 +3,8 @@ use super::records::{
     update_response_with_validator,
 };
 use super::{
-    HttpResponse, error, header, json_response, query_response_at, query_result_response,
-    read_json_body,
+    HttpResponse, error, header, json_response, options_response, query_response_at,
+    query_result_response, read_json_body,
 };
 use crate::catalog::Catalog;
 use crate::dbf::DbfTable;
@@ -27,38 +27,42 @@ pub(super) fn serve(root: impl AsRef<Path>, bind: &str) -> Result<(), String> {
 
 fn handle_request(mut request: Request, catalog: &Catalog) {
     let path = request.url().split('?').next().unwrap_or("/").to_owned();
-    let response =
-        if matches!(request.method(), Method::Get | Method::Head) && path == "/catalog" {
-            schema_response(catalog)
-        } else if matches!(request.method(), Method::Get | Method::Head)
-            && record_route(&path).is_some()
-        {
-            table_response(&request, &path, catalog)
-        } else if request.method().as_str() == "QUERY" && path == "/join" {
-            join_response(&mut request, catalog)
-        } else if request.method().as_str() == "QUERY" && table_explain_route(&path).is_some() {
-            table_explain_response(&mut request, &path, catalog)
-        } else if request.method().as_str() == "QUERY" && record_route(&path).is_some() {
-            table_query_response(&mut request, &path, catalog)
-        } else if matches!(request.method(), Method::Post) && path == "/transaction" {
-            super::catalog_transaction::response(&mut request, catalog)
-        } else if matches!(
-            request.method(),
-            Method::Post | Method::Put | Method::Patch | Method::Delete
-        ) && record_route(&path).is_some()
-        {
-            table_mutation_response(&mut request, &path, catalog)
-        } else {
-            json_response(
+    let response = if request.method().as_str() == "OPTIONS" {
+        options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY")
+    } else if matches!(request.method(), Method::Get | Method::Head) && path == "/catalog" {
+        schema_response(catalog)
+    } else if matches!(request.method(), Method::Get | Method::Head)
+        && record_route(&path).is_some()
+    {
+        table_response(&request, &path, catalog)
+    } else if request.method().as_str() == "QUERY" && path == "/join" {
+        join_response(&mut request, catalog)
+    } else if request.method().as_str() == "QUERY" && table_explain_route(&path).is_some() {
+        table_explain_response(&mut request, &path, catalog)
+    } else if request.method().as_str() == "QUERY" && record_route(&path).is_some() {
+        table_query_response(&mut request, &path, catalog)
+    } else if matches!(request.method(), Method::Post) && path == "/transaction" {
+        super::catalog_transaction::response(&mut request, catalog)
+    } else if matches!(
+        request.method(),
+        Method::Post | Method::Put | Method::Patch | Method::Delete
+    ) && record_route(&path).is_some()
+    {
+        table_mutation_response(&mut request, &path, catalog)
+    } else {
+        json_response(
             405,
             error(
                 "method_not_allowed",
-                "only GET, HEAD, POST, PUT, PATCH, DELETE, and QUERY catalog routes are available",
+                "only GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, and QUERY catalog routes are available",
             ),
             true,
         )
-        .with_header(header("Allow", "GET, HEAD, POST, PUT, PATCH, DELETE, QUERY"))
-        };
+        .with_header(header(
+            "Allow",
+            "GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY",
+        ))
+    };
     if let Err(error) = request.respond(response) {
         eprintln!("failed to send HTTP response: {error}");
     }

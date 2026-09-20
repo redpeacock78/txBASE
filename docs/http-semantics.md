@@ -24,7 +24,7 @@ The common method properties are:
 | --- | --- | --- | --- |
 | `GET` | Yes | Yes | Read records or one record |
 | `HEAD` | Yes | Yes | Read headers for records or one record |
-| `OPTIONS` | Yes | Yes | Not implemented |
+| `OPTIONS` | Yes | Yes | Advertise supported methods and the JSON query media type |
 | `TRACE` | Yes | Yes | Not implemented |
 | `POST` | No | No | Create a physical DBF record |
 | `PUT` | No | Yes | Replace an active record |
@@ -37,6 +37,10 @@ The properties describe method intent.
 They do not by themselves provide transaction isolation, deduplication, or a retry-safe network implementation.
 
 ## 2. Current txBASE routes
+
+`OPTIONS` returns `204 No Content`, an `Allow` header for the server surface, and `Accept-Query: "application/json"`.
+
+The response does not authorize a method on a resource that its route rules would otherwise reject.
 
 | Route | Request contract | Response contract |
 | --- | --- | --- |
