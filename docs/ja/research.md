@@ -1,48 +1,48 @@
-# Specification research index
+# 仕様調査インデックス
 
-This directory records the specifications used to define txBASE's current boundary and future work.
+このディレクトリには、txBASE の現在の境界と将来の作業を定義するために使った仕様を記録します。
 
-The documents distinguish three statuses:
+文書は、次の三つの状態を区別します。
 
-- **Current** means the behavior exists in this repository and is covered by code or tests.
-- **Reference** means an external product or protocol is being studied for a design lesson.
-- **Future** means a proposal that requires a separate contract before implementation.
+- **Current**：このリポジトリに動作が存在し、コードまたはテストでカバーされている。
+- **Reference**：外部製品またはプロトコルを設計上の知見として調査している。
+- **Future**：実装前に個別の契約が必要な提案である。
 
-This repository does not claim compatibility merely because it uses a familiar name or JSON shape.
+馴染みのある名前や JSON 形状を使っただけで互換性を主張することはありません。
 
-## Topic documents
+## トピック文書
 
-| Topic | Document | Status |
+| トピック | 文書 | 状態 |
 | --- | --- | --- |
-| dBASE and Visual FoxPro file structure | [DBF compatibility](dbf-compatibility.md) | Current plus future encoding work |
-| Query execution contract | [Query model](query-model.md) | Current subset |
-| MongoDB predicates and query planning | [Query planning](query-planning.md) | Current subset plus reference |
-| Mutation operators and atomicity | [Mutation model](mutation-model.md) | Current subset plus future boundary |
-| Firestore and Realtime Database design | [Firebase model](firebase-model.md) | Reference |
-| SQLite test breadth and quality | [Testing and quality](testing-quality.md) | Current test map plus reference |
-| Contract-to-test traceability | [Quality contract matrix](quality-matrix.md) | Current evidence map |
-| HTTP methods, PATCH, and QUERY | [HTTP semantics](http-semantics.md) | Current routes plus protocol reference |
-| Relational schema constraints over DBF | [Schema metadata](schema-metadata.md) | Current local subset plus future relational work |
-| Native XBF storage format | [XBF v1 draft](xbf.md) | Draft codec, DBF conversion/export, snapshot path, generation-checked WAL, and journaled schema export |
-| Multi-table DBF discovery and bounded local equality join | [Catalog](catalog.md) and [Query model](query-model.md) | Current boundary plus future relational work |
-| External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, equality, histogram-estimated range ordering, ordered-prefix traversal, mixed-direction compound-prefix sorting, equality-prefix candidate choice, uniform-statistics-ordered equality intersection, and future full cost model |
-| CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Future |
+| dBASE と Visual FoxPro のファイル構造 | [DBF 互換性](dbf-compatibility.md) | 現在の対応と将来のエンコーディング作業 |
+| クエリ実行契約 | [クエリモデル](query-model.md) | 現在のサブセット |
+| MongoDB の述語とクエリ計画 | [クエリ計画](query-planning.md) | 現在のサブセットと参照資料 |
+| 更新演算子とアトミック性 | [更新モデル](mutation-model.md) | 現在のサブセットと将来の境界 |
+| Firestore と Realtime Database の設計 | [Firebase モデル](firebase-model.md) | 参照資料 |
+| SQLite のテスト範囲と品質 | [テストと品質](testing-quality.md) | 現在のテストマップと参照資料 |
+| 契約からテストへの追跡 | [品質契約マトリクス](quality-matrix.md) | 現在の証拠マップ |
+| HTTP メソッド、PATCH、QUERY | [HTTP の意味](http-semantics.md) | 現在のルートとプロトコル参照 |
+| DBF 上のリレーショナルスキーマ制約 | [スキーマメタデータ](schema-metadata.md) | 現在のローカルサブセットと将来のリレーショナル作業 |
+| ネイティブ XBF ストレージ形式 | [XBF v1 草案](xbf.md) | 草案コーデック、DBF 変換と出力、スナップショット経路、世代検査付き WAL、スキーマ出力ジャーナル |
+| 複数テーブル DBF 検出と有界ローカル等値結合 | [カタログ](catalog.md) と [クエリモデル](query-model.md) | 現在の境界と将来のリレーショナル作業 |
+| 外部セカンダリインデックスのライフサイクル | [インデックス](indexes.md) | 現在のサイドカー保守、等値、ヒストグラムによる範囲順序、順序プレフィックス、混在方向の複合プレフィックスソート、等値プレフィックス候補選択、一様統計による等値積集合、将来の完全コストモデル |
+| CJK、インデックス、XBF、ストレージ、並行性 | [ロードマップ](roadmap.md) | 将来 |
 
-## Research method
+## 調査方法
 
-Primary specifications and vendor documentation are preferred.
+一次仕様とベンダー文書を優先します。
 
-Implementation behavior is checked against the current source and tests before it is called current.
+現在の動作として呼ぶ前に、実装とテストで確認します。
 
-Design notes are labeled future when they are not implemented.
+実装していない設計メモは Future としてラベル付けします。
 
-The research pass for this index was refreshed on 2026-09-20.
+このインデックスの調査は 2026-09-20 に更新しました。
 
-The README organization follows the section shape of [texenv's README](https://github.com/redpeacock78/texenv/blob/master/README.md), while the content is specific to txBASE.
+README の構成は [texenv の README](https://github.com/redpeacock78/texenv/blob/master/README.md)の節構造に従いますが、内容は txBASE 固有です。
 
-## Primary source groups
+## 主な資料群
 
-### dBASE and Visual FoxPro
+### dBASE と Visual FoxPro
 
 - [dBASE Level 7 file format](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)
 - [Visual FoxPro table file structure](https://techshelps.github.io/MSDN/FOXHELP/html/contable_file_structure_lp.dbfrp.htm)
@@ -79,7 +79,6 @@ The README organization follows the section shape of [texenv's README](https://g
 - [Realtime Database save data](https://firebase.google.com/docs/database/admin/save-data)
 - [Realtime Database security](https://firebase.google.com/docs/database/security)
 - [Realtime Database offline capabilities](https://firebase.google.com/docs/database/android/offline-capabilities)
-- [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
 
 ### SQLite
 
@@ -102,14 +101,15 @@ The README organization follows the section shape of [texenv's README](https://g
 - [RFC 5789: PATCH Method](https://www.rfc-editor.org/rfc/rfc5789.html)
 - [RFC 10008: The HTTP QUERY Method](https://www.rfc-editor.org/rfc/rfc10008.html)
 
-### File-system commit primitives
+### ファイルシステムのコミットプリミティブ
 
 - [POSIX `rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)
 - [POSIX `fsync()`](https://pubs.opengroup.org/onlinepubs/009695399/functions/fsync.html)
 - [POSIX file-system cache and directory durability rationale](https://pubs.opengroup.org/onlinepubs/9799919799/xrat/V4_xbd_chap01.html)
 
-## Review rule
+## レビュー規則
 
-When a new feature crosses a format, query, transaction, or HTTP boundary, update the relevant topic document and add the smallest fixture or failure test that proves the new contract.
+新しい機能が形式、クエリ、トランザクション、HTTP の境界をまたぐ場合は、該当するトピック文書を更新し、新しい契約を証明する最小のフィクスチャまたは失敗テストを追加します。
 
-Do not add a broad compatibility claim to the README without an implementation path and a reproducible check.
+実装経路と再現可能な検査なしに、README へ広い互換性の主張を追加しません。
+- [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)

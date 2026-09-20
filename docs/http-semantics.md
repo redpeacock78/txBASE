@@ -98,7 +98,7 @@ An API can make a particular patch idempotent through its document semantics or 
 
 For collision-sensitive patches, the RFC recommends conditional requests such as `If-Match` with a strong entity tag.
 
-txBASE currently accepts `application/json` plain field patches and the typed `$set`, `$unset`, and `$inc` subset described in [the query model](query-model.md).
+txBASE currently accepts `application/json` plain field patches and the typed `$set`, `$unset`, and `$inc` subset described in [the mutation model](mutation-model.md).
 
 txBASE implements a strong table representation tag, optional `If-Match` protection for the
 state-changing routes described above, and GET/HEAD-only `If-None-Match` cache validation.

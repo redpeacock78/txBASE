@@ -338,10 +338,14 @@ Files are split when ownership or maintenance becomes clearer; a crate split sho
 
 ### Documentation
 
+- [Documentation index](docs/README.md)
+- [Japanese documentation](docs/ja/README.md)
 - [DBF and dBASE compatibility](docs/dbf-compatibility.md)
 - [Multi-table catalog](docs/catalog.md)
 - [Secondary-index sidecar](docs/indexes.md)
-- [MongoDB query model and txBASE query behavior](docs/query-model.md)
+- [Query model](docs/query-model.md)
+- [Query planning and external vocabulary](docs/query-planning.md)
+- [Mutation model](docs/mutation-model.md)
 - [Firebase data-model and synchronization lessons](docs/firebase-model.md)
 - [SQLite testing and quality model](docs/testing-quality.md)
 - [Quality contract matrix](docs/quality-matrix.md)

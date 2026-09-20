@@ -1,12 +1,14 @@
 # txBASE
 
-txBASEは、dBASEのDBF file formatを中心に据えたRust製database prototypeです。
+txBASEは、dBASEのDBF file formatを中心に据えたRust製のdatabase prototypeです。
 
 選択したdBASEとVisual FoxProのfieldを読み書きし、JSONとHTTPのinterfaceを提供します。
 
 pathから読み込んだmutationにはfile-backed WALを使い、DBFとmemo sidecarの保存を復旧可能にします。
 
 英語のREADMEは[README.md](README.md)です。
+
+日本語ドキュメントの入口は[docs/ja/README.md](docs/ja/README.md)です。
 
 ## 使い方
 
@@ -61,7 +63,7 @@ curl -i -X QUERY \
   http://127.0.0.1:8080/records
 ```
 
-現在のqueryは`filter`、`sort`、`projection`、`skip`、`limit`、`page_size`、`cursor`、限定された一段の`aggregate`を提供します。
+現在のqueryは`filter`、`sort`、`projection`、`collation`、`skip`、`limit`、`page_size`、`cursor`、限定された`aggregate`を提供します。
 
 `page_size`を指定すると、physical record順のページを`records`と`cursor`で返します。
 次のページでは同じ`page_size`と返却された`cursor`を送ります。
@@ -77,17 +79,18 @@ sort、aggregate、page-size、cursorはblockingまたはresume boundaryを必�
 `query::stream_query_snapshot`はloaded tableのcloneを保持するため、元tableへの後続mutationから独立したpull-based iteratorです。
 `query::stream_query_bounded`はそのsnapshot iteratorをboundedな標準library channelの背後で動かし、consumerが読み取らない間はproducerを停止します。consumerをdropするとproducerも停止します。runtime固有のasync traitとHTTP chunked streamingは未実装です。
 
-`aggregate`は一つの`$group` stageと、その前に0個以上置けるboundedな`$match` stage、group後に一つだけ置ける`$project`、`$sort`、`$limit` stageを使えます。
+`aggregate`は、0個以上の`$match` stageの後に一つの終端`$count`または`$distinct` stage、または一つの`$group` stageを使えます。
+`$group`の後には一つの`$project`、最後の`$sort`、最後の`$limit`を置けます。
 `$count`、整数`$sum`、数値の`$avg`、および比較可能な値に対する`$min` / `$max`をサポートします。
 `$avg`はmissing、null、非数値を無視し、group内に数値がなければ`null`を返します。
 `$project`はgroup出力に対してinclude/exclude projectionを適用し、`$sort`または`$limit`の前に置きます。
 top-levelの`sort`、`projection`、pagination、`limit`との併用はできません。
 
-libraryにはcatalog table二つを読むboundedな`inner`、`left`、`semi`、`anti` equality joinと`cross` joinがあります。
+libraryにはcatalog table二つ以上を読むboundedな`inner`、`left`、`right`、`semi`、`anti` equality joinと`cross` joinがあります。
 添付仕様の`from`、`join.on`、`filter`、`projection`を受け付け、qualified keyのJSONを返します。
-resultは最大100,000行です。
+resultと各中間stageは最大100,000行です。
 `semi`と`anti`は右側の列を返さず、右側のmatch有無で左側の行を一度だけ返します。
-`cross`は空の`on`を要求し、候補pair数を100,000以下に制限します。
+`cross`は空の`on`を受け付け、候補pair数を100,000以下に制限します。
 single-table HTTP serverからは利用できませんが、`--serve-catalog DIRECTORY`のcatalog serverでは
 read-onlyな`QUERY /join`として利用できます。cross-table mutationは`POST /transaction`でatomicにcommitできます。
 
@@ -95,7 +98,7 @@ read-onlyな`QUERY /join`として利用できます。cross-table mutationは`P
 
 predicateは`$eq`、`$ne`、`$gt`、`$gte`、`$lt`、`$lte`、`$in`、`$nin`、`$and`、`$or`、`$not`、限定された`$expr`です。
 
-HTTP境界の詳細は[HTTP method semantics](docs/http-semantics.md)を参照してください。
+HTTP境界の詳細は[HTTP method semantics](docs/ja/http-semantics.md)を参照してください。
 
 `HEAD /records`と`HEAD /records/{id}`はGETと同じstatus/headerを返し、response bodyを転送しません。
 
@@ -188,7 +191,7 @@ recoverableな`TXSE` export boundaryでjournal化します。途中で停止し�
 path-aware plannerは、複数のsingle-field indexが有効なdirect equality filterであれば候補recordをintersectionできます。
 
 catalog joinは`txbase::query::join::parse`と`execute`から使います。
-複数join、cost-based planner、backpressure付きのstreaming、historical row version、MVCC visibilityは未実装です。
+複数joinは実装済みですが、planner-selected join strategy、cost-based planner、backpressure付きのruntime固有streaming、historical row version、MVCC visibilityは未実装です。
 
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt`、`.txschema.json`、`.txbase.state`、有効な`.txidx` sidecarもコピーします。
 sourceのindexがstaleまたは壊れている場合は拒否し、sourceにindexがなければdestinationの古いindexを削除します。
@@ -198,10 +201,11 @@ DBF codecはVisual FoxProのCJK driver IDであるWindows-31J/CP932、GBK/CP936�
 malformed readはU+FFFDにし、unmappableまたはbyte width超過のwriteは拒否します。
 strictな`Shift_JIS` overrideはASCII、半角カナ、JIS X 0208を受け付け、CP932拡張はreadでU+FFFD、writeで拒否します。
 
-optionalな`users.txschema.json` sidecarは、legacy DBF byteを変更せずに一つのfieldへ`primary`、`unique`、`not_null`を設定します。
+optionalな`users.txschema.json` sidecarは、legacy DBF byteを変更せずに一つのfieldへ`primary`、`unique`、`not_null`を設定し、boundedなcomposite `primary`と`unique`も定義できます。
 同じsidecarで対応済みのCJK codecを明示的に選択できます。
 load済みのactive recordとinsert、replace、patch、recallをconstraintで検証します。
-`CHECK`、foreign key、default、composite keyは未実装です。
+省略されたinsert fieldへのscalar `default`、table-level `checks`、catalog-scopedな`references`も実装済みです。
+`references`はcatalog serverのnamed-table mutationとcross-table transactionで検証し、single-table pathでは解決しません。
 
 ```bash
 txbase backup path/to/users.dbf backups/users.dbf
@@ -257,18 +261,21 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 ### 詳細文書
 
-- [DBFとdBASE compatibility](docs/dbf-compatibility.md)
-- [Multi-table catalog](docs/catalog.md)
-- [Secondary-index sidecar](docs/indexes.md)
-- [MongoDB query model](docs/query-model.md)
-- [Firebase data model](docs/firebase-model.md)
-- [SQLite testingとquality](docs/testing-quality.md)
-- [Quality contract matrix](docs/quality-matrix.md)
-- [HTTP semanticsとQUERY](docs/http-semantics.md)
-- [Schema metadataとlocal constraint](docs/schema-metadata.md)
-- [XBF v1 format draft](docs/xbf.md)
-- [Roadmapと明示的なnon-goal](docs/roadmap.md)
-- [Research index](docs/research.md)
+- [日本語ドキュメント一覧](docs/ja/README.md)
+- [DBFとdBASE互換性](docs/ja/dbf-compatibility.md)
+- [Multi-table catalog](docs/ja/catalog.md)
+- [Secondary-index sidecar](docs/ja/indexes.md)
+- [Query model](docs/ja/query-model.md)
+- [Query planning](docs/ja/query-planning.md)
+- [Mutation model](docs/ja/mutation-model.md)
+- [Firebase data model](docs/ja/firebase-model.md)
+- [SQLite testingとquality](docs/ja/testing-quality.md)
+- [Quality contract matrix](docs/ja/quality-matrix.md)
+- [HTTP semanticsとQUERY](docs/ja/http-semantics.md)
+- [Schema metadataとlocal constraint](docs/ja/schema-metadata.md)
+- [XBF v1 format draft](docs/ja/xbf.md)
+- [Roadmapと明示的なnon-goal](docs/ja/roadmap.md)
+- [Research index](docs/ja/research.md)
 
 ## Todo
 
@@ -279,7 +286,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort planner、equality prefixを使った候補数比較は実装済みです。
 一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
 full cost model、collation-aware planning、backpressure付きのstreaming、追加のaggregation stage、cross-table constraint、追加のCJK encodingはroadmapで検討します。
-XBFのwire contractは[XBF v1 format draft](docs/xbf.md)に記載しています。draftのcodec、DBFからXBFへの変換、限定されたXBFからDBFへのexport、schema sidecar付きjournal export、durable snapshot path、generation付きfull-snapshot WAL recoveryを提供します。strictな複数file reader atomicityとobject-storage commitは未対応です。
+XBFのwire contractは[XBF v1 format draft](docs/ja/xbf.md)に記載しています。draftのcodec、DBFからXBFへの変換、限定されたXBFからDBFへのexport、schema sidecar付きjournal export、durable snapshot path、generation付きfull-snapshot WAL recoveryを提供します。strictな複数file reader atomicityとobject-storage commitは未対応です。
 
 ## License
 

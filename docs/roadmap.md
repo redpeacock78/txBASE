@@ -261,6 +261,8 @@ A file should be split when its code has different ownership, failure behavior, 
 
 The current repository already splits DBF codecs, memo handling, WAL deltas, query validation, server ranges, and test groups along those boundaries.
 
+The query contract, planner rationale, and mutation contract now live in separate documents because they have different ownership and future work.
+
 Further splitting should follow a real boundary.
 
 The number of files is not a quality metric by itself.

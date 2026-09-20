@@ -2,9 +2,9 @@
 
 txBASE uses a small JSON query document.
 
-MongoDB is a source of vocabulary and comparison points, not a compatibility target.
+MongoDB supplies vocabulary and comparison points, not a compatibility target.
 
-The query engine operates on active DBF records after they have been decoded to JSON.
+The query engine evaluates active DBF records after decoding them to JSON.
 
 ## 1. Query document
 
@@ -27,7 +27,37 @@ The current document shape is:
 }
 ```
 
-The pipeline may also end with one bounded `$sort` stage over the group output:
+The top-level keys are validated.
+
+Unknown keys are rejected instead of ignored.
+
+`filter` defaults to a match-all filter.
+
+`sort` uses `1` for ascending order and `-1` for descending order.
+
+The optional `collation` currently accepts only `"unicode-lowercase"`.
+
+It lowercases Unicode string sort keys before comparison.
+
+Omitting it keeps the existing Unicode codepoint ordering.
+
+Collation affects sorting only.
+
+Filters and index lookup retain their existing comparison rules.
+
+Collation requires a non-empty top-level `sort`, is unavailable with aggregation, and deliberately uses a table scan.
+
+Sorted cursors encode the collation and reject a token from a different sort contract.
+
+`projection` uses inclusion or exclusion values of `1` and `0`.
+
+`skip` and `limit` are non-negative integer controls.
+
+The executor applies filtering, sorting, projection, skipping, and limiting in that order.
+
+Sort ties preserve DBF record order.
+
+The pipeline may end with one bounded `$sort` stage over group output:
 
 ```json
 {
@@ -38,7 +68,7 @@ The pipeline may also end with one bounded `$sort` stage over the group output:
 }
 ```
 
-A count-only pipeline may end after its optional `$match` stages with one terminal `$count` stage:
+A count-only pipeline may end after optional `$match` stages with one terminal `$count` stage:
 
 ```json
 {
@@ -49,7 +79,7 @@ A count-only pipeline may end after its optional `$match` stages with one termin
 }
 ```
 
-A distinct pipeline may end after its optional `$match` stages with one terminal `$distinct` stage:
+A distinct pipeline may end after optional `$match` stages with one terminal `$distinct` stage:
 
 ```json
 {
@@ -60,7 +90,7 @@ A distinct pipeline may end after its optional `$match` stages with one terminal
 }
 ```
 
-An optional final `$limit` may follow `$sort` (or `$group` when sorting is omitted):
+An optional final `$limit` may follow `$sort`, or `$group` when sorting is omitted:
 
 ```json
 {
@@ -72,29 +102,6 @@ An optional final `$limit` may follow `$sort` (or `$group` when sorting is omitt
 }
 ```
 
-The top-level keys are validated.
-
-Unknown keys are rejected rather than ignored.
-
-`filter` defaults to a match-all filter.
-
-`sort` uses `1` for ascending and `-1` for descending order.
-
-The optional `collation` currently accepts only `"unicode-lowercase"` and applies Unicode
-lowercasing to string sort keys before comparison. Omitting it keeps the existing Unicode
-codepoint ordering. It affects sorting only; filters and index lookup retain their existing
-comparison rules. It requires a non-empty top-level `sort`, is not available with aggregation,
-and custom-collation plans deliberately use a table scan. Sorted cursors encode the collation and
-reject a token from a different sort contract.
-
-`projection` uses inclusion or exclusion values of `1` and `0`.
-
-`skip` and `limit` are non-negative integer controls.
-
-The executor applies filtering, sorting, projection, skipping, and limiting in that order.
-
-Sort ties preserve DBF record order.
-
 `page_size` enables the bounded cursor response shape:
 
 ```json
@@ -104,49 +111,61 @@ Sort ties preserve DBF record order.
 }
 ```
 
-The page boundary is the one-based physical DBF record number after the returned page.
-The emitted physical cursor is an opaque versioned JSON string containing that record number and
-a table-representation snapshot tag. The next request sends that token with the same `page_size`
-and resumes after that record only if the table representation is unchanged.
-When `sort` is present, the cursor is a JSON string containing versioned sort keys, the snapshot
-tag, and the last physical record number used as a deterministic tie-breaker.
-The next request must repeat the same sort fields and directions.
-Sorted cursors are keyset boundaries, not offsets; `skip` cannot be combined with either cursor
-mode, and `page_size` is capped at 1,000.
-If a table changes after a cursor is issued, reusing it returns an invalid-query error rather than
-combining pages from different representations. This is a snapshot-consistency boundary, not
-historical MVCC: the old page is not retained for later readers.
-Legacy numeric physical cursors and version-1 sorted cursors remain accepted without a snapshot
-tag for compatibility.
+The physical page boundary is the one-based DBF record number after the returned page.
 
-Physical cursor pages scan active records in physical order and stop after one extra matching
-record proves that another page exists.
-They deliberately bypass index candidate ordering, and `explain_query_at` reports a table scan
-for this mode.
+The emitted physical cursor is an opaque versioned JSON string containing that number and a table-representation snapshot tag.
+
+The next request sends the token with the same `page_size` and resumes after that record only when the table representation is unchanged.
+
+When `sort` is present, the cursor contains versioned sort keys, the snapshot tag, and the last physical record number as a deterministic tie-breaker.
+
+The next request must repeat the same sort fields and directions.
+
+Sorted cursors are keyset boundaries, not offsets.
+
+`skip` cannot be combined with either cursor mode, and `page_size` is capped at 1,000.
+
+Reusing a cursor after a table change returns an invalid-query error instead of combining pages from different representations.
+
+This is a snapshot-consistency boundary, not historical MVCC.
+
+The old page is not retained for later readers.
+
+Legacy numeric physical cursors and version-1 sorted cursors remain accepted without a snapshot tag for compatibility.
+
+Physical cursor pages scan active records in physical order and stop after one extra matching record proves that another page exists.
+
+They bypass index candidate ordering, and `explain_query_at` reports a table scan for this mode.
+
 This keeps the page result bounded.
 
-Sorted cursor pages use the existing sort comparison and materialize the matching record
-references before selecting the page.
+Sorted cursor pages use the existing sort comparison and materialize matching record references before selecting the page.
+
 They provide a resumable result boundary but do not claim streaming or backpressure behavior.
 
-The library also exposes `query::stream_query` for a borrowed, pull-based iterator over active
-records.
-It applies `filter`, `projection`, `skip`, and `limit` as records are consumed, so it does not
-materialize the matching record set.
-It rejects `sort`, `aggregate`, `page_size`, and `cursor` because those controls require a
-blocking or resumable result boundary.
+The library exposes `query::stream_query` as a borrowed, pull-based iterator over active records.
+
+It applies `filter`, `projection`, `skip`, and `limit` as records are consumed, so it does not materialize the matching record set.
+
+It rejects `sort`, `aggregate`, `page_size`, and `cursor` because those controls require a blocking or resumable result boundary.
+
 The iterator does not provide a long-lived snapshot or an asynchronous backpressure protocol.
-`query::stream_query_snapshot` is the stable-snapshot variant: it clones the loaded table before
-iteration, so later mutations of the source table do not change its records.
-`query::stream_query_bounded` runs the same owned snapshot iterator on a producer thread and
-delivers items through a bounded standard-library channel. The producer blocks while the channel
-is full, and dropping the consumer cancels production. It remains an in-process pull consumer;
-runtime-specific async traits and HTTP chunked streaming are separate future boundaries.
+
+`query::stream_query_snapshot` is the stable-snapshot variant.
+
+It clones the loaded table before iteration, so later mutations of the source table do not change its records.
+
+`query::stream_query_bounded` runs the owned snapshot iterator on a producer thread and delivers items through a bounded standard-library channel.
+
+The producer blocks while the channel is full, and dropping the consumer cancels production.
+
+It remains an in-process pull consumer.
+
+Runtime-specific async traits and HTTP chunked streaming are separate future boundaries.
 
 ## 2. Bounded aggregation
 
-The query document can contain one terminal `$count` or `$distinct` stage, or one blocking `$group` stage after
-`filter` and zero or more preceding `$match` stages:
+The query document can contain one terminal `$count` or `$distinct` stage, or one blocking `$group` stage after `filter` and zero or more preceding `$match` stages:
 
 ```json
 {
@@ -163,53 +182,79 @@ The query document can contain one terminal `$count` or `$distinct` stage, or on
 }
 ```
 
-The current aggregation boundary accepts zero or more `$match` stages followed by either one
-terminal `$count` stage, one terminal `$distinct` stage, or one `$group` stage. Group output may have one optional `$project` stage,
-at most one final `$sort` stage, and at most one final `$limit` stage.
+The current aggregation boundary accepts zero or more `$match` stages followed by one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
+
+Group output may have one optional `$project`, at most one final `$sort`, and at most one final `$limit` stage.
+
 `_id` is either `null` or one dotted field reference.
-The supported accumulators are `$count: {}`, `$sum: "$FIELD"`, `$min: "$FIELD"`, and
-`$max: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
-The filter runs before grouping, and the result is a JSON array of documents containing `_id`
-and the named accumulator fields.
 
-`$project` reuses the query projection rules to include or exclude group-output fields. It must
-appear after `$group` and before `$sort` or `$limit`; inclusion and exclusion cannot be mixed.
-The projection is applied before the following `$sort`, so sorting a projected-away field yields
-the existing missing-value ordering.
+Supported accumulators are `$count: {}`, `$sum: "$FIELD"`, `$min: "$FIELD"`, and `$max: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
 
-A missing group field becomes `null`, so missing and explicit `null` values share a group.
+The filter runs before grouping.
+
+The result is a JSON array of documents containing `_id` and the named accumulator fields.
+
+`$project` reuses the query projection rules for group-output fields.
+
+It must appear after `$group` and before `$sort` or `$limit`.
+
+Inclusion and exclusion cannot be mixed.
+
+Projection runs before the following `$sort`, so sorting a projected-away field uses the existing missing-value ordering.
+
+A missing group field becomes `null`.
+
+Missing and explicit `null` values therefore share a group.
+
 Missing, `null`, and nonnumeric `$sum` inputs contribute zero.
-Fractional numbers are rejected because this slice preserves integer sums exactly.
-An integer sum that cannot be represented as a JSON signed or unsigned integer is rejected.
-Missing, `null`, and nonnumeric `$avg` inputs are ignored; an all-missing or all-nonnumeric group
-returns `null`, and a non-finite accumulated result is rejected.
-Missing and `null` `$min` / `$max` inputs are ignored; an all-missing or all-null group returns
-`null` for that accumulator.
-Non-null `$min` / `$max` values must be comparable under the existing JSON ordering rules.
-Incomparable values are rejected.
-The executor rejects more than 10,000 groups and rejects combining aggregation with top-level sort,
-projection, skip, limit, or cursor pagination.
-Without `$sort`, group output order is not part of the contract, although the current implementation
-emits a deterministic key order. `$sort` uses the existing JSON sort ordering and stable ties.
-`$limit` accepts a non-negative integer and truncates the materialized group result after sorting.
-`$match` stages use the same predicate rules as the top-level `filter` and must precede `$group`,
-`$count`, or `$distinct`.
-`$count` emits one document containing the named non-negative integer field, including zero when no
-records match. `$distinct` takes one field reference and emits the unique field values as a JSON array;
-missing fields and explicit `null` share one `null` value. Both stages are terminal and cannot be combined
-with group-output stages. Distinct output is capped at 10,000 values. Stages after `$limit`, additional
-grouping, count, or distinct stages, and expression operands remain unsupported.
 
-MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as
-`$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).
-Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
-is represented by this bounded txBASE stage, without claiming full MongoDB pipeline compatibility.
+Fractional numbers are rejected because this slice preserves integer sums exactly.
+
+An integer sum that cannot be represented as a JSON signed or unsigned integer is rejected.
+
+Missing, `null`, and nonnumeric `$avg` inputs are ignored.
+
+An all-missing or all-nonnumeric group returns `null`, and a non-finite accumulated result is rejected.
+
+Missing and `null` `$min` and `$max` inputs are ignored.
+
+An all-missing or all-null group returns `null` for that accumulator.
+
+Non-null `$min` and `$max` values must be comparable under the existing JSON ordering rules.
+
+Incomparable values are rejected.
+
+The executor rejects more than 10,000 groups and rejects aggregation combined with top-level sort, projection, skip, limit, or cursor pagination.
+
+Without `$sort`, group output order is not part of the contract, although the current implementation emits deterministic key order.
+
+`$sort` uses the existing JSON sort ordering and stable ties.
+
+`$limit` accepts a non-negative integer and truncates the materialized group result after sorting.
+
+`$match` stages use the same predicate rules as top-level `filter` and must precede `$group`, `$count`, or `$distinct`.
+
+`$count` emits one document containing the named non-negative integer field, including zero when no records match.
+
+`$distinct` takes one field reference and emits unique field values as a JSON array.
+
+Missing fields and explicit `null` share one `null` value.
+
+Both stages are terminal and cannot be combined with group-output stages.
+
+Distinct output is capped at 10,000 values.
+
+Stages after `$limit`, additional grouping, count, or distinct stages, and expression operands remain unsupported.
+
+MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as `$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).
+
+Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/) is represented by this bounded txBASE stage without claiming full MongoDB pipeline compatibility.
 
 ## 3. Bounded local join
 
 The library exposes one bounded local join through `txbase::query::join`.
-It accepts the relation shape from the roadmap and supports one or more equality conditions
-between two catalog tables:
+
+It accepts the relation shape from the roadmap and supports one or more equality conditions between two catalog tables:
 
 ```json
 {
@@ -235,37 +280,57 @@ between two catalog tables:
 }
 ```
 
-`join.parse` validates this JSON and `join::execute` loads the named tables from a `Catalog`.
+`join.parse` validates this JSON, and `join::execute` loads named tables from a `Catalog`.
+
 The current join types are `inner`, `left`, `right`, `semi`, `anti`, and `cross`.
-The result is a flat JSON object whose keys are qualified as `table.field`.
+
+The result is a flat JSON object whose keys use the `table.field` form.
+
 An unmatched left row is retained without right-table fields.
+
 An unmatched right row is retained without left-table fields for a `right` join.
-`semi` emits one left row when at least one right row matches, while `anti` emits one left row
-when no right row matches; neither type emits right-table fields.
-`cross` accepts an empty `on` object and emits every left/right pair.
+
+`semi` emits one left row when at least one right row matches.
+
+`anti` emits one left row when no right row matches.
+
+Neither type emits right-table fields.
+
+`cross` accepts an empty `on` object and emits every left and right pair.
+
 Its candidate pair count is capped at 100,000 before filtering.
+
 Missing and explicit `null` join keys do not match.
 
-The implementation builds one in-memory equality map for the right table, or the left table for a
-`right` join, and rejects a result larger than 100,000 rows.
-For multiple joins, the required `join` object is the first stage and an optional `joins` array
-adds stages from left to right.
-Each additional stage may reference any table already present in the intermediate row and adds
-one new table; table names cannot repeat, and the total stage count is capped at eight.
-Every intermediate result is capped at 100,000 rows.
-This is a bounded nested execution boundary, not a cost-based planner or a streaming executor.
-The single-table HTTP server does not expose joins. The catalog server exposes the same
-read-only boundary at `QUERY /join`; cross-table writes and transactions remain outside this
-surface.
-The join accepts the existing filter and projection rules, but not sort, pagination, aggregation,
-self-join aliases, or cross-table transactions.
+The implementation builds one in-memory equality map for the right table, or the left table for a `right` join.
 
-MongoDB's [`$lookup` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/)
-is the reference vocabulary.
-MongoDB describes `$lookup` as a left outer join that adds matching foreign documents as an array,
-while txBASE currently emits flat relational rows to match the attached join plan.
-The MongoDB documentation also calls out the performance cost of an unindexed foreign-side join,
-which is why this first slice has a hard result bound and no claim of planner-level performance.
+It rejects a result larger than 100,000 rows.
+
+For multiple joins, the required `join` object is the first stage and an optional `joins` array adds stages from left to right.
+
+Each additional stage may reference any table already present in the intermediate row and adds one new table.
+
+Table names cannot repeat, and the total stage count is capped at eight.
+
+Every intermediate result is capped at 100,000 rows.
+
+This is a bounded nested execution boundary, not a cost-based planner or a streaming executor.
+
+The single-table HTTP server does not expose joins.
+
+The catalog server exposes the same read-only boundary at `QUERY /join`.
+
+Cross-table writes and transactions remain outside this surface.
+
+The join accepts the existing filter and projection rules, but not sort, pagination, aggregation, self-join aliases, or cross-table transactions.
+
+MongoDB's [`$lookup` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/) is reference vocabulary.
+
+MongoDB describes `$lookup` as a left outer join that adds matching foreign documents as an array, while txBASE emits flat relational rows to match the attached join plan.
+
+The MongoDB documentation also calls out the performance cost of an unindexed foreign-side join.
+
+That is why this first slice has a hard result bound and makes no planner-level performance claim.
 
 ## 4. Current predicate vocabulary
 
@@ -286,9 +351,9 @@ When a field contains an array, a predicate can match when an array element sati
 
 These choices are tested in `src/query/tests.rs` and `src/query/malformed_tests.rs`.
 
-They are txBASE behavior and should not be described as MongoDB compatibility.
+They are txBASE behavior and must not be described as MongoDB compatibility.
 
-## 4. Paths, arrays, and projection
+## 5. Paths, arrays, and projection
 
 Dotted paths traverse nested JSON objects and arrays.
 
@@ -302,172 +367,19 @@ Projection validates its shape before applying selected fields.
 
 The current implementation does not promise every MongoDB projection rule, positional projection, `$elemMatch` projection, or aggregation expression.
 
-## 5. What MongoDB specifies
-
-The [MongoDB query predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/) groups predicates into comparison, logical, array, element, evaluation, bitwise, geospatial, and miscellaneous families.
-
-The current txBASE subset intentionally stops at comparison, membership, logical, and bounded field-expression predicates.
-
-MongoDB's [find command](https://www.mongodb.com/docs/manual/reference/command/find/) separates a filter from projection, sort, skip, limit, hint, and related cursor controls.
-
-That separation is useful for txBASE because query validation, result shaping, and planner access paths can evolve independently.
-
-MongoDB's find command returns an initial batch and a cursor identifier, while Firestore's
-[query cursor guidance](https://firebase.google.com/docs/firestore/query-data/query-cursors)
-uses the last document in one batch as the start point for the next batch.
-txBASE adopts that boundary idea for physical and sorted pages;
-it does not claim server-side cursor lifetime or snapshot isolation.
-
-MongoDB's [comparison predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/) documents operators such as `$eq`, `$gt`, `$gte`, `$lt`, `$lte`, `$ne`, `$in`, and `$nin`.
-
-MongoDB's [BSON comparison order](https://www.mongodb.com/docs/manual/reference/bson-type-comparison-order/) and the [`$gt` type-bracketing rules](https://www.mongodb.com/docs/manual/reference/operator/query/gt/) are important boundaries.
-
-MongoDB compares BSON values with BSON-specific type and array rules, while txBASE compares decoded JSON values with its own explicit scalar rules.
-
-The shared operator names therefore do not imply shared results for mixed types, missing fields, arrays, or documents.
-
-MongoDB's [logical predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/) documents `$and`, `$or`, `$nor`, and `$not`.
-
-MongoDB's [`$expr` predicate](https://www.mongodb.com/docs/manual/reference/operator/query/expr/) allows expressions inside a query predicate, including comparisons between two fields from the same document.
-
-txBASE implements a bounded expression tree: comparison leaves such as
-`{"$gt":["$LEFT","$RIGHT"]}` may be composed with `$and`, `$or`, and `$not`.
-Each comparison still has exactly two scalar or field-reference operands.
-
-A string operand beginning with `$` is a dotted field reference; all other scalar operands are literals.
-
-If either field reference is missing, the expression does not match.
-
-The expression path uses the table scan because a field-to-field comparison is not a constant-bound index lookup.
-Arithmetic, regular-expression, array, and document expressions remain unsupported.
-
-MongoDB's [array predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/) covers operators such as `$all`, `$elemMatch`, and `$size` that txBASE does not currently implement.
-
-MongoDB also has a broad [miscellaneous predicate family](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/misc/) including regular expressions and expression evaluation.
-
-Those operators need explicit encoding, resource, and error contracts before they belong in a file-native DBF query engine.
-
-## 6. Indexes and selectivity
-
-The [MongoDB query optimization guide](https://www.mongodb.com/docs/manual/core/query-optimization/) explains why predicate selectivity and index key order affect the amount of data examined.
-
-It also warns that low-selectivity operators such as `$ne` and `$nin` often do not benefit from an index in the same way as selective equality predicates.
-
-txBASE keeps the record scan as the query executor reference path.
-
-The path-aware query entry point now attempts external scalar-key equality, range, or ordered traversal before applying the same filter, sort, projection, skip, and limit pipeline.
-
-The planner reports `TableScan`, `EqualityIndex`, `RangeIndex`, `OrderedIndex`, `OrderedIndexPrefix`, or `CompoundOrderedIndex` through `explain_query_at`.
-
-The single-table HTTP server exposes the same explanation as `QUERY /explain`; its response is
-`{"plan": {"kind": "table_scan"}}` or a tagged index-plan object with the selected name,
-fields, and directions. The explanation is descriptive and does not promise a speedup.
-
-Missing, stale, malformed, and semantically unsupported sidecars fall back to `TableScan` because the sidecar is an optional acceleration structure.
-
-Connecting an index to query execution is therefore not just a parser change.
-
-It needs a key encoding, null and missing-field rules, duplicate ordering, update maintenance, recovery records, stale-index detection, and a planner policy.
-
-The current planner considers direct top-level equality, single-bound-per-side range predicates, single-field ordered traversal, and compound sort requests whose fields match an index suffix after an exact equality prefix.
-
-Multiple valid single-field equality indexes may be intersected by record number before the normal filter pipeline.
-
-The planner uses the sidecar's active-record count and each single-field index's distinct-key count to estimate equality cardinality before loading candidate lists.
-
-It processes the exact candidate lists in estimated-selectivity order, which limits repeated membership checks when predicates have different expected cardinalities.
-
-The equality estimate assumes a uniform distribution.
-
-Single-field range indexes use a persisted equi-depth histogram and sum the record counts of overlapping buckets.
-
-These are local selectivity estimates, not a full cost model or MongoDB planner compatibility.
-
-For a multi-key sort, a single-field index provides the first-key order and the remaining keys are sorted in memory within each equal first-key group.
-
-An ascending or mixed-direction compound index provides the complete order when the requested sort fields match its indexed fields after any exact equality prefix.
-
-The planner accepts the index order or its complete reverse, so compatible mixed-direction requests can avoid an in-memory sort as well.
-
-When equality, range, and ordered access paths coexist, the planner compares their exact candidate
-counts and prefers the smallest candidate set. Compound definitions still use their shortest
-definition and stable name tie-breakers when their candidate counts are equal.
-
-This local candidate-count choice is not a full cost model because it does not estimate index I/O, memory, cache state, collation, or range selectivity for compound keys.
-
-MongoDB's current guidance recommends a compound index for queries that repeatedly search multiple fields.
-
-The txBASE intersection is a local candidate-reduction feature and does not claim MongoDB planner compatibility or replace a future compound-index contract.
-
-MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a future compound-index planner must define index field order instead of treating every index as an interchangeable lookup table.
-
-txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, and per-field direction metadata for compound definitions, but no full cost model.
-
-The equality intersection is a bounded candidate prefilter, not a covered query or a claim of end-to-end speedup.
-
-The roadmap keeps index design separate from the query syntax so a query document does not imply an implementation strategy.
-
-## 7. Mutation operators
-
-`PATCH` accepts either a plain field object or a typed update document.
-
-The current typed subset is:
-
-```json
-{
-  "$set": {"NAME": "Caroline"},
-  "$unset": {"TEMP": true},
-  "$inc": {"COUNT": 1}
-}
-```
-
-An update document cannot mix operators with plain fields.
-
-A field cannot be modified more than once in one update document.
-
-Unknown fields and writes to auto-increment fields are rejected.
-
-MongoDB has a much larger [update operator reference](https://www.mongodb.com/docs/manual/reference/mql/update/) including array and arithmetic operators.
-
-txBASE rejects unsupported operators instead of silently treating them as field names.
-
-## 8. Not a MongoDB wire protocol
-
-txBASE does not implement BSON, the MongoDB wire protocol, JavaScript expressions, MongoDB collation, aggregation pipelines, MongoDB indexes, or the complete update operator set.
-
-The JSON syntax is a deliberately small local API.
-
-The [MongoDB atomicity and transactions guide](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/) is useful for separating single-record mutation from future multi-record transaction guarantees.
-
-No multi-record atomicity should be inferred from `$inc` or from the current HTTP `PATCH` route.
-
-## 9. Next query work
-
-The roadmap may later cover the following in separate contracts:
-
-1. Full expression evaluation and cost-based index choice with explicit missing, null, collation, and compound-range rules.
-2. A catalog for multiple tables and schema metadata.
-3. Additional aggregation stages and joins with bounded memory behavior.
-4. Runtime-specific async traits and HTTP chunked streaming for long-lived streams.
-5. Differential tests against a small reference evaluator.
-
-Until those contracts exist, the record scan is the simpler and more honest execution model.
+## Related documents
+
+- [Query planning and external vocabulary](query-planning.md)
+- [Mutation model](mutation-model.md)
+- [Secondary-index sidecar](indexes.md)
+- [HTTP method semantics](http-semantics.md)
+- [Quality contract matrix](quality-matrix.md)
 
 ## Primary references
 
 - [MongoDB documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
-- [MongoDB comparison predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/)
-- [MongoDB logical predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)
-- [MongoDB `$expr` predicate](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)
-- [MongoDB array predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
-- [MongoDB query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
-- [MongoDB BSON comparison order](https://www.mongodb.com/docs/manual/reference/bson-type-comparison-order/)
-- [MongoDB `$gt` type bracketing](https://www.mongodb.com/docs/manual/reference/operator/query/gt/)
-- [MongoDB compound-index sort order](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
-- [MongoDB equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
-- [SQLite query planning](https://www.sqlite.org/queryplanner.html)
-- [MongoDB update operators](https://www.mongodb.com/docs/manual/reference/mql/update/)
-- [MongoDB atomicity and transactions](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/)
+- [MongoDB `$group` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
+- [MongoDB `$lookup` join stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/)

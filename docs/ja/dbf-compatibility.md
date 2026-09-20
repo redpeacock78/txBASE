@@ -1,0 +1,242 @@
+# DBF と dBASE の互換性
+
+この文書は、公開されているファイル形式と txBASE が現在実装するサブセットを分けて記述します。
+
+まず、読み取り可能で復旧可能な DBF アクセスを成立させます。
+
+完全な dBASE または Visual FoxPro 互換性を主張するものではありません。
+
+## 1. 物理 DBF 構造
+
+[dBASE Level 7 ファイル形式](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)は、ヘッダー、フィールド記述子、レコード、任意のファイル終端マーカーという構造を定義します。
+
+重要なヘッダー位置は次のとおりです。
+
+| オフセット | サイズ | 意味 |
+| ---: | ---: | --- |
+| `0` | 1 | ファイルバージョンと memo 関連フラグ |
+| `1..3` | 3 | 年、月、日のバイトによる最終更新日 |
+| `4..7` | 4 | リトルエンディアンのレコード数 |
+| `8..9` | 2 | リトルエンディアンのヘッダー長 |
+| `10..11` | 2 | リトルエンディアンのレコード長 |
+| `28` | 1 | 生成時 MDX フラグ |
+| `29` | 1 | 言語ドライバー識別子 |
+| `32..` | 可変 | フィールド記述子 |
+| 記述子末尾 | 1 | フィールド記述子終端 |
+
+従来の記述子は 32 バイトです。
+
+dBASE Level 7 の記述子は 48 バイトで、記述子終端の後に拡張プロパティを持てます。
+
+記述子は、フィールド名、型、バイトオフセット、幅、小数桁、型固有フラグを含みます。
+
+Level 7 の自動インクリメント記述子は、初期値と増分情報も含みます。
+
+レコード領域は宣言されたヘッダー長から始まります。
+
+各物理レコードは削除フラグバイトから始まるため、DBF のレコード幅にはそのバイトが含まれます。
+
+宣言されたレコード数とレコード長は提案ではなく境界です。
+
+読み手は、宣言された構造を越えて読み取る代わりに、切り詰められたヘッダー、記述子、レコードを拒否しなければなりません。
+
+## 2. memo とバイナリのサイドカー
+
+memo フィールドは DBF レコードにブロックポインターを保存し、ペイロードを兄弟 memo ファイルに保存します。
+
+dBASE 形式は DBT サイドカーを、Visual FoxPro は一般に FPT サイドカーを使います。
+
+txBASE がサポートする形式では、ブロック 0 がサイドカーヘッダーです。
+
+ポインターのバイト順とブロックヘッダーのバイト順は形式ごとに異なるため、実装はすべての memo ファイルを一つの汎用バイト列として扱いません。
+
+現在の書き込み経路は次のとおりです。
+
+| サイドカー | 現在の txBASE の動作 |
+| --- | --- |
+| dBASE III DBT | 形式の終端規則でテキストとバイナリブロックを追記し、`0x1a1a` バイナリ終端を予約する |
+| dBASE IV DBT | サイドカーヘッダーが宣言するブロックサイズでテキストとバイナリブロックを追記する |
+| Visual FoxPro FPT | FPT ブロックヘッダーを付けてテキストブロックと型 0 のバイナリブロックを追記する |
+
+[Visual FoxPro のテーブルファイル構造](https://techshelps.github.io/MSDN/FOXHELP/html/contable_file_structure_lp.dbfrp.htm)と[memo ファイル構造](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm)は FoxPro 固有の構造を文書化しています。
+
+## 3. txBASE のフィールド対応
+
+パーサーは宣言されたフィールド記述子を読み取り、サポートする値を JSON へ対応付けます。
+
+次の表は一般的な DBF 型ガイドではなく、互換性の境界です。
+
+| フィールドの分類 | 現在の動作 |
+| --- | --- |
+| 文字とテキスト | サポートする言語ドライバー対応でデコードし、表現できない文字の書き込みを拒否する |
+| 日付 | 有効なら JSON の日付文字列へ変換する |
+| 数値と論理 | 有効なら JSON の数値または真偽値へ変換する |
+| 整数と double | 固定幅表現で読み書きする |
+| Visual FoxPro `B`、幅 8 | double として扱う |
+| Visual FoxPro `Y` | `f64` の丸めを避けるため、四桁小数の固定小数点文字列として公開する |
+| Visual FoxPro `T` | ユリウス日とミリ秒の組から、秒精度の ISO-8601 文字列として公開する |
+| Visual FoxPro `V` と `Q` | 可変長テキストまたはバイナリ値は固定レコードスロットと `_NullFlags` 規則を使い、`Q` は小文字の 16 進数にする |
+| Visual FoxPro `W` | FPT バイナリブロックを小文字の 16 進数として公開する |
+| `M` | DBT または FPT のテキスト、またはバイナリフラグ時の小文字の 16 進数 |
+| `B`、`G`、`P` | バイナリサイドカーのペイロードを小文字の 16 進数として公開し、Visual FoxPro の `P` は画像ブロックとして扱う |
+| Level 7 `+` と FoxPro `0x31` | insert で省略された値を記述子から割り当て、既存値は読み取り専用とする |
+
+Visual FoxPro の nullable テーブルは内部で `_NullFlags` を使います。
+
+このフィールドは JSON 文書から隠し、影響を受ける insert または更新に対してだけ再生成します。
+
+[Visual FoxPro の可変長フィールドの説明](https://vfphelp.com/help/html/465e7a94-51b7-4e0c-98f9-432864fe5bcc.htm)を `V` と `Q` のスロット規則の参照にします。
+
+## 4. エンコーディングと CJK の境界
+
+言語ドライバーのバイトは、文字バイトをどう解釈するかを宣言します。
+
+txBASE は `src/dbf/codepages.rs` が実装するコードページを現在サポートします。
+
+これには、サポートするドライバー ID が使う CP437、CP850、CP852、CP866、Windows-1250、Windows-1251、Windows-1252、Windows-1253、Windows-1254、Windows-1255、Windows-1256 の対応が含まれます。
+
+現在の CJK スライスは、[Visual FoxPro がサポートするコードページ](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)に記載された Visual FoxPro ドライバー ID もデコードおよびエンコードします。
+
+| ドライバー ID | 宣言されたプラットフォーム | 実効コーデック |
+| --- | --- | --- |
+| `0x7b` | 日本語 Windows | `encoding_rs::SHIFT_JIS` による Windows-31J/CP932 |
+| `0x7a` | 簡体字中国語 Windows | GBK/CP936 |
+| `0x79` | 韓国語 Windows | EUC-KR/CP949 |
+| `0x78` | 繁体字中国語 Windows | Big5/CP950 |
+
+`schema` 出力の `encoding` メンバーは、この四つのコーデックを識別します。
+
+`encoding_metadata` メンバーは `declared`、`effective`、`source` の値を公開し、読み手が同じ解釈を再現できるようにします。
+
+`source` は `language-driver`、`explicit-override`、`fallback` のいずれかです。
+
+サイドカーと呼び出し時のオーバーライドは、意図的に同じ `explicit-override` 値を使います。
+
+コーデックは壊れたバイト列を読み取り時に U+FFFD として扱います。
+
+DBF バイト列を変更する前に、書き込みで表現できない文字を拒否します。
+
+既存の固定フィールド幅検査はバイト幅検査のままです。
+
+そのため、マルチバイト値が収まらなければ切り詰めず拒否します。
+
+任意の `*.txschema.json` サイドカーの `encoding` プロパティは、四つの宣言済みコーデックまたは明示専用の `Shift_JIS`、`EUC-JP`、`GB18030`、`ISO-2022-JP` コーデックを選べます。
+
+利用できるラベルは `windows-31j`、`cp932`、`shift_jis`、`shift-jis`、`sjis`、`gbk`、`cp936`、`euc-kr`、`cp949`、`big5`、`cp950`、`euc-jp`、`gb18030`、`iso-2022-jp`、`iso2022-jp` です。
+
+正規化した選択値は `schema` 出力の `encoding_override` に表示されます。
+
+`encoding_metadata` の `effective` メンバーにも表示されます。
+
+このオーバーライドは文字のデコードとエンコードの前に適用し、DBF ヘッダーの言語ドライバーバイトは変更しません。
+
+パス対応の read、schema、verify、pack、recall、server コマンドは、同じ八つの明示コーデックに対する `--encoding NAME` も受け付けます。
+
+呼び出し時のオーバーライドはサイドカーのオーバーライドより優先し、DBF ヘッダーまたはメタデータサイドカーには書き込まず、スキーマ出力の実効 `encoding_override` として見えるままです。
+
+明示的な `Shift_JIS` オーバーライドは strict です。
+
+ASCII、半角カタカナ、JIS X 0208 文字を受け付け、CP932 拡張バイトは読み取り時に U+FFFD へ変換し、CP932 専用文字は書き込みで拒否します。
+
+DBF 言語ドライバーバイトは変更しません。
+
+未知のドライバーは既存の UTF-8 または lossy フォールバック動作を保ちます。
+
+選択したコードページで表現できない文字は書き込みで拒否します。
+
+DBF フィールド幅はバイト幅です。
+
+そのため、将来の CJK 互換性層は次の項目を一緒に定義しなければなりません。
+
+1. 宣言ドライバーと明示的オーバーライド。
+2. デコードとエンコードに使うコーデック。
+3. 切り詰めと検証のバイト幅規則。
+4. クエリとソートに使う照合規則。
+5. 往復動作を証明するフィクスチャ。
+
+Shift_JIS と CP932 は交換可能なラベルではありません。
+
+同じ注意が EUC-JP、GBK、GB18030、Big5、韓国語エンコーディングにも当てはまります。
+
+現在のオーバーライドスライスは、四つの宣言ドライバーコーデックと strict Shift_JIS、EUC-JP、GB18030、ISO-2022-JP について、呼び出し時とサイドカーでの選択をカバーします。
+
+固定したバイトフィクスチャは四つの宣言済み CJK ドライバーをカバーし、マルチバイトのレコード値を往復します。
+
+クエリソートには有界な Unicode 小文字化モードがあります。
+
+ロケール対応 CJK 照合と、より広い上流外部フィクスチャは将来の作業です。
+
+## 5. 永続化と復旧
+
+memo ポインターとサイドカーのペイロードはクラッシュ後にも一致しなければならないため、DBF 互換性は更新境界と結び付きます。
+
+txBASE は WAL で次のレコードを使います。
+
+| レコード | 役割 |
+| --- | --- |
+| `TXOP` | 永続的な HTTP 更新意図 |
+| `TXTI` | 正の DBF WAL コミット ID |
+| `TXDP` | 完全置換より小さい場合のバイト範囲差分 |
+| `TXDB` | 完全な DBF スナップショット |
+| `TXDM` | 完全な DBF と memo のスナップショット |
+
+DBF または memo サイドカーを置き換える前に WAL を同期します。
+
+WAL 付き単一テーブルコミットは正のコミット ID を `TXTI` WAL レコードと `*.txbase.state` サイドカーに保存します。
+
+復旧は WAL をクリアする前にそのサイドカーを書き込みます。
+
+従来の DBF は、最初の WAL 付き保存でコミット ID 1 から始まります。
+
+起動時の復旧は、すでに適用された対象を受け付け、基底が一致しない差分を拒否し、状態ペイロードがない場合にサポート対象の `TXOP` を再実行します。
+
+パスからロードした古いテーブルは、ロード後に DBF、memo、スキーマ、トランザクション状態のバイト列が変わると拒否します。
+
+これは現在のプロトタイプの復旧可能性契約であり、複数 writer のレプリケーションプロトコルではありません。
+
+## 6. 保守コマンド
+
+CLI はローカルデータベースの最初の保守境界を公開します。
+
+| コマンド | 動作 |
+| --- | --- |
+| `txbase schema FILE` | 解析した DBF ヘッダーメタデータとフィールド記述子を JSON で表示する |
+| `txbase verify FILE` | DBF をロードし、検出した memo データを検証し、シリアライズ済み DBF を再解析してレコード境界を検査する |
+| `txbase pack FILE` | 論理削除したレコードを取り除き、残りの物理レコードを振り直し、既存 WAL で結果を永続化する |
+| `txbase recall FILE RECORD` | 既存 WAL で一つの論理削除レコードを復元する |
+| `txbase backup SOURCE DEST` | `SOURCE` を検証し、DBF、検出した `.dbt` または `.fpt`、スキーマ、有効な `.txidx` サイドカーをコピーする |
+| `txbase restore SOURCE DEST` | バックアップを `SOURCE` として同じ検証済みコピー手順を使う |
+
+コピー操作は、同期済みの一時ファイルを通して各宛先ファイルを置き換えます。
+
+DBF と memo のサイドカー置換はファイル操作の列であり、新しい複数ファイルトランザクションプロトコルではありません。
+
+そのためコピーが中断された場合は、宛先を使う前に `txbase verify DEST` を実行します。
+
+`PACK` は memo サイドカーを圧縮しません。
+
+既存のインデックスサイドカーは pack 済み DBF の保存後に更新しますが、memo ブロックはそのままです。
+
+したがって削除済み memo ブロックは、サイドカー固有の圧縮契約ができるまで再利用可能な孤立領域として残ることがあります。
+
+## 7. 意図的な制限
+
+現在の DBF 層は次を実装していません。
+
+- 本番規模のセカンダリインデックス保守、完全な選択性コストモデル、より広い複合インデックス計画。
+- OLE の意味論と任意の外部 memo 形式。
+- Visual FoxPro の式またはコマンドの完全な互換性。
+- 複数 writer の自動マージと再試行。
+- ロケール対応 CJK 照合と完全なロケール固有順序。
+
+これらを追加する前に、契約、外部フィクスチャ、失敗テスト、明確な所有境界が必要です。
+
+## 主な参照先
+
+- [dBASE Level 7 file format](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)
+- [Visual FoxPro table file structure](https://techshelps.github.io/MSDN/FOXHELP/html/contable_file_structure_lp.dbfrp.htm)
+- [Visual FoxPro field descriptors and variable-length fields](https://vfphelp.com/help/html/465e7a94-51b7-4e0c-98f9-432864fe5bcc.htm)
+- [Visual FoxPro memo file structure](https://vfphelp.com/help/html/74f53aef-fd56-4f1a-a413-4f045922db21.htm)
+- [Visual FoxPro auto-increment fields](https://www.vfphelp.com/vfp9/html/bd6eff0c-2ce5-43b7-ab29-f5360cd2f90e.htm)
+- [Visual FoxPro code pages](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)
+- [`encoding_rs` encoding and error behavior](https://docs.rs/encoding_rs/latest/encoding_rs/struct.Encoding.html)
