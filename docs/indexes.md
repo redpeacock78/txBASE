@@ -181,11 +181,13 @@ When the requested sort fields match a compound definition after an exact equali
 
 The planner compares the table scan and each valid equality, range, or compatible ordered path
 with a bounded integer cost. A table scan costs the active-record count plus remaining sort work.
-An index path costs its exact candidate count plus remaining sort work. An ordered path that
-supplies the complete requested order has no sort term. Equal costs preserve the existing
-candidate order, so the table scan wins an exact tie.
+An index path costs its exact candidate count plus a bounded logarithmic traversal term derived
+from the sidecar entry count, plus remaining sort work. An index intersection adds one traversal
+term per selected sidecar. An ordered path that supplies the complete requested order has no sort
+term. Equal costs preserve the existing candidate order, so the table scan wins an exact tie.
 
-This is a local cardinality-and-sort model, not a full I/O, memory, or cache cost model.
+This is a local cardinality, traversal, and sort model, not a full physical I/O, memory, or cache
+cost model.
 
 The planner now records the active-record count and derives each single-field index's distinct-key count from its entries.
 

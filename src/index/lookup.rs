@@ -58,6 +58,20 @@ impl IndexFile {
         Some(indexed_records.div_ceil(distinct_keys))
     }
 
+    pub(crate) fn index_traversal_cost(&self, name: &str) -> Option<usize> {
+        let index = self
+            .indexes
+            .iter()
+            .find(|index| index.definition.name == name)?;
+        let entry_count = index.entries.len();
+        // ponytail: normalize tiny sidecars to the base probe; page/cache terms need measurements.
+        Some(if entry_count <= 2 {
+            0
+        } else {
+            (entry_count - 1).ilog2() as usize
+        })
+    }
+
     pub(crate) fn range_selectivity_estimate(
         &self,
         field: &str,

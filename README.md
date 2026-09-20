@@ -233,7 +233,7 @@ The path-aware planner can intersect candidates from multiple valid single-field
 
 It uses the sidecar's active-record and distinct-key statistics as a uniform equality estimate and can order single-field range candidates with a bounded histogram estimate.
 
-When equality, range, and ordered candidates coexist, it compares table-scan and index work with a bounded integer cost based on active or exact candidate records and remaining sort work.
+When equality, range, and ordered candidates coexist, it compares table-scan and index work with a bounded integer cost based on active or exact candidate records, sidecar traversal, and remaining sort work.
 
 This is not a full I/O, memory, cache, collation, or compound-range cost model.
 

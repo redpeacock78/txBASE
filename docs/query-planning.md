@@ -106,7 +106,7 @@ Single-field range indexes use a persisted equi-depth histogram and sum record c
 
 These statistics feed a bounded integer cost estimate.
 
-The planner compares the active-record count for a table scan with the exact candidate count for an index path and adds estimated in-memory sort work when the path does not provide the complete requested order.
+The planner compares the active-record count for a table scan with the exact candidate count for an index path, adds a bounded logarithmic traversal term derived from the selected sidecar's entry count, and adds estimated in-memory sort work when the path does not provide the complete requested order.
 
 This is local planning logic, not MongoDB planner compatibility.
 
@@ -124,7 +124,9 @@ When equality, range, and ordered access paths coexist, the planner compares bou
 
 The table-scan estimate uses the active-record count.
 
-An index-path estimate uses its exact candidate count and adds sort work when the path leaves part of the requested order to the executor.
+An index-path estimate uses its exact candidate count, adds one bounded logarithmic traversal term per selected sidecar, and adds sort work when the path leaves part of the requested order to the executor.
+
+An index intersection sums one traversal term for each selected sidecar.
 
 An ordered path that supplies the complete requested order has no sort term.
 
@@ -132,7 +134,7 @@ Compound definitions use their shortest definition and stable name tie-breakers 
 
 An exact cost tie preserves the existing candidate order, so the table scan wins a tie with an index path.
 
-This bounded model does not estimate index I/O, memory, cache state, collation, or range selectivity for compound keys.
+This bounded model estimates in-memory index traversal but does not estimate physical index I/O, memory, cache state, collation, or range selectivity for compound keys.
 
 MongoDB's current guidance recommends a compound index for queries that repeatedly search multiple fields.
 
@@ -142,7 +144,7 @@ It does not claim MongoDB planner compatibility or replace a future compound-ind
 
 MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a future compound-index planner must define index field order.
 
-txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, per-field direction metadata for compound definitions, and a bounded cost estimate for scan and remaining sort work.
+txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, per-field direction metadata for compound definitions, and a bounded cost estimate for scan, index traversal, and remaining sort work.
 
 It does not have a full I/O-aware cost model.
 

@@ -120,6 +120,8 @@ DBF、memo、WAL、JSON 入力について決定的なコーパスを保ちま�
 
 `src/query/planner_tests.rs::orders_equality_intersection_by_index_statistics` は、一様な異なるキー数推定を検査し、統計順の結果をテーブルスキャンと比較します。
 
+`src/index_tests.rs::builds_and_loads_an_external_scalar_index` は、プランナーのコストに使うエントリ由来の走査推定を検査します。
+
 `src/query/planner_tests.rs::orders_multiple_range_access_by_histogram_estimate` は、ヒストグラム順の範囲アクセスを検査し、選択結果をテーブルスキャンと比較します。
 
 `src/query/planner_tests.rs::uses_an_ordered_index_prefix_for_multi_key_sort` は、最初のキーのインデックス走査、二次キーの同値ソート、テーブルスキャンとの同値を検査します。

@@ -298,7 +298,7 @@ crate分割はbuildまたはownershipの境界が必要になるまで行いま�
 
 secondary index sidecarの自動更新と単純なequality、uniform selectivity estimateによるequality intersection、histogram estimateによるsingle-field range planner、single-field ordered planner、multi-key sortのordered-prefix planner、fieldごとのdirectionを持つcompound indexによるmulti-key sort plannerを実装済みです。
 
-equality、range、ordered candidateが同時に有効な場合は、active record数または正確なcandidate数と残りのsort作業に基づく有界な整数コストでtable scanとindex経路を比較します。
+equality、range、ordered candidateが同時に有効な場合は、active record数または正確なcandidate数、サイドカーの走査、残りのsort作業に基づく有界な整数コストでtable scanとindex経路を比較します。
 
 これはI/O、memory、cache、collation、compound rangeを含む完全なcost modelではありません。
 一つのfieldに対する`primary`、`unique`、`not_null`のschema metadataも実装済みです。
