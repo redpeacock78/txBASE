@@ -40,6 +40,9 @@ mod schema_export_tests;
 mod schema_metadata;
 #[cfg(test)]
 mod schema_metadata_tests;
+
+#[cfg(test)]
+mod schema_encoding_tests;
 #[cfg(test)]
 mod tests;
 mod wal;

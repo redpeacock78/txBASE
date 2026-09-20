@@ -5,14 +5,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT_SCHEMA_ID: AtomicUsize = AtomicUsize::new(0);
 
-fn fixture() -> Vec<u8> {
+pub(super) fn fixture() -> Vec<u8> {
     include_str!("../../tests/fixtures/users.dbf.hex")
         .split_whitespace()
         .map(|token| u8::from_str_radix(token, 16).unwrap())
         .collect()
 }
 
-fn temporary_path() -> std::path::PathBuf {
+pub(super) fn temporary_path() -> std::path::PathBuf {
     let id = NEXT_SCHEMA_ID.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
         "txbase-schema-metadata-{}-{id}.dbf",
@@ -20,7 +20,7 @@ fn temporary_path() -> std::path::PathBuf {
     ))
 }
 
-fn cleanup(path: &Path) {
+pub(super) fn cleanup(path: &Path) {
     for extension in [
         "dbf",
         "txschema.json",
@@ -94,7 +94,7 @@ fn composite_primary_metadata() -> Vec<u8> {
     .unwrap()
 }
 
-fn encoding_metadata(name: &str) -> Vec<u8> {
+pub(super) fn encoding_metadata(name: &str) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({
         "format": "txbase-schema",
         "version": 1,
@@ -368,115 +368,6 @@ fn rejects_a_schema_sidecar_changed_after_load() {
             .to_string()
             .contains("schema metadata changed since the table was loaded")
     );
-
-    cleanup(&path);
-}
-
-#[test]
-fn applies_a_supported_encoding_override_to_reads_and_writes() {
-    let path = temporary_path();
-    cleanup(&path);
-    let mut bytes = fixture();
-    bytes[29] = 0x00;
-    fs::write(&path, bytes).unwrap();
-    fs::write(
-        path.with_extension("txschema.json"),
-        encoding_metadata("gbk"),
-    )
-    .unwrap();
-
-    let mut table = DbfTable::from_path(&path).unwrap();
-    assert_eq!(table.schema_json()["encoding_override"], "GBK/CP936");
-    assert_eq!(
-        table.schema_json()["encoding_metadata"]["source"],
-        "explicit-override"
-    );
-    table
-        .patch_record(
-            1,
-            serde_json::json!({"NAME": "中文"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )
-        .unwrap();
-    table.save_with_wal(&path).unwrap();
-
-    let reloaded = DbfTable::from_path(&path).unwrap();
-    assert_eq!(reloaded.active_record(1).unwrap().values["NAME"], "中文");
-
-    cleanup(&path);
-}
-
-#[test]
-fn applies_a_path_encoding_override_without_persisting_it() {
-    let path = temporary_path();
-    cleanup(&path);
-    let mut bytes = fixture();
-    bytes[29] = 0x00;
-    fs::write(&path, bytes).unwrap();
-    let schema_path = path.with_extension("txschema.json");
-    let schema_bytes = encoding_metadata("big5");
-    fs::write(&schema_path, &schema_bytes).unwrap();
-
-    let mut table = DbfTable::from_path_with_encoding(&path, Some("gbk")).unwrap();
-    assert_eq!(table.schema_json()["encoding_override"], "GBK/CP936");
-    assert_eq!(
-        table.schema_json()["encoding_metadata"]["source"],
-        "explicit-override"
-    );
-    assert_eq!(
-        table.schema_json()["schema_metadata"]["encoding"],
-        "Big5/CP950"
-    );
-    table
-        .patch_record(
-            1,
-            serde_json::json!({"NAME": "中文"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )
-        .unwrap();
-    table.save_with_wal(&path).unwrap();
-
-    assert_eq!(fs::read(&path).unwrap()[29], 0x00);
-    assert_eq!(fs::read(schema_path).unwrap(), schema_bytes);
-    let reloaded = DbfTable::from_path_with_encoding(&path, Some("GBK/CP936")).unwrap();
-    assert_eq!(reloaded.active_record(1).unwrap().values["NAME"], "中文");
-    cleanup(&path);
-}
-
-#[test]
-fn accepts_strict_shift_jis_as_an_explicit_override() {
-    let path = temporary_path();
-    cleanup(&path);
-    fs::write(&path, fixture()).unwrap();
-    fs::write(
-        path.with_extension("txschema.json"),
-        encoding_metadata("shift_jis"),
-    )
-    .unwrap();
-
-    let table = DbfTable::from_path(&path).unwrap();
-    assert_eq!(table.schema_json()["encoding_override"], "Shift_JIS");
-
-    cleanup(&path);
-}
-
-#[test]
-fn accepts_iso_2022_jp_as_an_explicit_override() {
-    let path = temporary_path();
-    cleanup(&path);
-    fs::write(&path, fixture()).unwrap();
-    fs::write(
-        path.with_extension("txschema.json"),
-        encoding_metadata("iso2022-jp"),
-    )
-    .unwrap();
-
-    let table = DbfTable::from_path(&path).unwrap();
-    assert_eq!(table.schema_json()["encoding_override"], "ISO-2022-JP");
 
     cleanup(&path);
 }
