@@ -122,7 +122,7 @@ DBF、memo、WAL、JSON 入力について決定的なコーパスを保ちま�
 
 `src/index_tests.rs::builds_and_loads_an_external_scalar_index` は、プランナーのコストに使うエントリ由来の走査推定を検査します。
 
-`src/query/planner_tests.rs::orders_multiple_range_access_by_histogram_estimate` は、ヒストグラム順の範囲アクセスを検査し、選択結果をテーブルスキャンと比較します。
+`src/query/planner_tests.rs::chooses_the_lowest_cost_range_candidate` は、ヒストグラム順の候補構築、正確な範囲候補コストの選択、テーブルスキャンとの同値を検査します。
 
 `src/query/planner_compound_tests.rs::uses_a_compound_range_after_an_equality_prefix` は、正確な複合等値プレフィックス後の範囲候補を検査し、選択結果をテーブルスキャンと比較します。
 

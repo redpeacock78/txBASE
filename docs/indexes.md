@@ -201,7 +201,7 @@ It estimates an equality candidate count by assuming a uniform distribution, ord
 
 The equality estimate is a local statistic and one input to the bounded cost model.
 
-For multiple range predicates, the planner sums the record counts of overlapping histogram buckets and tries the smallest estimate first.
+For multiple range predicates, the planner uses overlapping histogram buckets to order candidate construction, then selects the lowest bounded cost from the exact range candidates.
 
 An overlapped bucket is counted in full, so the estimate is intentionally coarse; exact range candidates still determine the returned records.
 

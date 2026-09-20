@@ -59,7 +59,7 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
     if let Some(access) = choose_equality(&index_file, request) {
         candidates.push(access);
     }
-    if let Some(access) = choose_range(&index_file, request) {
+    if let Some(access) = choose_range(&index_file, request, active_record_count) {
         candidates.push(access);
     }
     if let Some(access) = choose_ordered(&index_file, request) {
@@ -178,13 +178,17 @@ fn choose_equality(index_file: &IndexFile, request: &QueryRequest) -> Option<Pla
     })
 }
 
-fn choose_range(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {
+fn choose_range(
+    index_file: &IndexFile,
+    request: &QueryRequest,
+    active_record_count: usize,
+) -> Option<PlannedAccess> {
     let mut range_fields = request
         .filter
         .iter()
         .filter_map(|(field, condition)| range_bounds(condition).map(|_| field.clone()))
         .collect::<Vec<_>>();
-    // ponytail: bucket-overlap estimate; keep exact range candidates as the correctness path.
+    // ponytail: histogram estimates order candidate construction; exact candidates choose the path.
     range_fields.sort_by_key(|field| {
         let condition = request.filter.get(field).expect("range field exists");
         let (lower, upper) = range_bounds(condition).expect("range field has bounds");
@@ -192,6 +196,7 @@ fn choose_range(index_file: &IndexFile, request: &QueryRequest) -> Option<Planne
             .range_selectivity_estimate(field, lower, upper)
             .unwrap_or(usize::MAX)
     });
+    let mut candidates = Vec::new();
     for field in range_fields {
         let Some(condition) = request.filter.get(&field) else {
             continue;
@@ -202,23 +207,23 @@ fn choose_range(index_file: &IndexFile, request: &QueryRequest) -> Option<Planne
         if let Ok(Some((name, records))) =
             index_file.lookup_compound_range_for_field(&field, lower, upper, &request.filter)
         {
-            return Some(PlannedAccess {
+            candidates.push(PlannedAccess {
                 plan: QueryPlan::RangeIndex { name, field },
                 records: Some(records),
                 ordered_prefix: 0,
             });
         }
-        let Ok(Some((name, records))) = index_file.lookup_range_for_field(&field, lower, upper)
-        else {
-            continue;
-        };
-        return Some(PlannedAccess {
-            plan: QueryPlan::RangeIndex { name, field },
-            records: Some(records),
-            ordered_prefix: 0,
-        });
+        if let Ok(Some((name, records))) = index_file.lookup_range_for_field(&field, lower, upper) {
+            candidates.push(PlannedAccess {
+                plan: QueryPlan::RangeIndex { name, field },
+                records: Some(records),
+                ordered_prefix: 0,
+            });
+        }
     }
-    None
+    candidates
+        .into_iter()
+        .min_by_key(|access| estimated_cost(access, index_file, active_record_count, request))
 }
 
 fn choose_ordered(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {

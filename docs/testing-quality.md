@@ -121,7 +121,7 @@ A delta with the wrong base must be rejected.
 
 `src/index_tests.rs::builds_and_loads_an_external_scalar_index` covers the entry-derived traversal estimate used by planner costs.
 
-`src/query/planner_tests.rs::orders_multiple_range_access_by_histogram_estimate` covers histogram-ordered range access and compares the selected result with the table scan.
+`src/query/planner_tests.rs::chooses_the_lowest_cost_range_candidate` covers histogram-ordered candidate construction, exact range-candidate cost choice, and equivalence with the table scan.
 
 `src/query/planner_compound_tests.rs::uses_a_compound_range_after_an_equality_prefix` covers range candidates after an exact compound equality prefix and compares the selected result with the table scan.
 

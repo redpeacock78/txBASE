@@ -197,7 +197,7 @@ fn orders_equality_intersection_by_index_statistics() {
 }
 
 #[test]
-fn orders_multiple_range_access_by_histogram_estimate() {
+fn chooses_the_lowest_cost_range_candidate() {
     let path = std::env::temp_dir().join(format!(
         "txbase-query-planner-range-statistics-{}.dbf",
         std::process::id()
@@ -216,12 +216,12 @@ fn orders_multiple_range_access_by_histogram_estimate() {
         .collect::<Vec<_>>();
     bytes[179] = b' ';
     let mut table = DbfTable::from_bytes(&bytes).unwrap();
-    for (id, name, age) in [(3, "Carol", 42), (4, "Dave", 43)] {
+    for age in 0..32 {
         table
             .insert_record(
                 serde_json::json!({
-                    "ID": id,
-                    "NAME": name,
+                    "ID": age + 3,
+                    "NAME": format!("N{age:02}"),
                     "AGE": age,
                     "ACTIVE": true
                 })
@@ -243,7 +243,8 @@ fn orders_multiple_range_access_by_histogram_estimate() {
     .save(&path)
     .unwrap();
 
-    let request = parse(br#"{"filter":{"AGE":{"$gte":0},"NAME":{"$gte":"C"}}}"#).unwrap();
+    let request =
+        parse(br#"{"filter":{"AGE":{"$gt":1,"$lt":5},"NAME":{"$gt":"N02","$lt":"N05"}}}"#).unwrap();
     assert_eq!(
         explain_query_at(&path, &request).unwrap(),
         QueryPlan::RangeIndex {
