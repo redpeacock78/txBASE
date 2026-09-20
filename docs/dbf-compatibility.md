@@ -159,9 +159,9 @@ its declared Windows-1251 driver, including Cyrillic field values and a persiste
 
 The current override slice covers both explicit invocation and sidecar selection for the four
 declared-driver codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP.
-Pinned DBF fixtures cover the four declared CJK drivers and round-trip their multibyte record
-values. Pinned explicit-codec byte fixtures cover DBF record decoding and write round-trips for
-all eight supported explicit codec names. Query sorting has a bounded Unicode-lowercase mode; locale-aware
+Pinned DBF fixtures cover the four Visual FoxPro CJK driver IDs and the legacy dBASE `0x4d` driver
+ID, and round-trip their multibyte record values. Pinned explicit-codec byte fixtures cover DBF
+record decoding and write round-trips for all eight supported explicit codec names. Query sorting has a bounded Unicode-lowercase mode; locale-aware
 CJK collation and additional broader upstream CJK fixtures remain future work.
 
 An upstream JavaDBF GBK fixture also covers three GBK-encoded CJK field names and 28 real records,

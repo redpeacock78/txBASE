@@ -209,10 +209,12 @@ full index-awareまたはcost-based merge join planning、full cost-based planne
 backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt`、`.txschema.json`、`.txbase.state`、有効な`.txidx` sidecarもコピーします。
 sourceのindexがstaleまたは壊れている場合は拒否し、sourceにindexがなければdestinationの古いindexを削除します。
 
-DBF codecはVisual FoxProのCJK driver IDであるWindows-31J/CP932、GBK/CP936、EUC-KR/CP949、Big5/CP950に対応します。
+DBF codecはVisual FoxProのCJK driver IDであるWindows-31J/CP932、GBK/CP936、EUC-KR/CP949、Big5/CP950に加えて、legacy dBASEの`0x4d` CP936 driver IDにも対応します。
 `euc-jp`、`gb18030`、`iso-2022-jp`はlanguage-driver IDを追加せず、explicit overrideとして使えます。
 malformed readはU+FFFDにし、unmappableまたはbyte width超過のwriteは拒否します。
 strictな`Shift_JIS` overrideはASCII、半角カナ、JIS X 0208を受け付け、CP932拡張はreadでU+FFFD、writeで拒否します。
+
+固定DBFフィクスチャは四つのVisual FoxPro CJK driver IDとlegacy dBASEの`0x4d` driver IDをカバーし、マルチバイトのレコード値を往復します。
 
 optionalな`users.txschema.json` sidecarは、legacy DBF byteを変更せずに一つのfieldへ`primary`、`unique`、`not_null`を設定し、boundedなcomposite `primary`と`unique`も定義できます。
 同じsidecarで対応済みのCJK codecを明示的に選択できます。
