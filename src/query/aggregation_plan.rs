@@ -34,6 +34,8 @@ pub(super) enum AccumulatorKind {
     Sum(String),
     Min(String),
     Max(String),
+    First(String),
+    Last(String),
 }
 
 pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
@@ -320,7 +322,7 @@ fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
                 })?,
                 &format!("$group.{name}.$sum"),
             )?),
-            "$min" | "$max" => {
+            "$min" | "$max" | "$first" | "$last" => {
                 let field = field_reference(
                     operand.as_str().ok_or_else(|| {
                         QueryError::Invalid(format!(
@@ -329,10 +331,12 @@ fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
                     })?,
                     &format!("$group.{name}.{operator}"),
                 )?;
-                if operator == "$min" {
-                    AccumulatorKind::Min(field)
-                } else {
-                    AccumulatorKind::Max(field)
+                match operator.as_str() {
+                    "$min" => AccumulatorKind::Min(field),
+                    "$max" => AccumulatorKind::Max(field),
+                    "$first" => AccumulatorKind::First(field),
+                    "$last" => AccumulatorKind::Last(field),
+                    _ => unreachable!("matched accumulator operator"),
                 }
             }
             _ => {

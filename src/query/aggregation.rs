@@ -24,6 +24,8 @@ enum AccumulatorState {
     },
     Min(Option<Value>),
     Max(Option<Value>),
+    First(Option<Value>),
+    Last(Option<Value>),
 }
 
 #[derive(Debug)]
@@ -175,6 +177,20 @@ pub(super) fn execute(
                 (AccumulatorState::Max(current), aggregation_plan::AccumulatorKind::Max(field)) => {
                     update_extreme(current, record, field, false)?;
                 }
+                (
+                    AccumulatorState::First(current),
+                    aggregation_plan::AccumulatorKind::First(field),
+                ) => {
+                    if current.is_none() {
+                        *current = Some(field_value(&record.values, field).unwrap_or(Value::Null));
+                    }
+                }
+                (
+                    AccumulatorState::Last(current),
+                    aggregation_plan::AccumulatorKind::Last(field),
+                ) => {
+                    *current = Some(field_value(&record.values, field).unwrap_or(Value::Null));
+                }
                 _ => unreachable!("validated accumulator state and specification differ"),
             }
         }
@@ -230,6 +246,8 @@ fn new_group(key: Value, spec: &aggregation_plan::GroupSpec) -> GroupState {
                 },
                 aggregation_plan::AccumulatorKind::Min(_) => AccumulatorState::Min(None),
                 aggregation_plan::AccumulatorKind::Max(_) => AccumulatorState::Max(None),
+                aggregation_plan::AccumulatorKind::First(_) => AccumulatorState::First(None),
+                aggregation_plan::AccumulatorKind::Last(_) => AccumulatorState::Last(None),
             })
             .collect(),
     }
@@ -270,9 +288,10 @@ fn finish_group(
                     })?,
                 None => Value::Number(number_from_i128(integer, &accumulator.name)?),
             },
-            AccumulatorState::Min(value) | AccumulatorState::Max(value) => {
-                value.unwrap_or(Value::Null)
-            }
+            AccumulatorState::Min(value)
+            | AccumulatorState::Max(value)
+            | AccumulatorState::First(value)
+            | AccumulatorState::Last(value) => value.unwrap_or(Value::Null),
         };
         output.insert(accumulator.name.clone(), value);
     }

@@ -212,7 +212,7 @@ Group output may have zero or more `$match` stages, followed by one optional `$p
 
 `_id` is either `null` or one dotted field reference.
 
-Supported accumulators are `$count: {}`, numeric `$sum: "$FIELD"`, `$min: "$FIELD"`, and `$max: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
+Supported accumulators are `$count: {}`, numeric `$sum: "$FIELD"`, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, and `$last: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
 
 The filter runs before grouping.
 
@@ -249,6 +249,10 @@ An all-missing or all-null group returns `null` for that accumulator.
 Non-null `$min` and `$max` values must be comparable under the existing JSON ordering rules.
 
 Incomparable values are rejected.
+
+`$first` and `$last` use input physical record order within each group.
+
+They return the first or last field value, including explicit `null`; a missing field is returned as `null`.
 
 The executor rejects more than 10,000 groups and rejects aggregation combined with top-level sort, projection, skip, limit, or cursor pagination.
 

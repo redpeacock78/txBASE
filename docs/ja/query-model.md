@@ -212,7 +212,7 @@ catalog server は `QUERY /{table}/records/stream` を公開します。
 
 `_id` は `null` または一つのドット区切りフィールド参照です。
 
-サポートするアキュムレータは `$count: {}`、数値の `$sum: "$FIELD"`、`$min: "$FIELD"`、`$max: "$FIELD"`、および有限な JSON 数値に対する `$avg: "$FIELD"` です。
+サポートするアキュムレータは `$count: {}`、数値の `$sum: "$FIELD"`、`$min: "$FIELD"`、`$max: "$FIELD"`、`$first: "$FIELD"`、`$last: "$FIELD"`、および有限な JSON 数値に対する `$avg: "$FIELD"` です。
 
 フィルターはグループ化より前に実行します。
 
@@ -249,6 +249,10 @@ catalog server は `QUERY /{table}/records/stream` を公開します。
 非 `null` の `$min` および `$max` 値は、既存の JSON 順序規則で比較できなければなりません。
 
 比較できない値は拒否します。
+
+`$first` と `$last` は、各グループ内の入力物理レコード順を使います。
+
+明示的な `null` を含めて最初または最後のフィールド値を返し、欠損フィールドは `null` として返します。
 
 10,000 を超えるグループは拒否し、集約とトップレベルの `sort`、`projection`、`skip`、`limit`、cursor ページングの併用も拒否します。
 

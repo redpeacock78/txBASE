@@ -157,6 +157,44 @@ fn groups_comparable_extremes_and_returns_null_for_missing_values() {
 }
 
 #[test]
+fn groups_first_and_last_values_in_physical_order() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"VALUE": "first"}).as_object().unwrap().clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"VALUE": "last"}).as_object().unwrap().clone(),
+    };
+    let records = [&first, &second];
+    let stages = vec![
+        json!({
+            "$group": {
+                "_id": null,
+                "first_value": {"$first": "$VALUE"},
+                "last_value": {"$last": "$VALUE"},
+                "missing_value": {"$first": "$MISSING"}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        super::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({
+            "_id": null,
+            "first_value": "first",
+            "last_value": "last",
+            "missing_value": null
+        })]
+    );
+}
+
+#[test]
 fn missing_group_fields_share_the_null_group() {
     let table = table_with_two_active_records();
     let request =
