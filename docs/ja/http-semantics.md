@@ -99,7 +99,17 @@ WAL 付きの成功した更新は `X-Txbase-Transaction-Id` も返します。
 
 一致しない値には通常の表現を返します。
 
-このキャッシュ検証の動作は現在 `GET` と `HEAD` に限られます。
+`304` を返すこのキャッシュ検証は `GET` と `HEAD` に限られますが、更新経路は同じ弱い比較を使い、条件が一致した場合に `412 Precondition Failed` を返します。
+
+`POST /records`、`PUT`、`PATCH`、`DELETE`、単一テーブルの `POST /transaction` は `If-None-Match` を受け付けます。
+
+一致する強いタグまたは弱いタグ、あるいは存在する対象に対する `*` は、現在の `ETag` を伴う `412 Precondition Failed` を返し、更新を実行しません。
+
+一致しない条件は操作を許可します。
+
+`/records` collection と単一テーブルの transaction target は存在するリソースであるため、`*` はこれらの操作を拒否します。
+
+catalog 全体の transaction endpoint は catalog representation ETag をまだ公開しないため、この境界の対象外です。
 
 ## 3. PATCH
 
@@ -115,9 +125,9 @@ API は、文書の意味論または条件付きリクエストによって特�
 
 txBASE は `application/json` の通常フィールドパッチと、[更新モデル](mutation-model.md)で定義する `$set`、`$unset`、`$inc` の型付きサブセットを受け付けます。
 
-上記の状態変更経路に対する強いテーブル表現タグと任意の `If-Match` 保護、GET と HEAD に限定した `If-None-Match` キャッシュ検証を実装しています。
+上記の状態変更経路に対する強いテーブル表現タグと任意の `If-Match` 保護、読み取りと単一テーブル更新に対する `If-None-Match` 検証を実装しています。
 
-更新側の `If-None-Match`、JSON Patch、JSON Merge Patch のメディアタイプはまだ実装していません。
+catalog 全体の transaction validator、JSON Patch、JSON Merge Patch のメディアタイプはまだ実装していません。
 
 MongoDB 風の更新文書は JSON 本文内のアプリケーション形式です。
 
@@ -204,7 +214,7 @@ HTTP の冪等性は DBF の書き込み経路をクラッシュ安全にはし�
 
 実装前に次の項目には明示的な契約が必要です。
 
-- 安全でないメソッドに対する `If-None-Match` の動作。
+- `POST /transaction` の catalog representation ETag と `If-None-Match` の動作。
 - QUERY 本文に対する `Content-Location` とキャッシュキーの規則。
 - HTTP ストリーミングとバックプレッシャー。
 - CORS と認証方針。

@@ -72,7 +72,7 @@ pub(super) fn post_response_at_with_validator(
     if operation_path != "/records" {
         return json_response(404, error("not_found", "resource not found"), false);
     }
-    if let Err(response) = etag::require_if_match(request, table, true) {
+    if let Err(response) = etag::require_mutation_preconditions(request, table, true) {
         return response;
     }
     let values = match read_json_object(request, "POST", false) {
@@ -135,7 +135,7 @@ pub(super) fn update_response_with_validator(
     if table.active_record(id).is_none() {
         return json_response(404, error("not_found", "record not found"), false);
     }
-    if let Err(response) = etag::require_if_match(request, table, true) {
+    if let Err(response) = etag::require_mutation_preconditions(request, table, true) {
         return response;
     }
     let values = match read_json_object(request, if replace { "PUT" } else { "PATCH" }, false) {
@@ -202,7 +202,7 @@ pub(super) fn delete_response_with_validator(
     if table.active_record(id).is_none() {
         return json_response(404, error("not_found", "record not found"), false);
     }
-    if let Err(response) = etag::require_if_match(request, table, true) {
+    if let Err(response) = etag::require_mutation_preconditions(request, table, true) {
         return response;
     }
     let operation = OperationIr {

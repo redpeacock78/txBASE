@@ -17,7 +17,7 @@ pub(super) fn response(
     table: &mut DbfTable,
     dbf_path: &Path,
 ) -> HttpResponse {
-    if let Err(response) = etag::require_if_match(request, table, true) {
+    if let Err(response) = etag::require_mutation_preconditions(request, table, true) {
         return response;
     }
     let body = match read_json_body(request, "POST /transaction", false) {

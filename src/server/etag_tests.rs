@@ -46,6 +46,16 @@ fn patch_request(tag: &str) -> Request {
         .into()
 }
 
+fn patch_if_none_match_request(tag: &str) -> Request {
+    TestRequest::new()
+        .with_method(Method::Patch)
+        .with_path("/records/1")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-None-Match", tag))
+        .with_body(r#"{"$inc":{"AGE":1}}"#)
+        .into()
+}
+
 fn post_request(tag: &str) -> Request {
     TestRequest::new()
         .with_method(Method::Post)
@@ -80,6 +90,18 @@ fn transaction_request(tag: &str) -> Request {
         .with_path("/transaction")
         .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
         .with_header(header("If-Match", tag))
+        .with_body(
+            r#"{"operations":[{"method":"PATCH","path":"/records/1","body":{"$inc":{"AGE":1}}}]}"#,
+        )
+        .into()
+}
+
+fn transaction_if_none_match_request(tag: &str) -> Request {
+    TestRequest::new()
+        .with_method(Method::Post)
+        .with_path("/transaction")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-None-Match", tag))
         .with_body(
             r#"{"operations":[{"method":"PATCH","path":"/records/1","body":{"$inc":{"AGE":1}}}]}"#,
         )
@@ -199,6 +221,61 @@ fn transaction_etag_precondition_is_atomic() {
     assert_eq!(response.status_code(), StatusCode(200));
     assert_ne!(header_value(&response, "ETag"), current);
     assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
+
+    cleanup(&path);
+}
+
+#[test]
+fn mutation_if_none_match_rejects_current_representation_without_writing() {
+    let path = test_path("none-match-mutation");
+    let mut table = prepare(&path);
+    let request = get_request("/records", None);
+    let current = header_value(&get_response(&request, "/records", &table), "ETag");
+    let before = fs::read(&path).unwrap();
+
+    let mut matching = patch_if_none_match_request(&current);
+    let response = update_response(&mut matching, "/records/1", &mut table, &path, false);
+    assert_eq!(response.status_code(), StatusCode(412));
+    assert_eq!(header_value(&response, "ETag"), current);
+    assert_eq!(fs::read(&path).unwrap(), before);
+    assert_eq!(table.active_record(1).unwrap().values["AGE"], 29);
+
+    let mut weak = patch_if_none_match_request(&format!("W/{current}"));
+    assert_eq!(
+        update_response(&mut weak, "/records/1", &mut table, &path, false).status_code(),
+        StatusCode(412)
+    );
+
+    let mut wildcard = patch_if_none_match_request("*");
+    assert_eq!(
+        update_response(&mut wildcard, "/records/1", &mut table, &path, false).status_code(),
+        StatusCode(412)
+    );
+
+    let mut stale = patch_if_none_match_request("\"stale\"");
+    assert_eq!(
+        update_response(&mut stale, "/records/1", &mut table, &path, false).status_code(),
+        StatusCode(200)
+    );
+    assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
+
+    cleanup(&path);
+}
+
+#[test]
+fn transaction_if_none_match_rejects_current_representation_atomically() {
+    let path = test_path("none-match-transaction");
+    let mut table = prepare(&path);
+    let request = get_request("/records", None);
+    let current = header_value(&get_response(&request, "/records", &table), "ETag");
+    let before = fs::read(&path).unwrap();
+
+    let mut request = transaction_if_none_match_request(&current);
+    let response = super::transaction::response(&mut request, &mut table, &path);
+    assert_eq!(response.status_code(), StatusCode(412));
+    assert_eq!(header_value(&response, "ETag"), current);
+    assert_eq!(fs::read(&path).unwrap(), before);
+    assert_eq!(table.active_record(1).unwrap().values["AGE"], 29);
 
     cleanup(&path);
 }

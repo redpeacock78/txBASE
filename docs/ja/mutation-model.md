@@ -80,9 +80,10 @@ txBASE は `application/json` の通常フィールドパッチと、上記の�
 
 状態変更経路に強いテーブル表現タグと任意の `If-Match` 保護を実装しています。
 
-GET と HEAD は `If-None-Match` によるキャッシュ検証を提供します。
+GET と HEAD は `If-None-Match` によるキャッシュ検証を提供し、単一テーブルの更新経路は同じ条件の弱い比較が一致した場合に `412 Precondition Failed` を返します。
 
-更新側の `If-None-Match`、JSON Patch、JSON Merge Patch のメディアタイプは未実装です。
+catalog 全体の transaction endpoint は catalog representation ETag をまだ持ちません。
+JSON Patch と JSON Merge Patch のメディアタイプは未実装です。
 
 MongoDB 風の更新文書は JSON 本文内のアプリケーション形式です。
 
@@ -103,7 +104,7 @@ JSON 構文は意図的に小さなローカル API です。
 実装前に次の項目には明示的な契約が必要です。
 
 - ローカル更新文書に加える標準パッチメディアタイプ。
-- 更新側の `If-None-Match` の動作。
+- catalog 全体の transaction endpoint に対する catalog representation ETag と validator。
 - 複数レコード更新の意味論と可視性規則。
 - 小さな更新参照モデルとの微分テスト。
 

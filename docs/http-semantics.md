@@ -88,7 +88,13 @@ the representation identity.
 `GET /records` and `HEAD /records` (and their `/{id}` forms) also accept `If-None-Match`. A matching strong or weak tag,
 or `*` for an existing resource, returns `304 Not Modified` with the current `ETag` and no body;
 an unmatched value returns the normal representation. This cache-validation behavior is currently
-limited to `GET` and `HEAD`.
+limited to `GET` and `HEAD` for `304`; mutation routes use the same weak comparison and return `412 Precondition Failed` when the condition matches.
+
+`POST /records`, `PUT`, `PATCH`, `DELETE`, and single-table `POST /transaction` accept `If-None-Match`.
+A matching strong or weak tag, or `*` for an existing target, returns `412 Precondition Failed` with the current `ETag` and performs no mutation.
+An unmatched condition permits the operation.
+The `/records` collection and single-table transaction target are existing resources, so `*` rejects those operations.
+The catalog-wide transaction endpoint does not yet expose a catalog representation ETag and remains outside this boundary.
 
 ## 3. PATCH
 
@@ -105,9 +111,9 @@ For collision-sensitive patches, the RFC recommends conditional requests such as
 txBASE currently accepts `application/json` plain field patches and the typed `$set`, `$unset`, and `$inc` subset described in [the mutation model](mutation-model.md).
 
 txBASE implements a strong table representation tag, optional `If-Match` protection for the
-state-changing routes described above, and GET/HEAD-only `If-None-Match` cache validation.
+state-changing routes described above, and `If-None-Match` validation for reads and single-table mutations.
 
-It does not yet implement mutation-side `If-None-Match`, JSON Patch, or JSON Merge Patch media types.
+It does not yet implement catalog-wide transaction validators, JSON Patch, or JSON Merge Patch media types.
 
 The MongoDB-shaped update document is an application format inside the JSON body.
 
@@ -189,7 +195,7 @@ Clients must not infer exactly-once effects from a successful TCP exchange alone
 
 The following require explicit contracts before implementation:
 
-- `If-None-Match` behavior for unsafe methods.
+- A catalog representation ETag for `POST /transaction` and its `If-None-Match` behavior.
 - `Content-Location` and cache-key rules for QUERY bodies.
 - HTTP streaming and backpressure.
 - CORS and authentication policy.

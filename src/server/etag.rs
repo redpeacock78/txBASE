@@ -60,6 +60,38 @@ pub(super) fn require_if_match(
     .with_header(header("ETag", &tag)))
 }
 
+pub(super) fn require_mutation_preconditions(
+    request: &Request,
+    table: &DbfTable,
+    resource_exists: bool,
+) -> Result<(), HttpResponse> {
+    require_if_match(request, table, resource_exists)?;
+    require_if_none_match(request, table, resource_exists)
+}
+
+fn require_if_none_match(
+    request: &Request,
+    table: &DbfTable,
+    resource_exists: bool,
+) -> Result<(), HttpResponse> {
+    let Some(value) = request_header(request, "If-None-Match") else {
+        return Ok(());
+    };
+    let tag = current(table);
+    if !matches_if_none_match(value, &tag, resource_exists) {
+        return Ok(());
+    }
+    Err(json_response(
+        412,
+        error(
+            "precondition_failed",
+            "If-None-Match matches the current representation",
+        ),
+        false,
+    )
+    .with_header(header("ETag", &tag)))
+}
+
 fn matches_if_match(value: &str, current: &str, resource_exists: bool) -> bool {
     let tags = value.split(',').map(str::trim).collect::<Vec<_>>();
     if tags.len() == 1 && tags[0] == "*" {

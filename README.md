@@ -147,8 +147,8 @@ The batch is single-table and all operations run on a private copy before one co
 `PATCH` also accepts the typed `$set`, `$unset`, and `$inc` operators.
 
 Successful reads return a strong `ETag`; GET and HEAD accept `If-None-Match` for `304 Not Modified`, and
-state-changing routes accept optional `If-Match` values to reject stale writers with `412
-Precondition Failed`.
+single-table state-changing routes accept optional `If-Match` and `If-None-Match` values for `412
+Precondition Failed` without partial mutation.
 
 Path-loaded mutations use a `TXDP` byte-range delta when it is smaller than a complete snapshot, otherwise a `TXDB` or `TXDM` snapshot.
 

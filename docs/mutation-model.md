@@ -80,9 +80,10 @@ txBASE accepts `application/json` plain field patches and the typed subset above
 
 It implements a strong table representation tag and optional `If-Match` protection for state-changing routes.
 
-GET and HEAD provide `If-None-Match` cache validation.
+GET and HEAD provide `If-None-Match` cache validation, and single-table mutation routes use the same condition with `412 Precondition Failed` when the weak comparison matches.
 
-Mutation-side `If-None-Match`, JSON Patch, and JSON Merge Patch media types are not implemented.
+The catalog-wide transaction endpoint has no catalog representation ETag yet.
+JSON Patch and JSON Merge Patch media types are not implemented.
 
 The MongoDB-shaped update document is an application format inside the JSON body.
 
@@ -103,7 +104,7 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 The following require explicit contracts before implementation:
 
 - A standard patch media type in addition to the local update document.
-- Mutation-side `If-None-Match` behavior.
+- A catalog representation ETag and validator for the catalog-wide transaction endpoint.
 - Broader multi-record mutation semantics and visibility rules.
 - Differential tests against a small mutation reference model.
 

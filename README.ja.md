@@ -105,7 +105,8 @@ HTTP境界の詳細は[HTTP method semantics](docs/ja/http-semantics.md)を参�
 成功する`GET /records`と`GET /records/{id}`は現在のtable representationを示すstrongな`ETag`を返します。
 GETとHEADは`If-None-Match`にも対応し、一致すれば`304 Not Modified`を返します。
 `POST`、`PUT`、`PATCH`、`DELETE`、`POST /transaction`には任意の`If-Match`を付けられます。
-currentなstrong tagまたは既存resourceに対する`*`以外は`412 Precondition Failed`となり、tableは変更されません。
+single-tableの状態変更には`If-None-Match`も付けられ、一致すれば`412 Precondition Failed`を返して変更しません。
+`If-Match`にcurrentなstrong tagまたは既存resourceに対する`*`以外を指定すると`412 Precondition Failed`となり、tableは変更されません。
 WAL-backed mutationは`X-Txbase-Transaction-Id`を返し、single-tableの`POST /transaction`では同じ値をJSONの`transaction_id`にも含めます。
 
 ### Mutation
