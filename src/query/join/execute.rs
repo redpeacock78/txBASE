@@ -247,7 +247,7 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
     Ok(output)
 }
 
-pub(super) fn encoded_key(
+pub(crate) fn encoded_key(
     values: &Map<String, Value>,
     fields: &[String],
 ) -> Result<Option<String>, JoinError> {
@@ -266,7 +266,7 @@ pub(super) fn encoded_key(
         .map_err(|error| JoinError::Invalid(format!("join key encoding failed: {error}")))
 }
 
-pub(super) fn emit(
+pub(crate) fn emit(
     output: &mut Vec<Value>,
     request: &JoinRequest,
     left: Option<&DbfRecord>,
