@@ -114,6 +114,25 @@ pub struct FileWal {
     last_lsn: Option<Lsn>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WalRecordInfo {
+    pub lsn: Lsn,
+    pub length: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WalInspection {
+    pub file_bytes: usize,
+    pub valid_bytes: usize,
+    pub truncated_tail: bool,
+    pub records: Vec<WalRecordInfo>,
+}
+
+struct ParsedWal {
+    records: Vec<(Lsn, Vec<u8>)>,
+    valid_bytes: usize,
+}
+
 impl std::fmt::Debug for FileWal {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -134,56 +153,13 @@ impl FileWal {
             .open(path)?;
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)?;
-        let mut records = Vec::new();
-        let mut offset = 0usize;
-        let mut expected_lsn = 0u64;
-
-        while offset < bytes.len() {
-            let remaining = bytes.len() - offset;
-            if remaining < WAL_HEADER_SIZE {
-                file.set_len(offset as u64)?;
-                file.sync_all()?;
-                break;
-            }
-            if bytes[offset..offset + WAL_MAGIC.len()] != WAL_MAGIC {
-                return Err(TransactionError::Invalid(
-                    "WAL record has an invalid magic".into(),
-                ));
-            }
-            let length = u32::from_le_bytes(
-                bytes[offset + 4..offset + 8]
-                    .try_into()
-                    .expect("WAL header length is fixed"),
-            ) as usize;
-            if length > MAX_WAL_RECORD_SIZE {
-                return Err(TransactionError::Invalid(
-                    "WAL record exceeds the configured size limit".into(),
-                ));
-            }
-            let end = offset
-                .checked_add(WAL_HEADER_SIZE)
-                .and_then(|header_end| header_end.checked_add(length))
-                .ok_or_else(|| TransactionError::Invalid("WAL record length overflows".into()))?;
-            if end > bytes.len() {
-                file.set_len(offset as u64)?;
-                file.sync_all()?;
-                break;
-            }
-            let lsn = u64::from_le_bytes(
-                bytes[offset + 8..offset + 16]
-                    .try_into()
-                    .expect("WAL header LSN is fixed"),
-            );
-            if lsn != expected_lsn {
-                return Err(TransactionError::Invalid(format!(
-                    "WAL LSN {lsn} is not the expected {expected_lsn}"
-                )));
-            }
-            records.push((Lsn(lsn), bytes[offset + WAL_HEADER_SIZE..end].to_vec()));
-            expected_lsn = expected_lsn
-                .checked_add(1)
-                .ok_or_else(|| TransactionError::Invalid("WAL LSN overflows".into()))?;
-            offset = end;
+        let ParsedWal {
+            records,
+            valid_bytes,
+        } = parse_wal(&bytes)?;
+        if valid_bytes < bytes.len() {
+            file.set_len(valid_bytes as u64)?;
+            file.sync_all()?;
         }
 
         file.seek(SeekFrom::End(0))?;
@@ -191,6 +167,26 @@ impl FileWal {
             file,
             last_lsn: records.last().map(|(lsn, _)| *lsn),
             records,
+        })
+    }
+
+    pub fn inspect(path: impl AsRef<Path>) -> Result<WalInspection, TransactionError> {
+        let bytes = std::fs::read(path)?;
+        let ParsedWal {
+            records,
+            valid_bytes,
+        } = parse_wal(&bytes)?;
+        Ok(WalInspection {
+            file_bytes: bytes.len(),
+            valid_bytes,
+            truncated_tail: valid_bytes < bytes.len(),
+            records: records
+                .into_iter()
+                .map(|(lsn, payload)| WalRecordInfo {
+                    lsn,
+                    length: payload.len(),
+                })
+                .collect(),
         })
     }
 
@@ -206,6 +202,67 @@ impl FileWal {
         self.last_lsn = None;
         Ok(())
     }
+}
+
+fn parse_wal(bytes: &[u8]) -> Result<ParsedWal, TransactionError> {
+    let mut records = Vec::new();
+    let mut offset = 0usize;
+    let mut expected_lsn = 0u64;
+
+    while offset < bytes.len() {
+        let remaining = bytes.len() - offset;
+        if remaining < WAL_HEADER_SIZE {
+            return Ok(ParsedWal {
+                records,
+                valid_bytes: offset,
+            });
+        }
+        if bytes[offset..offset + WAL_MAGIC.len()] != WAL_MAGIC {
+            return Err(TransactionError::Invalid(
+                "WAL record has an invalid magic".into(),
+            ));
+        }
+        let length = u32::from_le_bytes(
+            bytes[offset + 4..offset + 8]
+                .try_into()
+                .expect("WAL header length is fixed"),
+        ) as usize;
+        if length > MAX_WAL_RECORD_SIZE {
+            return Err(TransactionError::Invalid(
+                "WAL record exceeds the configured size limit".into(),
+            ));
+        }
+        let end = offset
+            .checked_add(WAL_HEADER_SIZE)
+            .and_then(|header_end| header_end.checked_add(length))
+            .ok_or_else(|| TransactionError::Invalid("WAL record length overflows".into()))?;
+        if end > bytes.len() {
+            return Ok(ParsedWal {
+                records,
+                valid_bytes: offset,
+            });
+        }
+        let lsn = u64::from_le_bytes(
+            bytes[offset + 8..offset + 16]
+                .try_into()
+                .expect("WAL header LSN is fixed"),
+        );
+        if lsn != expected_lsn {
+            return Err(TransactionError::Invalid(format!(
+                "WAL LSN {lsn} is not the expected {expected_lsn}"
+            )));
+        }
+        records.push((Lsn(lsn), bytes[offset + WAL_HEADER_SIZE..end].to_vec()));
+        expected_lsn = expected_lsn
+            .checked_add(1)
+            .ok_or_else(|| TransactionError::Invalid("WAL LSN overflows".into()))?;
+        offset = end;
+    }
+
+    Ok(ParsedWal {
+        records,
+        valid_bytes: bytes.len(),
+    })
 }
 
 impl Wal for FileWal {

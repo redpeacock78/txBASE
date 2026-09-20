@@ -222,6 +222,7 @@ The CLI now exposes the first local-database maintenance boundary:
 | `txbase recall FILE RECORD` | Restores one logically deleted record through the existing WAL |
 | `txbase backup SOURCE DEST` | Validates `SOURCE`, then copies its DBF, detected `.dbt` or `.fpt`, schema, and valid `.txidx` sidecars |
 | `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as `SOURCE` |
+| `txbase wal inspect WAL` | Reads a WAL without creating or truncating it, reports complete record LSN/payload lengths, and marks an incomplete final tail |
 
 The copy operation replaces each destination file through a synced temporary file.
 
@@ -230,6 +231,10 @@ DBF and memo sidecar replacement is still a sequence of file operations, not a n
 An interrupted copy should therefore be followed by `txbase verify DEST` before the destination is used.
 
 `PACK` does not compact memo sidecars. An existing index sidecar is refreshed after the packed DBF is saved, but memo blocks remain untouched.
+
+`wal inspect` reports the WAL file size, the valid byte boundary, and each complete record's LSN and
+payload length. A torn final header or payload is reported as `truncated_tail: true`; complete
+malformed records remain errors. The command is read-only and does not create or truncate the WAL.
 
 Deleted memo blocks can therefore remain as reclaimable orphan space until a sidecar-specific compaction contract exists.
 

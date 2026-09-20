@@ -34,6 +34,57 @@ fn file_wal_reopens_and_truncates_a_torn_tail() {
 }
 
 #[test]
+fn file_wal_inspect_reports_but_does_not_truncate_a_torn_tail() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-wal-inspect-test-{}.log",
+        std::process::id()
+    ));
+    let valid_length;
+    {
+        let mut wal = FileWal::open(&path).unwrap();
+        wal.append(b"commit").unwrap();
+        wal.sync().unwrap();
+        valid_length = fs::metadata(&path).unwrap().len();
+    }
+    {
+        let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+        file.write_all(&WAL_MAGIC).unwrap();
+    }
+
+    let inspection = FileWal::inspect(&path).unwrap();
+    assert_eq!(
+        inspection.file_bytes as u64,
+        valid_length + WAL_MAGIC.len() as u64
+    );
+    assert_eq!(inspection.valid_bytes as u64, valid_length);
+    assert!(inspection.truncated_tail);
+    assert_eq!(
+        inspection.records,
+        vec![WalRecordInfo {
+            lsn: Lsn(0),
+            length: 6,
+        }]
+    );
+    assert_eq!(
+        fs::metadata(&path).unwrap().len(),
+        inspection.file_bytes as u64
+    );
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn file_wal_inspect_does_not_create_a_missing_file() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-wal-inspect-missing-{}.log",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&path);
+
+    assert!(FileWal::inspect(&path).is_err());
+    assert!(!path.exists());
+}
+
+#[test]
 fn file_wal_rejects_corrupt_complete_records() {
     let cases = [
         ("magic", {
@@ -65,6 +116,10 @@ fn file_wal_rejects_corrupt_complete_records() {
         fs::write(&path, bytes).unwrap();
         assert!(matches!(
             FileWal::open(&path),
+            Err(TransactionError::Invalid(_))
+        ));
+        assert!(matches!(
+            FileWal::inspect(&path),
             Err(TransactionError::Invalid(_))
         ));
         fs::remove_file(path).unwrap();

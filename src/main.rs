@@ -8,6 +8,7 @@ use txbase::{
     dbf::copy_table_files,
     index::{IndexDefinition, IndexFile},
     server,
+    transaction::FileWal,
     xbf::XbfTable,
 };
 
@@ -149,6 +150,36 @@ fn run() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    if first == "wal" {
+        let operation = args
+            .next()
+            .ok_or_else(|| "wal requires inspect".to_owned())?;
+        if operation != "inspect" {
+            return Err(format!("unknown wal operation: {operation}").into());
+        }
+        let path = PathBuf::from(
+            args.next()
+                .ok_or_else(|| "wal inspect requires a WAL path".to_owned())?,
+        );
+        if let Some(extra) = args.next() {
+            return Err(format!("unexpected argument: {extra}").into());
+        }
+        let inspection = FileWal::inspect(&path)?;
+        let output = serde_json::json!({
+            "format": "txbase-wal",
+            "path": path.display().to_string(),
+            "file_bytes": inspection.file_bytes,
+            "valid_bytes": inspection.valid_bytes,
+            "truncated_tail": inspection.truncated_tail,
+            "records": inspection.records.iter().map(|record| serde_json::json!({
+                "lsn": record.lsn.0,
+                "length": record.length,
+            })).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+        return Ok(());
+    }
+
     if first == "index" {
         let operation = args
             .next()
@@ -286,6 +317,9 @@ fn run() -> Result<(), Box<dyn Error>> {
 fn print_help() {
     println!(
         "Usage:\n  txbase FILE [--encoding NAME]\n  txbase schema FILE [--encoding NAME]\n  txbase verify FILE [--encoding NAME]\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase xbf import DBF XBF [--encoding NAME]\n  txbase xbf export XBF DBF [--schema]\n  txbase xbf report XBF\n  txbase index build FILE FIELD...\n  txbase index build-compound FILE NAME FIELD[:1|-1] FIELD[:1|-1]...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE [--encoding NAME]\n  txbase recall FILE RECORD [--encoding NAME]\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase --serve FILE [--bind ADDRESS] [--encoding NAME]\n  txbase --serve-catalog DIRECTORY [--bind ADDRESS]\n\nReads active DBF records as JSON. NAME accepts the supported CJK aliases and takes precedence over a schema sidecar override for that invocation. Schema, catalog, verification, and index commands inspect DBF files. xbf import writes a bounded XBF snapshot from a DBF; xbf export writes a representable XBF table as DBF, and --schema also writes its constraint sidecar; xbf report checks DBF representability without writing. Backup and restore copy a DBF with its detected memo, schema, transaction-state, and valid index sidecars. The single-table server exposes GET /records, GET /records/{{id}}, QUERY /records, QUERY /explain, and JSON mutations. The catalog server exposes GET /catalog, GET/HEAD /{{table}}/records[/{{id}}], QUERY /{{table}}/records, QUERY /{{table}}/explain, and QUERY /join as bounded read-only routes."
+    );
+    println!(
+        "\nAdditional command:\n  txbase wal inspect WAL\n\nwal inspect reads a WAL without creating or truncating it and reports complete record lengths plus an incomplete final tail."
     );
 }
 

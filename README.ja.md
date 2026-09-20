@@ -170,7 +170,11 @@ txbase xbf import path/to/users.dbf path/to/users.xbf
 txbase xbf export path/to/users.xbf path/to/users.dbf
 txbase xbf export path/to/users.xbf path/to/users.dbf --schema
 txbase xbf report path/to/users.xbf
+txbase wal inspect path/to/users.txbase.wal
 ```
+
+`wal inspect`はWALを作成も切り詰めもせずに読み取ります。
+ファイルサイズ、有効なバイト境界、完全なレコードのLSNとペイロード長、切断された末尾レコードの有無を表示します。
 
 `pack`はlogical delete済みrecordを物理的に除去し、残ったrecord numberを詰め直します。
 

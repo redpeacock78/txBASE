@@ -183,7 +183,11 @@ txbase xbf import path/to/users.dbf path/to/users.xbf
 txbase xbf export path/to/users.xbf path/to/users.dbf
 txbase xbf export path/to/users.xbf path/to/users.dbf --schema
 txbase xbf report path/to/users.xbf
+txbase wal inspect path/to/users.txbase.wal
 ```
+
+`wal inspect` reads a WAL without creating or truncating it.
+It reports the file size, valid byte boundary, complete record LSN and payload length, and whether an incomplete final record is present.
 
 Copy a DBF and its detected memo, schema, transaction-state, and valid index sidecars:
 
@@ -201,6 +205,10 @@ Usage:
   txbase verify FILE [--encoding NAME]
   txbase catalog DIRECTORY
   txbase verify-catalog DIRECTORY
+  txbase xbf import DBF XBF [--encoding NAME]
+  txbase xbf export XBF DBF [--schema]
+  txbase xbf report XBF
+  txbase wal inspect WAL
   txbase index build FILE FIELD...
   txbase index build-compound FILE NAME FIELD[:1|-1] FIELD[:1|-1]...
   txbase index verify FILE

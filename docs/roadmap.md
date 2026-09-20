@@ -28,6 +28,7 @@ The repository currently provides:
 - Bounded `$expr` boolean trees over field-to-field comparison leaves, including numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` operands, that remain on the table-scan reference path.
 - HTTP `GET`, `QUERY`, `POST`, `PUT`, `PATCH`, and `DELETE` routes.
 - File or memory WAL types with `TXOP`, `TXTI`, `TXDP`, `TXDB`, and `TXDM` persistence paths.
+- A read-only `wal inspect` command that reports complete record boundaries and torn tails without mutating the WAL.
 - A low-level snapshot transaction engine whose `TransactionId` sequence resumes from retained
   memory or file WAL commit/rollback records, plus durable DBF single-table WAL commit IDs exposed
   by the HTTP mutation boundary.
@@ -65,6 +66,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - Transaction IDs and independently visible multi-record snapshots.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
+- Read-only WAL inspection.
 
 `PACK` must define whether memo blocks and indexes are rebuilt or left as reclaimable orphan space.
 
@@ -72,7 +74,7 @@ This phase keeps the database local and makes its operational boundary useful be
 
 ### Completion conditions
 
-Schema introspection, verification, copy tooling, `PACK`, `RECALL`, and the first directory-catalog boundary are implemented as the first Phase 1 slice.
+Schema introspection, verification, copy tooling, `PACK`, `RECALL`, read-only WAL inspection, and the first directory-catalog boundary are implemented as the first Phase 1 slice.
 
 The catalog currently derives table identity from direct-child DBF filenames and does not persist a separate manifest.
 
