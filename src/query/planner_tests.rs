@@ -244,7 +244,7 @@ fn chooses_the_lowest_cost_range_candidate() {
     .unwrap();
 
     let request =
-        parse(br#"{"filter":{"AGE":{"$gt":1,"$lt":5},"NAME":{"$gt":"N02","$lt":"N05"}}}"#).unwrap();
+        parse(br#"{"filter":{"AGE":{"$gt":1,"$lt":5},"NAME":{"$gt":"N02","$lt":"N04"}}}"#).unwrap();
     assert_eq!(
         explain_query_at(&path, &request).unwrap(),
         QueryPlan::RangeIndex {
