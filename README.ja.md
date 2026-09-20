@@ -97,7 +97,7 @@ catalog schemaを`GET /catalog`でstrongなcatalog representation `ETag`とと�
 cross-table mutationは`POST /transaction`でatomicにcommitできます。
 
 `$expr`による同一record内のfield比較を提供します。
-比較operandには二つの数値operandを持つ`$add`、`$subtract`、`$multiply`、`$divide`を含められます。
+比較operandには二つの数値operandを持つ`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`を含められます。
 整数結果は収まる場合に整数を維持し、混在型または小数の結果は有限なJSON数値でなければなりません。
 欠損または非数値のfield operandは比較不一致になり、整数overflowと有限でない結果は拒否します。
 

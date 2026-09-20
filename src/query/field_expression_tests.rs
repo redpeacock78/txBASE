@@ -100,6 +100,20 @@ fn compares_division_expression_results() {
 }
 
 #[test]
+fn compares_modulo_expression_results() {
+    let values = json!({
+        "VALUE": 17,
+        "MODULUS": 5,
+        "REMAINDER": 2,
+    });
+    let filter = json!({
+        "$expr": {"$eq": [{"$mod": ["$VALUE", "$MODULUS"]}, "$REMAINDER"]}
+    });
+
+    assert!(matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap());
+}
+
+#[test]
 fn rejects_division_by_zero() {
     let filter = json!({
         "$expr": {"$eq": [{"$divide": ["$VALUE", 0]}, 1]}
@@ -111,6 +125,20 @@ fn rejects_division_by_zero() {
     )
     .unwrap_err();
     assert!(error.to_string().contains("cannot divide by zero"));
+}
+
+#[test]
+fn rejects_modulo_by_zero() {
+    let filter = json!({
+        "$expr": {"$eq": [{"$mod": ["$VALUE", 0]}, 1]}
+    });
+
+    let error = matches_filter(
+        json!({"VALUE": 1}).as_object().unwrap(),
+        filter.as_object().unwrap(),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("cannot use zero as the divisor"));
 }
 
 #[test]
@@ -158,4 +186,5 @@ fn rejects_unsupported_or_malformed_expr() {
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$add":["$A"]},1]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$multiply":["$A",true]},1]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$divide":["$A",true]},1]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$mod":["$A",true]},1]}}}"#).is_err());
 }

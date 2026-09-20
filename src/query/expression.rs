@@ -78,11 +78,11 @@ fn validate_expression_operand(operand: &Value, path: &str) -> Result<(), QueryE
     if expression.len() != 1
         || !matches!(
             operator.as_str(),
-            "$add" | "$subtract" | "$multiply" | "$divide"
+            "$add" | "$subtract" | "$multiply" | "$divide" | "$mod"
         )
     {
         return Err(QueryError::Invalid(format!(
-            "{path} supports only $add, $subtract, $multiply, and $divide"
+            "{path} supports only $add, $subtract, $multiply, $divide, and $mod"
         )));
     }
     let operands = operands
@@ -214,7 +214,7 @@ fn resolve_numeric_expression(
     if expression.len() != 1
         || !matches!(
             operator.as_str(),
-            "$add" | "$subtract" | "$multiply" | "$divide"
+            "$add" | "$subtract" | "$multiply" | "$divide" | "$mod"
         )
     {
         return Err(QueryError::Invalid(format!(
@@ -252,10 +252,13 @@ fn apply_numeric_expression(
     let (Some(left), Some(right)) = (as_numeric(left), as_numeric(right)) else {
         return Ok(None);
     };
-    if operator == "$divide" && is_zero(right) {
-        return Err(QueryError::Invalid(
-            "filter.$expr.$divide cannot divide by zero".into(),
-        ));
+    if matches!(operator, "$divide" | "$mod") && is_zero(right) {
+        let message = if operator == "$divide" {
+            format!("filter.$expr.{operator} cannot divide by zero")
+        } else {
+            format!("filter.$expr.{operator} cannot use zero as the divisor")
+        };
+        return Err(QueryError::Invalid(message));
     }
     match (left, right) {
         (NumericValue::Integer(left), NumericValue::Integer(right)) => {
@@ -271,6 +274,7 @@ fn apply_numeric_expression(
                 "$subtract" => left.checked_sub(right),
                 "$multiply" => left.checked_mul(right),
                 "$divide" => left.checked_div(right),
+                "$mod" => left.checked_rem(right),
                 _ => unreachable!("validated numeric expression operator"),
             }
             .ok_or_else(|| {
@@ -286,6 +290,7 @@ fn apply_numeric_expression(
                 "$subtract" => left - right,
                 "$multiply" => left * right,
                 "$divide" => left / right,
+                "$mod" => left % right,
                 _ => unreachable!("validated numeric expression operator"),
             };
             finite_json_number(operator, value)

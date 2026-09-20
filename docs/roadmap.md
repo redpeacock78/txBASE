@@ -25,7 +25,7 @@ The repository currently provides:
 - DBF parsing and writing for selected classic and Visual FoxPro fields.
 - DBT and FPT memo or binary sidecar paths for the supported formats.
 - JSON query execution with a small MongoDB-inspired predicate vocabulary.
-- Bounded `$expr` boolean trees over field-to-field comparison leaves, including numeric `$add`, `$subtract`, `$multiply`, and `$divide` operands, that remain on the table-scan reference path.
+- Bounded `$expr` boolean trees over field-to-field comparison leaves, including numeric `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` operands, that remain on the table-scan reference path.
 - HTTP `GET`, `QUERY`, `POST`, `PUT`, `PATCH`, and `DELETE` routes.
 - File or memory WAL types with `TXOP`, `TXTI`, `TXDP`, `TXDB`, and `TXDM` persistence paths.
 - A low-level snapshot transaction engine whose `TransactionId` sequence resumes from retained
@@ -125,7 +125,7 @@ The current record scan remains the reference execution path while the query mod
 ### Candidate scope
 
 - Additional aggregation stages and accumulator expressions.
-- Full expression evaluation beyond the bounded `$expr` boolean-tree form and its numeric `$add`/`$subtract`/`$multiply`/`$divide` operands.
+- Full expression evaluation beyond the bounded `$expr` boolean-tree form and its numeric `$add`/`$subtract`/`$multiply`/`$divide`/`$mod` operands.
 - Joins.
 - Constraints.
 - Full physical cost planning for range and mixed-direction compound paths.
