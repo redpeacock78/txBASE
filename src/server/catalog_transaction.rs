@@ -12,7 +12,7 @@ struct TransactionRequest {
 }
 
 pub(super) fn response(request: &mut Request, catalog: &Catalog) -> HttpResponse {
-    let if_none_match = request_header(request, "If-None-Match");
+    let if_none_match = request_header(request, "If-None-Match").map(str::to_owned);
     let body = match read_json_body(request, "POST /transaction", false) {
         Ok(body) => body,
         Err(response) => return response,
@@ -38,7 +38,9 @@ pub(super) fn response(request: &mut Request, catalog: &Catalog) -> HttpResponse
         }
     };
 
-    match catalog.commit_operations_with_if_none_match(&transaction.operations, if_none_match) {
+    match catalog
+        .commit_operations_with_if_none_match(&transaction.operations, if_none_match.as_deref())
+    {
         Ok(transaction_id) => {
             let response = json_response(
                 200,
