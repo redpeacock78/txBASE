@@ -145,10 +145,7 @@ fn reads_and_writes_a_pinned_upstream_city_euc_kr_fixture() {
         "서울특별"
     );
     assert_eq!(table.active_record(1).unwrap().values["시군구코드"], "1111");
-    assert_eq!(
-        table.active_record(1).unwrap().values["시군구명"],
-        "1종로구"
-    );
+    assert_eq!(table.active_record(1).unwrap().values["시군구명"], "종로구");
 
     table
         .patch_record(
