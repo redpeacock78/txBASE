@@ -10,7 +10,15 @@ fn fixture() -> Vec<u8> {
 }
 
 fn remove_table_files(path: &std::path::Path) {
-    for extension in ["dbf", "dbt", "fpt", "txidx", "txbase.wal", "txbase.lock"] {
+    for extension in [
+        "dbf",
+        "dbt",
+        "fpt",
+        "txidx",
+        "txbase.wal",
+        "txbase.lock",
+        "txbase.state",
+    ] {
         let candidate = if extension == "dbf" {
             path.to_path_buf()
         } else {
@@ -71,6 +79,40 @@ fn copy_table_files_preserves_dbf_and_memo_sidecar() {
     );
 
     let _ = fs::remove_file(source.with_extension("dbt"));
+    remove_table_files(&source);
+    remove_table_files(&destination);
+}
+
+#[test]
+fn copy_table_files_preserves_transaction_state() {
+    let source = std::env::temp_dir().join(format!(
+        "txbase-maintenance-state-source-{}.dbf",
+        std::process::id()
+    ));
+    let destination = std::env::temp_dir().join(format!(
+        "txbase-maintenance-state-destination-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&source);
+    remove_table_files(&destination);
+
+    fs::write(&source, fixture()).unwrap();
+    let mut table = DbfTable::from_path(&source).unwrap();
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"AGE": 30}).as_object().unwrap().clone(),
+        )
+        .unwrap();
+    table.save_with_wal(&source).unwrap();
+
+    copy_table_files(&source, &destination).unwrap();
+
+    assert_eq!(
+        DbfTable::from_path(&destination).unwrap().transaction_id(),
+        Some(1)
+    );
+
     remove_table_files(&source);
     remove_table_files(&destination);
 }

@@ -38,6 +38,7 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 | WAL-002 | Snapshot, delta, mutation-intent, memo, and index recovery are idempotent across replacement boundaries, while malformed index snapshots remain recoverable WAL errors. | `src/dbf/recovery.rs`; `src/dbf/persistence.rs` | `src/dbf/tests/persistence.rs` recovery cases; `recovery_fault_tests.rs::keeps_a_wal_with_a_malformed_index_snapshot` | Current |
 | WAL-003 | Independently loaded stale writers are rejected rather than silently overwriting newer DBF or memo bytes. | `src/dbf/persistence.rs`; `src/dbf/writer_tests.rs` | `rejects_a_stale_second_writer_without_overwriting_the_first_save` | Current |
 | TXN-001 | The low-level snapshot transaction manager resumes the next transaction ID from retained memory or file WAL commit/rollback records without claiming DBF/catalog HTTP IDs or MVCC visibility. | `src/transaction.rs` | `snapshot_engine_resumes_transaction_ids_from_wal`; `file_snapshot_engine_resumes_transaction_ids_after_reopen` | Boundary |
+| TXN-002 | Single-table DBF WAL commits allocate positive durable IDs, recover them from `TXTI`, reject stale transaction-state writers, copy the state sidecar, and expose the ID on HTTP mutations. | `src/dbf/persistence.rs`; `src/dbf/recovery.rs`; `src/dbf/maintenance.rs`; `src/server/etag.rs` | `wal_commit_ids_persist_and_resume_after_reload`; `snapshot_recovery_persists_the_wal_transaction_id`; `copy_table_files_preserves_transaction_state`; `mutation_etag_prevents_lost_update` | Current |
 | XBF-001 | The draft XBF codec bounds allocations, validates header and section CRC-32C values, decodes all non-reserved v1 scalar types, preserves physical deletion flags, and enforces local uniqueness. | `src/xbf/`; `docs/xbf.md` | `src/xbf/tests.rs` fixture, corruption, size-limit, and constraint cases | Boundary |
 | XBF-002 | The XBF snapshot path encodes before writing, syncs the snapshot bytes, replaces the target, syncs the parent directory before returning, and normal reads recover a pending WAL first. | `src/xbf/persistence.rs` | `writes_and_reads_a_durable_snapshot_path`; `reading_a_snapshot_recovers_a_pending_wal` | Boundary |
 | XBF-003 | The full-snapshot XBF WAL names its base and target generations, enforces the transaction-layer record limit, applies a pending snapshot idempotently with the caller's limits, and rejects a different current generation. | `src/xbf/wal.rs` | `recovers_a_generation_checked_full_snapshot_wal`; `rejects_a_generation_mismatched_xbf_wal`; `rejects_xbf_wal_records_over_the_file_wal_limit` | Boundary |
@@ -74,7 +75,7 @@ The following topics have documentation or design notes but do not have a curren
 
 - backpressure and stable snapshot rules for long-lived streams;
 - a full cost-based planner, planner-selected join strategies, and aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, and group-output `$project`;
-- transaction IDs and MVCC visibility;
+- catalog-wide transaction IDs and MVCC visibility;
 - locale-aware CJK collation and broader upstream external fixtures;
 - Strict multi-file reader atomicity for schema-preserving XBF-to-DBF export, object-storage manifests, WASM hosting, and distributed replication.
 

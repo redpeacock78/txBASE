@@ -36,7 +36,7 @@ cargo run -- --serve-catalog path/to/database
 
 `GET /catalog`でschema、`GET`/`HEAD /{table}/records[/{id}]`でnamed tableを読み取れます。
 `POST /{table}/records`と`PUT`/`PATCH`/`DELETE /{table}/records/{id}`は、single-table serverと同じWAL/ETag semanticsで一つのDBFを更新します。
-`QUERY /{table}/records`と`QUERY /{table}/explain`はsingle-table serverと同じquery documentを受け付け、`QUERY /join`はbounded joinを返します。catalog serverの`POST /transaction`はnamed-table mutationをcatalog journalで複数DBFへatomicにcommitします。transaction IDとMVCC visibilityは未実装です。
+`QUERY /{table}/records`と`QUERY /{table}/explain`はsingle-table serverと同じquery documentを受け付け、`QUERY /join`はbounded joinを返します。named-table mutationはsingle-tableと同じ`X-Txbase-Transaction-Id`を返します。catalog serverの`POST /transaction`はnamed-table mutationをcatalog journalで複数DBFへatomicにcommitしますが、catalog-wide transaction IDとMVCC visibilityは未実装です。
 
 single-table serverの`QUERY /explain`は、同じquery documentに対するtable scanまたはindex
 planを構造化JSONで返します。
@@ -103,6 +103,7 @@ HTTP境界の詳細は[HTTP method semantics](docs/http-semantics.md)を参照�
 GETとHEADは`If-None-Match`にも対応し、一致すれば`304 Not Modified`を返します。
 `POST`、`PUT`、`PATCH`、`DELETE`、`POST /transaction`には任意の`If-Match`を付けられます。
 currentなstrong tagまたは既存resourceに対する`*`以外は`412 Precondition Failed`となり、tableは変更されません。
+WAL-backed mutationは`X-Txbase-Transaction-Id`を返し、single-tableの`POST /transaction`では同じ値をJSONの`transaction_id`にも含めます。
 
 ### Mutation
 
@@ -117,7 +118,7 @@ currentなstrong tagまたは既存resourceに対する`*`以外は`412 Precondi
 複数のrecord mutationは`POST /transaction`で一つのDBFに対してまとめてcommitできます。
 全operationをprivate copyに適用してから、一回のsnapshot/WAL boundaryで保存します。
 operationが失敗した場合はcopyを破棄し、元のDBFを変更しません。
-cross-table atomicityとMVCC visibilityは未実装です。
+commit IDは`.txbase.state` sidecarに保存され、再起動またはWAL復旧後も継続します。cross-table atomicity、catalog-wide transaction ID、MVCC visibilityは未実装です。
 
 path-loaded mutationは、可能なら`TXDP` byte-range deltaを使います。
 
@@ -187,9 +188,9 @@ recoverableな`TXSE` export boundaryでjournal化します。途中で停止し�
 path-aware plannerは、複数のsingle-field indexが有効なdirect equality filterであれば候補recordをintersectionできます。
 
 catalog joinは`txbase::query::join::parse`と`execute`から使います。
-複数join、cost-based planner、backpressure付きのstreaming、HTTP-visibleなtransaction ID、MVCC visibilityは未実装です。
+複数join、cost-based planner、backpressure付きのstreaming、catalog-wide transaction ID、MVCC visibilityは未実装です。
 
-backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt`、`.txschema.json`、有効な`.txidx` sidecarもコピーします。
+backupとrestoreは、DBFと同じstemの`.dbt`または`.fpt`、`.txschema.json`、`.txbase.state`、有効な`.txidx` sidecarもコピーします。
 sourceのindexがstaleまたは壊れている場合は拒否し、sourceにindexがなければdestinationの古いindexを削除します。
 
 DBF codecはVisual FoxProのCJK driver IDであるWindows-31J/CP932、GBK/CP936、EUC-KR/CP949、Big5/CP950に対応します。

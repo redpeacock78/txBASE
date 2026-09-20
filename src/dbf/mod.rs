@@ -63,7 +63,7 @@ use schema_metadata::SchemaMetadata;
 #[cfg(test)]
 use wal::{
     ByteDelta, DELTA_MAGIC, MEMO_SNAPSHOT_MAGIC, OPERATION_MAGIC, SNAPSHOT_MAGIC, apply_byte_delta,
-    decode_operation_payload, decode_snapshot,
+    decode_operation_payload, decode_snapshot, transaction_id_payload,
 };
 use wal::{delta_payload, memo_snapshot_payload, operation_payload, snapshot_payload};
 
@@ -233,6 +233,7 @@ struct PersistedState {
     dbf: Vec<u8>,
     memo: Option<Vec<u8>>,
     schema: Option<Vec<u8>>,
+    transaction_id: Option<u64>,
 }
 
 type MemoUpdates = BTreeMap<(usize, String), MemoUpdate>;
@@ -249,6 +250,7 @@ pub struct DbfTable {
     schema: Option<SchemaMetadata>,
     encoding_override: Option<String>,
     memo_updates: MemoUpdates,
+    transaction_id: Option<u64>,
     source: Option<PersistedState>,
 }
 
@@ -290,6 +292,10 @@ impl DbfTable {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         self.bytes.clone()
+    }
+
+    pub fn transaction_id(&self) -> Option<u64> {
+        self.transaction_id
     }
 
     pub(crate) fn representation_hash(&self) -> u64 {

@@ -1,3 +1,4 @@
+use super::persistence::transaction_state_path;
 use super::schema_metadata::schema_metadata_path;
 use super::{
     ACTIVE_RECORD, DbfError, DbfTable, EOF_MARKER, find_memo_path, sync_parent_directory,
@@ -31,6 +32,12 @@ pub fn copy_table_files(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(error.into()),
     };
+    let source_state = transaction_state_path(source);
+    let state_bytes = match fs::read(&source_state) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
     let source_index = sidecar_path(source);
     let index_bytes = match fs::read(&source_index) {
         Ok(bytes) => {
@@ -47,6 +54,7 @@ pub fn copy_table_files(
             .map(|extension| destination.with_extension(extension))
     });
     let destination_schema = schema_metadata_path(destination);
+    let destination_state = transaction_state_path(destination);
     let destination_index = sidecar_path(destination);
 
     let dbf_temp = write_temp(destination, &dbf_bytes, "dbf")?;
@@ -57,6 +65,10 @@ pub fn copy_table_files(
     let schema_temp = schema_bytes
         .as_ref()
         .map(|bytes| write_temp(&destination_schema, bytes, "schema"))
+        .transpose()?;
+    let state_temp = state_bytes
+        .as_ref()
+        .map(|bytes| write_temp(&destination_state, bytes, "state"))
         .transpose()?;
     let index_temp = index_bytes
         .as_ref()
@@ -69,6 +81,9 @@ pub fn copy_table_files(
             let _ = fs::remove_file(path);
         }
         if let Some(path) = schema_temp {
+            let _ = fs::remove_file(path);
+        }
+        if let Some(path) = state_temp {
             let _ = fs::remove_file(path);
         }
         if let Some(path) = index_temp {
@@ -86,6 +101,11 @@ pub fn copy_table_files(
     } else {
         remove_file_if_exists(&destination_schema)?;
     }
+    if let Some(temp) = state_temp {
+        replace_file(&temp, &destination_state)?;
+    } else {
+        remove_file_if_exists(&destination_state)?;
+    }
     if let Some(temp) = index_temp {
         replace_file(&temp, &destination_index)?;
     } else {
@@ -95,6 +115,7 @@ pub fn copy_table_files(
     if let Some(path) = destination_memo.as_ref() {
         sync_parent_directory(path)?;
     }
+    sync_parent_directory(&destination_state)?;
     sync_parent_directory(&destination_index)?;
     Ok(())
 }

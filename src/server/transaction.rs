@@ -59,12 +59,13 @@ pub(super) fn response(
         return dbf_error_response(dbf_error);
     }
     *table = working;
-    etag::with_current(
+    etag::with_transaction(
         json_response(
             200,
             json!({
                 "committed": true,
                 "operations": transaction.operations.len(),
+                "transaction_id": table.transaction_id(),
             }),
             false,
         ),

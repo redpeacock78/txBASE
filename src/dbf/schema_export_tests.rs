@@ -29,6 +29,7 @@ fn path(name: &str) -> PathBuf {
 fn cleanup(path: &Path) {
     let _ = fs::remove_file(path);
     let _ = fs::remove_file(path.with_extension("txschema.json"));
+    let _ = fs::remove_file(path.with_extension("txbase.state"));
     let _ = fs::remove_file(crate::index::sidecar_path(path));
     let _ = fs::remove_file(path.with_extension("txbase.lock"));
     let _ = fs::remove_file(schema_export::test_journal_path(path));

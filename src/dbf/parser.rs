@@ -1,3 +1,4 @@
+use super::persistence::read_transaction_state;
 use super::*;
 
 impl DbfTable {
@@ -220,6 +221,7 @@ impl DbfTable {
             schema: None,
             encoding_override: encoding_override.map(ToOwned::to_owned),
             memo_updates: BTreeMap::new(),
+            transaction_id: None,
             source: None,
         })
     }

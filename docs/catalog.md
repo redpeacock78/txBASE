@@ -76,7 +76,7 @@ single-table `QUERY /explain`. `QUERY /join` accepts the same JSON join document
 mutation, WAL, ETag, validation, and constraint behavior. Each request commits only its named
 DBF. `POST /transaction` accepts named-table mutation paths and commits all affected DBFs under
 one catalog journal; an incomplete prepare is rolled back on the next catalog read. The catalog
-does not provide transaction IDs or MVCC visibility.
+does not provide catalog-wide transaction IDs or MVCC visibility.
 The catalog is discovered once at server startup, while each request loads the named table through
 the existing recovery path. Named-table mutations do not add or remove tables.
 
@@ -138,4 +138,4 @@ It does not infer relationships from field names.
 The local join supports `inner`, `left`, `right`, `semi`, and `anti` equality joins plus a bounded
 `cross` join, with a hard result bound.
 It does not provide a cost-based planner, streaming backpressure, planner-selected join strategies,
-transaction IDs, or MVCC visibility.
+catalog-wide transaction IDs, or MVCC visibility.

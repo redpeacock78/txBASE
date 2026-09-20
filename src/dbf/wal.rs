@@ -13,7 +13,9 @@ pub(super) const SNAPSHOT_MAGIC: &[u8; 4] = b"TXDB";
 pub(super) const MEMO_SNAPSHOT_MAGIC: &[u8; 4] = b"TXDM";
 pub(super) const DELTA_MAGIC: &[u8; 4] = b"TXDP";
 pub(super) const OPERATION_MAGIC: &[u8; 4] = b"TXOP";
+pub(super) const TRANSACTION_ID_MAGIC: &[u8; 4] = b"TXTI";
 const OPERATION_VERSION: u8 = 1;
+const TRANSACTION_ID_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct RecoverySnapshot {
@@ -25,6 +27,41 @@ pub(super) fn snapshot_payload(dbf: &[u8]) -> Vec<u8> {
     let mut payload = SNAPSHOT_MAGIC.to_vec();
     payload.extend_from_slice(dbf);
     payload
+}
+
+pub(super) fn transaction_id_payload(transaction_id: u64) -> Vec<u8> {
+    let mut payload = TRANSACTION_ID_MAGIC.to_vec();
+    payload.push(TRANSACTION_ID_VERSION);
+    payload.extend_from_slice(&transaction_id.to_le_bytes());
+    payload
+}
+
+pub(super) fn decode_transaction_id_payload(payload: &[u8]) -> Result<Option<u64>, DbfError> {
+    let Some(body) = payload.strip_prefix(TRANSACTION_ID_MAGIC) else {
+        return Ok(None);
+    };
+    if body.len() != 9 {
+        return Err(DbfError::Invalid(
+            "transaction ID WAL payload is truncated".into(),
+        ));
+    }
+    if body[0] != TRANSACTION_ID_VERSION {
+        return Err(DbfError::Invalid(format!(
+            "unknown transaction ID WAL version {}",
+            body[0]
+        )));
+    }
+    let transaction_id = u64::from_le_bytes(
+        body[1..9]
+            .try_into()
+            .expect("transaction ID payload is fixed length"),
+    );
+    if transaction_id == 0 {
+        return Err(DbfError::Invalid(
+            "transaction ID WAL payload must be positive".into(),
+        ));
+    }
+    Ok(Some(transaction_id))
 }
 
 pub(super) fn operation_payload(operation: &OperationIr) -> Result<Vec<u8>, DbfError> {
@@ -61,6 +98,9 @@ pub(super) fn decode_wal_payload(
         delta::decode_delta_payload(path, payload)
     } else if payload.starts_with(OPERATION_MAGIC) {
         decode_operation_payload(payload)?;
+        Ok(None)
+    } else if payload.starts_with(TRANSACTION_ID_MAGIC) {
+        decode_transaction_id_payload(payload)?;
         Ok(None)
     } else {
         decode_snapshot(payload)

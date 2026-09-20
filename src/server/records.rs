@@ -104,7 +104,7 @@ pub(super) fn post_response_at_with_validator(
             false,
         );
     };
-    etag::with_current(
+    etag::with_transaction(
         json_response(201, record_json(record), false)
             .with_header(header("Location", &format!("{location_path}/{id}"))),
         table,
@@ -169,7 +169,9 @@ pub(super) fn update_response_with_validator(
         return response;
     }
     match table.active_record(id) {
-        Some(record) => etag::with_current(json_response(200, record_json(record), false), table),
+        Some(record) => {
+            etag::with_transaction(json_response(200, record_json(record), false), table)
+        }
         None => json_response(
             500,
             error("storage_error", "updated record is unavailable"),
@@ -220,7 +222,7 @@ pub(super) fn delete_response_with_validator(
     if let Err(response) = persist_mutation(table, original, dbf_path, &operation) {
         return response;
     }
-    etag::with_current(
+    etag::with_transaction(
         Response::from_string(String::new()).with_status_code(204),
         table,
     )

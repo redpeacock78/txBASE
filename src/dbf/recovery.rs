@@ -1,7 +1,8 @@
+use super::persistence::{next_transaction_id, read_transaction_state, write_transaction_state};
 use super::schema_metadata::read_schema_metadata;
 use super::wal::{
-    decode_operation_payload, decode_wal_payload, delta_payload, memo_snapshot_payload,
-    snapshot_payload,
+    decode_operation_payload, decode_transaction_id_payload, decode_wal_payload, delta_payload,
+    memo_snapshot_payload, snapshot_payload, transaction_id_payload,
 };
 use super::{
     DbfError, DbfTable, MemoFile, PersistedState, find_memo_path, save_bytes_to, transaction_error,
@@ -18,6 +19,7 @@ impl DbfTable {
         requested_encoding: Option<&str>,
     ) -> Result<Self, DbfError> {
         let dbf = fs::read(path)?;
+        let transaction_id = read_transaction_state(path)?;
         let schema = read_schema_metadata(path)?;
         let encoding_override = requested_encoding.or_else(|| {
             schema
@@ -44,7 +46,9 @@ impl DbfTable {
             dbf,
             memo: table.memo.as_ref().map(|memo| memo.bytes.clone()),
             schema: schema.map(|(_, bytes)| bytes),
+            transaction_id,
         });
+        table.transaction_id = transaction_id;
         Ok(table)
     }
 
@@ -87,6 +91,7 @@ impl DbfTable {
             return Ok(false);
         }
         let index_payload = find_index_payload(&wal)?;
+        let transaction_id = find_transaction_id(&wal)?;
         let snapshot =
             wal.records().iter().rev().find_map(|(_, payload)| {
                 match decode_wal_payload(path, payload) {
@@ -108,6 +113,9 @@ impl DbfTable {
                 crate::index::apply_snapshot_payload(path, index_payload)
                     .map_err(super::index_error)?;
             }
+            if let Some(transaction_id) = transaction_id {
+                persist_recovered_transaction_id(path, transaction_id)?;
+            }
             finish_recovery(wal, &wal_path);
             return Ok(true);
         }
@@ -120,9 +128,18 @@ impl DbfTable {
             }
         });
         let Some(operation) = operation else {
+            if transaction_id.is_some() {
+                finish_recovery(wal, &wal_path);
+            }
             return Ok(false);
         };
         let operation = operation?;
+        let transaction_id = match transaction_id {
+            Some(transaction_id) => transaction_id,
+            None => next_transaction_id(read_transaction_state(path)?)?,
+        };
+        let transaction_id = read_transaction_state(path)?
+            .map_or(transaction_id, |current| current.max(transaction_id));
         let mut table = Self::load_path_with_encoding(path, encoding_override)?;
         table.apply_operation(&operation)?;
         let memo_snapshot = table.apply_memo_updates(path)?;
@@ -139,6 +156,9 @@ impl DbfTable {
             memo_snapshot.as_ref().map(|memo| memo.bytes.as_slice()),
         )
         .map_err(super::index_error)?;
+        wal.append(&transaction_id_payload(transaction_id))
+            .map_err(transaction_error)?;
+        wal.sync().map_err(transaction_error)?;
         wal.append(&payload).map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
         if let Some(index_payload) = &index_payload {
@@ -155,6 +175,7 @@ impl DbfTable {
             crate::index::apply_snapshot_payload(path, index_payload)
                 .map_err(super::index_error)?;
         }
+        write_transaction_state(path, transaction_id)?;
         finish_recovery(wal, &wal_path);
         Ok(true)
     }
@@ -228,6 +249,21 @@ fn find_index_payload(wal: &FileWal) -> Result<Option<Vec<u8>>, DbfError> {
         }
     }
     Ok(None)
+}
+
+fn find_transaction_id(wal: &FileWal) -> Result<Option<u64>, DbfError> {
+    for (_, payload) in wal.records().iter().rev() {
+        if let Some(transaction_id) = decode_transaction_id_payload(payload)? {
+            return Ok(Some(transaction_id));
+        }
+    }
+    Ok(None)
+}
+
+fn persist_recovered_transaction_id(path: &Path, transaction_id: u64) -> Result<(), DbfError> {
+    let transaction_id =
+        read_transaction_state(path)?.map_or(transaction_id, |current| current.max(transaction_id));
+    write_transaction_state(path, transaction_id)
 }
 
 fn finish_recovery(mut wal: FileWal, wal_path: &Path) {

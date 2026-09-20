@@ -166,15 +166,21 @@ txBASE uses these records in its WAL:
 | Record | Role |
 | --- | --- |
 | `TXOP` | Durable HTTP mutation intent |
+| `TXTI` | Positive DBF WAL commit ID |
 | `TXDP` | Byte-range delta when smaller than a full replacement |
 | `TXDB` | Complete DBF snapshot |
 | `TXDM` | Complete DBF and memo snapshot |
 
 The WAL is synced before the replacement of the DBF or memo sidecar.
 
+WAL-backed single-table commits also persist the positive commit ID in a `TXTI` WAL record and
+the `*.txbase.state` sidecar. Recovery writes that sidecar before clearing the WAL. Legacy DBFs
+without the sidecar start at commit ID 1 on their first WAL-backed save.
+
 Startup recovery accepts an already-applied target, rejects a mismatched delta base, and replays a supported `TXOP` when no state payload exists.
 
-A stale path-loaded table is rejected when the DBF or memo bytes changed after the table was loaded.
+A stale path-loaded table is rejected when the DBF, memo, schema, or transaction-state bytes changed
+after the table was loaded.
 
 This is a recoverability contract for the current prototype, not a multi-writer replication protocol.
 

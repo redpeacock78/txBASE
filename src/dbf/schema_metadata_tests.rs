@@ -21,7 +21,13 @@ fn temporary_path() -> std::path::PathBuf {
 }
 
 fn cleanup(path: &Path) {
-    for extension in ["dbf", "txschema.json", "txbase.wal", "txbase.lock"] {
+    for extension in [
+        "dbf",
+        "txschema.json",
+        "txbase.wal",
+        "txbase.lock",
+        "txbase.state",
+    ] {
         let candidate = if extension == "dbf" {
             path.to_path_buf()
         } else {

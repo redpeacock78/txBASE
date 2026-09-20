@@ -9,6 +9,17 @@ pub(super) fn with_current(response: HttpResponse, table: &DbfTable) -> HttpResp
     response.with_header(header("ETag", &current(table)))
 }
 
+pub(super) fn with_transaction(response: HttpResponse, table: &DbfTable) -> HttpResponse {
+    let response = with_current(response, table);
+    match table.transaction_id() {
+        Some(transaction_id) => response.with_header(header(
+            "X-Txbase-Transaction-Id",
+            &transaction_id.to_string(),
+        )),
+        None => response,
+    }
+}
+
 pub(super) fn not_modified(
     request: &Request,
     table: &DbfTable,

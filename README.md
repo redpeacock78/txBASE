@@ -97,8 +97,9 @@ txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
 
 `QUERY /{table}/records` and `QUERY /{table}/explain` accept the same query document as the
 single-table routes. Named-table mutations reuse single-table WAL/ETag behavior and commit one
-DBF at a time. Catalog `POST /transaction` commits named-table mutations atomically through a
-catalog journal; transaction IDs and MVCC remain future work.
+DBF at a time, including its `X-Txbase-Transaction-Id` response header. Catalog `POST /transaction`
+commits named-table mutations atomically through a catalog journal; catalog-wide transaction IDs
+and MVCC remain future work.
 
 The single-table server also exposes `QUERY /explain`, which returns the selected table-scan or
 index plan for the same query document.
@@ -132,6 +133,10 @@ curl -i -X POST \
   -d '{"operations":[{"method":"POST","path":"/records","body":{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}},{"method":"PATCH","path":"/records/3","body":{"$inc":{"AGE":1}}}]}' \
   http://127.0.0.1:8080/transaction
 ```
+
+Successful WAL-backed mutations return `X-Txbase-Transaction-Id`. The single-table transaction
+response also includes the same value as `transaction_id`; it is persisted in the table's
+`.txbase.state` sidecar and resumes after restart or WAL recovery.
 
 The batch is single-table and all operations run on a private copy before one commit. Cross-table atomicity and MVCC visibility are not provided.
 
@@ -238,7 +243,7 @@ targets changed by another writer; it does not promise one physically atomic sna
 legacy readers.
 
 `backup` and `restore` validate the source first, then copy the DBF, detected memo and schema
-sidecars, plus a present valid `.txidx` sidecar. A stale or malformed source index is rejected;
+sidecars, the durable `.txbase.state` commit ID, plus a present valid `.txidx` sidecar. A stale or malformed source index is rejected;
 an absent source index removes an old destination index.
 
 When a DBF language-driver byte is missing or untrusted, the read, schema, verify, pack, recall,
@@ -352,7 +357,7 @@ The roadmap is research-led and does not turn every compatibility idea into code
 
 Near-term work is to harden the current DBF, memo, WAL, query, and HTTP contracts with fixtures and failure tests.
 
-Later phases may add a full cost-based index choice, streaming backpressure, planner-selected joins, additional aggregation stages, HTTP-visible transaction IDs, MVCC, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
+Later phases may add a full cost-based index choice, streaming backpressure, planner-selected joins, additional aggregation stages, catalog-wide transaction IDs, MVCC, additional CJK encodings, strict multi-file reader atomicity for XBF export, and object-storage commits.
 
 See [docs/roadmap.md](docs/roadmap.md) for the phase boundaries and acceptance conditions.
 

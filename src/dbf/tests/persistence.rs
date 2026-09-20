@@ -6,6 +6,83 @@ use fs2::FileExt;
 use std::fs::OpenOptions;
 
 #[test]
+fn wal_commit_ids_persist_and_resume_after_reload() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-transaction-id-reload-{}.dbf",
+        std::process::id()
+    ));
+    let state_path = path.with_extension("txbase.state");
+    let wal_path = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&state_path);
+    let _ = fs::remove_file(&wal_path);
+    fs::write(&path, fixture()).unwrap();
+
+    let mut first = DbfTable::from_path(&path).unwrap();
+    first
+        .patch_record(
+            1,
+            serde_json::json!({"AGE": 30}).as_object().unwrap().clone(),
+        )
+        .unwrap();
+    first.save_with_wal(&path).unwrap();
+    assert_eq!(first.transaction_id(), Some(1));
+
+    let mut second = DbfTable::from_path(&path).unwrap();
+    assert_eq!(second.transaction_id(), Some(1));
+    second
+        .patch_record(
+            1,
+            serde_json::json!({"AGE": 31}).as_object().unwrap().clone(),
+        )
+        .unwrap();
+    second.save_with_wal(&path).unwrap();
+    assert_eq!(second.transaction_id(), Some(2));
+    assert_eq!(
+        DbfTable::from_path(&path).unwrap().transaction_id(),
+        Some(2)
+    );
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(state_path).unwrap();
+}
+
+#[test]
+fn snapshot_recovery_persists_the_wal_transaction_id() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-transaction-id-recovery-{}.dbf",
+        std::process::id()
+    ));
+    let state_path = path.with_extension("txbase.state");
+    let wal_path = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&state_path);
+    let _ = fs::remove_file(&wal_path);
+    fs::write(&path, fixture()).unwrap();
+
+    let mut pending = DbfTable::from_bytes(&fixture()).unwrap();
+    pending
+        .patch_record(
+            1,
+            serde_json::json!({"AGE": 32}).as_object().unwrap().clone(),
+        )
+        .unwrap();
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(&transaction_id_payload(7)).unwrap();
+    wal.append(&snapshot_payload(&pending.to_bytes())).unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    let recovered = DbfTable::from_path(&path).unwrap();
+    assert_eq!(recovered.transaction_id(), Some(7));
+    assert!(!wal_path.exists());
+    assert!(state_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(state_path).unwrap();
+}
+
+#[test]
 fn rejects_stale_dbf_before_save() {
     let path = std::env::temp_dir().join(format!("txbase-stale-save-{}.dbf", std::process::id()));
     let wal_path = path.with_extension("txbase.wal");

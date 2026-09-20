@@ -27,9 +27,10 @@ The repository currently provides:
 - JSON query execution with a small MongoDB-inspired predicate vocabulary.
 - Bounded `$expr` boolean trees over field-to-field comparison leaves that remain on the table-scan reference path.
 - HTTP `GET`, `QUERY`, `POST`, `PUT`, `PATCH`, and `DELETE` routes.
-- File or memory WAL types with `TXOP`, `TXDP`, `TXDB`, and `TXDM` persistence paths.
+- File or memory WAL types with `TXOP`, `TXTI`, `TXDP`, `TXDB`, and `TXDM` persistence paths.
 - A low-level snapshot transaction engine whose `TransactionId` sequence resumes from retained
-  memory or file WAL commit/rollback records; DBF and catalog HTTP commits do not expose those IDs.
+  memory or file WAL commit/rollback records, plus durable DBF single-table WAL commit IDs exposed
+  by the HTTP mutation boundary.
 - Startup recovery, stale-snapshot rejection, and an Ubuntu/macOS/Windows CI gate.
 - Schema introspection, DBF verification, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
@@ -47,7 +48,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality and range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, DBF-to-XBF conversion helper, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, planner-selected join strategies, DBF/catalog transaction IDs or MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index model, an asynchronous streaming backpressure protocol, planner-selected join strategies, catalog-wide transaction IDs or MVCC visibility, aggregation stages beyond bounded `$match`, `$count`, `$distinct`, `$group`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -76,11 +77,11 @@ The catalog currently derives table identity from direct-child DBF filenames and
 It provides table discovery, named table loading, schema output, per-table verification, and
 independent named-table HTTP mutations that reuse the single-table persistence boundary.
 
-It does not yet provide relationships, cross-table index coordination, transaction IDs, or MVCC visibility.
+It does not yet provide relationships, cross-table index coordination, catalog-wide transaction IDs, or MVCC visibility.
 
 The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact equality and range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support a full cost model, collation-aware index keys, transaction IDs, or MVCC visibility.
+It does not yet support a full cost model, collation-aware index keys, catalog-wide transaction IDs, or MVCC visibility.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 

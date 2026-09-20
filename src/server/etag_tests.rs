@@ -24,6 +24,7 @@ fn cleanup(path: &Path) {
     let _ = fs::remove_file(path);
     let _ = fs::remove_file(path.with_extension("txbase.wal"));
     let _ = fs::remove_file(path.with_extension("txbase.lock"));
+    let _ = fs::remove_file(path.with_extension("txbase.state"));
 }
 
 fn header_value(response: &super::HttpResponse, name: &'static str) -> String {
@@ -114,6 +115,7 @@ fn mutation_etag_prevents_lost_update() {
     let response = update_response(&mut matching, "/records/1", &mut table, &path, false);
     assert_eq!(response.status_code(), StatusCode(200));
     assert_ne!(header_value(&response, "ETag"), current);
+    assert_eq!(header_value(&response, "X-Txbase-Transaction-Id"), "1");
     assert_eq!(table.active_record(1).unwrap().values["AGE"], 30);
 
     cleanup(&path);

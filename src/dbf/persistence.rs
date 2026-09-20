@@ -1,5 +1,68 @@
 use super::schema_metadata::schema_metadata_bytes;
+use super::wal::transaction_id_payload;
 use super::*;
+
+const TRANSACTION_STATE_MAGIC: &[u8; 4] = b"TXTS";
+const TRANSACTION_STATE_VERSION: u8 = 1;
+
+pub(super) fn transaction_state_path(path: &Path) -> PathBuf {
+    path.with_extension("txbase.state")
+}
+
+pub(super) fn read_transaction_state(path: &Path) -> Result<Option<u64>, DbfError> {
+    let state_path = transaction_state_path(path);
+    let bytes = match fs::read(state_path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let Some(body) = bytes.strip_prefix(TRANSACTION_STATE_MAGIC) else {
+        return Err(DbfError::Invalid(
+            "transaction state header is invalid".into(),
+        ));
+    };
+    if body.len() != 9 {
+        return Err(DbfError::Invalid(
+            "transaction state payload is truncated".into(),
+        ));
+    }
+    if body[0] != TRANSACTION_STATE_VERSION {
+        return Err(DbfError::Invalid(format!(
+            "unknown transaction state version {}",
+            body[0]
+        )));
+    }
+    let transaction_id = u64::from_le_bytes(
+        body[1..9]
+            .try_into()
+            .expect("transaction state payload is fixed length"),
+    );
+    if transaction_id == 0 {
+        return Err(DbfError::Invalid(
+            "transaction state ID must be positive".into(),
+        ));
+    }
+    Ok(Some(transaction_id))
+}
+
+pub(super) fn write_transaction_state(path: &Path, transaction_id: u64) -> Result<(), DbfError> {
+    if transaction_id == 0 {
+        return Err(DbfError::Invalid(
+            "transaction state ID must be positive".into(),
+        ));
+    }
+    let mut bytes = TRANSACTION_STATE_MAGIC.to_vec();
+    bytes.push(TRANSACTION_STATE_VERSION);
+    bytes.extend_from_slice(&transaction_id.to_le_bytes());
+    save_bytes_to(&transaction_state_path(path), &bytes, "txbase.state.tmp")
+}
+
+pub(super) fn next_transaction_id(current: Option<u64>) -> Result<u64, DbfError> {
+    current
+        .unwrap_or(0)
+        .checked_add(1)
+        .ok_or_else(|| DbfError::Invalid("transaction ID exhausted".into()))
+}
 
 impl DbfTable {
     pub(crate) fn prepare_snapshot(&mut self, path: &Path) -> Result<PreparedSnapshot, DbfError> {
@@ -74,6 +137,11 @@ impl DbfTable {
                 "schema metadata changed since the table was loaded".into(),
             ));
         }
+        if read_transaction_state(path)? != source.transaction_id {
+            return Err(DbfError::Invalid(
+                "transaction state changed since the table was loaded".into(),
+            ));
+        }
         Ok(())
     }
 
@@ -96,9 +164,12 @@ impl DbfTable {
     ) -> Result<(), DbfError> {
         let _lock = TableLock::acquire(path)?;
         let _ = Self::recover_wal_with_encoding(path, self.encoding_override.as_deref())?;
+        let current_transaction_id = read_transaction_state(path)?;
         self.bind_schema_if_present(path)?;
         self.ensure_source_current(path)?;
+        let transaction_id = next_transaction_id(current_transaction_id)?;
         let mut prepared = self.clone();
+        prepared.transaction_id = Some(transaction_id);
         let memo_snapshot = prepared.apply_memo_updates(path)?;
         let full_payload = match &memo_snapshot {
             Some(memo) => memo_snapshot_payload(&prepared.bytes, memo)?,
@@ -120,6 +191,9 @@ impl DbfTable {
                 .map_err(transaction_error)?;
             wal.sync().map_err(transaction_error)?;
         }
+        wal.append(&transaction_id_payload(transaction_id))
+            .map_err(transaction_error)?;
+        wal.sync().map_err(transaction_error)?;
         wal.append(&payload).map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
         if let Some(index_payload) = &index_payload {
@@ -138,6 +212,7 @@ impl DbfTable {
             crate::index::refresh_if_present(path, &prepared)
         };
         index_result.map_err(index_error)?;
+        write_transaction_state(path, transaction_id)?;
         wal.clear().map_err(transaction_error)?;
         drop(wal);
         fs::remove_file(wal_path)?;
@@ -146,6 +221,7 @@ impl DbfTable {
             dbf: prepared.bytes.clone(),
             memo: prepared.memo.as_ref().map(|memo| memo.bytes.clone()),
             schema: schema_metadata_bytes(path)?,
+            transaction_id: Some(transaction_id),
         });
         *self = prepared;
         Ok(())

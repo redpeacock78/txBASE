@@ -74,6 +74,8 @@ current tag, or `*` when the target exists, permits the mutation; a supplied wea
 non-matching condition returns `412 Precondition Failed` without changing the table. An omitted
 header preserves the existing behavior. A comma
 separated list succeeds when any strong tag matches. Successful mutations return the new `ETag`.
+WAL-backed successful mutations also return `X-Txbase-Transaction-Id`. `POST /transaction` repeats
+the same positive DBF commit ID as its `transaction_id` JSON member.
 
 The validator is opaque and is not an authenticity or authorization token. It is derived from the
 current in-memory DBF bytes and resolved active JSON values, so memo-backed values participate in
@@ -162,14 +164,15 @@ Startup recovery replays a supported intent when no state payload exists.
 
 `POST /transaction` applies all operations to a private table copy and persists one snapshot/WAL
 commit. If validation or any operation fails, the copy is discarded and the current DBF is not
-changed. The current boundary is one DBF table; it does not provide cross-table atomicity,
-independent transaction IDs, or MVCC visibility.
+changed. The commit ID is durable for that DBF and resumes after restart or WAL recovery. The
+current boundary is one DBF table; it does not provide cross-table atomicity, catalog-wide
+transaction IDs, or MVCC visibility.
 
 The catalog server's `POST /transaction` accepts `/table/records` and
 `/table/records/{id}` mutation paths. It prepares every affected table under one catalog lock,
 commits the DBF and changed sidecars through a directory journal, and rolls back an incomplete
 prepare on the next catalog read. It provides cross-table atomic commit and crash recovery, but
-does not provide independent transaction IDs or MVCC visibility.
+does not provide a catalog-wide transaction ID or MVCC visibility.
 
 The table lock serializes save paths, and a stale independently loaded table is rejected.
 

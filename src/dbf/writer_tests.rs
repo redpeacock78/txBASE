@@ -17,9 +17,11 @@ fn rejects_a_stale_second_writer_without_overwriting_the_first_save() {
     let path = std::env::temp_dir().join(format!("txbase-two-writers-{}.dbf", std::process::id()));
     let wal_path = path.with_extension("txbase.wal");
     let lock_path = path.with_extension("txbase.lock");
+    let state_path = path.with_extension("txbase.state");
     let _ = fs::remove_file(&path);
     let _ = fs::remove_file(&wal_path);
     let _ = fs::remove_file(&lock_path);
+    let _ = fs::remove_file(&state_path);
     fs::write(&path, fixture()).unwrap();
 
     let mut first = DbfTable::from_path(&path).unwrap();
@@ -55,6 +57,44 @@ fn rejects_a_stale_second_writer_without_overwriting_the_first_save() {
 
     fs::remove_file(path).unwrap();
     fs::remove_file(lock_path).unwrap();
+    fs::remove_file(state_path).unwrap();
+}
+
+#[test]
+fn rejects_a_stale_transaction_state_without_a_dbf_change() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-stale-transaction-state-{}.dbf",
+        std::process::id()
+    ));
+    let wal_path = path.with_extension("txbase.wal");
+    let lock_path = path.with_extension("txbase.lock");
+    let state_path = path.with_extension("txbase.state");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&lock_path);
+    let _ = fs::remove_file(&state_path);
+    fs::write(&path, fixture()).unwrap();
+
+    let mut current = DbfTable::from_path(&path).unwrap();
+    let mut stale = DbfTable::from_path(&path).unwrap();
+    current.save_with_wal(&path).unwrap();
+    stale
+        .patch_record(
+            1,
+            serde_json::json!({"AGE": 31}).as_object().unwrap().clone(),
+        )
+        .unwrap();
+
+    let error = stale.save_with_wal(&path).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("transaction state changed since the table was loaded")
+    );
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(lock_path).unwrap();
+    fs::remove_file(state_path).unwrap();
 }
 
 #[test]
