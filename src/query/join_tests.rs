@@ -347,6 +347,41 @@ fn chained_compound_join_uses_a_fresh_foreign_index() {
 }
 
 #[test]
+fn chained_right_compound_join_uses_a_fresh_foreign_index() {
+    let root = catalog_with_many_indexed_posts_and_comments();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let request = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "cross",
+            "table": "posts",
+            "on": {}
+          },
+          "joins": [
+            {
+              "type": "right",
+              "table": "comments",
+              "on": {
+                "posts.ID": {"$eq": {"$field": "comments.ID"}},
+                "posts.AGE": {"$eq": {"$field": "comments.AGE"}}
+              }
+            }
+          ],
+          "projection": {"posts.ID": 1, "comments.ID": 1, "posts.AGE": 1, "comments.AGE": 1}
+        }"#,
+    )
+    .unwrap();
+
+    let rows = execute(&catalog, &request).unwrap();
+
+    assert!(rows.len() >= 81);
+    assert!(rows.iter().all(|row| row.get("comments.ID").is_some()));
+    assert!(rows.iter().any(|row| row.get("posts.ID").is_none()));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn semi_and_anti_join_emit_only_matching_or_unmatched_left_rows() {
     let root = catalog_with_posts();
     let catalog = Catalog::from_path(&root).unwrap();

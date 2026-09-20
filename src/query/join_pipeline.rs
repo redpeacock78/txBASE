@@ -123,7 +123,7 @@ fn apply_stage(
         .collect::<Option<Vec<_>>>();
     let right_index = if let Some(index_fields) = index_fields.as_deref() {
         let should_try = if matches!(&spec.kind, JoinType::Right) {
-            local_fields.len() == 1 && index_fields.len() == 1
+            local_fields.len() == index_fields.len()
         } else {
             matches!(
                 super::join_strategy::choose(left.len(), right.len(), false),
@@ -142,17 +142,14 @@ fn apply_stage(
     ) {
         if let Some(index) = right_index.as_ref() {
             let output = if matches!(&spec.kind, JoinType::Right) {
-                if let (Some(local_field), Some(index_field)) = (
-                    local_fields.first(),
-                    index_fields.as_deref().and_then(|fields| fields.first()),
-                ) {
+                if let Some(index_fields) = index_fields.as_deref() {
                     super::join_index::execute_right_stage(
                         &left,
                         right,
                         right_numbers,
                         index,
-                        local_field,
-                        index_field,
+                        &local_fields,
+                        index_fields,
                     )?
                 } else {
                     None

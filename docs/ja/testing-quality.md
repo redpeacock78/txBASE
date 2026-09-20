@@ -134,7 +134,7 @@ DBF、memo、WAL、JSON 入力について決定的なコーパスを保ちま�
 
 `src/query/join_strategy.rs::chooses_nested_loop_for_small_join_inputs`、`chooses_hash_for_large_join_inputs`、`chooses_index_nested_loop_for_large_indexed_inputs` は、等値結合の決定的な戦略しきい値を検査します。
 `large_single_key_join_uses_a_fresh_foreign_index` は、直接のインデックス経路を検査します。
-`chained_single_key_join_uses_a_fresh_foreign_index`、`chained_right_single_key_join_uses_a_fresh_foreign_index`、`chained_compound_join_uses_a_fresh_foreign_index` は、多段ステージにおけるインデックス経路を検査します。
+`chained_single_key_join_uses_a_fresh_foreign_index`、`chained_right_single_key_join_uses_a_fresh_foreign_index`、`chained_compound_join_uses_a_fresh_foreign_index`、`chained_right_compound_join_uses_a_fresh_foreign_index` は、多段ステージにおけるインデックス経路を検査します。
 結合テストは、出力順と連鎖ステージの意味論を検査します。
 
 `src/query/field_expression_tests.rs` は、ドット区切りフィールド参照、欠損オペランド、壊れたまたは未サポートの `$expr` 文書を検査します。

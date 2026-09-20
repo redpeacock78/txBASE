@@ -140,16 +140,12 @@ pub(super) fn execute_right_stage(
     right: &[Map<String, Value>],
     right_numbers: &[usize],
     index: &IndexFile,
-    local_field: &str,
-    index_field: &str,
+    local_fields: &[String],
+    index_fields: &[String],
 ) -> Result<Option<Vec<Map<String, Value>>>, JoinError> {
-    let Some(probes) = probe_rows(
-        left,
-        std::slice::from_ref(&local_field),
-        std::slice::from_ref(&index_field),
-        index,
-    )?
-    else {
+    let local_fields = local_fields.iter().map(String::as_str).collect::<Vec<_>>();
+    let index_fields = index_fields.iter().map(String::as_str).collect::<Vec<_>>();
+    let Some(probes) = probe_rows(left, &local_fields, &index_fields, index)? else {
         return Ok(None);
     };
     if right.len() != right_numbers.len() {

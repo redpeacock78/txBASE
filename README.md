@@ -86,7 +86,7 @@ HTTP/1.1 chunked transfer. Runtime-specific async traits remain future work.
 
 The library also exposes bounded local `inner`, `left`, `right`, `semi`, or `anti` equality joins, plus bounded `cross` joins, over a catalog table and optional additional stages.
 Direct and chained single-key equality stages use a fresh single-field index on the probed table when available and otherwise choose a nested-loop strategy for at most 64 candidate pairs or a hash strategy for larger inputs; full index-aware and merge join planning remain future work.
-Chained non-right stages can also use a fresh compound index when the equality fields exactly match its field order.
+Chained stages can also use a fresh compound index when the equality fields exactly match its field order.
 The required `join` is the first stage; an optional `joins` array applies additional stages from left to right.
 Each stage accepts qualified `from`, `join.on`, `filter`, and `projection` fields, emits qualified JSON keys,
 supports multiple equality conditions, and is capped at 100,000 output rows.
