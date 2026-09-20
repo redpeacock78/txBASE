@@ -260,7 +260,11 @@ fn apply_numeric_expression(
     match (left, right) {
         (NumericValue::Integer(left), NumericValue::Integer(right)) => {
             if operator == "$divide" && left % right != 0 {
-                return finite_json_number(operator, numeric_as_f64(left) / numeric_as_f64(right));
+                return finite_json_number(
+                    operator,
+                    numeric_as_f64(NumericValue::Integer(left))
+                        / numeric_as_f64(NumericValue::Integer(right)),
+                );
             }
             let value = match operator {
                 "$add" => left.checked_add(right),
