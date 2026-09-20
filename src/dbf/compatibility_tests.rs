@@ -213,6 +213,15 @@ fn reads_and_writes_a_pinned_external_cp1251_fixture() {
     let mut table = DbfTable::from_path(&path).unwrap();
     assert_eq!(table.header.version, 0x30);
     assert_eq!(table.header.language_driver, 0xc9);
+    assert_eq!(table.schema_json()["encoding"], "Windows-1251");
+    assert_eq!(
+        table.schema_json()["encoding_metadata"],
+        serde_json::json!({
+            "declared": "Windows-1251",
+            "effective": "Windows-1251",
+            "source": "language-driver",
+        })
+    );
     assert_eq!(table.records().len(), 4);
     assert_eq!(
         table.active_record(1).unwrap().values["NAME"],

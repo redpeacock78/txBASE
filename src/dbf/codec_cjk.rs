@@ -44,16 +44,6 @@ pub(crate) fn canonical_encoding_name(name: &str) -> Option<&'static str> {
     }
 }
 
-pub(crate) fn encoding_name(language_driver: u8) -> Option<&'static str> {
-    Some(match language_driver {
-        0x78 => "Big5/CP950",
-        0x79 => "EUC-KR/CP949",
-        0x7a => "GBK/CP936",
-        0x7b => "Windows-31J/CP932",
-        _ => return None,
-    })
-}
-
 fn is_strict_shift_jis(encoding_override: Option<&str>) -> bool {
     encoding_override
         .and_then(canonical_encoding_name)

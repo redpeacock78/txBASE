@@ -104,7 +104,7 @@ txBASE は `src/dbf/codepages.rs` が実装するコードページを現在サ�
 | `0x79` | 韓国語 Windows | EUC-KR/CP949 |
 | `0x78` | 繁体字中国語 Windows | Big5/CP950 |
 
-`schema` 出力の `encoding` メンバーは、この四つのコーデックを識別します。
+`schema` 出力の `encoding` メンバーは、上記四つの CJK コーデックを含む、サポートするすべての宣言済みコードページを識別します。
 
 `encoding_metadata` メンバーは `declared`、`effective`、`source` の値を公開し、読み手が同じ解釈を再現できるようにします。
 

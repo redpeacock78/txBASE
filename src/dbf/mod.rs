@@ -16,6 +16,8 @@ mod codec;
 mod codepages;
 #[cfg(test)]
 mod compatibility_tests;
+#[cfg(test)]
+mod encoding_name_tests;
 mod lock;
 mod maintenance;
 #[cfg(test)]

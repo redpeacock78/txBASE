@@ -3,7 +3,8 @@ use super::super::codepages::{
     CP1254_UPPER, CP1255_UPPER, CP1256_UPPER, encode_codepage, encode_windows_1252,
 };
 use super::super::{DbfError, FieldDescriptor, binary_value};
-use super::cjk::{canonical_encoding_name, encode as encode_cjk, encoding_name};
+use super::cjk::{canonical_encoding_name, encode as encode_cjk};
+use super::encoding_name;
 use super::temporal::{currency_i64, foxpro_datetime_bytes};
 use serde_json::Value;
 

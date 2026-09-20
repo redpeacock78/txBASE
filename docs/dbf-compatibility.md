@@ -103,7 +103,8 @@ The current CJK slice also decodes and encodes the Visual FoxPro driver IDs docu
 | `0x79` | Korean Windows | EUC-KR/CP949 |
 | `0x78` | Traditional Chinese Windows | Big5/CP950 |
 
-The `encoding` member in `schema` output identifies these four codecs.
+The `encoding` member in `schema` output identifies every supported declared code page, including
+the four CJK codecs above.
 The `encoding_metadata` member exposes `declared`, `effective`, and `source` values so a reader
 can reproduce the interpretation.
 `source` is `language-driver`, `explicit-override`, or `fallback`; sidecar and invocation
