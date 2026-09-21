@@ -6,6 +6,15 @@ pub(crate) type CompoundOrdered = (String, Vec<String>, Vec<i8>, Vec<usize>);
 mod ordered;
 
 impl IndexFile {
+    pub(crate) fn compound_indexes(&self) -> impl Iterator<Item = (&str, &[String])> {
+        self.indexes.iter().filter_map(|index| {
+            (index.definition.fields.len() > 1).then_some((
+                index.definition.name.as_str(),
+                index.definition.fields.as_slice(),
+            ))
+        })
+    }
+
     pub(crate) fn has_exact_fields(&self, fields: &[&str]) -> bool {
         self.indexes.iter().any(|index| {
             index.definition.fields.len() == fields.len()
@@ -141,12 +150,38 @@ impl IndexFile {
         }) else {
             return Ok(None);
         };
-        if values.len() != fields.len() {
+        let name = index.definition.name.clone();
+        Ok(self
+            .lookup_eq_for_named_fields(&name, fields, values)?
+            .map(|records| (name, records)))
+    }
+
+    pub(crate) fn lookup_eq_for_named_fields(
+        &self,
+        name: &str,
+        fields: &[&str],
+        values: &[Value],
+    ) -> Result<Option<Vec<usize>>, IndexError> {
+        let Some(index) = self
+            .indexes
+            .iter()
+            .find(|index| index.definition.name == name)
+        else {
+            return Ok(None);
+        };
+        if values.len() != fields.len()
+            || index.definition.fields.len() != fields.len()
+            || !index
+                .definition
+                .fields
+                .iter()
+                .zip(fields)
+                .all(|(indexed, requested)| indexed == *requested)
+        {
             return Ok(None);
         }
         let key = IndexKey::from_values(values.iter().map(Some).collect())?;
-        Ok(Some((
-            index.definition.name.clone(),
+        Ok(Some(
             index
                 .entries
                 .binary_search_by(|entry| {
@@ -155,7 +190,7 @@ impl IndexFile {
                 .ok()
                 .map(|position| index.entries[position].records.clone())
                 .unwrap_or_default(),
-        )))
+        ))
     }
 
     pub(crate) fn lookup_range_for_field(

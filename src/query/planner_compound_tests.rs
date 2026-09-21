@@ -121,6 +121,48 @@ fn uses_a_compound_range_after_an_equality_prefix() {
 }
 
 #[test]
+fn uses_a_compound_index_for_exact_equality() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-query-planner-compound-equality-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&path);
+
+    let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    bytes[179] = b' ';
+    let table = DbfTable::from_bytes(&bytes).unwrap();
+    fs::write(&path, bytes).unwrap();
+    IndexFile::build(
+        &path,
+        vec![IndexDefinition::named_fields(
+            "by_name_age",
+            vec!["NAME".into(), "AGE".into()],
+        )],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let request = parse(br#"{"filter":{"NAME":"Alice","AGE":29}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &request).unwrap(),
+        QueryPlan::CompoundEqualityIndex {
+            name: "by_name_age".into(),
+            fields: vec!["NAME".into(), "AGE".into()],
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &request).unwrap(),
+        execute_query(&table, &request).unwrap()
+    );
+
+    remove_table_files(&path);
+}
+
+#[test]
 fn chooses_a_compound_sort_index_with_the_smallest_equality_prefix() {
     let path = std::env::temp_dir().join(format!(
         "txbase-query-planner-compound-cost-{}.dbf",

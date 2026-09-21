@@ -27,7 +27,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | Relational schema constraints over DBF | [Schema metadata](schema-metadata.md) | Current local subset plus future relational work |
 | Native XBF storage format | [XBF v1 draft](xbf.md) | Draft codec, DBF conversion/export, snapshot path, generation-checked WAL, and journaled schema export |
 | Multi-table DBF discovery and bounded local equality join | [Catalog](catalog.md) and [Join model](joins.md) | Current boundary plus future relational work |
-| External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, equality, compound equality-prefix range candidates, histogram-estimated range ordering, ordered-prefix traversal, mixed-direction compound-prefix sorting, equality-prefix candidate choice, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded record, traversal, and sort cost choice, and future full I/O-aware cost model |
+| External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, scalar and compound equality, compound equality-prefix range candidates, histogram-estimated range ordering, ordered-prefix traversal, mixed-direction compound-prefix sorting, equality-prefix candidate choice, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded record, traversal, and sort cost choice, and future full I/O-aware cost model |
 | CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Current boundary plus future work |
 
 ## Research method
