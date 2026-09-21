@@ -78,14 +78,6 @@ impl DbfTable {
         for index in 0..self.records.len() {
             self.record_offset(index)?;
         }
-        if let Some(source) = &self.source {
-            let index_path = crate::index::sidecar_path(&source.path);
-            if index_path.exists() {
-                crate::index::IndexFile::load(&source.path).map_err(|error| {
-                    DbfError::Invalid(format!("index sidecar is invalid: {error}"))
-                })?;
-            }
-        }
         Ok(())
     }
 }

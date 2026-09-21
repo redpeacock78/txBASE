@@ -71,6 +71,9 @@ fn run() -> Result<(), Box<dyn Error>> {
         let encoding = parse_encoding_option(&mut args)?;
         let table = DbfTable::from_path_with_encoding(&path, encoding.as_deref())?;
         table.verify()?;
+        if first == "verify" && txbase::index::sidecar_path(&path).exists() {
+            IndexFile::load(&path).map_err(|error| format!("index sidecar is invalid: {error}"))?;
+        }
         let output = if first == "schema" {
             table.schema_json()
         } else {
