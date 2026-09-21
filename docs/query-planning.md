@@ -76,7 +76,7 @@ txBASE keeps the record scan as the query executor reference path.
 
 The path-aware query entry point attempts external scalar-key equality, range, or ordered traversal before applying the same filter, sort, projection, skip, and limit pipeline.
 
-The planner reports `TableScan`, `EqualityIndex`, `RangeIndex`, `OrderedIndex`, `OrderedIndexPrefix`, or `CompoundOrderedIndex` through `explain_query_at`.
+The planner reports `TableScan`, `EqualityIndex`, `IndexIntersection`, `RangeIndex`, `OrderedIndex`, `OrderedIndexPrefix`, or `CompoundOrderedIndex` through `explain_query_at`.
 
 The single-table HTTP server exposes the same explanation as `QUERY /explain`.
 

@@ -120,6 +120,8 @@ DBF、memo、WAL、JSON 入力について決定的なコーパスを保ちま�
 
 `src/query/planner_tests.rs::orders_equality_intersection_by_index_statistics` は、一様な異なるキー数推定を検査し、統計順の結果をテーブルスキャンと比較します。
 
+`src/query/planner_tests.rs::chooses_the_lowest_cost_equality_candidate` は、積集合に走査項が加わる場合に単独等値インデックスを選び、テーブルスキャン結果を保つことを検査します。
+
 `src/index_tests.rs::builds_and_loads_an_external_scalar_index` は、プランナーのコストに使うエントリ由来の走査推定を検査します。
 
 `src/query/planner_tests.rs::chooses_the_lowest_cost_range_candidate` は、ヒストグラム順の候補構築、正確な範囲候補コストの選択、テーブルスキャンとの同値を検査します。

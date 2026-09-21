@@ -76,7 +76,7 @@ txBASE はレコードスキャンをクエリ実行器の参照経路として�
 
 パス対応のクエリエントリポイントは、同じフィルター、ソート、プロジェクション、スキップ、リミットのパイプラインを適用する前に、外部スカラーキーの等値、範囲、順序付き走査を試します。
 
-プランナーは `explain_query_at` を通じて `TableScan`、`EqualityIndex`、`RangeIndex`、`OrderedIndex`、`OrderedIndexPrefix`、`CompoundOrderedIndex` を報告します。
+プランナーは `explain_query_at` を通じて `TableScan`、`EqualityIndex`、`IndexIntersection`、`RangeIndex`、`OrderedIndex`、`OrderedIndexPrefix`、`CompoundOrderedIndex` を報告します。
 
 単一テーブル HTTP サーバーは `QUERY /explain` で同じ説明を公開します。
 

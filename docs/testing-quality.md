@@ -119,6 +119,8 @@ A delta with the wrong base must be rejected.
 
 `src/query/planner_tests.rs::orders_equality_intersection_by_index_statistics` covers uniform distinct-key estimates and compares the statistics-ordered result with the table scan.
 
+`src/query/planner_tests.rs::chooses_the_lowest_cost_equality_candidate` covers choosing a single equality index when the intersection adds a traversal term, while preserving table-scan results.
+
 `src/index_tests.rs::builds_and_loads_an_external_scalar_index` covers the entry-derived traversal estimate used by planner costs.
 
 `src/query/planner_tests.rs::chooses_the_lowest_cost_range_candidate` covers histogram-ordered candidate construction, exact range-candidate cost choice, and equivalence with the table scan.
