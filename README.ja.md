@@ -17,6 +17,7 @@ txBASEは、元のDBF表現を保ったまま、dBASEとVisual FoxProの一部�
 - 更新を復旧可能にするファイルベースWALとmemoサイドカー。
 - 有界なクエリ、集約、ローカルなカタログ結合、外部スカラー／複合インデックス。
 - XBF v1スナップショットと、DBFへ変換できる値を報告するエクスポート。
+- 世代CASと復旧を備えた決定的なXBFオブジェクトストレージマニフェスト境界。
 - 既存のDBFバイト列を変更しない明示的なCJK codec選択。
 
 互換性と動作の詳細は、[ドキュメント一覧](docs/ja/README.md)にまとめています。
@@ -273,7 +274,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - locale-awareなCJK collation。
 - 追加のupstream CJK fixture。
 - XBF exportにおける厳密な複数ファイルreader atomicity。
-- object-storage commit。
+- クラウドオブジェクトストレージアダプターと保持方針。
 - 分散replication。
 
 受け入れ条件は[docs/ja/roadmap.md](docs/ja/roadmap.md)に、出典とfixtureの方針は[docs/ja/research.md](docs/ja/research.md)に記載しています。

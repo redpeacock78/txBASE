@@ -14,6 +14,7 @@ Research and future work do not imply an implemented feature.
 - [Multi-table catalog](catalog.md)
 - [XBF v1 format draft](xbf.md)
 - [MVCC and historical snapshots](mvcc.md)
+- [Edge storage and object-store commits](edge-storage.md)
 
 ## Query and protocol contracts
 
@@ -34,7 +35,6 @@ Research and future work do not imply an implemented feature.
 
 ## Future architecture
 
-- [Edge storage and object-store commits](edge-storage.md)
 - [WASM and worker host boundary](wasm.md)
 - [Distributed evolution](distributed-evolution.md)
 

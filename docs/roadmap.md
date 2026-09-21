@@ -63,7 +63,7 @@ The baseline intentionally does not include the following:
 - `$project`, final `$sort`, `$skip`, and final `$limit` beyond the bounded aggregation contract.
 - Composite cross-table constraints beyond catalog-scoped `references`.
 - Strict multi-file reader atomicity for XBF export.
-- Object-storage commits.
+- Cloud object-storage adapters and retention policy.
 - Distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
@@ -233,7 +233,7 @@ An override must be visible in schema or command output so a reader can reproduc
 
 XBF is a separately versioned native format, not a silent DBF extension.
 
-The v1 wire contract is drafted in [XBF v1 format draft](xbf.md). A bounded codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, representability reporting, durable snapshot path, generation-checked full-snapshot WAL recovery, and a journaled `TXSE` schema-preserving file export exist for that draft. `TXSE` records base bytes, recovers interrupted DBF/schema/memo-sidecar/transaction-state/index replacement on the next DBF read, validates the target index before replacement, and rejects external target changes. Strict multi-file reader atomicity and object-storage commit semantics remain future work.
+The v1 wire contract is drafted in [XBF v1 format draft](xbf.md). A bounded codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, representability reporting, durable snapshot path, generation-checked full-snapshot WAL recovery, and a journaled `TXSE` schema-preserving file export exist for that draft. `TXSE` records base bytes, recovers interrupted DBF/schema/memo-sidecar/transaction-state/index replacement on the next DBF read, validates the target index before replacement, and rejects external target changes. Strict multi-file reader atomicity and cloud object-storage commit semantics remain future work.
 
 The proposed magic is `TXBF`.
 
@@ -257,18 +257,20 @@ DBF compatibility must remain an explicit import or export path.
 
 ## 7. Phase 5: edge storage
 
-The range-oriented local storage abstraction is a useful starting point, but object storage needs immutable objects and conditional manifest updates.
+The range-oriented local storage abstraction is a useful starting point, but remote object storage needs immutable objects and conditional manifest updates.
 
 ### Candidate scope
 
-- Storage-backend redesign.
+- A storage-backend redesign for remote object stores.
 - A WASM-compatible core.
-- An R2 or object-storage adapter.
-- Manifest compare-and-swap commits.
-- Immutable pages.
-- Generation snapshots.
+- An R2 or other cloud object-storage adapter.
+- Immutable pages and page-level manifests.
+- Cloud generation snapshots and retention.
 
-The object-storage model needs a consistency contract, orphan-page cleanup policy, retry behavior, and a deterministic local fixture.
+The local XBF object-store boundary is implemented by `edge::ObjectTable` and `MemoryObjectStore`.
+It defines the manifest schema, generation compare-and-swap, retry and recovery behavior, reader generation checks, and orphan cleanup without requiring a cloud account.
+
+The remaining cloud boundary needs a consistency contract, orphan-page cleanup policy, retry behavior, and a remote adapter fixture.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 
@@ -323,6 +325,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Full cost-based planners, joins, aggregation, row-level MVCC, durable XBF, object-storage, or distributed code without a contract and end-to-end test.
+- Full cost-based planners, joins, aggregation, row-level MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, and bounded cost choice based on record counts, index traversal, and sort work are implemented, while a full I/O-aware model and cross-table index definitions or index-aware planning remain future work.

@@ -12,6 +12,7 @@
 - [複数テーブルカタログ](catalog.md)
 - [XBF v1 フォーマット草案](xbf.md)
 - [MVCCと過去スナップショット](mvcc.md)
+- [エッジストレージとオブジェクトストレージのコミット](edge-storage.md)
 
 ## クエリとプロトコルの契約
 
@@ -32,7 +33,6 @@
 
 ## 将来のアーキテクチャ
 
-- [エッジストレージとオブジェクトストレージのコミット](edge-storage.md)
 - [WASMとワーカーのホスト境界](wasm.md)
 - [分散化の進化](distributed-evolution.md)
 

@@ -26,6 +26,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - File-backed WAL and memo sidecars for recoverable mutations.
 - Bounded queries, aggregation, local catalog joins, and external scalar or compound indexes.
 - XBF v1 snapshots and representability-aware DBF export.
+- A deterministic XBF object-store manifest boundary with generation CAS and recovery.
 - Explicit CJK codec selection without changing legacy DBF bytes.
 
 The detailed compatibility and behavior contracts live in the [documentation index](docs/README.md).
@@ -279,7 +280,7 @@ The roadmap still leaves the following areas as future work:
 - Locale-aware CJK collation.
 - Broader upstream CJK fixtures.
 - Strict multi-file reader atomicity for XBF export.
-- Object-storage commits.
+- Cloud object-storage adapters and retention policy.
 - Distributed replication.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance conditions and [docs/research.md](docs/research.md) for the source and fixture policy.

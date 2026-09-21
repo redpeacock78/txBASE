@@ -1,104 +1,112 @@
 # Edge storage and object-store commits
 
-This document isolates the future storage model for object stores and edge runtimes.
+This document defines the implemented local object-store boundary and the future cloud adapter boundary.
 
-The design is not a current txBASE feature.
+The local slice uses an in-memory object store to make generation, conditional publication, retry, and recovery behavior deterministic.
+
+It does not claim an R2 adapter or any other cloud-provider implementation.
 
 ## 1. Current boundary
 
-The current storage boundary is local and range-oriented.
+The native DBF and XBF paths remain local file and sidecar implementations.
 
-DBF and the draft XBF path use files, sidecars, WAL records, and local replacement rules.
+The `txbase::edge::ObjectTable` API adds a separate object-store commit boundary for XBF snapshots.
 
-Object storage has different primitives: immutable objects, conditional writes, and manifests that identify a committed generation.
+`MemoryObjectStore` is a deterministic fixture that implements the `ObjectStore` contract with immutable object publication and manifest compare-and-swap.
 
-The object-store design must preserve the existing query, mutation, and recovery contracts instead of creating a second database model.
+An object-store adapter can implement the same trait for a remote service without changing the XBF snapshot or generation rules.
 
-## 2. Object layout
+## 2. Manifest schema
 
-A candidate layout is:
+One table uses this object layout:
 
 ```text
-table.meta
-pages/
-  000001
-  000002
-  000003
-wal/
-  00000042
+users/manifest.json
+users/snapshots/0.xbf
+users/snapshots/1.xbf
+users/wal/1.json
 ```
 
-A manifest can identify the committed state:
+The manifest has one versioned schema:
 
 ```json
 {
+  "version": 1,
   "generation": 142,
-  "root": "pages/000031",
-  "wal_head": 9482
+  "root": "users/snapshots/142.xbf",
+  "wal_head": 142
 }
 ```
 
-Pages and WAL records are immutable after publication.
+`root` names an immutable XBF snapshot.
 
-The manifest is the mutable commit point.
+`generation` is the visible table generation.
+
+`wal_head` identifies the pending or published WAL generation in this local slice.
+
+The reader rejects a snapshot whose embedded XBF generation differs from the manifest generation.
 
 ## 3. Commit protocol
 
-A candidate commit sequence is:
+`ObjectTable::commit` performs the following operations:
 
 ```text
-write immutable pages
+write immutable XBF snapshot with put-if-absent
       ↓
-write WAL
+write pending WAL object with put-if-absent
       ↓
-conditionally update the manifest
+compare-and-swap the manifest
       ↓
-commit
+remove the pending WAL object
 ```
 
-An ETag or generation precondition can provide compare-and-swap protection against concurrent writers.
+The manifest CAS uses the exact bytes read before the commit.
 
-A failed manifest update must leave the previous generation readable.
+Two writers that publish different bytes for the same generation therefore produce a conflict instead of silently replacing one another.
 
-Readers must resolve one manifest generation before reading pages so one result cannot mix generations accidentally.
+Retrying the same generation with identical snapshot bytes returns `AlreadyCommitted`.
 
-## 4. Required contracts
+If publication fails after the snapshot and WAL objects exist, `ObjectTable::recover` validates the XBF generation and completes the manifest CAS when the recorded base generation is still current.
 
-Before implementation, this model must define:
+If the manifest was published but WAL cleanup failed, recovery removes the already-applied WAL without applying the snapshot twice.
 
-- consistency and visibility for readers;
-- manifest compare-and-swap failure behavior;
-- retry and idempotency rules;
-- orphan-page and orphan-WAL cleanup;
-- generation retention and snapshot expiration;
-- corruption detection and recovery;
-- a deterministic local fixture that does not require a cloud account.
+A reader resolves one manifest before loading its `root` object.
 
-These contracts cover the failure cases that local file replacement currently handles directly.
+Because the root object is immutable and the embedded generation is checked, a reader cannot accept a mixed-generation result.
 
-## 5. Relation to XBF
+## 4. Orphan cleanup
 
-XBF is the natural native format for immutable pages and generation snapshots.
+`ObjectTable::cleanup_orphans` keeps the current manifest root and any pending root whose WAL still follows the current base generation.
 
-The object-store backend should reuse XBF checksums, schema rules, query semantics, and transaction state transitions where they match.
+It removes stale WAL objects and unreferenced snapshot objects.
 
-Storage-specific code should own object keys, conditional manifest updates, retries, and garbage collection.
+The method does not remove a recoverable pending commit.
 
-## 6. Acceptance conditions
+It also does not run automatically, so an adapter can select a retention and expiration policy appropriate to its storage service.
 
-An initial object-store slice is complete only when it has:
+## 5. XBF relationship
 
-- one documented manifest schema;
-- one deterministic in-memory or local object-store fixture;
-- concurrent-writer conflict tests;
-- reader generation-consistency tests;
-- retry and orphan-cleanup behavior;
-- recovery tests for interrupted page, WAL, and manifest publication.
+The object-store boundary stores encoded XBF snapshots and reuses the XBF checksum, schema validation, generation field, and decode limits.
 
-Until then, object-storage commits remain future work.
+It does not create a second query language or mutation model.
+
+The manifest is the mutable commit point, while snapshots and pending WAL objects remain immutable after publication.
+
+## 6. Cloud adapter boundary
+
+A remote adapter still needs to define:
+
+- conditional-write and retry error mapping;
+- consistency guarantees for `get`, `list`, and compare-and-swap;
+- snapshot expiration and generation retention;
+- authentication and request limits;
+- orphan cleanup scheduling;
+- cloud-specific corruption and availability behavior.
+
+These concerns do not belong in `MemoryObjectStore` or in the XBF codec.
 
 ## 7. Explicit non-goals
 
-This document does not promise an R2 adapter, a specific cloud vendor, multi-region consensus, or automatic garbage collection policy.
+This slice does not promise an R2 adapter, a specific cloud vendor, multi-region consensus, automatic background garbage collection, immutable page splitting, or WASM hosting.
 
-Those choices require the contracts above and an end-to-end test.
+Those features can reuse the manifest and generation contract after their host-specific failure behavior has a deterministic test.
