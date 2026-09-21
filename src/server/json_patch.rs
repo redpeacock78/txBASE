@@ -284,10 +284,14 @@ mod tests {
     #[test]
     fn rejects_out_of_bounds_array_indices() {
         let current = json!({"VALUES": [1, 2]});
-        for operation in ["add", "replace", "remove"] {
+        for (operation, path) in [
+            ("add", "/VALUES/3"),
+            ("replace", "/VALUES/2"),
+            ("remove", "/VALUES/2"),
+        ] {
             let patch = json!([{
                 "op": operation,
-                "path": "/VALUES/2",
+                "path": path,
                 "value": 3
             }]);
             let error = apply(current.as_object().unwrap().clone(), &patch).unwrap_err();
