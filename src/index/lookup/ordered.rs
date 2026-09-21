@@ -32,7 +32,7 @@ impl IndexFile {
         directions: &[i8],
         filter: &Map<String, Value>,
     ) -> Result<Option<CompoundOrdered>, super::super::IndexError> {
-        if fields.len() < 2 {
+        if fields.is_empty() {
             return Ok(None);
         }
         let mut best = None;

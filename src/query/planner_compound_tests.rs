@@ -185,6 +185,49 @@ fn chooses_a_compound_sort_index_with_the_smallest_equality_prefix() {
 }
 
 #[test]
+fn uses_a_compound_index_for_a_single_sort_key_after_an_equality_prefix() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-query-planner-single-compound-sort-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&path);
+
+    let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    bytes[179] = b' ';
+    let table = DbfTable::from_bytes(&bytes).unwrap();
+    fs::write(&path, bytes).unwrap();
+    IndexFile::build(
+        &path,
+        vec![IndexDefinition::named_fields(
+            "by_active_name",
+            vec!["ACTIVE".into(), "NAME".into()],
+        )],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let request = parse(br#"{"filter":{"ACTIVE":true},"sort":{"NAME":1}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &request).unwrap(),
+        QueryPlan::CompoundOrderedIndex {
+            name: "by_active_name".into(),
+            fields: vec!["ACTIVE".into(), "NAME".into()],
+            directions: vec![1, 1],
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &request).unwrap(),
+        execute_query(&table, &request).unwrap()
+    );
+
+    remove_table_files(&path);
+}
+
+#[test]
 fn chooses_the_access_path_with_fewer_exact_candidates() {
     let path = std::env::temp_dir().join(format!(
         "txbase-query-planner-candidate-count-{}.dbf",

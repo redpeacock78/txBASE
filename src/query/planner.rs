@@ -185,22 +185,29 @@ fn choose_range(
 
 fn choose_ordered(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {
     if !request.sort.is_empty() {
-        if request.sort.len() > 1 {
-            let fields = request.sort.keys().map(String::as_str).collect::<Vec<_>>();
-            let directions = request.sort.values().copied().collect::<Vec<_>>();
-            if let Ok(Some((name, index_fields, index_directions, records))) =
-                index_file.lookup_ordered_for_fields(&fields, &directions, &request.filter)
-            {
-                return Some(PlannedAccess {
-                    plan: QueryPlan::CompoundOrderedIndex {
-                        name,
-                        fields: index_fields,
-                        directions: index_directions,
-                    },
-                    records: Some(records),
-                    ordered_prefix: request.sort.len(),
-                });
-            }
+        let fields = request.sort.keys().map(String::as_str).collect::<Vec<_>>();
+        let directions = request.sort.values().copied().collect::<Vec<_>>();
+        if let Ok(Some((name, index_fields, index_directions, records))) =
+            index_file.lookup_ordered_for_fields(&fields, &directions, &request.filter)
+        {
+            let plan = if index_fields.len() == 1 {
+                QueryPlan::OrderedIndex {
+                    name,
+                    field: index_fields[0].clone(),
+                    direction: directions[0],
+                }
+            } else {
+                QueryPlan::CompoundOrderedIndex {
+                    name,
+                    fields: index_fields,
+                    directions: index_directions,
+                }
+            };
+            return Some(PlannedAccess {
+                plan,
+                records: Some(records),
+                ordered_prefix: request.sort.len(),
+            });
         }
         let (field, direction) = request.sort.iter().next().expect("sort has one field");
         let Ok(Some((name, records))) =

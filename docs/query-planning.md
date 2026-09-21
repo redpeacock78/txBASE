@@ -90,7 +90,7 @@ Connecting an index to query execution therefore needs more than a parser change
 
 It needs key encoding, null and missing-field rules, duplicate ordering, update maintenance, recovery records, stale-index detection, and a planner policy.
 
-The current planner considers direct top-level equality, single-bound-per-side range predicates, single-field ordered traversal, compound equality-prefix range predicates, and compound sort requests whose fields match an index suffix after an exact equality prefix.
+The current planner considers direct top-level equality, single-bound-per-side range predicates, single-field ordered traversal, compound equality-prefix range predicates, and single-key or compound sort requests whose fields match an index suffix after an exact equality prefix.
 
 Multiple valid single-field equality indexes may be intersected by record number before the normal filter pipeline.
 
@@ -117,6 +117,8 @@ Access-path candidate construction remains in `src/query/planner.rs`, while the 
 This is local planning logic, not MongoDB planner compatibility.
 
 For a multi-key sort, a single-field index provides the first-key order.
+
+A single-key sort can also use a compound index suffix when every preceding index field has an exact equality predicate.
 
 The executor sorts remaining keys in memory within each equal first-key group.
 
