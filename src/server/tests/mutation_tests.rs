@@ -1,6 +1,5 @@
-use super::super::records::{
-    apply_merge_patch, delete_response, persist_mutation, post_response, update_response,
-};
+use super::super::merge_patch::apply_merge_patch;
+use super::super::records::{delete_response, persist_mutation, post_response, update_response};
 use super::super::{JSON_MERGE_PATCH_MEDIA_TYPE, JSON_PATCH_MEDIA_TYPE, header, transaction};
 use super::{fixture, json_request};
 use crate::dbf::DbfTable;

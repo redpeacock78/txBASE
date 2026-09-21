@@ -11,6 +11,7 @@ mod catalog_transaction;
 mod etag;
 mod explain;
 mod json_patch;
+mod merge_patch;
 mod range;
 mod records;
 mod response;

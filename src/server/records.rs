@@ -1,10 +1,11 @@
+use super::merge_patch;
 use super::{
     DbfTable, HttpResponse, PatchMediaType, dbf_error_response, empty_response, error, etag,
     header, json_response, read_json_object, read_json_patch_document,
 };
 use crate::dbf::DbfRecord;
 use crate::xbase::{OperationIr, OperationMethod};
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::path::Path;
 use tiny_http::Request;
 
@@ -162,7 +163,7 @@ pub(super) fn update_response_with_validator(
                         false,
                     );
                 };
-                apply_merge_patch(
+                merge_patch::apply_merge_patch(
                     current,
                     document
                         .as_object()
@@ -185,7 +186,7 @@ pub(super) fn update_response_with_validator(
                         return json_response(422, error("invalid_json_patch", &message), false);
                     }
                 };
-                materialize_removed_fields(current, patched)
+                merge_patch::materialize_removed_fields(current, patched)
             }
         }
     };
@@ -224,61 +225,6 @@ pub(super) fn update_response_with_validator(
             error("storage_error", "updated record is unavailable"),
             false,
         ),
-    }
-}
-
-pub(super) fn apply_merge_patch(
-    current: Map<String, Value>,
-    patch: Map<String, Value>,
-) -> Map<String, Value> {
-    let known_fields = current.keys().cloned().collect::<Vec<_>>();
-    let unknown_null_fields = patch
-        .iter()
-        .filter(|(key, value)| value.is_null() && !current.contains_key(*key))
-        .map(|(key, _)| key.clone())
-        .collect::<Vec<_>>();
-    let mut target = Value::Object(current);
-    merge_patch_value(&mut target, Value::Object(patch));
-    let mut target = match target {
-        Value::Object(object) => object,
-        Value::Array(_) | Value::Bool(_) | Value::Null | Value::Number(_) | Value::String(_) => {
-            unreachable!("root merge patch remains an object")
-        }
-    };
-    for key in known_fields {
-        target.entry(key).or_insert(Value::Null);
-    }
-    for key in unknown_null_fields {
-        target.entry(key).or_insert(Value::Null);
-    }
-    target
-}
-
-fn materialize_removed_fields(
-    current: Map<String, Value>,
-    mut patched: Map<String, Value>,
-) -> Map<String, Value> {
-    for key in current.keys() {
-        patched.entry(key.clone()).or_insert(Value::Null);
-    }
-    patched
-}
-
-fn merge_patch_value(target: &mut Value, patch: Value) {
-    let Value::Object(patch) = patch else {
-        *target = patch;
-        return;
-    };
-    if !target.is_object() {
-        *target = Value::Object(Map::new());
-    }
-    let target = target.as_object_mut().expect("target is an object");
-    for (key, value) in patch {
-        if value.is_null() {
-            target.remove(&key);
-        } else {
-            merge_patch_value(target.entry(key).or_insert(Value::Null), value);
-        }
     }
 }
 
