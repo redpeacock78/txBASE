@@ -72,6 +72,10 @@ curl -i -X QUERY \
 カタログサーバーは、`GET /catalog`、名前付きテーブルの読み書き、`QUERY /{table}/records`、`QUERY /{table}/explain`、`QUERY /{table}/records/stream`、有界なローカル結合`QUERY /join`を提供します。
 `POST /transaction`は、カタログjournalを通じて名前付きテーブルの更新をcommitします。
 
+`QUERY /join`は、有界な`inner`、`left`、`right`、`full`、`semi`、`anti`、`cross`結合をサポートします。
+大きな直接等値結合では、freshで互換性のあるordered indexを使ったmerge実行を選べます。
+そのmerge経路を使えない場合、またはコストが高い場合は、有界なhash経路またはindex probe経路にフォールバックします。
+
 正確な境界は、[クエリモデル](docs/ja/query-model.md)、[集約モデル](docs/ja/aggregation.md)、[結合モデル](docs/ja/joins.md)、[クエリ計画](docs/ja/query-planning.md)を参照してください。
 
 ### 更新

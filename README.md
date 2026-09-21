@@ -74,6 +74,9 @@ curl -i -X QUERY \
 
 The catalog server adds `GET /catalog`, named-table read and mutation routes, `QUERY /{table}/records`, `QUERY /{table}/explain`, `QUERY /{table}/records/stream`, and the bounded local join at `QUERY /join`. Catalog `POST /transaction` commits named-table mutations through a catalog journal.
 
+`QUERY /join` supports bounded `inner`, `left`, `right`, `full`, `semi`, `anti`, and `cross` joins.
+Large direct equality joins can use fresh compatible ordered indexes for merge execution; the planner falls back to bounded hash or index-probe paths when that merge path is unavailable or more expensive.
+
 See the [query model](docs/query-model.md), [aggregation model](docs/aggregation.md), [join model](docs/joins.md), and [query planning](docs/query-planning.md) for the exact boundary.
 
 ### Mutate
