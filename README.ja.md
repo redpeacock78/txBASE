@@ -104,13 +104,13 @@ curl -i -X PATCH \
 curl -i -X DELETE http://127.0.0.1:8080/records/3
 ```
 
-`POST`、`PUT`、`PATCH`、`DELETE`は、それぞれレコードの作成、置換、更新、論理削除を行います。
+`POST`、`PUT`、`PATCH`、`DELETE`は、それぞれレコードの作成、置換、更新、論理削除をします。
 `PATCH`は、ローカル形式の`application/json`更新文書、`application/merge-patch+json`のオブジェクトパッチ、有界な`application/json-patch+json`操作配列を受け付けます。
 Merge Patchはオブジェクトを再帰的にマージし、`null`をフィールド削除として扱い、配列またはスカラー値で現在値を置き換えます。
 JSON PatchはRFC 6901のJSON Pointerパスを使うRFC 6902の`add`、`remove`、`replace`、`test`、`move`、`copy`をサポートします。
 ローカル形式のJSON文書では、型付きの`$set`、`$unset`、`$inc`演算子も使えます。
 
-単一テーブルの`POST /transaction`は、複数の操作をprivate copyへ適用してから、一つのsnapshot/WAL境界でcommitします。
+単一テーブルの`POST /transaction`は、複数の操作をprivate copyへ適用してから、1つのsnapshot/WAL境界でcommitします。
 カタログの`POST /transaction`は、同じ役割を複数テーブル向けのカタログjournalで担います。
 どちらも過去の行バージョンやMVCCによる可視性は提供しません。
 
@@ -120,7 +120,7 @@ WALと復旧の契約は、[更新モデル](docs/ja/mutation-model.md)に記載
 
 ### 検査と保守
 
-読み取り専用のschema、catalog、index、XBF、WAL検査:
+読み取り専用のschema、catalog、index、XBF、WAL検査。
 
 ```bash
 txbase schema path/to/users.dbf
@@ -135,7 +135,7 @@ txbase wal inspect path/to/users.txbase.wal
 `wal inspect`はWALを作成も切り詰めもせずに読み取ります。
 ファイルサイズ、有効なバイト境界、完全なレコードのLSNとペイロード長、最後のレコードが切断されているかどうかを表示します。
 
-インデックスのライフサイクルと保守:
+インデックスのライフサイクルと保守。
 
 ```bash
 txbase index build path/to/users.dbf NAME AGE
@@ -148,7 +148,7 @@ txbase recall path/to/users.dbf 2
 `index verify`は古いサイドカーを拒否し、`index rebuild`が明示的な修復手段になります。
 `pack`は論理削除したレコードを除去し、`recall`は物理レコード番号で一件の論理削除を取り消します。
 
-XBF変換とサイドカーを含むファイル転送:
+XBF変換とサイドカーを含むファイル転送。
 
 ```bash
 txbase xbf import path/to/users.dbf path/to/users.xbf
@@ -189,9 +189,11 @@ cargo build --release
 
 ### 品質ゲート
 
-CIはUbuntu、macOS、Windowsで次のチェックを実行します。
+CIはUbuntuのdocsジョブでドキュメント検査を実行し、Ubuntu、macOS、WindowsのRustジョブで次のチェックを実行します。
 
 ```bash
+bun install --frozen-lockfile
+bun run lint:docs
 bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings

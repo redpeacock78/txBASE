@@ -196,9 +196,11 @@ The resulting binary is `target/release/txbase`.
 
 ### Quality gates
 
-CI runs the following checks on Ubuntu, macOS, and Windows:
+CI runs the documentation checks on Ubuntu and the Rust checks on Ubuntu, macOS, and Windows:
 
 ```bash
+bun install --frozen-lockfile
+bun run lint:docs
 bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings

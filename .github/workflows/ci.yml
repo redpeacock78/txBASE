@@ -5,6 +5,15 @@ on:
   pull_request:
 
 jobs:
+  docs:
+    name: docs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run lint:docs
+
   test:
     name: test (${{ matrix.os }})
     strategy:

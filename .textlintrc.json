@@ -1,0 +1,40 @@
+{
+  "rules": {
+    "preset-ja-spacing": true,
+    "preset-japanese": {
+      "no-doubled-joshi": false,
+      "sentence-length": {
+        "max": 200
+      },
+      "max-ten": {
+        "max": 4
+      }
+    },
+    "@textlint-ja/preset-ai-writing": {
+      "ai-tech-writing-guideline": {
+        "severity": "info"
+      }
+    },
+    "preset-ai-words-ja": {
+      "no-ai-words": {
+        "allows": [
+          "/ゲート|壊れ|既定|検査|照合|経路/"
+        ]
+      }
+    },
+    "preset-ja-technical-writing": {
+      "sentence-length": {
+        "max": 200
+      },
+      "max-ten": {
+        "max": 4
+      },
+      "ja-no-redundant-expression": false,
+      "ja-unnatural-alphabet": false,
+      "no-doubled-joshi": false
+    },
+    "ja-no-redundant-expression": true,
+    "ja-unnatural-alphabet": true,
+    "no-doubled-joshi": true
+  }
+}

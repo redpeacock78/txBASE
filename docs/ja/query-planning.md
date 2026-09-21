@@ -2,55 +2,55 @@
 
 この文書は、外部のクエリ用語とローカルプランナーの契約を分離します。
 
-MongoDB は語彙とトレードオフの参照先です。
+MongoDBは語彙とトレードオフの参照先です。
 
-txBASE は MongoDB のクエリ互換性やプランナー互換性を主張しません。
+txBASEはMongoDBのクエリ互換性やプランナー互換性を主張しません。
 
 ## 1. 外部クエリ語彙
 
 [MongoDB のクエリ述語リファレンス](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)は、述語を比較、論理、配列、要素、評価、ビット演算、地理空間、その他の分類に分けています。
 
-現在の txBASE のサブセットは、比較、所属、論理、有界なフィールド式までです。
+現在のtxBASEのサブセットは、比較、所属、論理、有界なフィールド式までです。
 
-MongoDB の [find コマンド](https://www.mongodb.com/docs/manual/reference/command/find/)は、フィルターとプロジェクション、ソート、スキップ、リミット、ヒント、その他のカーソル制御を分けています。
+MongoDBの[find コマンド](https://www.mongodb.com/docs/manual/reference/command/find/)は、フィルターとプロジェクション、ソート、スキップ、リミット、ヒント、その他のカーソル制御を分けています。
 
-この分離により、txBASE はクエリ検証、結果整形、プランナーのアクセス経路を独立して変更できます。
+この分離により、txBASEはクエリ検証、結果整形、プランナーのアクセス経路を独立して変更できます。
 
-MongoDB の find コマンドは初期バッチとカーソル識別子を返します。
+MongoDBのfindコマンドは初期バッチとカーソル識別子を返します。
 
-Firestore の[クエリカーソルの説明](https://firebase.google.com/docs/firestore/query-data/query-cursors)は、一つのバッチの最後の文書を次のバッチの開始点に使います。
+Firestoreの[クエリカーソルの説明](https://firebase.google.com/docs/firestore/query-data/query-cursors)は、1つのバッチの最後の文書を次のバッチの開始点に使います。
 
-txBASE は物理ページとソートページでこの境界の考え方を採用します。
+txBASEは物理ページとソートページでこの境界の考え方を採用します。
 
 サーバー側のカーソル寿命やスナップショット分離は主張しません。
 
-MongoDB の[比較述語リファレンス](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/)は `$eq`、`$gt`、`$gte`、`$lt`、`$lte`、`$ne`、`$in`、`$nin` などを定義しています。
+MongoDBの[比較述語リファレンス](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/comparison/)は`$eq`、`$gt`、`$gte`、`$lt`、`$lte`、`$ne`、`$in`、`$nin`などを定義しています。
 
-MongoDB の [BSON 比較順序](https://www.mongodb.com/docs/manual/reference/bson-type-comparison-order/)と [`$gt` の型ブラケット規則](https://www.mongodb.com/docs/manual/reference/operator/query/gt/)は別の境界を定義します。
+MongoDBの[BSON 比較順序](https://www.mongodb.com/docs/manual/reference/bson-type-comparison-order/)と[`$gt`の型ブラケット規則](https://www.mongodb.com/docs/manual/reference/operator/query/gt/)は別の境界を定義します。
 
-MongoDB は BSON 固有の型規則と配列規則で BSON 値を比較します。
+MongoDBはBSON固有の型規則と配列規則でBSON値を比較します。
 
-txBASE は独自の明示的なスカラー規則でデコード済み JSON 値を比較します。
+txBASEは独自の明示的なスカラー規則でデコード済みJSON値を比較します。
 
 したがって、同じ演算子名でも混在型、欠損フィールド、配列、文書に対する結果が同じとは限りません。
 
-MongoDB の[論理述語リファレンス](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)は `$and`、`$or`、`$nor`、`$not` を定義しています。
+MongoDBの[論理述語リファレンス](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)は`$and`、`$or`、`$nor`、`$not`を定義しています。
 
-MongoDB の [`$expr` 述語](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)は、同じ文書内の二つのフィールドを比較する式を含め、述語内の式を許可します。
+MongoDBの[`$expr`述語](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)は、同じ文書内の2つのフィールドを比較する式を含め、述語内の式を許可します。
 
-txBASE は有界な式木を実装します。
+txBASEは有界な式木を実装します。
 
-`{"$gt":["$LEFT","$RIGHT"]}` のような比較リーフを `$and`、`$or`、`$not` で合成できます。
+`{"$gt":["$LEFT","$RIGHT"]}`のような比較リーフを`$and`、`$or`、`$not`で合成できます。
 
-比較オペランドには、一つのオペランドを持つ数値 `$abs` 式、または二つのオペランドを持つ数値 `$add`、`$subtract`、`$multiply`、`$divide`、`$mod` 式も含められます。
+比較オペランドには、1つのオペランドを持つ数値`$abs`式、または2つのオペランドを持つ数値`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`式も含められます。
 
-整数演算は、結果が収まる場合に JSON の整数結果を維持します。
+整数演算は、結果が収まる場合にJSONの整数結果を維持します。
 
-混在型または小数の演算は、有限な JSON 数値を生成する必要があります。
+混在型または小数の演算では、有限なJSON数値だけを生成します。
 
 欠損または非数値のフィールド値は、比較不一致になります。
 
-`$` で始まる文字列オペランドはドット区切りフィールド参照です。
+`$`で始まる文字列オペランドはドット区切りフィールド参照です。
 
 それ以外のスカラーオペランドはリテラルです。
 
@@ -60,37 +60,37 @@ txBASE は有界な式木を実装します。
 
 正規表現、配列、文書の式は未サポートです。
 
-MongoDB の[配列述語リファレンス](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)には、txBASE が実装していない `$all`、`$elemMatch`、`$size` などがあります。
+MongoDBの[配列述語リファレンス](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)には、txBASEが実装していない`$all`、`$elemMatch`、`$size`などがあります。
 
-MongoDB には正規表現や式評価を含む広い[その他の述語分類](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/misc/)もあります。
+MongoDBには正規表現や式評価を含む広い[その他の述語分類](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/misc/)もあります。
 
-これらをファイルネイティブな DBF クエリエンジンに追加するには、エンコード、資源上限、エラー契約を先に定義する必要があります。
+これらをファイルネイティブなDBFクエリエンジンに追加するには、先にエンコード、資源上限、エラー契約を定義します。
 
 ## 2. プランナーの境界
 
 [MongoDB のクエリ最適化ガイド](https://www.mongodb.com/docs/manual/core/query-optimization/)は、述語の選択性とインデックスキーの順序が調査するデータ量に影響する理由を説明します。
 
-選択性の低い `$ne` や `$nin` は、選択性の高い等値述語と同じようにはインデックスの恩恵を受けないことも説明しています。
+選択性の低い`$ne`や`$nin`は、選択性の高い等値述語と同じようにはインデックスの恩恵を受けないことも説明しています。
 
-txBASE はレコードスキャンをクエリ実行器の参照経路として保ちます。
+txBASEはレコードスキャンをクエリ実行器の参照経路として保ちます。
 
 パス対応のクエリエントリポイントは、同じフィルター、ソート、プロジェクション、スキップ、リミットのパイプラインを適用する前に、外部スカラーキーまたは複合キーの等値、範囲、順序付き走査を試します。
 
-プランナーは `explain_query_at` を通じて `TableScan`、`EqualityIndex`、`CompoundEqualityIndex`、`CompoundEqualityPrefixIndex`、`IndexIntersection`、`RangeIndex`、`OrderedIndex`、`OrderedIndexPrefix`、`CompoundOrderedIndex` を報告します。
+プランナーは`explain_query_at`を通じて`TableScan`、`EqualityIndex`、`CompoundEqualityIndex`、`CompoundEqualityPrefixIndex`、`IndexIntersection`、`RangeIndex`、`OrderedIndex`、`OrderedIndexPrefix`、`CompoundOrderedIndex`を報告します。
 
-単一テーブル HTTP サーバーは `QUERY /explain` で同じ説明を公開します。
+単一テーブルHTTPサーバーは`QUERY /explain`で同じ説明を公開します。
 
-応答は `{"plan": {"kind": "table_scan"}}` または選択した名前、フィールド、方向を持つタグ付きインデックス計画です。
+応答は`{"plan": {"kind": "table_scan"}}`または選択した名前、フィールド、方向を持つタグ付きインデックス計画です。
 
 この説明は記述的なもので、速度向上を保証しません。
 
-欠損、古い、壊れた、意味上サポートされないサイドカーは、任意の高速化構造であるため `TableScan` にフォールバックします。
+欠損、古い、壊れた、意味上サポートされないサイドカーは、任意の高速化構造であるため`TableScan`にフォールバックします。
 
 インデックスをクエリ実行へ接続するには、パーサー変更だけでは足りません。
 
-キーのエンコード、null と欠損フィールドの規則、重複順序、更新時の保守、復旧レコード、古いインデックスの検出、プランナー方針が必要です。
+キーのエンコード、nullと欠損フィールドの規則、重複順序、更新時の保守、復旧レコード、古いインデックスの検出、プランナー方針が必要です。
 
-現在のプランナーは、トップレベルの直接等値、複合キーの完全一致等値、複合等値プレフィックス候補、片側ごとに一つの境界を持つ範囲述語、単一フィールドの順序付き走査、複合等値プレフィックス範囲述語、正確な等値プレフィックスの後でインデックスサフィックスに一致する単一キーまたは複合ソート要求を扱います。
+現在のプランナーは、トップレベルの直接等値、複合キーの完全一致等値、複合等値プレフィックス候補、片側ごとに1つの境界を持つ範囲述語、単一フィールドの順序付き走査、複合等値プレフィックス範囲述語、正確な等値プレフィックスの後でインデックスサフィックスに一致する単一キーまたは複合ソート要求を扱います。
 
 複数の利用可能な単一フィールド等値インデックスがある場合、プランナーは各単独インデックス候補とレコード番号による積集合候補を比較し、最も低い有界コストを選びます。
 
@@ -110,11 +110,12 @@ txBASE はレコードスキャンをクエリ実行器の参照経路として�
 
 これらの統計は、有界な整数コスト推定に使います。
 
-プランナーは、テーブルスキャンのアクティブレコード数とインデックス経路の正確な候補数を比較し、選択したサイドカーのエントリ数から求めた有界な対数走査項と、経路が要求された順序を完全には提供しない場合のメモリ上のソート作業を加えます。
+プランナーは、テーブルスキャンのアクティブレコード数とインデックス経路の正確な候補数を比較します。
+選択したサイドカーのエントリ数から求めた有界な対数走査項を加え、経路が要求された順序の一部しか提供しない場合はメモリ上のソート作業も加えます。
 
-アクセス経路の候補構築は `src/query/planner.rs` に置き、有界なコスト計算は `src/query/planner_cost.rs` に分離しています。
+アクセス経路の候補構築は`src/query/planner.rs`に置き、有界なコスト計算は`src/query/planner_cost.rs`に分離しています。
 
-これはローカルな計画ロジックであり、MongoDB プランナー互換性ではありません。
+これはローカルな計画ロジックであり、MongoDBプランナー互換性ではありません。
 
 複数キーソートでは、単一フィールドインデックスが最初のキーの順序を提供します。
 
@@ -132,29 +133,29 @@ txBASE はレコードスキャンをクエリ実行器の参照経路として�
 
 テーブルスキャンの推定値にはアクティブレコード数を使います。
 
-インデックス経路の推定値には正確な候補数を使い、選択したサイドカーごとに有界な対数走査項を一つ加え、経路が要求された順序の一部を実行器に残す場合はソート作業を加えます。
+インデックス経路の推定値には正確な候補数を使い、選択したサイドカーごとに有界な対数走査項を1つ加え、経路が要求された順序の一部を実行器に残す場合はソート作業を加えます。
 
 積集合では、選択したサイドカーごとの走査項を合計します。
 
-要求された順序を完全に提供する順序付き経路にはソート項を加えません。
+要求された順序をそのまま提供する順序付き経路にはソート項を加えません。
 
 候補数が同じ場合、複合定義は最短の定義、安定した名前の順で選びます。
 
-コストが完全に同じ場合は、複合等値プレフィックスによる前処理よりもテーブルスキャンと既存のアクセス経路を優先します。
+コストが一致する場合は、複合等値プレフィックスによる前処理よりもテーブルスキャンと既存のアクセス経路を優先します。
 
-この有界モデルはメモリ上のインデックス走査を推定しますが、物理インデックス I/O、メモリ使用量、キャッシュ状態、照合、複合範囲の選択性は推定しません。
+この有界モデルはメモリ上のインデックス走査を推定しますが、物理インデックスI/O、メモリ使用量、キャッシュ状態、照合、複合範囲の選択性は推定しません。
 
-MongoDB の現在の指針は、複数フィールドを繰り返し検索する場合に複合インデックスを推奨しています。
+MongoDBの現在の指針は、複数フィールドを繰り返し検索する場合に複合インデックスを推奨しています。
 
-txBASE の積集合はローカルな候補削減機能です。
+txBASEの積集合はローカルな候補削減機能です。
 
-MongoDB のプランナー互換性や、将来の複合インデックス契約を置き換えるものではありません。
+MongoDBのプランナー互換性や、将来の複合インデックス契約を置き換えるものではありません。
 
-MongoDB の[複合インデックスのソート順に関する説明](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)と[等値、ソート、範囲の指針](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)は、完全な複合インデックスプランナーがフィールド順を定義すべき理由を示します。
+MongoDBの[複合インデックスのソート順に関する説明](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)と[等値、ソート、範囲の指針](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)は、完全な複合インデックスプランナーがフィールド順を定義すべき理由を示します。
 
-txBASE は現在、アクティブレコード数、等値用の一様な異なるキー数推定、単一フィールドの範囲ヒストグラム、複合等値プレフィックス候補と複合等値プレフィックス範囲候補、複合定義ごとの方向メタデータ、スキャン、インデックス走査、残りのソート作業に対する有界なコスト推定を持ちます。
+txBASEは現在、アクティブレコード数、等値用の一様な異なるキー数推定、単一フィールドの範囲ヒストグラム、複合等値プレフィックス候補と複合等値プレフィックス範囲候補、複合定義ごとの方向メタデータ、スキャン、インデックス走査、残りのソート作業に対する有界なコスト推定を持ちます。
 
-I/O を考慮した完全なコストモデルは持ちません。
+I/Oを考慮した完全なコストモデルは持ちません。
 
 等値積集合は有界な候補前処理であり、カバードクエリやエンドツーエンドの高速化を主張するものではありません。
 
@@ -165,7 +166,7 @@ I/O を考慮した完全なコストモデルは持ちません。
 次の項目には個別の公開契約が必要です。
 
 1. 欠損、null、照合、複合範囲の選択性規則を明示した完全な式評価とコストベースのインデックス選択。
-2. 現在の有界な group 契約を超える、メモリ動作を有界にした追加の集約ステージとアキュムレータ。
+2. 現在の有界なgroup契約を超える、メモリ動作を有界にした追加の集約ステージとアキュムレータ。
 3. 完全なインデックス対応またはコストベースのマージ結合戦略と、より広い結合意味論。
 4. 長寿命ストリーム向けのランタイム固有非同期トレイト。
 5. 小さな参照評価器との微分テスト。
