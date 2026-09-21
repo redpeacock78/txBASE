@@ -1,6 +1,6 @@
 use crate::transaction::{FileWal, TransactionError, Wal};
 use crate::xbase::OperationIr;
-use serde_json::{Map, Number, Value};
+use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
