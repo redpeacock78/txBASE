@@ -34,6 +34,55 @@ fn remove_table_files(path: &Path) {
 }
 
 #[test]
+fn index_definition_wire_shape_validates_fields_and_directions() {
+    let single = IndexDefinition::named("by_name", "NAME");
+    assert_eq!(single.name(), "by_name");
+    assert_eq!(single.field(), "NAME");
+    assert_eq!(
+        serde_json::to_value(&single).unwrap(),
+        json!({"name": "by_name", "field": "NAME"})
+    );
+    assert_eq!(
+        serde_json::from_value::<IndexDefinition>(serde_json::to_value(&single).unwrap())
+            .unwrap()
+            .fields(),
+        &["NAME".to_owned()]
+    );
+
+    let compound = IndexDefinition::named_fields_with_directions(
+        "by_name_age",
+        vec!["NAME".into(), "AGE".into()],
+        vec![1, -1],
+    );
+    assert_eq!(
+        serde_json::to_value(&compound).unwrap(),
+        json!({
+            "name": "by_name_age",
+            "fields": ["NAME", "AGE"],
+            "directions": [1, -1]
+        })
+    );
+
+    for (document, message) in [
+        (
+            json!({"name": "bad", "field": "NAME", "fields": ["AGE"]}),
+            "both field and fields",
+        ),
+        (
+            json!({"name": "bad", "fields": ["NAME", "AGE"], "directions": [1]}),
+            "directions must match field count",
+        ),
+        (
+            json!({"name": "bad", "field": "NAME", "directions": [0]}),
+            "directions must be 1 or -1",
+        ),
+    ] {
+        let error = serde_json::from_value::<IndexDefinition>(document).unwrap_err();
+        assert!(error.to_string().contains(message));
+    }
+}
+
+#[test]
 fn builds_and_loads_an_external_scalar_index() {
     let path = temporary_dbf();
     let index = IndexFile::build(&path, vec![IndexDefinition::for_field("NAME")]).unwrap();
