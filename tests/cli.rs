@@ -167,6 +167,46 @@ fn dbf_maintenance_cli_commands_operate_on_a_dbf() {
 }
 
 #[test]
+fn verify_cli_rejects_a_stale_index_sidecar() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-cli-verify-stale-index-{}.dbf",
+        std::process::id()
+    ));
+    for extension in ["txidx", "txbase.state", "txbase.wal", "txbase.lock"] {
+        let _ = fs::remove_file(path.with_extension(extension));
+    }
+    let _ = fs::remove_file(&path);
+
+    fs::write(&path, users_fixture()).unwrap();
+    let build = run_cli(&["index", "build", path.to_str().unwrap(), "NAME"]);
+    assert!(
+        build.status.success(),
+        "index build failed: {}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let mut changed = txbase::dbf::DbfTable::from_path(&path).unwrap();
+    changed
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "Changed"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    fs::write(&path, changed.to_bytes()).unwrap();
+
+    let verify = run_cli(&["verify", path.to_str().unwrap()]);
+    assert!(!verify.status.success());
+    assert!(String::from_utf8_lossy(&verify.stderr).contains("index sidecar is invalid"));
+
+    for extension in ["txidx", "txbase.state", "txbase.wal", "txbase.lock"] {
+        let _ = fs::remove_file(path.with_extension(extension));
+    }
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn xbf_cli_import_report_and_export_a_dbf() {
     let source =
         std::env::temp_dir().join(format!("txbase-cli-xbf-source-{}.dbf", std::process::id()));

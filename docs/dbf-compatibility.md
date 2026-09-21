@@ -223,7 +223,7 @@ The CLI now exposes the first local-database maintenance boundary:
 | Command | Behavior |
 | --- | --- |
 | `txbase schema FILE` | Prints parsed DBF header metadata and field descriptors as JSON |
-| `txbase verify FILE` | Loads the DBF, validates detected memo data, reparses the serialized DBF, and checks record boundaries |
+| `txbase verify FILE` | Loads the DBF, validates detected memo data and any `.txidx` sidecar, reparses the serialized DBF, and checks record boundaries |
 | `txbase pack FILE` | Removes logically deleted records, renumbers the remaining physical records, and persists the result through the existing WAL |
 | `txbase recall FILE RECORD` | Restores one logically deleted record through the existing WAL |
 | `txbase backup SOURCE DEST` | Validates `SOURCE`, then copies its DBF, detected `.dbt` or `.fpt`, schema, and valid `.txidx` sidecars |
