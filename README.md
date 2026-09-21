@@ -68,14 +68,21 @@ curl -i -X QUERY \
 
 `GET` and `HEAD` use one-based physical DBF record numbers. `QUERY /records` accepts bounded `filter`, `sort`, `projection`, `collation`, `skip`, `limit`, `page_size`, `cursor`, and `aggregate` controls.
 
-`page_size` returns an opaque cursor. Physical cursors follow record order; sorted cursors use the declared sort and a physical-record tie-breaker. New cursors are bound to the current table representation, while legacy unbound cursor formats remain accepted for compatibility.
+`page_size` returns an opaque cursor.
+Physical cursors follow record order.
+Sorted cursors use the declared sort and a physical-record tie-breaker.
+New cursors are bound to the current table representation, while legacy unbound cursor formats remain accepted for compatibility.
 
-`QUERY /records/stream` returns filter/projection/skip/limit results as chunked `application/x-ndjson`. `QUERY /explain` reports the selected table-scan or index plan. The library exposes the corresponding borrowed, snapshot, and bounded streaming iterators.
+`QUERY /records/stream` returns filter/projection/skip/limit results as chunked `application/x-ndjson`.
+`QUERY /explain` reports the selected table-scan or index plan.
+The library exposes the corresponding borrowed, snapshot, and bounded streaming iterators.
 
-The catalog server adds `GET /catalog`, named-table read and mutation routes, `QUERY /{table}/records`, `QUERY /{table}/explain`, `QUERY /{table}/records/stream`, and the bounded local join at `QUERY /join`. Catalog `POST /transaction` commits named-table mutations through a catalog journal.
+The catalog server adds `GET /catalog`, named-table read and mutation routes, `QUERY /{table}/records`, `QUERY /{table}/explain`, `QUERY /{table}/records/stream`, and the bounded local join at `QUERY /join`.
+Catalog `POST /transaction` commits named-table mutations through a catalog journal.
 
 `QUERY /join` supports bounded `inner`, `left`, `right`, `full`, `semi`, `anti`, and `cross` joins.
-Large direct equality joins can use fresh compatible ordered indexes for merge execution; the planner falls back to bounded hash or index-probe paths when that merge path is unavailable or more expensive.
+Large direct equality joins can use fresh compatible ordered indexes for merge execution.
+The planner falls back to bounded hash or index-probe paths when that merge path is unavailable or more expensive.
 
 See the [query model](docs/query-model.md), [aggregation model](docs/aggregation.md), [join model](docs/joins.md), and [query planning](docs/query-planning.md) for the exact boundary.
 
@@ -105,11 +112,19 @@ curl -i -X PATCH \
 curl -i -X DELETE http://127.0.0.1:8080/records/3
 ```
 
-`POST`, `PUT`, `PATCH`, and `DELETE` create, replace, update, and logically delete records. `PATCH` accepts the local `application/json` update document, `application/merge-patch+json` object patches, and bounded `application/json-patch+json` operation arrays. Merge Patch recursively merges objects, treats `null` as field removal, and replaces arrays or scalar values. JSON Patch supports the RFC 6902 `add`, `remove`, `replace`, `test`, `move`, and `copy` operations with RFC 6901 JSON Pointer paths. It also accepts typed `$set`, `$unset`, and `$inc` operators in the local JSON document.
+`POST`, `PUT`, `PATCH`, and `DELETE` create, replace, update, and logically delete records.
+`PATCH` accepts the local `application/json` update document, `application/merge-patch+json` object patches, and bounded `application/json-patch+json` operation arrays.
+Merge Patch recursively merges objects, treats `null` as field removal, and replaces arrays or scalar values.
+JSON Patch supports the RFC 6902 `add`, `remove`, `replace`, `test`, `move`, and `copy` operations with RFC 6901 JSON Pointer paths.
+It also accepts typed `$set`, `$unset`, and `$inc` operators in the local JSON document.
 
-Single-table `POST /transaction` applies multiple operations to a private copy and commits one snapshot/WAL boundary. Catalog `POST /transaction` provides the corresponding cross-table catalog journal boundary. Neither boundary provides historical row versions or MVCC visibility.
+Single-table `POST /transaction` applies multiple operations to a private copy and commits one snapshot/WAL boundary.
+Catalog `POST /transaction` provides the corresponding cross-table catalog journal boundary.
+Neither boundary provides historical row versions or MVCC visibility.
 
-Successful mutations return `X-Txbase-Transaction-Id` and persist the commit ID in a state sidecar. Strong `ETag`, `If-Match`, and `If-None-Match` conditions reject stale writes without partial mutation. The [mutation model](docs/mutation-model.md) describes the WAL and recovery contract.
+Successful mutations return `X-Txbase-Transaction-Id` and persist the commit ID in a state sidecar.
+Strong `ETag`, `If-Match`, and `If-None-Match` conditions reject stale writes without partial mutation.
+The [mutation model](docs/mutation-model.md) describes the WAL and recovery contract.
 
 ### Inspect and maintain
 
@@ -149,15 +164,21 @@ txbase backup path/to/users.dbf backups/users.dbf
 txbase restore backups/users.dbf path/to/users.dbf
 ```
 
-`xbf report` checks representability without writing. `xbf export --schema` journals the DBF, schema, memo, and state sidecars through a recoverable `TXSE` boundary; it does not promise one physically atomic snapshot to external legacy readers. `backup` and `restore` validate and copy supported memo, schema, state, and valid index sidecars.
+`xbf report` checks representability without writing.
+`xbf export --schema` journals the DBF, schema, memo, and state sidecars through a recoverable `TXSE` boundary.
+It does not promise one physically atomic snapshot to external legacy readers.
+`backup` and `restore` validate and copy supported memo, schema, state, and valid index sidecars.
 
 ### File and sidecar boundaries
 
 For `users.dbf`, txBASE may discover sibling `.dbt` or `.fpt` memo data, `users.txschema.json` constraint and encoding metadata, `users.txbase.wal`, `users.txbase.state`, and the valid `users.txidx` scalar or compound index sidecar.
 
-When the DBF language-driver byte is missing or untrusted, read, schema, verify, pack, recall, and server commands accept `--encoding NAME`. Supported aliases include `windows-31j`/`cp932`, `gbk`/`cp936`, `euc-kr`/`cp949`, `big5`/`cp950`, strict `shift_jis`/`shift-jis`/`sjis`, `euc-jp`, `gb18030`, and `iso-2022-jp`/`iso2022-jp`.
+When the DBF language-driver byte is missing or untrusted, read, schema, verify, pack, recall, and server commands accept `--encoding NAME`.
+Supported aliases include `windows-31j`/`cp932`, `gbk`/`cp936`, `euc-kr`/`cp949`, `big5`/`cp950`, strict `shift_jis`/`shift-jis`/`sjis`, `euc-jp`, `gb18030`, and `iso-2022-jp`/`iso2022-jp`.
 
-Malformed reads use U+FFFD. Writes reject unmappable or over-width values. The [DBF compatibility](docs/dbf-compatibility.md), [schema metadata](docs/schema-metadata.md), and [XBF v1](docs/xbf.md) documents define the supported formats and sidecar contracts.
+Malformed reads use U+FFFD.
+Writes reject unmappable or over-width values.
+The [DBF compatibility](docs/dbf-compatibility.md), [schema metadata](docs/schema-metadata.md), and [XBF v1](docs/xbf.md) documents define the supported formats and sidecar contracts.
 
 ## Install
 
@@ -229,7 +250,17 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 
 The current implementation prioritizes bounded, recoverable local operations over an unbounded database server.
 
-The roadmap still leaves runtime-specific async stream traits, full cost-based index and join planning, broader aggregation, catalog-wide MVCC, locale-aware CJK collation, broader upstream CJK fixtures, strict multi-file reader atomicity for XBF export, object-storage commits, and distributed replication as future work.
+The roadmap still leaves the following areas as future work:
+
+- Runtime-specific async stream traits.
+- Full cost-based index and join planning.
+- Broader aggregation.
+- Catalog-wide MVCC.
+- Locale-aware CJK collation.
+- Broader upstream CJK fixtures.
+- Strict multi-file reader atomicity for XBF export.
+- Object-storage commits.
+- Distributed replication.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance conditions and [docs/research.md](docs/research.md) for the source and fixture policy.
 

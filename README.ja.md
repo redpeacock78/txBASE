@@ -244,7 +244,17 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 
 現在の実装は、無制限のデータベースサーバーよりも、有界で復旧可能なローカル処理を優先します。
 
-runtime固有のasync stream trait、完全なcost-based index／join planner、より広い集約、catalog全体のMVCC、locale-awareなCJK collation、追加のupstream CJK fixture、XBF exportにおける厳密な複数ファイルreader atomicity、object-storage commit、分散replicationは、引き続き将来の作業です。
+次の領域は引き続き将来の作業です。
+
+- runtime固有のasync stream trait。
+- 完全なcost-based index／join planner。
+- より広い集約。
+- catalog全体のMVCC。
+- locale-awareなCJK collation。
+- 追加のupstream CJK fixture。
+- XBF exportにおける厳密な複数ファイルreader atomicity。
+- object-storage commit。
+- 分散replication。
 
 受け入れ条件は[docs/ja/roadmap.md](docs/ja/roadmap.md)に、出典とfixtureの方針は[docs/ja/research.md](docs/ja/research.md)に記載しています。
 

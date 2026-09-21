@@ -51,7 +51,18 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with scalar and compound equality, compound equality-prefix, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index or join model, full index-aware or cost-based merge join strategies, runtime-specific async traits, catalog-wide MVCC visibility, aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, `$project`, final `$sort`, `$skip`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include the following:
+
+- A full cost-based index or join model.
+- Full index-aware or cost-based merge join strategies.
+- Runtime-specific async traits.
+- Catalog-wide MVCC visibility.
+- Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
+- `$project`, final `$sort`, `$skip`, and final `$limit` beyond the bounded aggregation contract.
+- Composite cross-table constraints beyond catalog-scoped `references`.
+- Strict multi-file reader atomicity for XBF export.
+- Object-storage commits.
+- Distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
