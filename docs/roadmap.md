@@ -38,7 +38,7 @@ The repository currently provides:
 - A durable catalog-journal commit ID for multi-table mutation transactions.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
-- A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, numeric field-reference or literal `$sum`, numeric `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, plus final `$sort` and `$limit` stages over group output.
+- A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, numeric field-reference or literal `$sum`, numeric `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, plus final `$sort`, `$skip`, and `$limit` stages over group output.
 - A bounded local `inner`, `left`, `right`, `full`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
@@ -51,7 +51,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with equality, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics-ordered equality candidate intersection, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection and DBF-read recovery.
 
-The baseline intentionally does not include a full cost-based index or join model, full index-aware or cost-based merge join strategies, runtime-specific async traits, catalog-wide MVCC visibility, aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, `$project`, final `$sort`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
+The baseline intentionally does not include a full cost-based index or join model, full index-aware or cost-based merge join strategies, runtime-specific async traits, catalog-wide MVCC visibility, aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, `$project`, final `$sort`, `$skip`, and final `$limit`, composite cross-table constraints beyond catalog-scoped `references`, strict multi-file reader atomicity for XBF export, object-storage commits, or distributed replication.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -145,7 +145,7 @@ Distributed joins and distributed transactions remain later features.
 Aggregation must define missing, null, numeric overflow, and memory-limit behavior before it is added to the HTTP API.
 
 The current aggregation slice also permits one terminal `$count` or `$distinct` stage, or one `$group` with
-`$count`, field-reference or literal `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, bounded group-output `$match` stages and a bounded `$project` before the final sort and limit. It reuses the
+`$count`, field-reference or literal `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, bounded group-output `$match` stages and a bounded `$project` before the final sort, skip, and limit. It reuses the
 existing include/exclude projection contract.
 
 The planner explanation boundary is implemented by `explain_query_at` and `QUERY /explain`.

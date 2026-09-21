@@ -18,6 +18,7 @@ pub(super) struct AggregationPlan {
     pub(super) distinct: Option<String>,
     pub(super) projection: Option<BTreeMap<String, i8>>,
     pub(super) sort: Option<IndexMap<String, i8>>,
+    pub(super) skip: Option<u64>,
     pub(super) limit: Option<u64>,
 }
 
@@ -80,6 +81,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
     let mut distinct = None;
     let mut projection = None;
     let mut sort = None;
+    let mut skip = None;
     let mut limit = None;
     for (index, stage) in stages.iter().enumerate() {
         if stage.len() != 1 {
@@ -97,7 +99,11 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
                 matches.push(filter.clone());
             }
             "$match"
-                if group.is_some() && projection.is_none() && sort.is_none() && limit.is_none() =>
+                if group.is_some()
+                    && projection.is_none()
+                    && sort.is_none()
+                    && skip.is_none()
+                    && limit.is_none() =>
             {
                 let filter = value.as_object().ok_or_else(|| {
                     QueryError::Invalid(format!("aggregate stage {index}.$match must be an object"))
@@ -115,19 +121,26 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
                 distinct = Some(parse_distinct(value, index)?);
             }
             "$project"
-                if group.is_some() && projection.is_none() && sort.is_none() && limit.is_none() =>
+                if group.is_some()
+                    && projection.is_none()
+                    && sort.is_none()
+                    && skip.is_none()
+                    && limit.is_none() =>
             {
                 projection = Some(parse_projection(value, index)?);
             }
-            "$sort" if group.is_some() && sort.is_none() && limit.is_none() => {
+            "$sort" if group.is_some() && sort.is_none() && skip.is_none() && limit.is_none() => {
                 sort = Some(parse_sort(value, index)?);
+            }
+            "$skip" if group.is_some() && skip.is_none() && limit.is_none() => {
+                skip = Some(parse_skip(value, index)?);
             }
             "$limit" if group.is_some() && limit.is_none() => {
                 limit = Some(parse_limit(value, index)?);
             }
             "$match" => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate stage {index}.$match must precede $group or follow $group before $project, $sort, or $limit"
+                    "aggregate stage {index}.$match must precede $group or follow $group before $project, $sort, $skip, or $limit"
                 )));
             }
             "$group" => {
@@ -137,12 +150,17 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
             }
             "$project" => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate stage {index}.$project must follow $group, precede $sort/$limit, and appear once"
+                    "aggregate stage {index}.$project must follow $group, precede $sort/$skip/$limit, and appear once"
                 )));
             }
             "$sort" => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate stage {index}.$sort must follow $group, precede $limit, and appear once"
+                    "aggregate stage {index}.$sort must follow $group, precede $skip/$limit, and appear once"
+                )));
+            }
+            "$skip" => {
+                return Err(QueryError::Invalid(format!(
+                    "aggregate stage {index}.$skip must follow $group and precede $limit, and appear once"
                 )));
             }
             "$limit" => {
@@ -176,6 +194,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
         distinct,
         projection,
         sort,
+        skip,
         limit,
     })
 }
@@ -276,6 +295,15 @@ fn parse_limit(value: &Value, index: usize) -> Result<u64, QueryError> {
         )));
     };
     Ok(limit)
+}
+
+fn parse_skip(value: &Value, index: usize) -> Result<u64, QueryError> {
+    let Some(skip) = value.as_u64() else {
+        return Err(QueryError::Invalid(format!(
+            "aggregate stage {index}.$skip must be a non-negative integer"
+        )));
+    };
+    Ok(skip)
 }
 
 fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {

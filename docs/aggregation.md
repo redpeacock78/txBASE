@@ -25,7 +25,7 @@ The query document can contain one terminal `$count` or `$distinct` stage, or on
 
 The current aggregation boundary accepts zero or more `$match` stages followed by one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
 
-Group output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, and at most one final `$limit` stage.
+Group output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, at most one `$skip`, and at most one final `$limit` stage.
 
 `_id` is either `null` or one dotted field reference.
 
@@ -37,7 +37,7 @@ The result is a JSON array of documents containing `_id` and the named accumulat
 
 `$project` reuses the query projection rules for group-output fields.
 
-It must appear after `$group` and before `$sort` or `$limit`.
+It must appear after `$group` and before `$sort`, `$skip`, or `$limit`.
 
 Inclusion and exclusion cannot be mixed.
 
@@ -87,11 +87,15 @@ Without `$sort`, group output order is not part of the contract, although the cu
 
 `$limit` accepts a non-negative integer and truncates the materialized group result after sorting.
 
+`$skip` accepts a non-negative integer and discards that many materialized group results after sorting and before `$limit`.
+
+`$skip` must appear after `$group` and any optional `$project` or `$sort`, and before `$limit`.
+
 `$match` stages use the same predicate rules as top-level `filter`.
 
 Input `$match` stages must precede `$group`, `$count`, or `$distinct`.
 
-Group-output `$match` stages must follow `$group` and precede `$project`, `$sort`, or `$limit`.
+Group-output `$match` stages must follow `$group` and precede `$project`, `$sort`, `$skip`, or `$limit`.
 
 `$count` emits one document containing the named non-negative integer field, including zero when no records match.
 
@@ -103,7 +107,7 @@ Both stages are terminal and cannot be combined with group-output stages.
 
 Distinct output is capped at 10,000 values.
 
-Stages after `$limit`, additional grouping, count, or distinct stages remain unsupported.
+Stages after `$limit`, additional grouping, count, distinct, or skip stages remain unsupported.
 
 `$expr` operands are supported only in the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` forms described in the query model.
 

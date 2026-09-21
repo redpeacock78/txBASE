@@ -135,6 +135,30 @@ fn limits_sorted_group_output() {
 }
 
 #[test]
+fn skips_sorted_group_output_before_limiting() {
+    let table = table_with_two_active_records();
+    let request = crate::query::parse(
+        br#"{
+            "aggregate": [
+                {"$group": {
+                    "_id": "$AGE",
+                    "count": {"$count": {}}
+                }},
+                {"$sort": {"_id": -1}},
+                {"$skip": 1},
+                {"$limit": 1}
+            ]
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        crate::query::execute_query(&table, &request).unwrap(),
+        vec![json!({"_id": 7, "count": 1})]
+    );
+}
+
+#[test]
 fn projects_group_output_before_sorting() {
     let table = table_with_two_active_records();
     let request = crate::query::parse(
@@ -184,6 +208,10 @@ fn rejects_unsupported_aggregation_combinations() {
         br#"{"aggregate":[{"$group":{"_id":null}},{"$limit":-1}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$limit":1},{"$limit":1}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$limit":1},{"$sort":{"_id":1}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$skip":1},{"$group":{"_id":null}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null}},{"$skip":-1}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null}},{"$skip":1},{"$skip":1}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null}},{"$limit":1},{"$skip":1}]}"#.as_slice(),
         br#"{"aggregate":[{"$project":{"_id":1}},{"$group":{"_id":null}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$project":{"_id":1,"count":0}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$sort":{"_id":1}},{"$project":{"_id":1}}]}"#
