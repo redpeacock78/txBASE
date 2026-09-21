@@ -59,9 +59,7 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
     };
     let active_record_count = index_file.active_record_count();
     let mut candidates = vec![table_scan()];
-    if let Some(access) = choose_equality(&index_file, request) {
-        candidates.push(access);
-    }
+    candidates.extend(choose_equality(&index_file, request));
     if let Some(access) = choose_range(&index_file, request, active_record_count) {
         candidates.push(access);
     }
@@ -78,7 +76,7 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
         .unwrap_or_else(table_scan)
 }
 
-fn choose_equality(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {
+fn choose_equality(index_file: &IndexFile, request: &QueryRequest) -> Vec<PlannedAccess> {
     let mut equality_fields = request
         .filter
         .iter()
@@ -103,33 +101,37 @@ fn choose_equality(index_file: &IndexFile, request: &QueryRequest) -> Option<Pla
         };
         equality_indexes.push((name, field.clone(), records));
     }
-    let (name, field, first_records) = equality_indexes.first()?;
-    let mut records = first_records.clone();
-    for (_, _, candidates) in equality_indexes.iter().skip(1) {
-        records.retain(|record| candidates.binary_search(record).is_ok());
+    let mut candidates = Vec::with_capacity(equality_indexes.len() + 1);
+    if equality_indexes.len() > 1 {
+        let mut records = equality_indexes[0].2.clone();
+        for (_, _, candidate_records) in &equality_indexes[1..] {
+            records.retain(|record| candidate_records.binary_search(record).is_ok());
+        }
+        candidates.push(PlannedAccess {
+            plan: QueryPlan::IndexIntersection {
+                names: equality_indexes
+                    .iter()
+                    .map(|(name, _, _)| name.clone())
+                    .collect(),
+                fields: equality_indexes
+                    .iter()
+                    .map(|(_, field, _)| field.clone())
+                    .collect(),
+            },
+            records: Some(records),
+            ordered_prefix: 0,
+        });
     }
-    let plan = if equality_indexes.len() == 1 {
-        QueryPlan::EqualityIndex {
-            name: name.clone(),
-            field: field.clone(),
-        }
-    } else {
-        QueryPlan::IndexIntersection {
-            names: equality_indexes
-                .iter()
-                .map(|(name, _, _)| name.clone())
-                .collect(),
-            fields: equality_indexes
-                .iter()
-                .map(|(_, field, _)| field.clone())
-                .collect(),
-        }
-    };
-    Some(PlannedAccess {
-        plan,
-        records: Some(records),
-        ordered_prefix: 0,
-    })
+    candidates.extend(
+        equality_indexes
+            .into_iter()
+            .map(|(name, field, records)| PlannedAccess {
+                plan: QueryPlan::EqualityIndex { name, field },
+                records: Some(records),
+                ordered_prefix: 0,
+            }),
+    );
+    candidates
 }
 
 fn choose_range(

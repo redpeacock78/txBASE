@@ -197,6 +197,72 @@ fn orders_equality_intersection_by_index_statistics() {
 }
 
 #[test]
+fn chooses_the_lowest_cost_equality_candidate() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-query-planner-equality-cost-{}.dbf",
+        std::process::id()
+    ));
+    let sidecar = crate::index::sidecar_path(&path);
+    let lock = path.with_extension("txbase.lock");
+    let wal = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&sidecar);
+    let _ = fs::remove_file(&lock);
+    let _ = fs::remove_file(&wal);
+
+    let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    bytes[179] = b' ';
+    let mut table = DbfTable::from_bytes(&bytes).unwrap();
+    for age in 0..32 {
+        table
+            .insert_record(
+                serde_json::json!({
+                    "ID": age + 3,
+                    "NAME": format!("Group{}", age % 3),
+                    "AGE": age,
+                    "ACTIVE": true
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            )
+            .unwrap();
+    }
+    fs::write(&path, table.to_bytes()).unwrap();
+    IndexFile::build(
+        &path,
+        vec![
+            IndexDefinition::named("by_name", "NAME"),
+            IndexDefinition::named("by_age", "AGE"),
+        ],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let request = parse(br#"{"filter":{"NAME":"Group0","AGE":0}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &request).unwrap(),
+        QueryPlan::EqualityIndex {
+            name: "by_age".into(),
+            field: "AGE".into(),
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &request).unwrap(),
+        execute_query(&table, &request).unwrap()
+    );
+
+    fs::remove_file(&sidecar).unwrap();
+    fs::remove_file(path).unwrap();
+    let _ = fs::remove_file(lock);
+    let _ = fs::remove_file(wal);
+}
+
+#[test]
 fn chooses_the_lowest_cost_range_candidate() {
     let path = std::env::temp_dir().join(format!(
         "txbase-query-planner-range-statistics-{}.dbf",

@@ -92,7 +92,7 @@ It needs key encoding, null and missing-field rules, duplicate ordering, update 
 
 The current planner considers direct top-level equality, single-bound-per-side range predicates, single-field ordered traversal, compound equality-prefix range predicates, and single-key or compound sort requests whose fields match an index suffix after an exact equality prefix.
 
-Multiple valid single-field equality indexes may be intersected by record number before the normal filter pipeline.
+For multiple usable single-field equality indexes, the planner compares each single-index candidate with one record-number intersection candidate and chooses the lowest bounded cost.
 
 The planner uses the sidecar's active-record count and each single-field index's distinct-key count to estimate equality cardinality before loading candidate lists.
 

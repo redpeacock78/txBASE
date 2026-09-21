@@ -197,7 +197,7 @@ cost model.
 
 The planner now records the active-record count and derives each single-field index's distinct-key count from its entries.
 
-It estimates an equality candidate count by assuming a uniform distribution, orders the candidate indexes by that estimate, and then uses exact record lists for the intersection.
+It estimates an equality candidate count by assuming a uniform distribution, orders the candidate indexes by that estimate, and uses exact record lists to build the intersection candidate.
 
 The equality estimate is a local statistic and one input to the bounded cost model.
 
