@@ -280,4 +280,18 @@ mod tests {
         .unwrap_err();
         assert!(error.contains("operation count"));
     }
+
+    #[test]
+    fn rejects_out_of_bounds_array_indices() {
+        let current = json!({"VALUES": [1, 2]});
+        for operation in ["add", "replace", "remove"] {
+            let patch = json!([{
+                "op": operation,
+                "path": "/VALUES/2",
+                "value": 3
+            }]);
+            let error = apply(current.as_object().unwrap().clone(), &patch).unwrap_err();
+            assert!(error.contains("array index out of bounds"));
+        }
+    }
 }
