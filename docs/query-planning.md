@@ -74,7 +74,7 @@ It also warns that low-selectivity operators such as `$ne` and `$nin` often do n
 
 txBASE keeps the record scan as the query executor reference path.
 
-The path-aware query entry point attempts external scalar-key equality, range, or ordered traversal before applying the same filter, sort, projection, skip, and limit pipeline.
+The path-aware query entry point attempts external scalar-key or compound-key equality, range, or ordered traversal before applying the same filter, sort, projection, skip, and limit pipeline.
 
 The planner reports `TableScan`, `EqualityIndex`, `CompoundEqualityIndex`, `CompoundEqualityPrefixIndex`, `IndexIntersection`, `RangeIndex`, `OrderedIndex`, `OrderedIndexPrefix`, or `CompoundOrderedIndex` through `explain_query_at`.
 

@@ -74,7 +74,7 @@ MongoDB には正規表現や式評価を含む広い[その他の述語分類](
 
 txBASE はレコードスキャンをクエリ実行器の参照経路として保ちます。
 
-パス対応のクエリエントリポイントは、同じフィルター、ソート、プロジェクション、スキップ、リミットのパイプラインを適用する前に、外部スカラーキーの等値、範囲、順序付き走査を試します。
+パス対応のクエリエントリポイントは、同じフィルター、ソート、プロジェクション、スキップ、リミットのパイプラインを適用する前に、外部スカラーキーまたは複合キーの等値、範囲、順序付き走査を試します。
 
 プランナーは `explain_query_at` を通じて `TableScan`、`EqualityIndex`、`CompoundEqualityIndex`、`CompoundEqualityPrefixIndex`、`IndexIntersection`、`RangeIndex`、`OrderedIndex`、`OrderedIndexPrefix`、`CompoundOrderedIndex` を報告します。
 
