@@ -177,12 +177,12 @@ fn catalog_transaction_refreshes_indexes_for_each_changed_table() {
                 OperationIr {
                     method: OperationMethod::Patch,
                     path: "/users/records/1".into(),
-                    body: Some(json!({"NAME": "Users changed"})),
+                    body: Some(json!({"NAME": "Users new"})),
                 },
                 OperationIr {
                     method: OperationMethod::Patch,
                     path: "/posts/records/1".into(),
-                    body: Some(json!({"NAME": "Posts changed"})),
+                    body: Some(json!({"NAME": "Posts new"})),
                 },
             ],
             None,
@@ -193,14 +193,14 @@ fn catalog_transaction_refreshes_indexes_for_each_changed_table() {
     assert!(
         crate::index::IndexFile::load(&users)
             .unwrap()
-            .lookup_eq("NAME", &json!("Users changed"))
+            .lookup_eq("NAME", &json!("Users new"))
             .unwrap()
             .contains(&1)
     );
     assert!(
         crate::index::IndexFile::load(&posts)
             .unwrap()
-            .lookup_eq("NAME", &json!("Posts changed"))
+            .lookup_eq("NAME", &json!("Posts new"))
             .unwrap()
             .contains(&1)
     );
