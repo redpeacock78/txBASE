@@ -24,14 +24,13 @@ preserves representable `primary`, `unique`, and `not_null` constraints for a
 caller-managed sidecar.
 `save_dbf_with_schema` stages that DBF and sidecar, validates them, and commits
 the desired DBF, schema, memo-sidecar, and durable `.txbase.state` state through a durable `TXSE`
-journal. The journal records exact base bytes, applies the DBF, schema, and transaction state with
-per-file sync-and-replace, removes stale memo variants, and lets normal DBF
-reads resume an interrupted export. Recovery rejects a target changed by
-another writer instead of overwriting it. This is a crash-recovery and
-conflict-detection boundary; it does not claim that external legacy readers
-observe all files as one physically atomic snapshot.
-When an existing `.txidx` sidecar is present, the export refreshes it from the
-committed DBF state instead of leaving a stale candidate index behind.
+journal. The journal records exact base bytes, applies the DBF, schema, transaction state, and
+existing index with per-file sync-and-replace, removes stale memo variants, and lets normal DBF
+reads resume an interrupted export. The export builds the refreshed index from the target DBF
+bytes before writing the journal, and recovery validates its entries and source fingerprint before
+replacement. Recovery rejects a target changed by another writer instead of overwriting it. This
+is a crash-recovery and conflict-detection boundary; it does not claim that external legacy
+readers observe all files as one physically atomic snapshot.
 
 The codec is intentionally kept in the format layer. It does not add a second
 query or HTTP implementation.
@@ -300,10 +299,12 @@ as `xbf export XBF DBF --schema`.
 
 The file-level path writes a journal beside the destination and removes it only
 after all desired targets are applied. The journal covers the DBF, schema
-sidecar, and both DBT/FPT case variants, so a stale memo sidecar is removed as
-part of the export. A normal `DbfTable::from_path` call recovers a pending
-journal before loading records. An existing external index is refreshed at the
-same export boundary; it is derived state and is not copied from the XBF input.
+sidecar, both DBT/FPT case variants, transaction state, and an existing index
+sidecar, so a stale memo sidecar is removed as part of the export and the index
+can be replayed after a partial replacement. A normal `DbfTable::from_path` call
+recovers a pending journal before loading records. The export rebuilds the
+existing index definitions from the target DBF; it does not copy an index from
+the XBF input.
 
 The CLI also exposes `xbf report XBF`, which prints the representability report
 without writing a DBF or schema sidecar.

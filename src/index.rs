@@ -415,6 +415,7 @@ impl IndexFile {
 
 pub(crate) use commit::{
     apply_snapshot_payload, decode_snapshot_payload, pending_snapshot_payload, refresh_if_present,
+    snapshot_bytes_without_memo, validate_snapshot_bytes,
 };
 
 #[cfg(test)]

@@ -10,10 +10,11 @@ use std::path::{Path, PathBuf};
 const JOURNAL_MAGIC: [u8; 4] = *b"TXSE";
 const JOURNAL_VERSION: u16 = 1;
 const JOURNAL_RECORD_SIZE: usize = 8;
-const TARGET_COUNT: usize = 7;
+const TARGET_COUNT: usize = 8;
 const DBF_TARGET: usize = 0;
 const SCHEMA_TARGET: usize = 1;
 const STATE_TARGET: usize = 6;
+const INDEX_TARGET: usize = 7;
 
 pub(crate) fn commit_schema_export(
     path: &Path,
@@ -26,6 +27,14 @@ pub(crate) fn commit_schema_export(
 
     let dbf_bytes = table.to_bytes();
     validate_staged_export(&dbf_bytes, schema_bytes)?;
+    let index_path = crate::index::sidecar_path(path);
+    let index_bytes = match crate::index::snapshot_bytes_without_memo(path, table, &dbf_bytes)
+        .map_err(super::index_error)?
+    {
+        Some(bytes) => Some(bytes),
+        None if index_path.is_file() => Some(fs::read(&index_path)?),
+        None => None,
+    };
     let transaction_id = next_transaction_id(read_transaction_state(path)?)?;
     let state_bytes = transaction_state_bytes(transaction_id)?;
     let directory = transaction_directory(path);
@@ -35,11 +44,13 @@ pub(crate) fn commit_schema_export(
     write_file(&stage_path(&directory, DBF_TARGET), &dbf_bytes)?;
     write_file(&stage_path(&directory, SCHEMA_TARGET), schema_bytes)?;
     write_file(&stage_path(&directory, STATE_TARGET), &state_bytes)?;
+    if let Some(bytes) = &index_bytes {
+        write_file(&stage_path(&directory, INDEX_TARGET), bytes)?;
+    }
     let flags = capture_bases(path, &directory)?;
     sync_directory(&directory)?;
     write_journal(path, flags)?;
     recover_schema_export_locked(path)?;
-    let _ = crate::index::refresh_if_present(path, table);
     Ok(())
 }
 
@@ -79,7 +90,16 @@ fn apply_export(path: &Path, flags: u16) -> Result<(), DbfError> {
     let dbf_bytes = fs::read(stage_path(&directory, DBF_TARGET))?;
     let schema_bytes = fs::read(stage_path(&directory, SCHEMA_TARGET))?;
     let state_bytes = read_optional(&stage_path(&directory, STATE_TARGET))?;
+    let index_bytes = if flags & (1 << INDEX_TARGET) != 0 {
+        Some(fs::read(stage_path(&directory, INDEX_TARGET))?)
+    } else {
+        None
+    };
     validate_staged_export(&dbf_bytes, &schema_bytes)?;
+    if let Some(bytes) = &index_bytes {
+        crate::index::validate_snapshot_bytes(path, &dbf_bytes, bytes)
+            .map_err(super::index_error)?;
+    }
 
     let targets = target_paths(path);
     let desired = [
@@ -90,6 +110,7 @@ fn apply_export(path: &Path, flags: u16) -> Result<(), DbfError> {
         None,
         None,
         state_bytes.as_deref(),
+        index_bytes.as_deref(),
     ];
     let mut replace = [false; TARGET_COUNT];
     for (index, target) in targets.iter().enumerate() {
@@ -191,6 +212,7 @@ fn target_paths(path: &Path) -> [PathBuf; TARGET_COUNT] {
         path.with_extension("fpt"),
         path.with_extension("FPT"),
         super::persistence::transaction_state_path(path),
+        crate::index::sidecar_path(path),
     ]
 }
 
@@ -207,6 +229,7 @@ fn stage_path(directory: &Path, index: usize) -> PathBuf {
         DBF_TARGET => "dbf",
         SCHEMA_TARGET => "schema",
         STATE_TARGET => "state",
+        INDEX_TARGET => "index",
         _ => "unused",
     })
 }

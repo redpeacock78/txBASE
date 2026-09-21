@@ -40,6 +40,13 @@ pub(super) fn source_fingerprint_for(
     Ok(SourceFingerprint { dbf, memo })
 }
 
+pub(super) fn source_fingerprint_for_without_memo(dbf_bytes: &[u8]) -> SourceFingerprint {
+    SourceFingerprint {
+        dbf: fingerprint_bytes(dbf_bytes),
+        memo: None,
+    }
+}
+
 fn file_fingerprint(path: &Path) -> Result<FileFingerprint, IndexError> {
     let bytes = fs::read(path)?;
     Ok(fingerprint_bytes(&bytes))

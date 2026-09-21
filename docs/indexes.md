@@ -167,11 +167,14 @@ DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sid
 Mutation persistence validates an existing sidecar before replacing the DBF; a stale or malformed
 sidecar therefore leaves the DBF unchanged and reports an index error.
 
-Schema-preserving XBF-to-DBF export also refreshes an existing sidecar after its
-`TXSE` journal applies the new DBF state; the XBF input does not provide an
-index to copy.
+Schema-preserving XBF-to-DBF export stages an existing sidecar as a `TXSE` target
+alongside the new DBF state. The export rebuilds its existing definitions from
+the target DBF, validates the entries and source fingerprint during recovery,
+and does not copy an index from the XBF input.
 
-Direct DBF edits, unsupported sidecar definitions, and refresh I/O failures leave the sidecar stale; `index rebuild` is the explicit repair path.
+Direct DBF edits can leave the sidecar stale; `index rebuild` is the explicit
+repair path. Unsupported sidecar definitions and refresh I/O failures reject
+schema-preserving export before its journal is written.
 
 The path-aware query executor uses equality, compound equality-prefix, equality intersection, range, compound equality-prefix range, single-field ordered, or compound-prefix ordered sidecar traversal when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
 

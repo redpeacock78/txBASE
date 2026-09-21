@@ -138,6 +138,71 @@ fn schema_export_read_recovers_after_dbf_replacement() {
 }
 
 #[test]
+fn schema_export_recovery_replays_index_target() {
+    let destination = path("index-recovery");
+    cleanup(&destination);
+    let old_bytes = fixture();
+    fs::write(&destination, &old_bytes).unwrap();
+    let definition = crate::index::IndexDefinition::for_field("ID");
+    let old_index = crate::index::IndexFile::build(&destination, vec![definition.clone()]).unwrap();
+    let old_index_bytes = serde_json::to_vec_pretty(&old_index).unwrap();
+    old_index.save(&destination).unwrap();
+
+    let mut table = DbfTable::from_bytes(&old_bytes).unwrap();
+    table.delete_record(1).unwrap();
+    let new_bytes = table.to_bytes();
+    fs::write(&destination, &new_bytes).unwrap();
+    let new_index = crate::index::IndexFile::build(&destination, vec![definition]).unwrap();
+    let new_index_bytes = serde_json::to_vec_pretty(&new_index).unwrap();
+    fs::write(&destination, &old_bytes).unwrap();
+    fs::write(crate::index::sidecar_path(&destination), &old_index_bytes).unwrap();
+
+    let schema = schema_bytes();
+    let old_state = super::persistence::transaction_state_bytes(1).unwrap();
+    let new_state = super::persistence::transaction_state_bytes(2).unwrap();
+    let directory = schema_export::test_transaction_directory(&destination);
+    fs::write(destination.with_extension("txbase.state"), &old_state).unwrap();
+    fs::create_dir(&directory).unwrap();
+    schema_export::test_write_file(&schema_export::test_stage_path(&directory, 0), &new_bytes)
+        .unwrap();
+    schema_export::test_write_file(&schema_export::test_stage_path(&directory, 1), &schema)
+        .unwrap();
+    schema_export::test_write_file(&schema_export::test_stage_path(&directory, 6), &new_state)
+        .unwrap();
+    schema_export::test_write_file(
+        &schema_export::test_stage_path(&directory, 7),
+        &new_index_bytes,
+    )
+    .unwrap();
+    schema_export::test_write_file(&schema_export::test_base_path(&directory, 0), &old_bytes)
+        .unwrap();
+    schema_export::test_write_file(&schema_export::test_base_path(&directory, 6), &old_state)
+        .unwrap();
+    schema_export::test_write_file(
+        &schema_export::test_base_path(&directory, 7),
+        &old_index_bytes,
+    )
+    .unwrap();
+    schema_export::test_write_journal(&destination, 1 | (1 << 6) | (1 << 7)).unwrap();
+    fs::write(&destination, &new_bytes).unwrap();
+
+    let loaded = DbfTable::from_path(&destination).unwrap();
+
+    assert!(loaded.records()[0].deleted);
+    assert_eq!(loaded.transaction_id(), Some(2));
+    assert!(
+        crate::index::IndexFile::load(&destination)
+            .unwrap()
+            .lookup_eq("ID", &serde_json::json!(1))
+            .unwrap()
+            .is_empty()
+    );
+    assert!(!schema_export::test_journal_path(&destination).exists());
+
+    cleanup(&destination);
+}
+
+#[test]
 fn schema_export_read_rejects_an_external_target_change() {
     let destination = path("conflict");
     cleanup(&destination);
@@ -185,7 +250,7 @@ fn schema_export_rejects_malformed_journal_records() {
         ),
         (
             "unknown-flags",
-            vec![b'T', b'X', b'S', b'E', 1, 0, 0x80, 0],
+            vec![b'T', b'X', b'S', b'E', 1, 0, 0, 1],
             "XBF schema export journal contains unknown flags",
         ),
     ];
