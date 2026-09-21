@@ -120,7 +120,9 @@ It also accepts typed `$set`, `$unset`, and `$inc` operators in the local JSON d
 
 Single-table `POST /transaction` applies multiple operations to a private copy and commits one snapshot/WAL boundary.
 Single-table mutations retain table-scoped historical snapshots through the `mvcc` CLI.
-Catalog `POST /transaction` provides the corresponding cross-table catalog journal boundary, but it does not yet provide a historical multi-table snapshot.
+Catalog `POST /transaction` also retains one full-image historical snapshot for every discovered
+table. `Catalog::from_path_at` and `mvcc catalog` read one consistent catalog commit; the catalog
+HTTP server currently serves the current image only.
 
 Successful mutations return `X-Txbase-Transaction-Id` and persist the commit ID in a state sidecar.
 Strong `ETag`, `If-Match`, and `If-None-Match` conditions reject stale writes without partial mutation.
@@ -136,6 +138,8 @@ txbase schema path/to/users.dbf
 txbase verify path/to/users.dbf
 txbase catalog path/to/database
 txbase verify-catalog path/to/database
+txbase mvcc catalog list path/to/database
+txbase mvcc catalog read path/to/database 1
 txbase index verify path/to/users.dbf
 txbase xbf report path/to/users.xbf
 txbase wal inspect path/to/users.txbase.wal
@@ -214,6 +218,7 @@ cargo test --all-targets --all-features
 src/dbf/            DBF parsing, codecs, memo sidecars, maintenance, mutation, WAL, and tests
 src/catalog.rs      Direct-child DBF discovery, table lookup, and catalog verification
 src/catalog/        Catalog locks, journals, recovery, and named-table transactions
+src/catalog/mvcc.rs Catalog-wide commit-level historical snapshots
 src/index.rs        External scalar and compound-key index sidecar lifecycle
 src/query.rs        JSON query execution and filter evaluation
 src/query/          Planner, ordering, validation, bounded joins, and query tests
@@ -262,7 +267,7 @@ The roadmap still leaves the following areas as future work:
 - Runtime-specific async stream traits.
 - Full cost-based index and join planning.
 - Broader aggregation.
-- Catalog-wide MVCC.
+- Row-level MVCC history and retention.
 - Locale-aware CJK collation.
 - Broader upstream CJK fixtures.
 - Strict multi-file reader atomicity for XBF export.

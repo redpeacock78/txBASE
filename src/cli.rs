@@ -42,6 +42,9 @@ fn print_help() {
     println!(
         "\nAdditional command:\n  txbase wal inspect WAL\n\nwal inspect reads a WAL without creating or truncating it and reports complete record lengths plus an incomplete final tail."
     );
+    println!(
+        "\nCatalog MVCC commands:\n  txbase mvcc catalog list DIRECTORY\n  txbase mvcc catalog read DIRECTORY TRANSACTION_ID"
+    );
 }
 
 pub(super) fn parse_encoding_option(

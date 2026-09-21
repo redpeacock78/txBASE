@@ -112,7 +112,9 @@ JSON PatchはRFC 6901のJSON Pointerパスを使うRFC 6902の`add`、`remove`�
 
 単一テーブルの`POST /transaction`は、複数の操作をprivate copyへ適用してから、1つのsnapshot/WAL境界でcommitします。
 単一テーブルの更新は、`mvcc` CLIを通してテーブル単位の過去スナップショットを保持します。
-カタログの`POST /transaction`は、同じ役割を複数テーブル向けのカタログjournalで担いますが、過去の複数テーブルスナップショットはまだ提供しません。
+カタログの`POST /transaction`も、検出したすべてのテーブルの完全なイメージによる過去スナップショットを保持します。
+`Catalog::from_path_at`と`mvcc catalog`は、一貫したカタログcommitを読み取ります。
+カタログHTTPサーバーは、現在のイメージだけを提供します。
 
 成功した更新は`X-Txbase-Transaction-Id`を返し、commit IDをstateサイドカーへ保存します。
 strongな`ETag`と`If-Match`、`If-None-Match`によって、古い更新を部分変更なしで拒否できます。
@@ -128,6 +130,8 @@ txbase schema path/to/users.dbf
 txbase verify path/to/users.dbf
 txbase catalog path/to/database
 txbase verify-catalog path/to/database
+txbase mvcc catalog list path/to/database
+txbase mvcc catalog read path/to/database 1
 txbase index verify path/to/users.dbf
 txbase xbf report path/to/users.xbf
 txbase wal inspect path/to/users.txbase.wal
@@ -207,6 +211,7 @@ cargo test --all-targets --all-features
 src/dbf/            DBF parser、codec、memoサイドカー、保守、更新、WAL、テスト
 src/catalog.rs      直下のDBF検出、テーブル検索、catalog検証
 src/catalog/        catalog lock、journal、復旧、名前付きテーブルのtransaction
+src/catalog/mvcc.rs catalog全体のcommit単位の過去スナップショット
 src/index.rs        外部scalar／compound keyのindexサイドカー
 src/query.rs        JSON queryの実行とfilter評価
 src/query/          planner、ordering、validation、有界join、queryテスト
@@ -256,7 +261,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - runtime固有のasync stream trait。
 - 完全なcost-based index／join planner。
 - より広い集約。
-- catalog全体のMVCC。
+- 行単位のMVCC履歴と保持期間。
 - locale-awareなCJK collation。
 - 追加のupstream CJK fixture。
 - XBF exportにおける厳密な複数ファイルreader atomicity。

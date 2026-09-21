@@ -65,6 +65,11 @@ pub(crate) fn transaction_id(root: &Path) -> Result<Option<u64>, CatalogError> {
     read_transaction_id_locked(root)
 }
 
+pub(crate) fn next_transaction_id_locked(root: &Path) -> Result<u64, CatalogError> {
+    let state_before = read_optional(&root.join(TRANSACTION_STATE))?;
+    next_transaction_id(state_before.as_deref())
+}
+
 pub(crate) fn read_transaction_id_locked(root: &Path) -> Result<Option<u64>, CatalogError> {
     let path = root.join(TRANSACTION_STATE);
     let bytes = match fs::read(path) {

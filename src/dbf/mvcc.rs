@@ -24,6 +24,8 @@ pub(super) struct Snapshot {
     pub(super) schema: Option<Vec<u8>>,
 }
 
+pub(crate) type CatalogSnapshotParts = (Vec<u8>, Option<(u8, Vec<u8>)>, Option<Vec<u8>>);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Record {
     Prepare {
@@ -127,6 +129,27 @@ impl DbfTable {
         Self::from_mvcc_snapshot(transaction_id, snapshot)
     }
 
+    pub(crate) fn from_catalog_snapshot(
+        dbf: &[u8],
+        memo: Option<(u8, Vec<u8>)>,
+        schema: Option<&[u8]>,
+    ) -> Result<Self, DbfError> {
+        let memo = match memo {
+            Some((tag, bytes)) => Some(MemoSnapshot {
+                format: MemoFormat::from_tag(tag)?,
+                bytes,
+            }),
+            None => None,
+        };
+        let mut table = Self::from_snapshot(Snapshot {
+            dbf: dbf.to_vec(),
+            memo,
+            schema: schema.map(ToOwned::to_owned),
+        })?;
+        table.historical_snapshot = true;
+        Ok(table)
+    }
+
     pub fn mvcc_versions(path: impl AsRef<Path>) -> Result<Vec<u64>, DbfError> {
         let path = path.as_ref();
         let _lock = TableLock::acquire(path)?;
@@ -135,7 +158,27 @@ impl DbfTable {
         versions(path)
     }
 
+    pub(crate) fn catalog_snapshot_parts(
+        &self,
+        path: &Path,
+    ) -> Result<CatalogSnapshotParts, DbfError> {
+        Ok((
+            self.bytes.clone(),
+            self.memo
+                .as_ref()
+                .map(|memo| (memo.format.tag(), memo.bytes.clone())),
+            schema_metadata_bytes(path)?,
+        ))
+    }
+
     fn from_mvcc_snapshot(transaction_id: u64, snapshot: Snapshot) -> Result<Self, DbfError> {
+        let mut table = Self::from_snapshot(snapshot)?;
+        table.transaction_id = Some(transaction_id);
+        table.historical_snapshot = true;
+        Ok(table)
+    }
+
+    fn from_snapshot(snapshot: Snapshot) -> Result<Self, DbfError> {
         let schema = snapshot
             .schema
             .as_deref()
@@ -159,8 +202,6 @@ impl DbfTable {
             metadata.validate_records(&table.records)?;
         }
         table.source = None;
-        table.transaction_id = Some(transaction_id);
-        table.historical_snapshot = true;
         Ok(table)
     }
 }

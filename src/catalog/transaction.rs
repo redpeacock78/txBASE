@@ -1,5 +1,6 @@
 pub(crate) use super::journal::{CatalogReadLock, CatalogWriteLock, read_lock, write_lock};
-use super::journal::{FileChange, commit};
+use super::journal::{FileChange, commit, next_transaction_id_locked};
+use super::mvcc::{Snapshot, TableSnapshot};
 use super::{Catalog, CatalogError, CatalogTransactionError};
 use crate::dbf::DbfTable;
 use crate::xbase::{OperationIr, OperationMethod};
@@ -17,6 +18,11 @@ impl Catalog {
         if operations.is_empty() {
             return Err(CatalogTransactionError::Invalid(
                 "operations must not be empty".into(),
+            ));
+        }
+        if self.is_historical() {
+            return Err(CatalogTransactionError::Invalid(
+                "historical catalog snapshots are read-only".into(),
             ));
         }
         let _lock = self
@@ -79,10 +85,12 @@ impl Catalog {
         self.validate_replacements(&tables)
             .map_err(CatalogTransactionError::Catalog)?;
 
+        let transaction_id =
+            next_transaction_id_locked(&self.root).map_err(CatalogTransactionError::Catalog)?;
         let mut changes = Vec::new();
-        for (name, mut table) in tables {
+        for (name, table) in &mut tables {
             let path = self
-                .table_path(&name)
+                .table_path(name)
                 .expect("catalog transaction table path exists");
             let prepared = table.prepare_snapshot(path).map_err(|error| {
                 CatalogTransactionError::Catalog(CatalogError::Table {
@@ -126,6 +134,49 @@ impl Catalog {
                 });
             }
         }
+        let mut snapshot_tables = BTreeMap::new();
+        for entry in self.tables() {
+            let table = match tables.get(entry.name()) {
+                Some(table) => table.clone(),
+                None => self
+                    .open_table_unlocked(entry.name())
+                    .map_err(CatalogTransactionError::Catalog)?,
+            };
+            let (dbf, memo, schema) =
+                table
+                    .catalog_snapshot_parts(entry.path())
+                    .map_err(|error| {
+                        CatalogTransactionError::Catalog(CatalogError::Table {
+                            name: entry.name().to_owned(),
+                            source: error,
+                        })
+                    })?;
+            snapshot_tables.insert(
+                entry.name().to_owned(),
+                TableSnapshot {
+                    file_name: entry.file_name().to_owned(),
+                    dbf,
+                    memo,
+                    schema,
+                },
+            );
+        }
+        let history_path = super::mvcc::path_for(&self.root);
+        let history_before =
+            read_optional(&history_path).map_err(CatalogTransactionError::Catalog)?;
+        let history_after = super::mvcc::append_snapshot(
+            history_before.as_deref(),
+            Snapshot {
+                transaction_id,
+                tables: snapshot_tables,
+            },
+        )
+        .map_err(CatalogTransactionError::Catalog)?;
+        changes.push(FileChange {
+            target: history_path,
+            before: history_before,
+            after: Some(history_after),
+        });
         commit(&self.root, changes).map_err(CatalogTransactionError::Catalog)
     }
 }

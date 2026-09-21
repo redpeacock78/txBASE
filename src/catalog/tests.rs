@@ -154,6 +154,131 @@ fn commits_named_operations_across_tables() {
 }
 
 #[test]
+fn catalog_mvcc_preserves_consistent_cross_table_snapshots() {
+    let root = temporary_catalog();
+    let users = root.join("users.dbf");
+    let posts = root.join("posts.dbf");
+    fs::write(&users, fixture()).unwrap();
+    fs::write(&posts, fixture()).unwrap();
+    let catalog = Catalog::from_path(&root).unwrap();
+
+    assert_eq!(
+        catalog
+            .commit_operations_with_preconditions(
+                &[
+                    OperationIr {
+                        method: OperationMethod::Post,
+                        path: "/users/records".into(),
+                        body: Some(json!({
+                            "ID": 3,
+                            "NAME": "Carol",
+                            "AGE": 42,
+                            "ACTIVE": true
+                        })),
+                    },
+                    OperationIr {
+                        method: OperationMethod::Post,
+                        path: "/posts/records".into(),
+                        body: Some(json!({
+                            "ID": 3,
+                            "NAME": "Carol",
+                            "AGE": 42,
+                            "ACTIVE": true
+                        })),
+                    },
+                ],
+                None,
+                None,
+            )
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        catalog
+            .commit_operations_with_preconditions(
+                &[OperationIr {
+                    method: OperationMethod::Patch,
+                    path: "/users/records/1".into(),
+                    body: Some(json!({"NAME": "Current"})),
+                }],
+                None,
+                None,
+            )
+            .unwrap(),
+        2
+    );
+
+    assert_eq!(Catalog::mvcc_versions(&root).unwrap(), vec![1, 2]);
+    let first = Catalog::from_path_at(&root, 1).unwrap();
+    let second = Catalog::from_path_at(&root, 2).unwrap();
+    assert_eq!(first.transaction_id().unwrap(), Some(1));
+    assert!(
+        first
+            .open_table("users")
+            .unwrap()
+            .active_record(3)
+            .is_some()
+    );
+    assert!(
+        first
+            .open_table("posts")
+            .unwrap()
+            .active_record(3)
+            .is_some()
+    );
+    assert_eq!(
+        second
+            .open_table("users")
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["NAME"],
+        "Current"
+    );
+    assert!(
+        second
+            .open_table("posts")
+            .unwrap()
+            .active_record(3)
+            .is_some()
+    );
+
+    let mut current_users = DbfTable::from_path(&users).unwrap();
+    current_users
+        .patch_record(1, json!({"NAME": "Later"}).as_object().unwrap().clone())
+        .unwrap();
+    current_users.save_with_wal(&users).unwrap();
+    assert_eq!(
+        first
+            .open_table("users")
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["NAME"],
+        "Current"
+    );
+
+    let error = first
+        .commit_operations_with_preconditions(
+            &[OperationIr {
+                method: OperationMethod::Patch,
+                path: "/users/records/1".into(),
+                body: Some(json!({"NAME": "Rejected"})),
+            }],
+            None,
+            None,
+        )
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("historical catalog snapshots are read-only")
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn catalog_transaction_refreshes_indexes_for_each_changed_table() {
     let root = temporary_catalog();
     let users = root.join("users.dbf");

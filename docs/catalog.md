@@ -4,6 +4,8 @@ The catalog boundary maps one database directory to the DBF tables stored direct
 
 This is the first multi-table slice in the roadmap.
 
+Catalog-journal commits also retain a consistent historical image of every discovered table.
+
 It does not add relationships, cross-table index definitions, or a second storage format.
 
 ## Filesystem contract
@@ -34,6 +36,8 @@ Table names are matched exactly by the public API.
 
 The catalog does not write a manifest, rename files, or claim ownership of sidecars.
 
+The `.txbase.catalog.mvcc` history is an internal versioned snapshot sidecar, not a table-discovery manifest.
+
 This keeps the DBF files readable by existing xBase tools and leaves per-table recovery on the existing DBF path.
 
 ## Rust API
@@ -45,6 +49,10 @@ let catalog = Catalog::from_path("database")?;
 let users = catalog.open_table("users")?;
 let names = catalog.table_names();
 catalog.verify()?;
+
+let versions = Catalog::mvcc_versions("database")?;
+let historical = Catalog::from_path_at("database", 1)?;
+let old_users = historical.open_table("users")?;
 ```
 
 `open_table` loads one DBF through the existing recovery and memo-sidecar path.
@@ -53,9 +61,19 @@ catalog.verify()?;
 
 `schema_json` loads every discovered table and returns its name, filename, and DBF schema.
 
-`transaction_id` returns the last durable catalog-journal commit ID, if one exists. The ID is
-advanced only by the multi-table `POST /transaction` journal boundary; independent named-table
-mutations retain their per-table DBF transaction IDs.
+`transaction_id` returns the catalog commit ID represented by the catalog. For a current catalog,
+the ID is the last durable catalog-journal commit ID, if one exists. For a historical catalog, it
+is the snapshot ID used to open that catalog.
+
+`mvcc_versions` lists catalog commits that have a retained image, and `from_path_at` opens one
+read-only image. Every table opened from that value belongs to the same catalog commit.
+
+Historical tables use their retained DBF, memo, and schema images and do not reuse current index
+sidecars.
+
+The ID advances only through the multi-table `POST /transaction` journal boundary. Independent
+named-table mutations retain their per-table DBF transaction IDs and do not create a new catalog
+image.
 
 `verify` loads and verifies every discovered table and any present index sidecar, reporting the
 table name when a table or its sidecar fails.
@@ -83,8 +101,9 @@ single-table `QUERY /explain`. `QUERY /join` accepts the same JSON join document
 `POST /{table}/records` and `PUT`/`PATCH`/`DELETE /{table}/records/{id}` reuse the single-table
 mutation, WAL, ETag, validation, and constraint behavior. Each request commits only its named
 DBF. `POST /transaction` accepts named-table mutation paths and commits all affected DBFs and
-their changed index sidecars under one catalog journal; an incomplete prepare is rolled back on
-the next catalog read. Successful
+their changed index sidecars under one catalog journal; it also records one image of every
+discovered table in the catalog MVCC history. An incomplete prepare, including its history image,
+is rolled back on the next catalog read. Successful
 catalog-journal commits advance a durable catalog transaction ID and return it in the JSON body
 and `X-Txbase-Transaction-Id` header. The response also returns the new catalog representation
 `ETag`. Optional `If-Match` and `If-None-Match` conditions are evaluated under the catalog write
@@ -94,6 +113,9 @@ status without changing any DBF or sidecar. This is an ordering/identification b
 MVCC visibility.
 The catalog is discovered once at server startup, while each request loads the named table through
 the existing recovery path. Named-table mutations do not add or remove tables.
+
+Historical catalog images are currently exposed through the Rust API and CLI. The catalog HTTP
+server continues to serve the current image only.
 
 An invalid DBF does not prevent directory discovery because discovery only identifies files.
 
@@ -111,6 +133,13 @@ Verify every discovered table:
 
 ```bash
 txbase verify-catalog path/to/database
+```
+
+List retained catalog commits and read one consistent historical image:
+
+```bash
+txbase mvcc catalog list path/to/database
+txbase mvcc catalog read path/to/database 1
 ```
 
 The catalog output has this shape:
@@ -136,14 +165,20 @@ The full nested schema includes the DBF header, record counts, memo sidecar dete
 ## Boundary
 
 The catalog currently provides discovery, lookup, schema introspection, verification, the
-input boundary used by the bounded local join, and an optional HTTP surface for independent
-named-table reads and mutations.
+input boundary used by the bounded local join, an optional HTTP surface for independent
+named-table reads and mutations, and read-only catalog-wide historical snapshots.
 
 It provides a cross-table atomic transaction boundary for named record mutations.
 
 The catalog journal persists a monotonically increasing commit ID in
 `.txbase.catalog.state`. Recovery rolls that state back with a prepared journal or reapplies it
-with a committed journal. It does not provide historical multi-table row versions or MVCC visibility.
+`.txbase.catalog.state`. Each successful multi-table commit stores a full image of all discovered
+tables in `.txbase.catalog.mvcc` through the same journal. Recovery rolls the state and history
+back with a prepared journal or reapplies both with a committed journal.
+
+The history provides commit-level visibility, not row-level versions. It has no retention or
+garbage-collection policy yet, and it does not provide distributed snapshots or serializable
+conflict detection.
 
 When a field sidecar declares `references: "TABLE.FIELD"`, catalog named-table mutations and
 catalog transactions validate non-null child values against active rows in the referenced table.
@@ -158,4 +193,4 @@ It does not infer relationships from field names.
 The local join supports `inner`, `left`, `right`, `full`, `semi`, and `anti` equality joins plus a bounded
 `cross` join, with a hard result bound.
 It does not provide a full cost-based planner, full index-aware or cost-based merge join strategies,
-runtime-specific async stream traits, or MVCC visibility.
+runtime-specific async stream traits, row-level MVCC versions, or distributed visibility.

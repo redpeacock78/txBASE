@@ -7,7 +7,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 mod constraints;
+mod discovery;
 mod journal;
+mod mvcc;
 mod transaction;
 
 #[cfg(test)]
@@ -99,6 +101,7 @@ impl CatalogTable {
 pub struct Catalog {
     root: PathBuf,
     tables: BTreeMap<String, CatalogTable>,
+    historical_snapshot: Option<mvcc::Snapshot>,
 }
 
 impl Catalog {
@@ -112,55 +115,42 @@ impl Catalog {
         }
         let _lock = transaction::read_lock(&root)?;
 
-        let mut tables = BTreeMap::new();
-        for entry in fs::read_dir(&root)? {
-            let entry = entry?;
-            if !entry.file_type()?.is_file() {
-                continue;
-            }
+        Ok(Self {
+            tables: discovery::discover_tables(&root)?,
+            root,
+            historical_snapshot: None,
+        })
+    }
 
-            let path = entry.path();
-            let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
-                continue;
-            };
-            if !extension.eq_ignore_ascii_case("dbf") {
-                continue;
-            }
-
-            let Some(name) = path
-                .file_stem()
-                .and_then(|value| value.to_str())
-                .map(ToOwned::to_owned)
-            else {
-                return Err(CatalogError::Invalid(format!(
-                    "DBF filename is not valid UTF-8: {}",
-                    path.display()
-                )));
-            };
-            if name.is_empty() {
-                return Err(CatalogError::Invalid(format!(
-                    "DBF filename has an empty table name: {}",
-                    path.display()
-                )));
-            }
-            if tables
-                .insert(
-                    name.to_owned(),
+    pub fn from_path_at(path: impl AsRef<Path>, transaction_id: u64) -> Result<Self, CatalogError> {
+        let root = path.as_ref().to_path_buf();
+        if !fs::metadata(&root)?.is_dir() {
+            return Err(CatalogError::Invalid(format!(
+                "catalog path is not a directory: {}",
+                root.display()
+            )));
+        }
+        let _lock = transaction::read_lock(&root)?;
+        let snapshot = mvcc::snapshot_at(&root, transaction_id)?;
+        let tables = snapshot
+            .tables
+            .iter()
+            .map(|(name, table)| {
+                (
+                    name.clone(),
                     CatalogTable {
                         name: name.clone(),
-                        file_name: entry.file_name().to_string_lossy().into_owned(),
-                        path,
+                        file_name: table.file_name.clone(),
+                        path: root.join(&table.file_name),
                     },
                 )
-                .is_some()
-            {
-                return Err(CatalogError::Invalid(format!(
-                    "duplicate table name: {name}"
-                )));
-            }
-        }
-
-        Ok(Self { root, tables })
+            })
+            .collect();
+        Ok(Self {
+            root,
+            tables,
+            historical_snapshot: Some(snapshot),
+        })
     }
 
     pub fn root(&self) -> &Path {
@@ -168,7 +158,16 @@ impl Catalog {
     }
 
     pub fn transaction_id(&self) -> Result<Option<u64>, CatalogError> {
+        if let Some(snapshot) = &self.historical_snapshot {
+            return Ok(Some(snapshot.transaction_id));
+        }
         journal::transaction_id(&self.root)
+    }
+
+    pub fn mvcc_versions(path: impl AsRef<Path>) -> Result<Vec<u64>, CatalogError> {
+        let root = path.as_ref();
+        let _lock = transaction::read_lock(root)?;
+        mvcc::versions(root)
     }
 
     pub fn table_names(&self) -> Vec<String> {
@@ -193,6 +192,21 @@ impl Catalog {
             .tables
             .get(name)
             .ok_or_else(|| CatalogError::Invalid(format!("table not found: {name}")))?;
+        if let Some(snapshot) = &self.historical_snapshot {
+            let table_snapshot = snapshot
+                .tables
+                .get(name)
+                .ok_or_else(|| CatalogError::Invalid(format!("table not found: {name}")))?;
+            return DbfTable::from_catalog_snapshot(
+                &table_snapshot.dbf,
+                table_snapshot.memo.clone(),
+                table_snapshot.schema.as_deref(),
+            )
+            .map_err(|source| CatalogError::Table {
+                name: table.name.clone(),
+                source,
+            });
+        }
         DbfTable::from_path(table.path()).map_err(|source| CatalogError::Table {
             name: table.name.clone(),
             source,
@@ -216,7 +230,10 @@ impl Catalog {
     }
 
     fn schema_json_unlocked(&self) -> Result<Value, CatalogError> {
-        let transaction_id = journal::read_transaction_id_locked(&self.root)?;
+        let transaction_id = match &self.historical_snapshot {
+            Some(snapshot) => Some(snapshot.transaction_id),
+            None => journal::read_transaction_id_locked(&self.root)?,
+        };
         let mut tables = Vec::with_capacity(self.tables.len());
         for entry in self.tables() {
             let table = self.open_table_unlocked(entry.name())?;
@@ -239,13 +256,18 @@ impl Catalog {
     }
 
     fn verify_unlocked(&self) -> Result<(), CatalogError> {
+        if self.historical_snapshot.is_none() {
+            mvcc::validate(&self.root)?;
+        }
         for entry in self.tables() {
             let table = self.open_table_unlocked(entry.name())?;
             table.verify().map_err(|source| CatalogError::Table {
                 name: entry.name().to_owned(),
                 source,
             })?;
-            if crate::index::sidecar_path(entry.path()).exists() {
+            if self.historical_snapshot.is_none()
+                && crate::index::sidecar_path(entry.path()).exists()
+            {
                 crate::index::IndexFile::load(entry.path()).map_err(|error| {
                     CatalogError::Table {
                         name: entry.name().to_owned(),
@@ -283,6 +305,10 @@ impl Catalog {
         replacements: &BTreeMap<String, DbfTable>,
     ) -> Result<(), CatalogError> {
         constraints::validate_replacements(self, replacements)
+    }
+
+    pub(crate) fn is_historical(&self) -> bool {
+        self.historical_snapshot.is_some()
     }
 }
 

@@ -13,6 +13,9 @@ pub(super) fn load_fields(
     table_name: &str,
     fields: &[String],
 ) -> Option<IndexFile> {
+    if catalog.is_historical() {
+        return None;
+    }
     let path = catalog.table_path(table_name)?;
     let index = IndexFile::load(path).ok()?;
     let fields = fields.iter().map(String::as_str).collect::<Vec<_>>();

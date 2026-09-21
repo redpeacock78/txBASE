@@ -37,6 +37,7 @@ The repository currently provides:
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A durable catalog-journal commit ID for multi-table mutation transactions.
 - Persistent table-scoped MVCC snapshots for single-table mutations, with `mvcc list` and `mvcc read` CLI commands.
+- Catalog-wide commit-level MVCC snapshots for all discovered tables, with `Catalog::from_path_at` and `mvcc catalog` CLI commands.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
 - A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, numeric field-reference or literal `$sum`, numeric `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, followed by bounded group-output `$match` stages, one optional `$project`, and final `$sort`, `$skip`, and `$limit` stages.
@@ -57,7 +58,6 @@ The baseline intentionally does not include the following:
 - A full cost-based index or join model.
 - Full index-aware or cost-based merge join strategies.
 - Runtime-specific async traits.
-- Catalog-wide MVCC visibility.
 - Row-level version storage and retention policies.
 - Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - `$project`, final `$sort`, `$skip`, and final `$limit` beyond the bounded aggregation contract.
@@ -94,11 +94,12 @@ The catalog currently derives table identity from direct-child DBF filenames and
 It provides table discovery, named table loading, schema output, per-table verification, and
 independent named-table HTTP mutations that reuse the single-table persistence boundary.
 
-It does not yet provide relationships or catalog-wide MVCC visibility.
+It provides catalog-wide commit-level MVCC visibility through a full image of every discovered
+table at each successful catalog transaction.
 
 The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact scalar and compound equality, compound equality-prefix and range candidate lookup, equality-prefix compound range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support a full cost model, collation-aware index keys, catalog-wide MVCC visibility, or row-level historical versions.
+It does not yet support a full cost model, collation-aware index keys, or row-level historical versions.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
@@ -121,13 +122,17 @@ Runtime-specific async traits remain a later contract.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 
-A catalog-wide multi-record snapshot is not complete until commit, rollback, crash recovery, retention, and visibility rules are tested together.
+A catalog-wide commit-level snapshot is implemented with commit, rollback, crash recovery, and
+visibility rules in the shared catalog journal boundary. Row-level history is not complete until
+retention and garbage-collection rules are specified and tested.
 
 The single-table transaction slice covers one DBF table through one snapshot/WAL persistence path and retains committed table snapshots in a `*.txbase.mvcc` sidecar.
 The catalog transaction slice prepares named operations across multiple DBFs under a catalog
 lock, commits DBF and changed-sidecar images through a directory journal, persists a catalog
-journal commit ID, and recovers an incomplete prepare before the next catalog read. The ID is an
-ordering/identification boundary; historical multi-table versions and catalog-wide MVCC visibility remain future work.
+journal commit ID, and records a full image of every discovered table in `.txbase.catalog.mvcc`
+through that same journal. It recovers an incomplete prepare before the next catalog read and
+exposes read-only historical catalog images through the Rust API and CLI. The history is
+commit-level, not row-level, and has no retention or garbage-collection policy yet.
 
 The lower-level `TransactionManager` is separate from those DBF persistence paths. Its
 `TransactionId` allocator resumes after reopening a WAL that retains completed transaction
@@ -273,7 +278,7 @@ Distributed behavior comes after the local and edge contracts are stable.
 
 ### Candidate scope
 
-- Catalog-wide MVCC and row-level version retention.
+- Row-level version retention and garbage collection.
 - Change data capture.
 - Persistent WAL history.
 - Replication.
@@ -316,6 +321,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Full cost-based planners, joins, aggregation, catalog-wide MVCC, durable XBF, object-storage, or distributed code without a contract and end-to-end test.
+- Full cost-based planners, joins, aggregation, row-level MVCC, durable XBF, object-storage, or distributed code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, and bounded cost choice based on record counts, index traversal, and sort work are implemented, while a full I/O-aware model and cross-table index definitions or index-aware planning remain future work.

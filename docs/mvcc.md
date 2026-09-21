@@ -1,8 +1,8 @@
 # MVCC and historical snapshots
 
-txBASE provides persistent, table-scoped MVCC snapshots for DBF mutations.
+txBASE provides persistent MVCC snapshots for DBF mutations and catalog transactions.
 
-This document defines the current visibility contract and the remaining multi-table boundary.
+This document defines the current visibility contract and the remaining row-level boundary.
 
 ## 1. Current contract
 
@@ -27,6 +27,25 @@ The requested ID must identify a committed snapshot.
 
 Historical snapshots are read-only and cannot be saved as a new current state.
 
+Catalog transactions retain a commit-level image of every discovered table:
+
+```rust
+use txbase::catalog::Catalog;
+
+let versions = Catalog::mvcc_versions("database")?;
+let catalog = Catalog::from_path_at("database", 2)?;
+let users = catalog.open_table("users")?;
+```
+
+The catalog CLI exposes the same boundary:
+
+```bash
+txbase mvcc catalog list path/to/database
+txbase mvcc catalog read path/to/database 2
+```
+
+All tables opened from one historical catalog have the same catalog commit ID and are read-only.
+
 ## 2. Commit and recovery
 
 The writer holds the existing per-table lock.
@@ -39,21 +58,28 @@ An old DBF WAL without an MVCC prepare record is upgraded during recovery by rec
 
 The table lock keeps the local writer boundary serial.
 
+The catalog transaction journal includes the catalog MVCC history file in the same prepared and
+committed change set. A prepared journal rolls both the current table images and the new history
+image back. A committed journal reapplies both before the next catalog read returns.
+
 ## 3. Isolation boundary
 
-The current implementation is table-scoped snapshot visibility.
+The current implementation provides table-scoped snapshot visibility for single-table commits and
+commit-level snapshot visibility for catalog transactions.
 
-It does not provide row-level version storage, predicate locking, serializable conflict detection, or a long-lived transaction object across CLI calls.
+Catalog history stores a full image of every discovered table per catalog commit. It does not
+provide row-level version storage, retention or garbage collection, predicate locking, serializable
+conflict detection, or a long-lived transaction object across CLI calls.
 
-The catalog transaction ID orders a multi-table commit, but the catalog does not yet expose a historical multi-table snapshot.
+The catalog transaction ID identifies one consistent multi-table image.
 
 The low-level transaction engine in `src/transaction/` remains a separate WAL transaction primitive.
 
 ## 4. Roadmap
 
-The next MVCC boundary is a catalog-wide snapshot that resolves a consistent version for every table in one catalog commit.
-
-That work needs explicit rules for schema versions, missing table versions, catalog journal recovery, retention, and garbage collection.
+The next MVCC boundary is row-level version storage with an explicit retention and garbage
+collection policy. That work must define schema-version selection, compaction, and the interaction
+between row history and the existing full-image catalog commits.
 
 Distributed snapshots, follower reads, and serializable conflict detection remain later work.
 
