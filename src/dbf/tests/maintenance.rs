@@ -18,6 +18,7 @@ fn remove_table_files(path: &std::path::Path) {
         "txbase.wal",
         "txbase.lock",
         "txbase.state",
+        "txbase.mvcc",
     ] {
         let candidate = if extension == "dbf" {
             path.to_path_buf()
@@ -112,6 +113,7 @@ fn copy_table_files_preserves_transaction_state() {
         DbfTable::from_path(&destination).unwrap().transaction_id(),
         Some(1)
     );
+    assert_eq!(DbfTable::mvcc_versions(&destination).unwrap(), vec![1]);
 
     remove_table_files(&source);
     remove_table_files(&destination);

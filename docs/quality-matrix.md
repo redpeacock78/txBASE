@@ -21,6 +21,8 @@ The authoritative CI command is:
 bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
+cargo build --bin txbase
+bash tests/e2e/cli_lifecycle.sh
 cargo test --all-targets --all-features
 ```
 
@@ -41,9 +43,11 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 | WAL-004 | Read-only WAL inspection reports complete record boundaries and an incomplete final tail without creating, truncating, or mutating the WAL; complete malformed records remain errors. | `src/transaction/wal.rs`; `src/cli.rs`; `tests/cli.rs`; `docs/dbf-compatibility.md` | `file_wal_inspect_reports_but_does_not_truncate_a_torn_tail`; `file_wal_inspect_does_not_create_a_missing_file`; `wal_inspect_cli_reports_a_torn_tail_without_mutating_the_file` | Current |
 | TXN-001 | The low-level snapshot transaction manager resumes the next transaction ID from retained memory or file WAL commit/rollback records without claiming DBF/catalog HTTP IDs or MVCC visibility. | `src/transaction/mod.rs`; `src/transaction/wal.rs` | `snapshot_engine_resumes_transaction_ids_from_wal`; `file_snapshot_engine_resumes_transaction_ids_after_reopen` | Boundary |
 | TXN-002 | Single-table DBF WAL commits allocate positive durable IDs, recover them from `TXTI`, reject stale transaction-state writers, copy the state sidecar, and expose the ID on HTTP mutations. | `src/dbf/persistence.rs`; `src/dbf/recovery.rs`; `src/dbf/maintenance.rs`; `src/server/etag.rs` | `wal_commit_ids_persist_and_resume_after_reload`; `snapshot_recovery_persists_the_wal_transaction_id`; `copy_table_files_preserves_transaction_state`; `mutation_etag_prevents_lost_update` | Current |
+| MVCC-001 | Single-table DBF commits retain durable prepare and commit records with DBF, memo, and schema images; exact committed snapshots are readable through the library and CLI, while historical tables are read-only. | `src/dbf/mvcc.rs`; `src/dbf/persistence.rs`; `src/dbf/recovery.rs`; `src/cli/commands/mvcc.rs`; `docs/mvcc.md` | `persistent_snapshots_keep_each_committed_table_image`; `tests/e2e/cli_lifecycle.sh` | Current |
 | CLI-001 | Backup and restore validate a DBF source and copy the DBF plus supported sidecars through the sidecar-aware maintenance boundary. | `src/cli.rs`; `src/dbf/maintenance.rs`; `src/dbf/tests/maintenance.rs`; `tests/cli.rs`; `docs/dbf-compatibility.md` | `backup_and_restore_cli_copy_a_dbf`; `copy_table_files_preserves_dbf_and_memo_sidecar`; `copy_table_files_preserves_transaction_state`; `copy_table_files_preserves_a_valid_index_sidecar` | Current |
 | CLI-002 | Schema, verify, pack, and recall commands parse their CLI arguments and operate on a validated DBF through the public binary path; verify also validates any `.txidx` sidecar. | `src/cli.rs`; `src/dbf/parser.rs`; `src/dbf/persistence.rs`; `src/index.rs`; `tests/cli.rs`; `docs/dbf-compatibility.md` | `dbf_maintenance_cli_commands_operate_on_a_dbf`; `verify_cli_rejects_a_stale_index_sidecar` | Current |
 | CLI-003 | XBF import and representability reporting operate through the public binary path; direct export rejects a non-null constraint that DBF cannot preserve, while schema-preserving export retains the active DBF records. | `src/cli.rs`; `src/xbf/`; `src/dbf/schema_export.rs`; `tests/cli.rs`; `docs/xbf.md` | `xbf_cli_import_report_and_export_a_dbf` | Current |
+| CLI-004 | The multi-call CLI initializes a DBF, inserts records through the normal WAL path, reads the current table, lists and reads an MVCC snapshot, and verifies the result in a numbered shell E2E. | `src/cli.rs`; `src/cli/commands/setup.rs`; `src/cli/commands/mvcc.rs`; `tests/e2e/cli_lifecycle.sh`; `.github/workflows/ci.yml` | `bash tests/e2e/cli_lifecycle.sh` on the Ubuntu, macOS, and Windows matrix | Current |
 | XBF-001 | The draft XBF codec bounds allocations, validates header and section CRC-32C values, decodes all non-reserved v1 scalar types, preserves physical deletion flags, and enforces local uniqueness. | `src/xbf/`; `src/xbf/malformed_tests.rs`; `tests/corpus/xbf/`; `docs/xbf.md` | `src/xbf/tests.rs` fixture, corruption, size-limit, and constraint cases; `rejects_malformed_xbf_header_corpus`; `rejects_malformed_xbf_sections_and_directory`; `rejects_malformed_xbf_utf8_and_payload_values` | Boundary |
 | XBF-002 | The XBF snapshot path encodes before writing, syncs the snapshot bytes, replaces the target, syncs the parent directory before returning, and normal reads recover a pending WAL first. | `src/xbf/persistence.rs` | `writes_and_reads_a_durable_snapshot_path`; `reading_a_snapshot_recovers_a_pending_wal` | Boundary |
 | XBF-003 | The full-snapshot XBF WAL names its base and target generations, enforces the transaction-layer record limit, applies a pending snapshot idempotently with the caller's limits, and rejects a different current generation. | `src/xbf/wal.rs` | `recovers_a_generation_checked_full_snapshot_wal`; `rejects_a_generation_mismatched_xbf_wal`; `rejects_xbf_wal_records_over_the_file_wal_limit` | Boundary |
@@ -85,7 +89,7 @@ The following topics have documentation or design notes but do not have a curren
 
 - runtime-specific async traits for long-lived streams;
 - a full cost-based planner, full index-aware or cost-based merge join strategies, and aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`;
-- catalog-wide MVCC visibility and historical row versions;
+- catalog-wide MVCC visibility and row-level historical versions;
 - locale-aware CJK collation and broader upstream CJK fixtures;
 - Strict multi-file reader atomicity for schema-preserving XBF-to-DBF export, object-storage manifests, WASM hosting, and distributed replication.
 

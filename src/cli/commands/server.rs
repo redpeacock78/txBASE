@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use txbase::{dbf::DbfTable, server};
 
 pub(crate) fn serve(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
-    let path = PathBuf::from(args.next().ok_or("--serve requires a DBF path")?);
+    let path = PathBuf::from(args.next().ok_or("serve requires a DBF path")?);
     let mut bind = String::from("127.0.0.1:8080");
     let mut encoding = None;
     while let Some(option) = args.next() {
@@ -21,7 +21,7 @@ pub(crate) fn serve(mut args: impl Iterator<Item = String>) -> Result<(), Box<dy
 pub(crate) fn serve_catalog(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
     let path = PathBuf::from(
         args.next()
-            .ok_or("--serve-catalog requires a directory path")?,
+            .ok_or("serve-catalog requires a directory path")?,
     );
     let mut bind = String::from("127.0.0.1:8080");
     while let Some(option) = args.next() {

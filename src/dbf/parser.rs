@@ -229,6 +229,7 @@ impl DbfTable {
             memo_updates: BTreeMap::new(),
             transaction_id: None,
             source: None,
+            historical_snapshot: false,
         })
     }
 }

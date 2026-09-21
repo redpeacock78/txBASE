@@ -16,6 +16,7 @@ mod codepages;
 mod compatibility_tests;
 #[cfg(test)]
 mod encoding_name_tests;
+mod initializer;
 mod lock;
 mod maintenance;
 #[cfg(test)]
@@ -28,6 +29,9 @@ mod mutation_auto;
 mod mutation_memo;
 #[cfg(test)]
 mod mutation_model_tests;
+mod mvcc;
+#[cfg(test)]
+mod mvcc_tests;
 mod parser;
 #[cfg(test)]
 mod parser_fuzz_tests;
@@ -62,6 +66,7 @@ use codec::{
 };
 #[cfg(test)]
 use codec::{decode_field, encode_field, text};
+pub use initializer::DbfFieldSpec;
 use lock::TableLock;
 use memo::{
     binary_value, empty_memo_value, encode_memo_pointer, find_memo_path, is_sidecar_field,

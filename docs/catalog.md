@@ -67,7 +67,7 @@ more named tables without adding a persistent relationship manifest.
 The optional catalog server exposes that boundary over HTTP:
 
 ```bash
-txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
+txbase serve-catalog path/to/database --bind 127.0.0.1:8080
 ```
 
 `GET` or `HEAD /catalog` returns the discovered table schemas with a strong catalog representation
@@ -143,7 +143,7 @@ It provides a cross-table atomic transaction boundary for named record mutations
 
 The catalog journal persists a monotonically increasing commit ID in
 `.txbase.catalog.state`. Recovery rolls that state back with a prepared journal or reapplies it
-with a committed journal. It does not provide historical row versions or MVCC visibility.
+with a committed journal. It does not provide historical multi-table row versions or MVCC visibility.
 
 When a field sidecar declares `references: "TABLE.FIELD"`, catalog named-table mutations and
 catalog transactions validate non-null child values against active rows in the referenced table.

@@ -22,6 +22,8 @@
 bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
+cargo build --bin txbase
+bash tests/e2e/cli_lifecycle.sh
 cargo test --all-targets --all-features
 ```
 
@@ -42,9 +44,11 @@ cargo test --all-targets --all-features
 | WAL-004 | 読み取り専用 WAL 検査が、WAL を作成、切り詰め、変更せずに完全なレコード境界と切断された末尾を表示し、完全な壊れたレコードは引き続きエラーにする。 | `src/transaction/wal.rs`; `src/cli.rs`; `tests/cli.rs`; `docs/ja/dbf-compatibility.md` | `file_wal_inspect_reports_but_does_not_truncate_a_torn_tail`; `file_wal_inspect_does_not_create_a_missing_file`; `wal_inspect_cli_reports_a_torn_tail_without_mutating_the_file` | Current |
 | TXN-001 | 低レベルのスナップショットトランザクション管理器が、保持されたメモリまたはファイル WAL のコミット、ロールバック記録から次のトランザクション ID を継続する。ただし DBF やカタログの HTTP ID、MVCC 可視性は提供しない。 | `src/transaction/mod.rs`; `src/transaction/wal.rs` | `snapshot_engine_resumes_transaction_ids_from_wal`; `file_snapshot_engine_resumes_transaction_ids_after_reopen` | Boundary |
 | TXN-002 | 単一テーブル DBF WAL コミットが正の永続 ID を割り当て、`TXTI`から復旧し、古いトランザクション状態の writer を拒否し、状態サイドカーをコピーし、HTTP 更新へ ID を公開する。 | `src/dbf/persistence.rs`; `src/dbf/recovery.rs`; `src/dbf/maintenance.rs`; `src/server/etag.rs` | `wal_commit_ids_persist_and_resume_after_reload`; `snapshot_recovery_persists_the_wal_transaction_id`; `copy_table_files_preserves_transaction_state`; `mutation_etag_prevents_lost_update` | Current |
+| MVCC-001 | 単一テーブル DBF commit が耐久的な prepare と commit の記録をDBF、memo、スキーマのイメージとともに保持し、commit済みIDの完全なスナップショットをライブラリとCLIから読み取れるようにし、過去テーブルを読み取り専用にする。 | `src/dbf/mvcc.rs`; `src/dbf/persistence.rs`; `src/dbf/recovery.rs`; `src/cli/commands/mvcc.rs`; `docs/ja/mvcc.md` | `persistent_snapshots_keep_each_committed_table_image`; `tests/e2e/cli_lifecycle.sh` | Current |
 | CLI-001 | backup と restore が DBF のソースを検証し、サポート対象のサイドカーとともにサイドカー対応保守境界を通して DBF をコピーする。 | `src/cli.rs`; `src/dbf/maintenance.rs`; `src/dbf/tests/maintenance.rs`; `tests/cli.rs`; `docs/ja/dbf-compatibility.md` | `backup_and_restore_cli_copy_a_dbf`; `copy_table_files_preserves_dbf_and_memo_sidecar`; `copy_table_files_preserves_transaction_state`; `copy_table_files_preserves_a_valid_index_sidecar` | Current |
 | CLI-002 | schema、verify、pack、recall コマンドが CLI 引数を解析し、公開バイナリ経路を通して検証済み DBF を操作する。verify は存在する`.txidx`サイドカーも検証する。 | `src/cli.rs`; `src/dbf/parser.rs`; `src/dbf/persistence.rs`; `src/index.rs`; `tests/cli.rs`; `docs/ja/dbf-compatibility.md` | `dbf_maintenance_cli_commands_operate_on_a_dbf`; `verify_cli_rejects_a_stale_index_sidecar` | Current |
 | CLI-003 | XBF の import と表現可能性レポートが公開バイナリ経路で動作し、DBF が保持できない not-null 制約を直接 export が拒否し、スキーマ保持 export がアクティブな DBF レコードを保持する。 | `src/cli.rs`; `src/xbf/`; `src/dbf/schema_export.rs`; `tests/cli.rs`; `docs/ja/xbf.md` | `xbf_cli_import_report_and_export_a_dbf` | Current |
+| CLI-004 | マルチコールCLIがDBFを初期化し、通常のWAL経路でレコードをinsertし、現在のテーブルを読み取り、MVCCスナップショットを一覧表示して読み取り、番号付きshell E2Eで結果を検証する。 | `src/cli.rs`; `src/cli/commands/setup.rs`; `src/cli/commands/mvcc.rs`; `tests/e2e/cli_lifecycle.sh`; `.github/workflows/ci.yml` | Ubuntu、macOS、Windowsのマトリクスで実行する`bash tests/e2e/cli_lifecycle.sh` | Current |
 | XBF-001 | 草案 XBF コーデックが割り当てを制限し、ヘッダーとセクションの CRC-32C を検証し、予約外の v1 スカラー型をデコードし、物理削除フラグを保ち、ローカル一意性を強制する。 | `src/xbf/`; `src/xbf/malformed_tests.rs`; `tests/corpus/xbf/`; `docs/ja/xbf.md` | `src/xbf/tests.rs`のフィクスチャ、破損、サイズ制限、制約ケース; `rejects_malformed_xbf_header_corpus`; `rejects_malformed_xbf_sections_and_directory`; `rejects_malformed_xbf_utf8_and_payload_values` | Boundary |
 | XBF-002 | XBF スナップショット経路が書き込み前にエンコードし、スナップショットバイトを同期し、対象を置換し、戻る前に親ディレクトリを同期し、通常読み取りで先に保留 WAL を復旧する。 | `src/xbf/persistence.rs` | `writes_and_reads_a_durable_snapshot_path`; `reading_a_snapshot_recovers_a_pending_wal` | Boundary |
 | XBF-003 | 完全スナップショット XBF WAL が基準世代と対象世代を記録し、トランザクション層のレコード上限を守り、保留スナップショットを呼び出し側の制限で冪等に適用し、異なる現在世代を拒否する。 | `src/xbf/wal.rs` | `recovers_a_generation_checked_full_snapshot_wal`; `rejects_a_generation_mismatched_xbf_wal`; `rejects_xbf_wal_records_over_the_file_wal_limit` | Boundary |
@@ -86,7 +90,7 @@ cargo test --all-targets --all-features
 
 - 長寿命ストリーム向けのランタイム固有非同期トレイト。
 - 完全なコストベースプランナー、完全なインデックス対応またはコストベースのマージ結合戦略、入力およびグループ出力の有界`$match`、`$count`、`$distinct`、`$group`の`$sum`、`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を超える集約ステージまたはアキュムレータ。
-- カタログ全体のMVCC可視性と過去の行バージョン。
+- カタログ全体のMVCC可視性と行単位の過去バージョン。
 - ロケール対応CJK照合と、より広い上流CJKフィクスチャ。
 - スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、オブジェクトストレージのマニフェスト、WASMホスティング、分散レプリケーション。
 

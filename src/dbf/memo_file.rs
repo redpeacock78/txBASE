@@ -5,57 +5,63 @@ use std::path::Path;
 impl MemoFile {
     pub(crate) fn open(path: &Path, dbf_version: u8) -> Result<Self, DbfError> {
         let bytes = fs::read(path)?;
-        if path
+        let format = if path
             .extension()
             .is_some_and(|extension| extension.eq_ignore_ascii_case("fpt"))
         {
-            let block_size = bytes
-                .get(6..8)
-                .map(|header| usize::from(u16::from_be_bytes([header[0], header[1]])))
-                .ok_or_else(|| DbfError::Invalid("FPT header is truncated".into()))?;
-            if block_size < 8 || bytes.len() < block_size {
-                return Err(DbfError::Invalid(
-                    "FPT block size or header is invalid".into(),
-                ));
-            }
-            Ok(Self {
-                bytes,
-                block_size,
-                format: MemoFormat::FoxPro,
-            })
+            MemoFormat::FoxPro
         } else {
-            if bytes.len() < DBT_BLOCK_SIZE {
-                return Err(DbfError::Invalid("DBT header is truncated".into()));
-            }
-            let format = if dbf_version == 0x83 {
+            if dbf_version == 0x83 {
                 MemoFormat::Dbase3
             } else {
                 MemoFormat::Dbase4
-            };
-            let block_size = if format == MemoFormat::Dbase4 {
+            }
+        };
+        Self::from_bytes(bytes, format)
+    }
+
+    pub(crate) fn from_bytes(bytes: Vec<u8>, format: MemoFormat) -> Result<Self, DbfError> {
+        let block_size = match format {
+            MemoFormat::FoxPro => usize::from(u16::from_be_bytes(
+                bytes
+                    .get(6..8)
+                    .ok_or_else(|| DbfError::Invalid("FPT header is truncated".into()))?
+                    .try_into()
+                    .expect("FPT block size is fixed"),
+            )),
+            MemoFormat::Dbase3 => {
+                if bytes.len() < DBT_BLOCK_SIZE {
+                    return Err(DbfError::Invalid("DBT header is truncated".into()));
+                }
+                DBT_BLOCK_SIZE
+            }
+            MemoFormat::Dbase4 => {
+                if bytes.len() < DBT_BLOCK_SIZE {
+                    return Err(DbfError::Invalid("DBT header is truncated".into()));
+                }
                 let block_size = usize::from(u16::from_le_bytes([bytes[20], bytes[21]]));
                 if block_size == 0 {
                     DBT_BLOCK_SIZE
                 } else {
                     block_size
                 }
-            } else {
-                DBT_BLOCK_SIZE
-            };
-            if block_size < DBT_BLOCK_SIZE
-                || block_size % DBT_BLOCK_SIZE != 0
-                || bytes.len() < block_size
-            {
-                return Err(DbfError::Invalid(
-                    "dBASE DBT block size or header is invalid".into(),
-                ));
             }
-            Ok(Self {
-                bytes,
-                block_size,
-                format,
-            })
+        };
+        if block_size < 8 || bytes.len() < block_size {
+            return Err(DbfError::Invalid(
+                "memo block size or header is invalid".into(),
+            ));
         }
+        if format != MemoFormat::FoxPro
+            && (block_size < DBT_BLOCK_SIZE || block_size % DBT_BLOCK_SIZE != 0)
+        {
+            return Err(DbfError::Invalid("dBASE DBT block size is invalid".into()));
+        }
+        Ok(Self {
+            bytes,
+            block_size,
+            format,
+        })
     }
 
     pub(crate) fn read(&self, block: u32) -> Result<Option<Vec<u8>>, DbfError> {

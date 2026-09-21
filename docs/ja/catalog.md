@@ -66,7 +66,7 @@ catalog.verify()?;
 任意のカタログサーバーはこの境界をHTTPで公開します。
 
 ```bash
-txbase --serve-catalog path/to/database --bind 127.0.0.1:8080
+txbase serve-catalog path/to/database --bind 127.0.0.1:8080
 ```
 
 `GET`または`HEAD /catalog`は検出したテーブルスキーマと、カタログ表現を示す強い`ETag`を返します。
@@ -157,7 +157,7 @@ txbase verify-catalog path/to/database
 
 準備済みジャーナルでは状態をロールバックし、コミット済みジャーナルでは状態を再適用して復旧します。
 
-過去の行バージョンやMVCCの可視性は提供しません。
+過去の複数テーブル行バージョンやMVCCの可視性は提供しません。
 
 フィールドサイドカーが`references: "TABLE.FIELD"`を宣言すると、カタログの名前付き更新とカタログトランザクションは、非nullの子値が参照テーブルのアクティブ行に存在するか検証します。
 

@@ -169,6 +169,7 @@ pub struct DbfTable {
     pub(super) memo_updates: MemoUpdates,
     pub(super) transaction_id: Option<u64>,
     pub(super) source: Option<PersistedState>,
+    pub(super) historical_snapshot: bool,
 }
 
 pub(crate) struct PreparedSnapshot {

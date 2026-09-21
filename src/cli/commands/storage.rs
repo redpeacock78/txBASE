@@ -114,12 +114,10 @@ pub(crate) fn copy_files(
     Ok(())
 }
 
-pub(crate) fn read(
-    path: &str,
-    mut args: impl Iterator<Item = String>,
-) -> Result<(), Box<dyn Error>> {
+pub(crate) fn read(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
+    let path = args.next().ok_or("read requires a DBF path")?;
     let encoding = parse_encoding_option(&mut args)?;
-    let table = DbfTable::from_path_with_encoding(path, encoding.as_deref())?;
+    let table = DbfTable::from_path_with_encoding(&path, encoding.as_deref())?;
     let stdout = io::stdout();
     let mut output = stdout.lock();
     serde_json::to_writer_pretty(&mut output, &table.active_json())?;

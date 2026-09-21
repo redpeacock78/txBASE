@@ -13,6 +13,7 @@ Research and future work do not imply an implemented feature.
 - [Secondary-index sidecar](indexes.md)
 - [Multi-table catalog](catalog.md)
 - [XBF v1 format draft](xbf.md)
+- [MVCC and historical snapshots](mvcc.md)
 
 ## Query and protocol contracts
 

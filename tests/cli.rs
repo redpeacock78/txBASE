@@ -142,7 +142,7 @@ fn dbf_maintenance_cli_commands_operate_on_a_dbf() {
         "recall failed: {}",
         String::from_utf8_lossy(&recall.stderr)
     );
-    let recalled = run_cli(&[recall_path.to_str().unwrap()]);
+    let recalled = run_cli(&["read", recall_path.to_str().unwrap()]);
     assert!(recalled.status.success());
     let recalled_json: serde_json::Value = serde_json::from_slice(&recalled.stdout).unwrap();
     assert_eq!(recalled_json.as_array().unwrap().len(), 2);
@@ -153,7 +153,7 @@ fn dbf_maintenance_cli_commands_operate_on_a_dbf() {
         "pack failed: {}",
         String::from_utf8_lossy(&pack.stderr)
     );
-    let packed = run_cli(&[pack_path.to_str().unwrap()]);
+    let packed = run_cli(&["read", pack_path.to_str().unwrap()]);
     assert!(packed.status.success());
     let packed_json: serde_json::Value = serde_json::from_slice(&packed.stdout).unwrap();
     assert_eq!(packed_json.as_array().unwrap().len(), 1);
@@ -164,6 +164,61 @@ fn dbf_maintenance_cli_commands_operate_on_a_dbf() {
         }
         fs::remove_file(path).unwrap();
     }
+}
+
+#[test]
+fn init_and_insert_cli_lifecycle_preserves_record_numbers() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-cli-init-lifecycle-{}.dbf",
+        std::process::id()
+    ));
+    for extension in ["txbase.state", "txbase.wal", "txbase.lock", "txbase.mvcc"] {
+        let _ = fs::remove_file(path.with_extension(extension));
+    }
+    let _ = fs::remove_file(&path);
+
+    let init = run_cli(&[
+        "init",
+        path.to_str().unwrap(),
+        "--field",
+        "ID:N:4:0",
+        "--field",
+        "NAME:C:16",
+    ]);
+    assert!(
+        init.status.success(),
+        "init failed: {}",
+        String::from_utf8_lossy(&init.stderr)
+    );
+
+    for record in [r#"{"ID":1,"NAME":"Alice"}"#, r#"{"ID":2,"NAME":"Bob"}"#] {
+        let insert = run_cli(&["insert", path.to_str().unwrap(), record]);
+        assert!(
+            insert.status.success(),
+            "insert failed: {}",
+            String::from_utf8_lossy(&insert.stderr)
+        );
+    }
+
+    let schema = run_cli(&["schema", path.to_str().unwrap()]);
+    assert!(schema.status.success());
+    let schema_json: serde_json::Value = serde_json::from_slice(&schema.stdout).unwrap();
+    assert_eq!(schema_json["record_count"], 2);
+    assert_eq!(schema_json["active_record_count"], 2);
+
+    let read = run_cli(&["read", path.to_str().unwrap()]);
+    assert!(read.status.success());
+    let records: serde_json::Value = serde_json::from_slice(&read.stdout).unwrap();
+    assert_eq!(records[0]["ID"], 1);
+    assert_eq!(records[1]["ID"], 2);
+
+    let verify = run_cli(&["verify", path.to_str().unwrap()]);
+    assert!(verify.status.success());
+
+    for extension in ["txbase.state", "txbase.wal", "txbase.lock", "txbase.mvcc"] {
+        let _ = fs::remove_file(path.with_extension(extension));
+    }
+    fs::remove_file(path).unwrap();
 }
 
 #[test]

@@ -84,7 +84,7 @@ Sorted cursors are keyset boundaries, not offsets.
 
 Reusing a cursor after a table change returns an invalid-query error instead of combining pages from different representations.
 
-This is a snapshot-consistency boundary, not historical MVCC.
+This is a cursor snapshot-consistency boundary; historical table snapshots are defined separately in [MVCC and historical snapshots](mvcc.md).
 
 The old page is not retained for later readers.
 

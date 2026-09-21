@@ -46,7 +46,8 @@ If validation or any operation fails, the copy is discarded and the current DBF 
 
 The commit ID is durable for that DBF and resumes after restart or WAL recovery.
 
-This single-table boundary does not provide cross-table atomicity, catalog-wide transaction IDs, or MVCC visibility.
+This single-table boundary does not provide cross-table atomicity or catalog-wide transaction IDs.
+It does provide table-scoped historical snapshots through the `mvcc` CLI and `*.txbase.mvcc` sidecar.
 
 The catalog server's `POST /transaction` is the separate cross-table boundary.
 
@@ -56,7 +57,7 @@ It returns a durable catalog-journal transaction ID in JSON and `X-Txbase-Transa
 
 That ID identifies and orders a catalog commit.
 
-It does not provide MVCC visibility.
+It does not provide historical multi-table MVCC visibility.
 
 The table lock serializes save paths, and a stale independently loaded table is rejected.
 

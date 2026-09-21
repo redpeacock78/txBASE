@@ -29,4 +29,6 @@ jobs:
       - run: bash scripts/check-doc-translations.sh
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo build --bin txbase
+      - run: bash tests/e2e/cli_lifecycle.sh
       - run: cargo test --all-targets --all-features

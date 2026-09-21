@@ -28,19 +28,19 @@ txBASEは、元のDBF表現を保ったまま、dBASEとVisual FoxProの一部�
 DBFの有効なレコードを読み取ります。
 
 ```bash
-cargo run -- path/to/users.dbf
+cargo run -- read path/to/users.dbf
 ```
 
 単一テーブル用のHTTPサーバーを起動します。
 
 ```bash
-cargo run -- --serve path/to/users.dbf
+cargo run -- serve path/to/users.dbf
 ```
 
 名前付きテーブルと有界な結合を使うカタログサーバーを起動します。
 
 ```bash
-cargo run -- --serve-catalog path/to/database
+cargo run -- serve-catalog path/to/database
 ```
 
 既定のリスナーは`127.0.0.1:8080`です。
@@ -111,12 +111,13 @@ JSON PatchはRFC 6901のJSON Pointerパスを使うRFC 6902の`add`、`remove`�
 ローカル形式のJSON文書では、型付きの`$set`、`$unset`、`$inc`演算子も使えます。
 
 単一テーブルの`POST /transaction`は、複数の操作をprivate copyへ適用してから、1つのsnapshot/WAL境界でcommitします。
-カタログの`POST /transaction`は、同じ役割を複数テーブル向けのカタログjournalで担います。
-どちらも過去の行バージョンやMVCCによる可視性は提供しません。
+単一テーブルの更新は、`mvcc` CLIを通してテーブル単位の過去スナップショットを保持します。
+カタログの`POST /transaction`は、同じ役割を複数テーブル向けのカタログjournalで担いますが、過去の複数テーブルスナップショットはまだ提供しません。
 
 成功した更新は`X-Txbase-Transaction-Id`を返し、commit IDをstateサイドカーへ保存します。
 strongな`ETag`と`If-Match`、`If-None-Match`によって、古い更新を部分変更なしで拒否できます。
 WALと復旧の契約は、[更新モデル](docs/ja/mutation-model.md)に記載しています。
+過去スナップショットの可視性は、[MVCC文書](docs/ja/mvcc.md)に記載しています。
 
 ### 検査と保守
 
@@ -239,6 +240,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - [HTTPメソッドの意味とQUERY](docs/ja/http-semantics.md)
 - [schema metadataとローカル制約](docs/ja/schema-metadata.md)
 - [XBF v1フォーマット草案](docs/ja/xbf.md)
+- [MVCCと過去スナップショット](docs/ja/mvcc.md)
 - [ロードマップと明示的な非目標](docs/ja/roadmap.md)
 - [調査インデックスと出典ポリシー](docs/ja/research.md)
 - [エッジストレージとオブジェクトストレージのコミット](docs/ja/edge-storage.md)

@@ -115,6 +115,12 @@ impl DbfTable {
             }
             if let Some(transaction_id) = transaction_id {
                 persist_recovered_transaction_id(path, transaction_id)?;
+                super::mvcc::commit_recovered_snapshot(
+                    path,
+                    transaction_id,
+                    &snapshot.dbf,
+                    snapshot.memo.as_ref(),
+                )?;
             }
             finish_recovery(wal, &wal_path);
             return Ok(true);
@@ -176,6 +182,12 @@ impl DbfTable {
                 .map_err(super::index_error)?;
         }
         write_transaction_state(path, transaction_id)?;
+        super::mvcc::commit_recovered_snapshot(
+            path,
+            transaction_id,
+            &table.bytes,
+            memo_snapshot.as_ref(),
+        )?;
         finish_recovery(wal, &wal_path);
         Ok(true)
     }

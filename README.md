@@ -37,19 +37,19 @@ The detailed compatibility and behavior contracts live in the [documentation ind
 Read active records from a DBF file:
 
 ```bash
-cargo run -- path/to/users.dbf
+cargo run -- read path/to/users.dbf
 ```
 
 Start the single-table HTTP server:
 
 ```bash
-cargo run -- --serve path/to/users.dbf
+cargo run -- serve path/to/users.dbf
 ```
 
 Start the catalog server for named tables and bounded joins:
 
 ```bash
-cargo run -- --serve-catalog path/to/database
+cargo run -- serve-catalog path/to/database
 ```
 
 The default listener is `127.0.0.1:8080`. Use `--bind ADDRESS` to choose another address.
@@ -119,12 +119,13 @@ JSON Patch supports the RFC 6902 `add`, `remove`, `replace`, `test`, `move`, and
 It also accepts typed `$set`, `$unset`, and `$inc` operators in the local JSON document.
 
 Single-table `POST /transaction` applies multiple operations to a private copy and commits one snapshot/WAL boundary.
-Catalog `POST /transaction` provides the corresponding cross-table catalog journal boundary.
-Neither boundary provides historical row versions or MVCC visibility.
+Single-table mutations retain table-scoped historical snapshots through the `mvcc` CLI.
+Catalog `POST /transaction` provides the corresponding cross-table catalog journal boundary, but it does not yet provide a historical multi-table snapshot.
 
 Successful mutations return `X-Txbase-Transaction-Id` and persist the commit ID in a state sidecar.
 Strong `ETag`, `If-Match`, and `If-None-Match` conditions reject stale writes without partial mutation.
 The [mutation model](docs/mutation-model.md) describes the WAL and recovery contract.
+The [MVCC document](docs/mvcc.md) describes historical snapshot visibility.
 
 ### Inspect and maintain
 
@@ -245,6 +246,7 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 - [HTTP method semantics and QUERY](docs/http-semantics.md)
 - [Schema metadata and local constraints](docs/schema-metadata.md)
 - [XBF v1 format draft](docs/xbf.md)
+- [MVCC and historical snapshots](docs/mvcc.md)
 - [Roadmap and explicit non-goals](docs/roadmap.md)
 - [Research index and source policy](docs/research.md)
 - [Edge storage and object-store commits](docs/edge-storage.md)

@@ -112,6 +112,11 @@ impl DbfTable {
     }
 
     fn ensure_source_current(&self, path: &Path) -> Result<(), DbfError> {
+        if self.historical_snapshot {
+            return Err(DbfError::Invalid(
+                "historical MVCC snapshots are read-only".into(),
+            ));
+        }
         let Some(source) = &self.source else {
             return Ok(());
         };
@@ -174,6 +179,13 @@ impl DbfTable {
         };
         let payload = delta_payload(&prepared, path, memo_snapshot.as_ref(), full_payload.len())?
             .unwrap_or(full_payload);
+        let history_memo = memo_snapshot.clone().or_else(|| {
+            prepared.memo.as_ref().map(|memo| MemoSnapshot {
+                format: memo.format,
+                bytes: memo.bytes.clone(),
+            })
+        });
+        let schema_bytes = schema_metadata_bytes(path)?;
         let index_payload = crate::index::pending_snapshot_payload(
             path,
             &prepared,
@@ -197,6 +209,13 @@ impl DbfTable {
             wal.append(index_payload).map_err(transaction_error)?;
             wal.sync().map_err(transaction_error)?;
         }
+        super::mvcc::prepare_snapshot(
+            path,
+            transaction_id,
+            &prepared.bytes,
+            history_memo.as_ref(),
+            schema_bytes.as_deref(),
+        )?;
         if let Some(memo) = &memo_snapshot {
             let memo_path = find_memo_path(path)
                 .unwrap_or_else(|| path.with_extension(memo.format.extension()));
@@ -210,6 +229,13 @@ impl DbfTable {
         };
         index_result.map_err(index_error)?;
         write_transaction_state(path, transaction_id)?;
+        super::mvcc::commit_snapshot(
+            path,
+            transaction_id,
+            &prepared.bytes,
+            history_memo.as_ref(),
+            schema_bytes.as_deref(),
+        )?;
         wal.clear().map_err(transaction_error)?;
         drop(wal);
         fs::remove_file(wal_path)?;
