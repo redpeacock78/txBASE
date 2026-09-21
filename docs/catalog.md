@@ -57,7 +57,8 @@ catalog.verify()?;
 advanced only by the multi-table `POST /transaction` journal boundary; independent named-table
 mutations retain their per-table DBF transaction IDs.
 
-`verify` loads and verifies every discovered table, reporting the table name when a table fails.
+`verify` loads and verifies every discovered table and any present index sidecar, reporting the
+table name when a table or its sidecar fails.
 
 The bounded local join boundary is separate from catalog discovery.
 Call `txbase::query::join::execute` with a `Catalog` and a validated join document to read one or

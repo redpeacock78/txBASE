@@ -245,6 +245,14 @@ impl Catalog {
                 name: entry.name().to_owned(),
                 source,
             })?;
+            if crate::index::sidecar_path(entry.path()).exists() {
+                crate::index::IndexFile::load(entry.path()).map_err(|error| {
+                    CatalogError::Table {
+                        name: entry.name().to_owned(),
+                        source: DbfError::Invalid(format!("index sidecar is invalid: {error}")),
+                    }
+                })?;
+            }
         }
         self.validate_replacements(&BTreeMap::new())?;
         Ok(())
