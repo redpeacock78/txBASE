@@ -48,7 +48,7 @@ users/wal/1.json
 
 ## 3. commit手順
 
-`ObjectTable::commit`は次の操作を行います。
+`ObjectTable::commit`の手順は次のとおりです。
 
 ```text
 変更後に内容を変えないXBFスナップショットをput-if-absentで書き込む
