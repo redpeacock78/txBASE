@@ -130,6 +130,8 @@ DBF、memo、WAL、JSON 入力について決定的なコーパスを保ちま�
 
 `src/query/planner_compound_tests.rs::uses_a_compound_index_for_exact_equality` は、複合インデックスによる複数フィールドの完全一致等値検索を検査し、結果をテーブルスキャンと比較します。
 
+`src/query/planner_compound_tests.rs::uses_a_compound_index_for_an_equality_prefix` は、複合インデックスによる等値プレフィックス検索を検査し、結果をテーブルスキャンと比較します。
+
 `src/query/planner_tests.rs::uses_an_ordered_index_prefix_for_multi_key_sort` は、最初のキーのインデックス走査、二次キーの同値ソート、テーブルスキャンとの同値を検査します。
 
 `src/query/planner_tests.rs::uses_a_compound_index_for_multi_key_sort` は、昇順の複合キーのプレフィックス順、完全な逆順走査、混在方向のフォールバック、テーブルスキャンとの同値を検査します。

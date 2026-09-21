@@ -76,7 +76,7 @@ txBASE はレコードスキャンをクエリ実行器の参照経路として�
 
 パス対応のクエリエントリポイントは、同じフィルター、ソート、プロジェクション、スキップ、リミットのパイプラインを適用する前に、外部スカラーキーの等値、範囲、順序付き走査を試します。
 
-プランナーは `explain_query_at` を通じて `TableScan`、`EqualityIndex`、`CompoundEqualityIndex`、`IndexIntersection`、`RangeIndex`、`OrderedIndex`、`OrderedIndexPrefix`、`CompoundOrderedIndex` を報告します。
+プランナーは `explain_query_at` を通じて `TableScan`、`EqualityIndex`、`CompoundEqualityIndex`、`CompoundEqualityPrefixIndex`、`IndexIntersection`、`RangeIndex`、`OrderedIndex`、`OrderedIndexPrefix`、`CompoundOrderedIndex` を報告します。
 
 単一テーブル HTTP サーバーは `QUERY /explain` で同じ説明を公開します。
 
@@ -90,7 +90,7 @@ txBASE はレコードスキャンをクエリ実行器の参照経路として�
 
 キーのエンコード、null と欠損フィールドの規則、重複順序、更新時の保守、復旧レコード、古いインデックスの検出、プランナー方針が必要です。
 
-現在のプランナーは、トップレベルの直接等値、複合キーの完全一致等値、片側ごとに一つの境界を持つ範囲述語、単一フィールドの順序付き走査、複合等値プレフィックス範囲述語、正確な等値プレフィックスの後でインデックスサフィックスに一致する単一キーまたは複合ソート要求を扱います。
+現在のプランナーは、トップレベルの直接等値、複合キーの完全一致等値、複合等値プレフィックス候補、片側ごとに一つの境界を持つ範囲述語、単一フィールドの順序付き走査、複合等値プレフィックス範囲述語、正確な等値プレフィックスの後でインデックスサフィックスに一致する単一キーまたは複合ソート要求を扱います。
 
 複数の利用可能な単一フィールド等値インデックスがある場合、プランナーは各単独インデックス候補とレコード番号による積集合候補を比較し、最も低い有界コストを選びます。
 

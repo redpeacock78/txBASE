@@ -160,7 +160,7 @@ It depends on the file system honoring the file and directory sync operations us
 
 ## Current boundary
 
-The sidecar currently supports build, exact scalar and compound equality lookup, range candidate lookup, compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, per-field-direction compound-key construction and prefix traversal, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
+The sidecar currently supports build, exact scalar and compound equality lookup, compound equality-prefix candidate lookup, range candidate lookup, compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, per-field-direction compound-key construction and prefix traversal, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
@@ -173,7 +173,7 @@ index to copy.
 
 Direct DBF edits, unsupported sidecar definitions, and refresh I/O failures leave the sidecar stale; `index rebuild` is the explicit repair path.
 
-The path-aware query executor uses equality, equality intersection, range, compound equality-prefix range, single-field ordered, or compound-prefix ordered sidecar traversal when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
+The path-aware query executor uses equality, compound equality-prefix, equality intersection, range, compound equality-prefix range, single-field ordered, or compound-prefix ordered sidecar traversal when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
 
 For a multi-key sort, a single-field index supplies the first sort-key order and the executor stably sorts only equal-key groups by the remaining keys.
 
@@ -206,6 +206,8 @@ For multiple range predicates, the planner uses overlapping histogram buckets to
 An overlapped bucket is counted in full, so the estimate is intentionally coarse; exact range candidates still determine the returned records.
 
 The path-less `QueryExecutor` implementation remains a table-scan reference path.
+
+Compound equality-prefix candidate lookup narrows a compound index to a contiguous leading-key interval and returns physical record order.
 
 Single-field range candidate lookup narrows the typed key domain and uses binary seeks for the lower and upper bounds.
 

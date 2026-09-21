@@ -76,7 +76,7 @@ txBASE keeps the record scan as the query executor reference path.
 
 The path-aware query entry point attempts external scalar-key equality, range, or ordered traversal before applying the same filter, sort, projection, skip, and limit pipeline.
 
-The planner reports `TableScan`, `EqualityIndex`, `CompoundEqualityIndex`, `IndexIntersection`, `RangeIndex`, `OrderedIndex`, `OrderedIndexPrefix`, or `CompoundOrderedIndex` through `explain_query_at`.
+The planner reports `TableScan`, `EqualityIndex`, `CompoundEqualityIndex`, `CompoundEqualityPrefixIndex`, `IndexIntersection`, `RangeIndex`, `OrderedIndex`, `OrderedIndexPrefix`, or `CompoundOrderedIndex` through `explain_query_at`.
 
 The single-table HTTP server exposes the same explanation as `QUERY /explain`.
 
@@ -90,7 +90,7 @@ Connecting an index to query execution therefore needs more than a parser change
 
 It needs key encoding, null and missing-field rules, duplicate ordering, update maintenance, recovery records, stale-index detection, and a planner policy.
 
-The current planner considers direct top-level equality, exact compound equality, single-bound-per-side range predicates, single-field ordered traversal, compound equality-prefix range predicates, and single-key or compound sort requests whose fields match an index suffix after an exact equality prefix.
+The current planner considers direct top-level equality, exact compound equality, compound equality-prefix candidates, single-bound-per-side range predicates, single-field ordered traversal, compound equality-prefix range predicates, and single-key or compound sort requests whose fields match an index suffix after an exact equality prefix.
 
 For multiple usable single-field equality indexes, the planner compares each single-index candidate with one record-number intersection candidate and chooses the lowest bounded cost.
 

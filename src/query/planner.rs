@@ -22,6 +22,10 @@ pub enum QueryPlan {
         name: String,
         fields: Vec<String>,
     },
+    CompoundEqualityPrefixIndex {
+        name: String,
+        fields: Vec<String>,
+    },
     RangeIndex {
         name: String,
         field: String,
@@ -127,6 +131,30 @@ fn choose_equality(index_file: &IndexFile, request: &QueryRequest) -> Vec<Planne
         });
     }
     for (name, fields) in index_file.compound_indexes() {
+        for prefix_len in 1..fields.len() {
+            let prefix_fields = &fields[..prefix_len];
+            let Some(values) = prefix_fields
+                .iter()
+                .map(|field| request.filter.get(field).and_then(equality_value).cloned())
+                .collect::<Option<Vec<_>>>()
+            else {
+                continue;
+            };
+            let field_refs = prefix_fields.iter().map(String::as_str).collect::<Vec<_>>();
+            let Ok(Some(records)) =
+                index_file.lookup_eq_prefix_for_named_fields(name, &field_refs, &values)
+            else {
+                continue;
+            };
+            candidates.push(PlannedAccess {
+                plan: QueryPlan::CompoundEqualityPrefixIndex {
+                    name: name.to_owned(),
+                    fields: prefix_fields.to_vec(),
+                },
+                records: Some(records),
+                ordered_prefix: 0,
+            });
+        }
         let Some(values) = fields
             .iter()
             .map(|field| request.filter.get(field).and_then(equality_value).cloned())

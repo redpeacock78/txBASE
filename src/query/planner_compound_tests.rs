@@ -163,6 +163,63 @@ fn uses_a_compound_index_for_exact_equality() {
 }
 
 #[test]
+fn uses_a_compound_index_for_an_equality_prefix() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-query-planner-compound-equality-prefix-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&path);
+
+    let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    bytes[179] = b' ';
+    let mut table = DbfTable::from_bytes(&bytes).unwrap();
+    for age in 0..32 {
+        table
+            .insert_record(
+                serde_json::json!({
+                    "ID": age + 3,
+                    "NAME": format!("N{age:02}"),
+                    "AGE": age,
+                    "ACTIVE": age % 2 == 0
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            )
+            .unwrap();
+    }
+    fs::write(&path, table.to_bytes()).unwrap();
+    IndexFile::build(
+        &path,
+        vec![IndexDefinition::named_fields(
+            "by_active_name",
+            vec!["ACTIVE".into(), "NAME".into()],
+        )],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let request = parse(br#"{"filter":{"ACTIVE":true}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &request).unwrap(),
+        QueryPlan::CompoundEqualityPrefixIndex {
+            name: "by_active_name".into(),
+            fields: vec!["ACTIVE".into()],
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &request).unwrap(),
+        execute_query(&table, &request).unwrap()
+    );
+
+    remove_table_files(&path);
+}
+
+#[test]
 fn chooses_a_compound_sort_index_with_the_smallest_equality_prefix() {
     let path = std::env::temp_dir().join(format!(
         "txbase-query-planner-compound-cost-{}.dbf",

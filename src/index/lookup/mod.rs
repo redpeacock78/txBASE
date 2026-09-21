@@ -193,6 +193,50 @@ impl IndexFile {
         ))
     }
 
+    pub(crate) fn lookup_eq_prefix_for_named_fields(
+        &self,
+        name: &str,
+        fields: &[&str],
+        values: &[Value],
+    ) -> Result<Option<Vec<usize>>, IndexError> {
+        let Some(index) = self
+            .indexes
+            .iter()
+            .find(|index| index.definition.name == name)
+        else {
+            return Ok(None);
+        };
+        if fields.is_empty()
+            || values.len() != fields.len()
+            || fields.len() >= index.definition.fields.len()
+            || !index
+                .definition
+                .fields
+                .iter()
+                .zip(fields)
+                .all(|(indexed, requested)| indexed == *requested)
+        {
+            return Ok(None);
+        }
+        let prefix = values
+            .iter()
+            .map(|value| IndexKey::from_value(Some(value)))
+            .collect::<Result<Vec<_>, _>>()?;
+        let prefix_start = lower_bound(&index.entries, |entry| {
+            !compare_index_prefix(&entry.key, &prefix, index.definition.directions()).is_lt()
+        });
+        let prefix_entries = &index.entries[prefix_start..];
+        let prefix_end = lower_bound(prefix_entries, |entry| {
+            compare_index_prefix(&entry.key, &prefix, index.definition.directions()).is_gt()
+        });
+        let mut records = prefix_entries[..prefix_end]
+            .iter()
+            .flat_map(|entry| entry.records.iter().copied())
+            .collect::<Vec<_>>();
+        records.sort_unstable();
+        Ok(Some(records))
+    }
+
     pub(crate) fn lookup_range_for_field(
         &self,
         field: &str,

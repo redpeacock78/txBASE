@@ -27,6 +27,7 @@ fn index_traversal_cost(access: &PlannedAccess, index_file: &IndexFile) -> usize
         QueryPlan::TableScan => 0,
         QueryPlan::EqualityIndex { name, .. }
         | QueryPlan::CompoundEqualityIndex { name, .. }
+        | QueryPlan::CompoundEqualityPrefixIndex { name, .. }
         | QueryPlan::RangeIndex { name, .. }
         | QueryPlan::OrderedIndex { name, .. }
         | QueryPlan::OrderedIndexPrefix { name, .. }
