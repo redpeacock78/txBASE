@@ -38,7 +38,7 @@ The repository currently provides:
 - A durable catalog-journal commit ID for multi-table mutation transactions.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
-- A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, numeric field-reference or literal `$sum`, numeric `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, plus final `$sort`, `$skip`, and `$limit` stages over group output.
+- A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, numeric field-reference or literal `$sum`, numeric `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, followed by bounded group-output `$match` stages, one optional `$project`, and final `$sort`, `$skip`, and `$limit` stages.
 - A bounded local `inner`, `left`, `right`, `full`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
