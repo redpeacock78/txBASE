@@ -227,6 +227,82 @@ fn right_join_keeps_unmatched_right_record() {
 }
 
 #[test]
+fn full_join_keeps_unmatched_left_and_right_records_in_direct_and_chained_queries() {
+    let root = catalog_with_posts_and_comments();
+    let users_path = root.join("users.dbf");
+    let mut users = DbfTable::from_path(&users_path).unwrap();
+    users
+        .insert_record(
+            json!({"ID": 99, "NAME": "LeftOnly", "AGE": 99, "ACTIVE": true})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    users.save_with_wal(&users_path).unwrap();
+    let catalog = Catalog::from_path(&root).unwrap();
+
+    let direct = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "full",
+            "table": "posts",
+            "on": {
+              "users.ID": {"$eq": {"$field": "posts.ID"}}
+            }
+          },
+          "projection": {"users.NAME": 1, "posts.NAME": 1}
+        }"#,
+    )
+    .unwrap();
+    let rows = execute(&catalog, &direct).unwrap();
+    assert!(
+        rows.iter()
+            .any(|row| row == &json!({"users.NAME": "LeftOnly"}))
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row == &json!({"posts.NAME": "Other"}))
+    );
+
+    let chained = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "full",
+            "table": "posts",
+            "on": {
+              "users.ID": {"$eq": {"$field": "posts.ID"}}
+            }
+          },
+          "joins": [{
+            "type": "left",
+            "table": "comments",
+            "on": {
+              "posts.ID": {"$eq": {"$field": "comments.ID"}}
+            }
+          }],
+          "projection": {
+            "users.NAME": 1,
+            "posts.NAME": 1,
+            "comments.NAME": 1
+          }
+        }"#,
+    )
+    .unwrap();
+    let rows = execute(&catalog, &chained).unwrap();
+    assert!(
+        rows.iter()
+            .any(|row| row == &json!({"users.NAME": "LeftOnly"}))
+    );
+    assert!(rows.iter().any(|row| {
+        row.get("posts.NAME") == Some(&json!("Other")) && row.get("users.NAME").is_none()
+    }));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn semi_and_anti_join_emit_only_matching_or_unmatched_left_rows() {
     let root = catalog_with_posts();
     let catalog = Catalog::from_path(&root).unwrap();

@@ -38,6 +38,16 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
         return Ok(output);
     }
 
+    if let JoinType::Full = &request.join.kind {
+        return join_nested::execute_full_join(
+            &left_records,
+            &right_records,
+            request,
+            &local_fields,
+            &foreign_fields,
+        );
+    }
+
     let large_join = matches!(
         join_strategy::choose(left_records.len(), right_records.len(), false),
         join_strategy::JoinStrategy::Hash
@@ -241,7 +251,9 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
             JoinType::Semi if had_matches => emit(&mut output, request, Some(left_record), None)?,
             JoinType::Anti if !had_matches => emit(&mut output, request, Some(left_record), None)?,
             JoinType::Semi | JoinType::Anti => {}
-            JoinType::Right | JoinType::Cross => unreachable!("join type handled above"),
+            JoinType::Right | JoinType::Full | JoinType::Cross => {
+                unreachable!("join type handled above")
+            }
         }
     }
     Ok(output)

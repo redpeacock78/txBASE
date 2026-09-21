@@ -92,7 +92,7 @@ pub(super) fn execute_join(
                 emit(&mut output, request, Some(left_record), None)?;
             }
             JoinType::Semi | JoinType::Anti => {}
-            JoinType::Right | JoinType::Cross => return Ok(None),
+            JoinType::Right | JoinType::Full | JoinType::Cross => return Ok(None),
         }
     }
     Ok(Some(output))
@@ -170,7 +170,7 @@ pub(super) fn execute_stage(
                 push_combined(&mut output, Some(left_row), None)?;
             }
             JoinType::Semi | JoinType::Anti => {}
-            JoinType::Right | JoinType::Cross => return Ok(None),
+            JoinType::Right | JoinType::Full | JoinType::Cross => return Ok(None),
         }
     }
     Ok(Some(output))

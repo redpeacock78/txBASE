@@ -39,7 +39,7 @@ The repository currently provides:
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
 - A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, numeric field-reference or literal `$sum`, numeric `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, plus final `$sort` and `$limit` stages over group output.
-- A bounded local `inner`, `left`, `right`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
+- A bounded local `inner`, `left`, `right`, `full`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
@@ -133,6 +133,8 @@ The current record scan remains the reference execution path while the query mod
 - Full physical cost planning for range and mixed-direction compound paths.
 
 The first join slice is local and bounded.
+
+It also supports a `full` equality join through a bounded hash path that emits unmatched rows from both sides.
 It implements one or more equality conditions, compares bounded hash and index-probe costs after the small nested-loop boundary, uses a fresh single-field index when that estimate wins, uses an exact field-order compound index for direct or chained probes, and uses a compatible ordered-index merge path for large direct joins when that estimate wins.
 Additional stages may reference earlier joined tables and keep one catalog read lock across the
 pipeline, but full index-aware and cost-based merge planning, streaming, and broader null or

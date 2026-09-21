@@ -36,13 +36,17 @@ It accepts the relation shape from the roadmap and supports one or more equality
 
 `join.parse` validates this JSON, and `join::execute` loads named tables from a `Catalog`.
 
-The current join types are `inner`, `left`, `right`, `semi`, `anti`, and `cross`.
+The current join types are `inner`, `left`, `right`, `full`, `semi`, `anti`, and `cross`.
 
 The result is a flat JSON object whose keys use the `table.field` form.
 
 An unmatched left row is retained without right-table fields.
 
 An unmatched right row is retained without left-table fields for a `right` join.
+
+A `full` join retains unmatched rows from both tables.
+
+It emits matched and unmatched left rows in left-table order, then emits unmatched right rows in right-table order.
 
 `semi` emits one left row when at least one right row matches.
 
@@ -77,6 +81,8 @@ Direct and chained stages may also use a fresh compound index when the equality 
 For a large direct equality join with compatible fresh ordered indexes on both inputs, the planner selects `Merge` when its bounded cost is lowest and restores left-major or right-major output order after matching key groups.
 
 When an index is unavailable, stale, malformed, or more expensive than the hash estimate, larger inputs select `Hash` and build one in-memory equality map for the right table, or the left table for a `right` join.
+
+A `full` join always uses the bounded hash fallback and does not select an index-nested-loop or merge strategy.
 
 The selector preserves left-major output order for non-right joins and right-major output order for right joins.
 

@@ -4,6 +4,7 @@ use super::join::{
 use super::join_pipeline::{encoded_key as row_encoded_key, push_combined};
 use crate::dbf::DbfRecord;
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 
 pub(super) fn execute_join(
     left_records: &[&DbfRecord],
@@ -35,7 +36,7 @@ pub(super) fn execute_join(
                         break;
                     }
                     JoinType::Anti => break,
-                    JoinType::Right | JoinType::Cross => {
+                    JoinType::Right | JoinType::Full | JoinType::Cross => {
                         unreachable!("join type handled above")
                     }
                 }
@@ -49,6 +50,7 @@ pub(super) fn execute_join(
             | JoinType::Semi
             | JoinType::Anti
             | JoinType::Right
+            | JoinType::Full
             | JoinType::Cross => {}
         }
     }
@@ -86,6 +88,44 @@ pub(super) fn execute_right_join(
     Ok(output)
 }
 
+pub(super) fn execute_full_join(
+    left_records: &[&DbfRecord],
+    right_records: &[&DbfRecord],
+    request: &JoinRequest,
+    local_fields: &[String],
+    foreign_fields: &[String],
+) -> Result<Vec<Value>, JoinError> {
+    let mut right_by_key = BTreeMap::<String, Vec<(usize, &DbfRecord)>>::new();
+    for (index, &record) in right_records.iter().enumerate() {
+        let Some(key) = record_encoded_key(&record.values, foreign_fields)? else {
+            continue;
+        };
+        right_by_key.entry(key).or_default().push((index, record));
+    }
+
+    let mut matched_right = vec![false; right_records.len()];
+    let mut output = Vec::new();
+    for &left_record in left_records {
+        let matches = record_encoded_key(&left_record.values, local_fields)?
+            .and_then(|key| right_by_key.get(&key));
+        if let Some(matches) = matches {
+            for &(index, right_record) in matches {
+                matched_right[index] = true;
+                emit(&mut output, request, Some(left_record), Some(right_record))?;
+            }
+        } else {
+            emit(&mut output, request, Some(left_record), None)?;
+        }
+    }
+
+    for (index, &right_record) in right_records.iter().enumerate() {
+        if !matched_right[index] {
+            emit(&mut output, request, None, Some(right_record))?;
+        }
+    }
+    Ok(output)
+}
+
 pub(super) fn execute_stage(
     left: &[Map<String, Value>],
     right: &[Map<String, Value>],
@@ -116,7 +156,7 @@ pub(super) fn execute_stage(
                         break;
                     }
                     JoinType::Anti => break,
-                    JoinType::Right | JoinType::Cross => {
+                    JoinType::Right | JoinType::Full | JoinType::Cross => {
                         unreachable!("join type handled above")
                     }
                 }
@@ -130,6 +170,7 @@ pub(super) fn execute_stage(
             | JoinType::Semi
             | JoinType::Anti
             | JoinType::Right
+            | JoinType::Full
             | JoinType::Cross => {}
         }
     }

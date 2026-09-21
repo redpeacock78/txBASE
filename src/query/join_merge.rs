@@ -89,6 +89,11 @@ pub(super) fn execute(
                 }
             }
         }
+        JoinType::Full => {
+            return Err(JoinError::Invalid(
+                "merge join does not support full joins".into(),
+            ));
+        }
         JoinType::Cross => return Err(JoinError::Invalid("merge join cannot be cross".into())),
     }
     Ok(output)
