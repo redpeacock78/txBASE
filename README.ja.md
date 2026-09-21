@@ -241,6 +241,9 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - [XBF v1フォーマット草案](docs/ja/xbf.md)
 - [ロードマップと明示的な非目標](docs/ja/roadmap.md)
 - [調査インデックスと出典ポリシー](docs/ja/research.md)
+- [エッジストレージとオブジェクトストレージのコミット](docs/ja/edge-storage.md)
+- [WASMとワーカーのホスト境界](docs/ja/wasm.md)
+- [分散化の進化](docs/ja/distributed-evolution.md)
 
 ## 現在の境界とロードマップ
 

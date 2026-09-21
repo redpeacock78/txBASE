@@ -247,6 +247,9 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 - [XBF v1 format draft](docs/xbf.md)
 - [Roadmap and explicit non-goals](docs/roadmap.md)
 - [Research index and source policy](docs/research.md)
+- [Edge storage and object-store commits](docs/edge-storage.md)
+- [WASM and worker host boundary](docs/wasm.md)
+- [Distributed evolution](docs/distributed-evolution.md)
 
 ## Current boundary and roadmap
 

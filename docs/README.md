@@ -31,6 +31,12 @@ Research and future work do not imply an implemented feature.
 - [Specification research index](research.md)
 - [Roadmap and explicit non-goals](roadmap.md)
 
+## Future architecture
+
+- [Edge storage and object-store commits](edge-storage.md)
+- [WASM and worker host boundary](wasm.md)
+- [Distributed evolution](distributed-evolution.md)
+
 ## File-granularity rule
 
 Split a document when ownership, failure behavior, fixtures, or change cadence differ.

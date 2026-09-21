@@ -263,6 +263,8 @@ The object-storage model needs a consistency contract, orphan-page cleanup polic
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 
+The detailed future boundaries are described in [edge storage](edge-storage.md) and [WASM](wasm.md).
+
 ## 8. Phase 6: advanced database features
 
 Distributed behavior comes after the local and edge contracts are stable.
@@ -281,6 +283,8 @@ Distributed behavior comes after the local and edge contracts are stable.
 These features require an authority model, conflict semantics, schema-version handling, recovery procedures, and observability.
 
 No consensus or multi-region feature is implied by the current exclusive table lock.
+
+The detailed future boundary is described in [distributed evolution](distributed-evolution.md).
 
 ## 9. XBF and shared upper layers
 

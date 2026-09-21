@@ -29,6 +29,9 @@ This repository does not claim compatibility merely because it uses a familiar n
 | Multi-table DBF discovery and bounded local equality join | [Catalog](catalog.md) and [Join model](joins.md) | Current boundary plus future relational work |
 | External secondary-index lifecycle | [Indexes](indexes.md) | Current sidecar maintenance, scalar and compound equality, compound equality-prefix candidates, compound equality-prefix range candidates, histogram-estimated range ordering, ordered-prefix traversal, mixed-direction compound-prefix sorting, equality-prefix candidate choice, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded record, traversal, and sort cost choice, and future full I/O-aware cost model |
 | CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Current boundary plus future work |
+| Edge and object-storage commits | [Edge storage](edge-storage.md) | Future architecture |
+| WASM and worker host boundary | [WASM](wasm.md) | Future architecture |
+| Distributed replication and authority | [Distributed evolution](distributed-evolution.md) | Future architecture |
 
 ## Research method
 
