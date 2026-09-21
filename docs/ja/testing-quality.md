@@ -132,7 +132,7 @@ DBF、memo、WAL、JSON 入力について決定的なコーパスを保ちま�
 
 `src/query/planner_compound_tests.rs::uses_a_compound_index_for_an_equality_prefix` は、複合インデックスによる等値プレフィックス検索を検査し、結果をテーブルスキャンと比較します。
 
-`src/query/planner_compound_tests.rs::uses_a_compound_index_for_a_multi_field_equality_prefix` は、残余述語を伴う複数フィールドの等値プレフィックス検索を検査し、結果をテーブルスキャンと比較します。
+`src/query/planner_compound_tests.rs::uses_a_compound_index_for_a_multi_field_equality_prefix` は、先頭から続く複数フィールドの等値プレフィックス検索と残余述語を検査し、先頭フィールドを飛ばしたプレフィックスを拒否して、両方の結果をテーブルスキャンと比較します。
 
 `src/query/planner_tests.rs::uses_an_ordered_index_prefix_for_multi_key_sort` は、最初のキーのインデックス走査、二次キーの同値ソート、テーブルスキャンとの同値を検査します。
 

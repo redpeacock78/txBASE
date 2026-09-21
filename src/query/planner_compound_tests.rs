@@ -275,6 +275,16 @@ fn uses_a_compound_index_for_a_multi_field_equality_prefix() {
         execute_query(&table, &request).unwrap()
     );
 
+    let non_prefix_request = parse(br#"{"filter":{"NAME":"N07"}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &non_prefix_request).unwrap(),
+        QueryPlan::TableScan
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &non_prefix_request).unwrap(),
+        execute_query(&table, &non_prefix_request).unwrap()
+    );
+
     remove_table_files(&path);
 }
 
