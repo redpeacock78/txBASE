@@ -3,49 +3,9 @@ use indexmap::IndexMap;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone)]
-pub(super) struct GroupSpec {
-    pub(super) key_field: Option<String>,
-    pub(super) accumulators: Vec<AccumulatorSpec>,
-}
+mod types;
 
-#[derive(Debug, Clone)]
-pub(super) struct AggregationPlan {
-    pub(super) matches: Vec<Map<String, Value>>,
-    pub(super) group_matches: Vec<Map<String, Value>>,
-    pub(super) group: Option<GroupSpec>,
-    pub(super) count: Option<String>,
-    pub(super) distinct: Option<String>,
-    pub(super) projection: Option<BTreeMap<String, i8>>,
-    pub(super) sort: Option<IndexMap<String, i8>>,
-    pub(super) skip: Option<u64>,
-    pub(super) limit: Option<u64>,
-}
-
-#[derive(Debug, Clone)]
-pub(super) struct AccumulatorSpec {
-    pub(super) name: String,
-    pub(super) kind: AccumulatorKind,
-}
-
-#[derive(Debug, Clone)]
-pub(super) enum AccumulatorKind {
-    Count,
-    Average(String),
-    Sum(SumOperand),
-    Min(String),
-    Max(String),
-    First(String),
-    Last(String),
-    Push(String),
-    AddToSet(String),
-}
-
-#[derive(Debug, Clone)]
-pub(super) enum SumOperand {
-    Field(String),
-    Literal(serde_json::Number),
-}
+pub(super) use types::{AccumulatorKind, AccumulatorSpec, AggregationPlan, GroupSpec, SumOperand};
 
 pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
     let Some(stages) = request.aggregate.as_ref() else {
