@@ -12,6 +12,8 @@ pub struct Manifest {
     pub generation: u64,
     pub root: String,
     pub wal_head: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<u64>,
 }
 
 impl Manifest {
@@ -39,6 +41,18 @@ impl Manifest {
             return Err(ObjectStoreError::Invalid(
                 "manifest root must be a non-empty object key".into(),
             ));
+        }
+        if !self.history.is_empty() {
+            if self.history.windows(2).any(|window| window[0] >= window[1]) {
+                return Err(ObjectStoreError::Invalid(
+                    "manifest history must be strictly increasing".into(),
+                ));
+            }
+            if self.history.last().copied() != Some(self.generation) {
+                return Err(ObjectStoreError::Invalid(
+                    "manifest history must end at the current generation".into(),
+                ));
+            }
         }
         Ok(())
     }
@@ -142,6 +156,54 @@ impl<S: ObjectStore> ObjectTable<S> {
         Ok(Some(snapshot))
     }
 
+    pub fn read_at(&self, generation: u64) -> Result<Option<XbfTable>, ObjectStoreError> {
+        self.recover()?;
+        let (_, manifest) = self.current_manifest()?;
+        let Some(manifest) = manifest else {
+            return Ok(None);
+        };
+        self.validate_manifest_root(&manifest)?;
+        if !manifest_history(&manifest).contains(&generation) {
+            return Ok(None);
+        }
+        let root = self.snapshot_key(generation);
+        if self.store.get(&root)?.is_none() {
+            return Ok(None);
+        }
+        Ok(Some(self.read_snapshot(&root, generation)?))
+    }
+
+    pub fn retain_generations(&self, keep_last: usize) -> Result<Vec<String>, ObjectStoreError> {
+        if keep_last == 0 {
+            return Err(ObjectStoreError::Invalid(
+                "object-store retention count must be positive".into(),
+            ));
+        }
+        self.recover()?;
+        let (_, manifest) = self.current_manifest()?;
+        let Some(manifest) = manifest else {
+            return Ok(Vec::new());
+        };
+        self.validate_manifest_root(&manifest)?;
+        let retained = manifest_history(&manifest)
+            .into_iter()
+            .rev()
+            .take(keep_last)
+            .collect::<BTreeSet<_>>();
+        let prefix = self.snapshot_prefix();
+        let mut removed = Vec::new();
+        for key in self.store.list(&prefix)? {
+            let keep = snapshot_generation(&prefix, &key)
+                .is_some_and(|generation| retained.contains(&generation));
+            if !keep {
+                self.store.delete(&key)?;
+                removed.push(key);
+            }
+        }
+        removed.sort();
+        Ok(removed)
+    }
+
     pub fn commit(&self, table: &XbfTable) -> Result<CommitResult, ObjectStoreError> {
         self.recover()?;
         let snapshot = encode(table)?;
@@ -184,6 +246,7 @@ impl<S: ObjectStore> ObjectTable<S> {
             generation: table.generation,
             root,
             wal_head: table.generation,
+            history: history_with_generation(current.as_ref(), table.generation)?,
         };
         let manifest_bytes = manifest.to_bytes()?;
         match self.store.compare_and_swap(
@@ -256,6 +319,7 @@ impl<S: ObjectStore> ObjectTable<S> {
                 generation: pending.target_generation,
                 root: pending.root,
                 wal_head: pending.wal_head,
+                history: history_with_generation(current.as_ref(), pending.target_generation)?,
             };
             self.store.compare_and_swap(
                 &self.manifest_key,
@@ -276,7 +340,11 @@ impl<S: ObjectStore> ObjectTable<S> {
         let current_generation = current.as_ref().map(|manifest| manifest.generation);
         let current_root = current.as_ref().map(|manifest| manifest.root.as_str());
         let mut retained_roots = BTreeSet::new();
-        if let Some(root) = current_root {
+        if let Some(manifest) = &current {
+            for generation in manifest_history(manifest) {
+                retained_roots.insert(self.snapshot_key(generation));
+            }
+        } else if let Some(root) = current_root {
             retained_roots.insert(root.to_owned());
         }
         let mut removed = Vec::new();
@@ -381,6 +449,35 @@ impl<S: ObjectStore> ObjectTable<S> {
     fn wal_key(&self, generation: u64) -> String {
         format!("{}wal/{generation}.json", self.prefix)
     }
+}
+
+fn manifest_history(manifest: &Manifest) -> Vec<u64> {
+    if manifest.history.is_empty() {
+        vec![manifest.generation]
+    } else {
+        manifest.history.clone()
+    }
+}
+
+fn history_with_generation(
+    current: Option<&Manifest>,
+    generation: u64,
+) -> Result<Vec<u64>, ObjectStoreError> {
+    let mut history = current.map(manifest_history).unwrap_or_default();
+    if history
+        .last()
+        .is_some_and(|previous| generation <= *previous)
+    {
+        return Err(ObjectStoreError::Invalid(format!(
+            "XBF generation {generation} is not newer than the manifest history"
+        )));
+    }
+    history.push(generation);
+    Ok(history)
+}
+
+fn snapshot_generation(prefix: &str, key: &str) -> Option<u64> {
+    key.strip_prefix(prefix)?.strip_suffix(".xbf")?.parse().ok()
 }
 
 fn validate_namespace(namespace: &str) -> Result<(), ObjectStoreError> {

@@ -44,7 +44,7 @@ fn commits_and_reads_one_consistent_xbf_generation() {
         object_table.commit(&first).unwrap(),
         CommitResult::Committed { generation: 0 }
     );
-    assert_eq!(object_table.read().unwrap(), Some(first));
+    assert_eq!(object_table.read().unwrap(), Some(first.clone()));
 
     let second = table(1, "Bob");
     assert_eq!(
@@ -52,13 +52,18 @@ fn commits_and_reads_one_consistent_xbf_generation() {
         CommitResult::Committed { generation: 1 }
     );
     assert_eq!(object_table.read().unwrap(), Some(second.clone()));
+    assert_eq!(object_table.read_at(0).unwrap(), Some(first));
 
     let manifest = object_table.manifest().unwrap().unwrap();
     assert_eq!(manifest.generation, 1);
     assert_eq!(manifest.wal_head, 1);
+    assert_eq!(manifest.history, vec![0, 1]);
     assert!(manifest.root.ends_with("snapshots/1.xbf"));
     let removed = object_table.cleanup_orphans().unwrap();
+    assert!(removed.is_empty());
+    let removed = object_table.retain_generations(1).unwrap();
     assert!(removed.iter().any(|key| key.ends_with("snapshots/0.xbf")));
+    assert_eq!(object_table.read_at(0).unwrap(), None);
     assert_eq!(object_table.read().unwrap(), Some(second));
 }
 
@@ -102,6 +107,7 @@ fn rejects_a_manifest_that_points_to_a_different_snapshot_generation() {
         generation: 1,
         root: second_root.into(),
         wal_head: 1,
+        history: vec![1],
     }
     .to_bytes()
     .unwrap();
@@ -116,6 +122,27 @@ fn rejects_a_manifest_that_points_to_a_different_snapshot_generation() {
     assert!(matches!(
         object_table.read(),
         Err(ObjectStoreError::Invalid(message)) if message.contains("does not match")
+    ));
+}
+
+#[test]
+fn rejects_invalid_manifest_history_and_zero_retention() {
+    let manifest = Manifest {
+        version: 1,
+        generation: 2,
+        root: "users/snapshots/2.xbf".into(),
+        wal_head: 2,
+        history: vec![2, 1],
+    };
+    assert!(matches!(
+        manifest.to_bytes(),
+        Err(ObjectStoreError::Invalid(message)) if message.contains("strictly increasing")
+    ));
+
+    let object_table = ObjectTable::new(MemoryObjectStore::new(), "users").unwrap();
+    assert!(matches!(
+        object_table.retain_generations(0),
+        Err(ObjectStoreError::Invalid(message)) if message.contains("retention count")
     ));
 }
 

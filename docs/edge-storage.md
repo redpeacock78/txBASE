@@ -2,7 +2,7 @@
 
 This document defines the implemented local object-store boundary and the future cloud adapter boundary.
 
-The local boundary provides an in-memory fixture and a durable filesystem backend for the same generation, conditional publication, retry, and recovery contract.
+The local boundary provides an in-memory fixture and a durable filesystem backend for the same generation, conditional publication, retry, recovery, historical-read, and explicit-retention contract.
 
 It does not claim an R2 adapter or any other cloud-provider implementation.
 
@@ -38,7 +38,8 @@ The manifest has one versioned schema:
   "version": 1,
   "generation": 142,
   "root": "users/snapshots/142.xbf",
-  "wal_head": 142
+  "wal_head": 142,
+  "history": [140, 141, 142]
 }
 ```
 
@@ -47,6 +48,9 @@ The manifest has one versioned schema:
 `generation` is the visible table generation.
 
 `wal_head` identifies the pending or published WAL generation in this local slice.
+
+`history` lists the committed generations still addressable by `ObjectTable::read_at`.
+Older manifests may omit it; those manifests expose only their current generation until the next commit writes history.
 
 The reader rejects a snapshot whose embedded XBF generation differs from the manifest generation.
 
@@ -78,15 +82,19 @@ A reader resolves one manifest before loading its `root` object.
 
 Because the root object is immutable and the embedded generation is checked, a reader cannot accept a mixed-generation result.
 
+`ObjectTable::read_at` reads a retained committed generation from its immutable snapshot object.
+It returns no snapshot after that generation has been removed by retention.
+
 ## 4. Orphan cleanup
 
-`ObjectTable::cleanup_orphans` keeps the current manifest root and any pending root whose WAL still follows the current base generation.
+`ObjectTable::cleanup_orphans` keeps every generation listed in the current manifest history and any pending root whose WAL still follows the current base generation.
 
-It removes stale WAL objects and unreferenced snapshot objects.
+It removes stale WAL objects and snapshot objects that are not in the committed history or a recoverable pending commit.
 
 The method does not remove a recoverable pending commit.
 
-It also does not run automatically, so an adapter can select a retention and expiration policy appropriate to its storage service.
+`ObjectTable::retain_generations(keep_last)` explicitly removes older snapshot objects while preserving the newest committed generations and the current manifest.
+It does not run automatically, so an adapter can select a retention and expiration policy appropriate to its storage service.
 
 ## 5. XBF relationship
 

@@ -268,10 +268,10 @@ The range-oriented local storage abstraction is a useful starting point, but rem
 - Cloud generation snapshots and retention.
 
 The local XBF object-store boundary is implemented by `edge::ObjectTable`, `MemoryObjectStore`, and `FilesystemObjectStore`.
-It defines the manifest schema, generation compare-and-swap, retry and recovery behavior, reader generation checks, and orphan cleanup without requiring a cloud account.
+It defines the manifest schema and committed-generation history, generation compare-and-swap, retry and recovery behavior, historical reads, explicit local retention, reader generation checks, and orphan cleanup without requiring a cloud account.
 The filesystem backend persists the same contract under one directory with exclusive object creation, a store lock, and synced temporary manifest replacement.
 
-The remaining cloud boundary needs a consistency contract, orphan-page cleanup policy, retry behavior, and a remote adapter fixture.
+The remaining cloud boundary needs a consistency contract, service-specific retention and orphan-page cleanup policy, retry behavior, and a remote adapter fixture.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 
