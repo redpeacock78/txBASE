@@ -2,7 +2,7 @@
 
 This document defines the implemented local object-store boundary and the future cloud adapter boundary.
 
-The local slice uses an in-memory object store to make generation, conditional publication, retry, and recovery behavior deterministic.
+The local boundary provides an in-memory fixture and a durable filesystem backend for the same generation, conditional publication, retry, and recovery contract.
 
 It does not claim an R2 adapter or any other cloud-provider implementation.
 
@@ -13,6 +13,10 @@ The native DBF and XBF paths remain local file and sidecar implementations.
 The `txbase::edge::ObjectTable` API adds a separate object-store commit boundary for XBF snapshots.
 
 `MemoryObjectStore` is a deterministic fixture that implements the `ObjectStore` contract with immutable object publication and manifest compare-and-swap.
+
+`FilesystemObjectStore` persists the same contract below one directory.
+It creates parent directories, publishes immutable objects with exclusive creation, serializes store operations with a lock file, and replaces manifests through a synced temporary file.
+The filesystem backend is a local durable adapter and does not claim cloud-provider consistency.
 
 An object-store adapter can implement the same trait for a remote service without changing the XBF snapshot or generation rules.
 
@@ -104,6 +108,8 @@ A remote adapter still needs to define:
 - cloud-specific corruption and availability behavior.
 
 These concerns do not belong in `MemoryObjectStore` or in the XBF codec.
+
+`FilesystemObjectStore` supplies a local persistence fixture for those tests, but its lock file and filesystem durability behavior are not a substitute for a remote service's consistency contract.
 
 ## 7. Explicit non-goals
 

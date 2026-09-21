@@ -1,10 +1,22 @@
 use super::{
-    CommitResult, Manifest, MemoryObjectStore, ObjectStore, ObjectStoreError, ObjectTable,
+    CommitResult, FilesystemObjectStore, Manifest, MemoryObjectStore, ObjectStore,
+    ObjectStoreError, ObjectTable,
 };
 use crate::xbf::{XbfField, XbfRecord, XbfTable, XbfType, XbfValue, encode};
 use serde_json::json;
+use std::env;
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+fn temporary_directory(label: &str) -> PathBuf {
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    env::temp_dir().join(format!(
+        "txbase-edge-{label}-{}-{}",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ))
+}
 
 fn table(generation: u64, name: &str) -> XbfTable {
     XbfTable {
@@ -157,13 +169,84 @@ fn recovers_pending_generations_in_numeric_order() {
     assert_eq!(object_table.read().unwrap(), Some(table(10, "Ten")));
 }
 
+#[test]
+fn filesystem_store_persists_objects_and_rejects_unsafe_keys() {
+    let root = temporary_directory("store");
+    {
+        let store = FilesystemObjectStore::new(&root).unwrap();
+        store
+            .put_if_absent("users/snapshots/0.xbf", b"snapshot")
+            .unwrap();
+        store.put_if_absent("users/wal/0.json", b"pending").unwrap();
+        assert_eq!(
+            store.list("users/snapshots/").unwrap(),
+            vec!["users/snapshots/0.xbf"]
+        );
+        assert_eq!(
+            store.get("users/snapshots/0.xbf").unwrap(),
+            Some(b"snapshot".to_vec())
+        );
+        assert!(matches!(
+            store.get("../outside"),
+            Err(ObjectStoreError::Invalid(_))
+        ));
+        assert!(matches!(
+            store.get("users/../outside"),
+            Err(ObjectStoreError::Invalid(_))
+        ));
+    }
+    {
+        let store = FilesystemObjectStore::new(&root).unwrap();
+        assert_eq!(
+            store.get("users/wal/0.json").unwrap(),
+            Some(b"pending".to_vec())
+        );
+        store
+            .compare_and_swap("users/manifest.json", None, br#"{"generation":0}"#)
+            .unwrap();
+        assert!(matches!(
+            store.compare_and_swap("users/manifest.json", None, b"other"),
+            Err(ObjectStoreError::Conflict(_))
+        ));
+        store.delete("users/wal/0.json").unwrap();
+        assert_eq!(store.get("users/wal/0.json").unwrap(), None);
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn filesystem_object_table_reopens_and_recovers_an_interrupted_commit() {
+    let root = temporary_directory("table");
+    let failure = Arc::new(AtomicBool::new(true));
+    {
+        let store = FilesystemObjectStore::new(&root).unwrap();
+        let failing_store = FailingCasStore {
+            inner: store,
+            failure: failure.clone(),
+        };
+        let object_table = ObjectTable::new(failing_store, "users").unwrap();
+        let pending = table(4, "Carol");
+        assert!(matches!(
+            object_table.commit(&pending),
+            Err(ObjectStoreError::Unavailable(_))
+        ));
+    }
+    {
+        let store = FilesystemObjectStore::new(&root).unwrap();
+        let object_table = ObjectTable::new(store, "users").unwrap();
+        assert_eq!(object_table.recover().unwrap(), 1);
+        assert_eq!(object_table.read().unwrap(), Some(table(4, "Carol")));
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
 #[derive(Clone)]
-struct FailingCasStore {
-    inner: MemoryObjectStore,
+struct FailingCasStore<S> {
+    inner: S,
     failure: Arc<AtomicBool>,
 }
 
-impl ObjectStore for FailingCasStore {
+impl<S: ObjectStore> ObjectStore for FailingCasStore<S> {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ObjectStoreError> {
         self.inner.get(key)
     }

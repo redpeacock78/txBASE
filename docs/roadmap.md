@@ -267,8 +267,9 @@ The range-oriented local storage abstraction is a useful starting point, but rem
 - Immutable pages and page-level manifests.
 - Cloud generation snapshots and retention.
 
-The local XBF object-store boundary is implemented by `edge::ObjectTable` and `MemoryObjectStore`.
+The local XBF object-store boundary is implemented by `edge::ObjectTable`, `MemoryObjectStore`, and `FilesystemObjectStore`.
 It defines the manifest schema, generation compare-and-swap, retry and recovery behavior, reader generation checks, and orphan cleanup without requiring a cloud account.
+The filesystem backend persists the same contract under one directory with exclusive object creation, a store lock, and synced temporary manifest replacement.
 
 The remaining cloud boundary needs a consistency contract, orphan-page cleanup policy, retry behavior, and a remote adapter fixture.
 

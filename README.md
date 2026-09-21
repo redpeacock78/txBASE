@@ -26,7 +26,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - File-backed WAL and memo sidecars for recoverable mutations.
 - Bounded queries, aggregation, local catalog joins, and external scalar or compound indexes.
 - XBF v1 snapshots and representability-aware DBF export.
-- A deterministic XBF object-store manifest boundary with generation CAS and recovery.
+- A deterministic XBF object-store manifest boundary with generation CAS and recovery, backed by memory or a durable filesystem store.
 - Explicit CJK codec selection without changing legacy DBF bytes.
 
 The detailed compatibility and behavior contracts live in the [documentation index](docs/README.md).
