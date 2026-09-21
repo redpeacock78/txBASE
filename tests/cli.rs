@@ -212,7 +212,7 @@ fn xbf_cli_import_report_and_export_a_dbf() {
     assert!(report.status.success());
     let report_json: serde_json::Value = serde_json::from_slice(&report.stdout).unwrap();
     assert_eq!(report_json["representable"], true);
-    assert_eq!(report_json["requires_schema_sidecar"], false);
+    assert_eq!(report_json["requires_schema_sidecar"], true);
 
     let export = run_cli(&[
         "xbf",
