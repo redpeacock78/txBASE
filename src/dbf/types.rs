@@ -1,5 +1,5 @@
 use super::schema_metadata::SchemaMetadata;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -105,11 +105,22 @@ pub struct RowVersion {
     pub values: Map<String, Value>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ForeignKeyAction {
+    #[default]
+    Restrict,
+    Cascade,
+    SetNull,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ForeignKey {
     pub(crate) local_fields: Vec<String>,
     pub(crate) parent_table: String,
     pub(crate) parent_fields: Vec<String>,
+    pub(crate) on_delete: ForeignKeyAction,
+    pub(crate) on_update: ForeignKeyAction,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

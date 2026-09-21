@@ -190,12 +190,17 @@ conflict detection.
 
 When a field sidecar declares `references: "TABLE.FIELD"`, catalog named-table mutations and
 catalog transactions validate non-null child values against active rows in the referenced table.
-They reject parent updates or logical deletes that would leave a child dangling; nulls are allowed
-and changes are not cascaded. Direct single-table routes cannot resolve these cross-table rules.
+Nulls are allowed. Optional `on_delete` and `on_update` actions default to `restrict`; `cascade`
+propagates a matching parent delete or key update, while `set_null` clears the local key fields.
+`set_null` requires nullable, non-primary local fields.
 
 A schema sidecar can also declare `constraints.foreign_keys` with equal-length child and parent
 field lists. The catalog compares the complete tuple, skips the check when any child value is null,
-and applies the same orphan-prevention rule to parent updates and logical deletes.
+and applies the same actions to parent updates and logical deletes.
+
+Cascades are applied recursively inside one catalog transaction and journal commit.
+Constraint failures or a non-converging cascade are rejected before any table is published.
+Direct single-table routes cannot resolve these cross-table rules.
 
 The catalog lock serializes catalog reads and writes, while per-table locks continue to protect
 direct DBF persistence.

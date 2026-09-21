@@ -77,7 +77,8 @@ pub(crate) use types::PreparedSnapshot;
 pub(super) use types::PreparedStorage;
 pub use types::{DbfError, DbfHeader, DbfRecord, DbfTable, FieldDescriptor, RowId, RowVersion};
 pub(crate) use types::{
-    MemoFile, MemoFormat, MemoSnapshot, MemoUpdate, NullFlagBits, PersistedState,
+    ForeignKey, ForeignKeyAction, MemoFile, MemoFormat, MemoSnapshot, MemoUpdate, NullFlagBits,
+    PersistedState,
 };
 #[cfg(test)]
 use wal::{

@@ -4,7 +4,7 @@ use super::mvcc::{Snapshot, TableSnapshot};
 use super::{Catalog, CatalogError, CatalogTransactionError};
 use crate::dbf::DbfTable;
 use crate::xbase::{OperationIr, OperationMethod};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -38,7 +38,16 @@ impl Catalog {
                 return Err(CatalogTransactionError::PreconditionFailed { tag });
             }
         }
-        let mut tables = BTreeMap::<String, DbfTable>::new();
+        let mut before = BTreeMap::<String, DbfTable>::new();
+        for entry in self.tables() {
+            before.insert(
+                entry.name().to_owned(),
+                self.open_table_unlocked(entry.name())
+                    .map_err(CatalogTransactionError::Catalog)?,
+            );
+        }
+        let mut tables = before.clone();
+        let mut touched = BTreeSet::new();
         for operation in operations {
             let Some((name, local_path)) = transaction_operation_path(&operation.path) else {
                 return Err(CatalogTransactionError::Invalid(format!(
@@ -63,15 +72,10 @@ impl Catalog {
                     "table not found: {name}"
                 )));
             }
-            if !tables.contains_key(name) {
-                let table = self
-                    .open_table_unlocked(name)
-                    .map_err(CatalogTransactionError::Catalog)?;
-                tables.insert(name.to_owned(), table);
-            }
             let table = tables
                 .get_mut(name)
                 .expect("catalog transaction table was inserted");
+            touched.insert(name.to_owned());
             table
                 .apply_operation(&OperationIr {
                     method: operation.method,
@@ -82,13 +86,21 @@ impl Catalog {
                     CatalogTransactionError::Invalid(format!("table {name}: {error}"))
                 })?;
         }
-        self.validate_replacements(&tables)
+        touched.extend(
+            super::constraint_actions::apply_actions(&before, &mut tables)
+                .map_err(CatalogTransactionError::Catalog)?,
+        );
+        let mut replacements = tables
+            .into_iter()
+            .filter(|(name, _)| touched.contains(name))
+            .collect::<BTreeMap<_, _>>();
+        self.validate_replacements(&replacements)
             .map_err(CatalogTransactionError::Catalog)?;
 
         let transaction_id =
             next_transaction_id_locked(&self.root).map_err(CatalogTransactionError::Catalog)?;
         let mut changes = Vec::new();
-        for (name, table) in &mut tables {
+        for (name, table) in &mut replacements {
             let path = self
                 .table_path(name)
                 .expect("catalog transaction table path exists");
@@ -136,7 +148,7 @@ impl Catalog {
         }
         let mut snapshot_tables = BTreeMap::new();
         for entry in self.tables() {
-            let table = match tables.get(entry.name()) {
+            let table = match replacements.get(entry.name()) {
                 Some(table) => table.clone(),
                 None => self
                     .open_table_unlocked(entry.name())

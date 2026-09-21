@@ -1,5 +1,5 @@
 use super::{CompositeForeignKeyMetadata, SchemaMetadata};
-use crate::dbf::types::ForeignKey;
+use crate::dbf::types::{ForeignKey, ForeignKeyAction};
 use crate::dbf::{DbfError, DbfRecord, FieldDescriptor};
 use crate::json_order::compare_scalar_values;
 use crate::query::matches_filter;
@@ -35,6 +35,29 @@ impl SchemaMetadata {
                 ));
             }
             field_primary |= metadata.primary;
+            if metadata.references.is_none()
+                && (metadata.on_delete.is_some() || metadata.on_update.is_some())
+            {
+                return Err(DbfError::Invalid(format!(
+                    "schema field {name} foreign-key actions require references"
+                )));
+            }
+            if let Some(action) = &metadata.on_delete {
+                self.validate_action_fields(
+                    action,
+                    std::slice::from_ref(name),
+                    fields,
+                    &format!("fields.{name}.on_delete"),
+                )?;
+            }
+            if let Some(action) = &metadata.on_update {
+                self.validate_action_fields(
+                    action,
+                    std::slice::from_ref(name),
+                    fields,
+                    &format!("fields.{name}.on_update"),
+                )?;
+            }
         }
         self.foreign_keys()?;
         for (index, key) in self.constraints.foreign_keys.iter().enumerate() {
@@ -43,6 +66,23 @@ impl SchemaMetadata {
                 fields,
                 &format!("constraints.foreign_keys[{index}]"),
             )?;
+            let path = format!("constraints.foreign_keys[{index}]");
+            if let Some(action) = &key.on_delete {
+                self.validate_action_fields(
+                    action,
+                    &key.fields,
+                    fields,
+                    &format!("{path}.on_delete"),
+                )?;
+            }
+            if let Some(action) = &key.on_update {
+                self.validate_action_fields(
+                    action,
+                    &key.fields,
+                    fields,
+                    &format!("{path}.on_update"),
+                )?;
+            }
         }
         if !self.constraints.primary.is_empty() {
             if field_primary {
@@ -66,9 +106,9 @@ impl SchemaMetadata {
                 metadata
                     .references
                     .as_deref()
-                    .map(|reference| (local_field, reference))
+                    .map(|reference| (local_field, reference, metadata))
             })
-            .map(|(local_field, reference)| {
+            .map(|(local_field, reference, metadata)| {
                 let mut parts = reference.split('.');
                 let table = parts.next().unwrap_or_default();
                 let field = parts.next().unwrap_or_default();
@@ -81,6 +121,8 @@ impl SchemaMetadata {
                     local_fields: vec![local_field.clone()],
                     parent_table: table.to_owned(),
                     parent_fields: vec![field.to_owned()],
+                    on_delete: metadata.on_delete.unwrap_or_default(),
+                    on_update: metadata.on_update.unwrap_or_default(),
                 })
             })
             .collect::<Result<Vec<_>, DbfError>>()?;
@@ -99,6 +141,8 @@ impl SchemaMetadata {
                 local_fields: key.fields.clone(),
                 parent_table: key.references.table.clone(),
                 parent_fields: key.references.fields.clone(),
+                on_delete: key.on_delete.unwrap_or_default(),
+                on_update: key.on_update.unwrap_or_default(),
             });
         }
         Ok(foreign_keys)
@@ -239,6 +283,58 @@ fn validate_composite_foreign_key(
     if key.fields.len() != key.references.fields.len() {
         return Err(DbfError::Invalid(format!(
             "{path}.fields and {path}.references.fields must have the same length"
+        )));
+    }
+    if let Some(action) = &key.on_delete {
+        // The shape and local-field checks above make this safe to inspect here.
+        validate_set_null_fields(action, &key.fields, path, fields)?;
+    }
+    if let Some(action) = &key.on_update {
+        validate_set_null_fields(action, &key.fields, path, fields)?;
+    }
+    Ok(())
+}
+
+impl SchemaMetadata {
+    fn validate_action_fields(
+        &self,
+        action: &ForeignKeyAction,
+        local_fields: &[String],
+        fields: &[FieldDescriptor],
+        path: &str,
+    ) -> Result<(), DbfError> {
+        validate_set_null_fields(action, local_fields, path, fields)?;
+        if matches!(action, ForeignKeyAction::SetNull)
+            && local_fields.iter().any(|field| {
+                self.fields
+                    .get(field)
+                    .is_some_and(|metadata| metadata.not_null || metadata.primary)
+                    || self.constraints.primary.iter().any(|name| name == field)
+            })
+        {
+            return Err(DbfError::Invalid(format!(
+                "{path} set_null requires nullable child fields"
+            )));
+        }
+        Ok(())
+    }
+}
+
+fn validate_set_null_fields(
+    action: &ForeignKeyAction,
+    local_fields: &[String],
+    path: &str,
+    fields: &[FieldDescriptor],
+) -> Result<(), DbfError> {
+    if matches!(action, ForeignKeyAction::SetNull)
+        && local_fields.iter().any(|name| {
+            !fields
+                .iter()
+                .any(|field| !field.is_system() && field.name == *name)
+        })
+    {
+        return Err(DbfError::Invalid(format!(
+            "{path} set_null references an unknown child field"
         )));
     }
     Ok(())

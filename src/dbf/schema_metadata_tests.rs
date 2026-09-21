@@ -348,6 +348,72 @@ fn composite_foreign_keys_validate_shape_and_local_fields() {
 }
 
 #[test]
+fn foreign_key_actions_require_references_and_nullable_children() {
+    let path = temporary_path();
+    cleanup(&path);
+    fs::write(&path, fixture()).unwrap();
+
+    let without_reference = serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {
+            "ID": {"on_delete": "cascade"}
+        }
+    }))
+    .unwrap();
+    fs::write(path.with_extension("txschema.json"), without_reference).unwrap();
+    let error = DbfTable::from_path(&path).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("foreign-key actions require references")
+    );
+
+    let non_nullable = serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {
+            "ID": {
+                "not_null": true,
+                "references": "users.ID",
+                "on_delete": "set_null"
+            }
+        }
+    }))
+    .unwrap();
+    fs::write(path.with_extension("txschema.json"), non_nullable).unwrap();
+    let error = DbfTable::from_path(&path).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("set_null requires nullable child fields")
+    );
+
+    let composite_primary = serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "constraints": {
+            "primary": ["ID", "AGE"],
+            "foreign_keys": [{
+                "fields": ["ID", "AGE"],
+                "references": {"table": "users", "fields": ["ID", "AGE"]},
+                "on_delete": "set_null"
+            }]
+        }
+    }))
+    .unwrap();
+    fs::write(path.with_extension("txschema.json"), composite_primary).unwrap();
+    let error = DbfTable::from_path(&path).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("set_null requires nullable child fields")
+    );
+
+    cleanup(&path);
+}
+
+#[test]
 fn rejects_existing_rows_that_break_schema_metadata() {
     let path = temporary_path();
     cleanup(&path);

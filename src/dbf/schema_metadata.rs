@@ -1,5 +1,6 @@
 use super::DbfError;
 use super::codec::canonical_encoding_name;
+use super::types::ForeignKeyAction;
 use crate::query::validate_filter;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -41,6 +42,10 @@ struct FieldMetadata {
     default: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     references: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    on_delete: Option<ForeignKeyAction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    on_update: Option<ForeignKeyAction>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -59,6 +64,10 @@ struct ConstraintMetadata {
 struct CompositeForeignKeyMetadata {
     fields: Vec<String>,
     references: ForeignKeyTargetMetadata,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    on_delete: Option<ForeignKeyAction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    on_update: Option<ForeignKeyAction>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -120,10 +129,12 @@ impl SchemaMetadata {
             || !self.constraints.primary.is_empty()
             || !self.constraints.unique.is_empty()
             || !self.constraints.foreign_keys.is_empty()
-            || self
-                .fields
-                .values()
-                .any(|field| field.default.is_some() || field.references.is_some())
+            || self.fields.values().any(|field| {
+                field.default.is_some()
+                    || field.references.is_some()
+                    || field.on_delete.is_some()
+                    || field.on_update.is_some()
+            })
         {
             return Err(DbfError::Invalid(
                 "schema metadata contains constraints not representable in XBF v1".into(),

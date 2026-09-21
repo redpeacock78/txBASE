@@ -48,7 +48,7 @@ The repository currently provides:
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
 - A bounded thread-backed snapshot stream whose producer applies channel backpressure and stops when its consumer is dropped.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950, plus the legacy dBASE aliases `0x13`, `0x4d`, `0x4e`, and `0x4f`.
-- An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, bounded table-level `checks` predicates, and catalog-scoped scalar and composite foreign-key validation.
+- An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, bounded table-level `checks` predicates, and catalog-scoped scalar and composite foreign-key validation with restrict, cascade, and set-null actions.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP, with normalized schema output.
 - A rebuildable external scalar and compound-key index sidecar with scalar and compound equality, compound equality-prefix, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
 - Durable table-local row history stored with MVCC prepare/commit records, epoch-separated physical row IDs, retained row reads, and baseline reconstruction during full-image GC.
@@ -62,7 +62,7 @@ The baseline intentionally does not include the following:
 - Independent row-retention policies, predicate locking, and long-lived snapshot transactions.
 - Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - `$project`, final `$sort`, `$skip`, and final `$limit` beyond the bounded aggregation contract.
-- Cascading, deferred, and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys.
+- Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export.
 - Cloud object-storage adapters and retention policy.
 - Distributed replication.
@@ -176,7 +176,8 @@ Full cost-based choice remains future work.
 
 The first constraint slice is an optional schema sidecar.
 It enforces one-field `primary`, `unique`, and `not_null` properties, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, plus bounded table-level query-predicate `checks` on active records and mutation candidates without changing legacy DBF bytes.
-Catalog-scoped scalar `references` and composite `constraints.foreign_keys` validation covers non-null child values and restricts parent updates or deletes; schema migration and broader cross-table constraints remain future work.
+Catalog-scoped scalar `references` and composite `constraints.foreign_keys` validation covers non-null child values.
+`restrict`, `cascade`, and `set_null` actions are applied recursively inside one catalog transaction and journal commit; schema migration, deferred checks, and broader cross-table constraints remain future work.
 
 ## 5. Phase 3: legacy international compatibility
 

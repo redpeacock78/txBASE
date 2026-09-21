@@ -6,6 +6,7 @@ use std::fmt::{self, Display, Formatter};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod constraint_actions;
 mod constraints;
 mod discovery;
 mod journal;
