@@ -61,6 +61,19 @@ if ! grep -Eq '"ID"[[:space:]]*:[[:space:]]*1' <<<"$snapshot" || grep -Eq '"ID"[
 fi
 
 step=$((step + 1))
+printf '[%02d] inspect and read a retained row version through the CLI\n' "$step" >&2
+row_history=$("$binary" mvcc row "$dbf" 1)
+if ! grep -Eq '"transaction_id"[[:space:]]*:[[:space:]]*1' <<<"$row_history"; then
+    printf 'row history did not contain transaction 1: %s\n' "$row_history" >&2
+    exit 1
+fi
+row_at=$("$binary" mvcc row-at "$dbf" 1 1 1)
+if ! grep -Eq '"deleted"[[:space:]]*:[[:space:]]*false' <<<"$row_at" || ! grep -Eq '"NAME"[[:space:]]*:[[:space:]]*"Alice"' <<<"$row_at"; then
+    printf 'row-at did not return Alice: %s\n' "$row_at" >&2
+    exit 1
+fi
+
+step=$((step + 1))
 printf '[%02d] garbage-collect old MVCC snapshots through the CLI\n' "$step" >&2
 retained=$("$binary" mvcc gc "$dbf" --keep 1)
 if ! grep -Fq '[2]' <<<"$retained" || grep -Fq '[1]' <<<"$retained"; then

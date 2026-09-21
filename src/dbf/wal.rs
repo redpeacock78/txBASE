@@ -14,8 +14,10 @@ pub(super) const MEMO_SNAPSHOT_MAGIC: &[u8; 4] = b"TXDM";
 pub(super) const DELTA_MAGIC: &[u8; 4] = b"TXDP";
 pub(super) const OPERATION_MAGIC: &[u8; 4] = b"TXOP";
 pub(super) const TRANSACTION_ID_MAGIC: &[u8; 4] = b"TXTI";
+pub(super) const LAYOUT_CHANGE_MAGIC: &[u8; 4] = b"TXPK";
 const OPERATION_VERSION: u8 = 1;
 const TRANSACTION_ID_VERSION: u8 = 1;
+const LAYOUT_CHANGE_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct RecoverySnapshot {
@@ -34,6 +36,30 @@ pub(super) fn transaction_id_payload(transaction_id: u64) -> Vec<u8> {
     payload.push(TRANSACTION_ID_VERSION);
     payload.extend_from_slice(&transaction_id.to_le_bytes());
     payload
+}
+
+pub(super) fn layout_change_payload() -> Vec<u8> {
+    let mut payload = LAYOUT_CHANGE_MAGIC.to_vec();
+    payload.push(LAYOUT_CHANGE_VERSION);
+    payload
+}
+
+pub(super) fn decode_layout_change_payload(payload: &[u8]) -> Result<Option<bool>, DbfError> {
+    let Some(body) = payload.strip_prefix(LAYOUT_CHANGE_MAGIC) else {
+        return Ok(None);
+    };
+    if body.len() != 1 {
+        return Err(DbfError::Invalid(
+            "layout-change WAL payload is truncated".into(),
+        ));
+    }
+    if body[0] != LAYOUT_CHANGE_VERSION {
+        return Err(DbfError::Invalid(format!(
+            "unknown layout-change WAL version {}",
+            body[0]
+        )));
+    }
+    Ok(Some(true))
 }
 
 pub(super) fn decode_transaction_id_payload(payload: &[u8]) -> Result<Option<u64>, DbfError> {
@@ -101,6 +127,9 @@ pub(super) fn decode_wal_payload(
         Ok(None)
     } else if payload.starts_with(TRANSACTION_ID_MAGIC) {
         decode_transaction_id_payload(payload)?;
+        Ok(None)
+    } else if payload.starts_with(LAYOUT_CHANGE_MAGIC) {
+        decode_layout_change_payload(payload)?;
         Ok(None)
     } else {
         decode_snapshot(payload)

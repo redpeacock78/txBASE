@@ -3,10 +3,12 @@ use std::path::PathBuf;
 
 use serde_json::json;
 use txbase::catalog::Catalog;
-use txbase::dbf::DbfTable;
+use txbase::dbf::{DbfTable, RowId};
 
 pub(crate) fn mvcc(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
-    let action = args.next().ok_or("mvcc requires list or read")?;
+    let action = args
+        .next()
+        .ok_or("mvcc requires list, read, row, row-at, or gc")?;
     match action.as_str() {
         "list" => {
             let path = PathBuf::from(args.next().ok_or("mvcc list requires a DBF path")?);
@@ -18,14 +20,52 @@ pub(crate) fn mvcc(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn
         }
         "read" => {
             let path = PathBuf::from(args.next().ok_or("mvcc read requires a DBF path")?);
-            let transaction_id = args
-                .next()
-                .ok_or("mvcc read requires a transaction ID")?
-                .parse::<u64>()
-                .map_err(|_| "mvcc transaction ID must be a positive integer")?;
+            let transaction_id = parse_positive_u64(
+                args.next().ok_or("mvcc read requires a transaction ID")?,
+                "mvcc transaction ID",
+            )?;
             reject_extra(args)?;
             let table = DbfTable::from_path_at(path, transaction_id)?;
             println!("{}", serde_json::to_string(&table.active_json())?);
+        }
+        "row" => {
+            let path = PathBuf::from(args.next().ok_or("mvcc row requires a DBF path")?);
+            let record_number = parse_positive_usize(
+                args.next().ok_or("mvcc row requires a record number")?,
+                "mvcc row record number",
+            )?;
+            reject_extra(args)?;
+            println!(
+                "{}",
+                serde_json::to_string(&DbfTable::mvcc_row_versions(path, record_number)?)?
+            );
+        }
+        "row-at" => {
+            let path = PathBuf::from(args.next().ok_or("mvcc row-at requires a DBF path")?);
+            let transaction_id = parse_positive_u64(
+                args.next().ok_or("mvcc row-at requires a transaction ID")?,
+                "mvcc row-at transaction ID",
+            )?;
+            let epoch = parse_positive_u64(
+                args.next().ok_or("mvcc row-at requires an epoch")?,
+                "mvcc row-at epoch",
+            )?;
+            let record_number = parse_positive_usize(
+                args.next().ok_or("mvcc row-at requires a record number")?,
+                "mvcc row-at record number",
+            )?;
+            reject_extra(args)?;
+            println!(
+                "{}",
+                serde_json::to_string(&DbfTable::mvcc_read_row(
+                    path,
+                    transaction_id,
+                    RowId {
+                        epoch,
+                        record_number,
+                    },
+                )?)?
+            );
         }
         "gc" => {
             let path = PathBuf::from(args.next().ok_or("mvcc gc requires a DBF path")?);
@@ -57,11 +97,11 @@ fn catalog_mvcc(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Er
                 args.next()
                     .ok_or("mvcc catalog read requires a directory")?,
             );
-            let transaction_id = args
-                .next()
-                .ok_or("mvcc catalog read requires a transaction ID")?
-                .parse::<u64>()
-                .map_err(|_| "mvcc transaction ID must be a positive integer")?;
+            let transaction_id = parse_positive_u64(
+                args.next()
+                    .ok_or("mvcc catalog read requires a transaction ID")?,
+                "mvcc catalog transaction ID",
+            )?;
             reject_extra(args)?;
             let catalog = Catalog::from_path_at(&path, transaction_id)?;
             let tables = catalog
@@ -118,4 +158,24 @@ fn parse_keep_last(
     }
     reject_extra(args)?;
     Ok(keep_last)
+}
+
+fn parse_positive_u64(value: String, label: &str) -> Result<u64, Box<dyn Error>> {
+    let parsed = value
+        .parse::<u64>()
+        .map_err(|_| format!("{label} must be a positive integer"))?;
+    if parsed == 0 {
+        return Err(format!("{label} must be a positive integer").into());
+    }
+    Ok(parsed)
+}
+
+fn parse_positive_usize(value: String, label: &str) -> Result<usize, Box<dyn Error>> {
+    let parsed = value
+        .parse::<usize>()
+        .map_err(|_| format!("{label} must be a positive integer"))?;
+    if parsed == 0 {
+        return Err(format!("{label} must be a positive integer").into());
+    }
+    Ok(parsed)
 }

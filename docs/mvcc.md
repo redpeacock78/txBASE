@@ -19,10 +19,18 @@ The CLI exposes the committed versions and reads one exact historical snapshot:
 ```bash
 txbase mvcc list path/to/users.dbf
 txbase mvcc read path/to/users.dbf 2
+txbase mvcc row path/to/users.dbf 1
+txbase mvcc row-at path/to/users.dbf 2 1 1
 txbase mvcc gc path/to/users.dbf --keep 5
 ```
 
 `mvcc read` returns active records as JSON.
+
+`mvcc row` lists retained versions for one physical DBF record number.
+
+`mvcc row-at` reads one retained row version by transaction ID, epoch, and physical record number.
+
+Both commands return JSON and use the same committed-history and GC boundaries as the Rust API.
 
 The requested ID must identify a committed snapshot.
 
@@ -58,6 +66,40 @@ txbase mvcc catalog gc path/to/database --keep 5
 
 All tables opened from one historical catalog have the same catalog commit ID and are read-only.
 
+### Row-level history
+
+The table MVCC sidecar also stores row changes inside the same prepare and commit records.
+
+The public API exposes the retained row history and one row at a committed table snapshot:
+
+```rust
+use txbase::dbf::{DbfTable, RowId};
+
+let history = DbfTable::mvcc_row_versions("users.dbf", 1)?;
+let row = DbfTable::mvcc_read_row(
+    "users.dbf",
+    2,
+    RowId {
+        epoch: history[0].id.epoch,
+        record_number: 1,
+    },
+)?;
+```
+
+The row number is the physical DBF record number, not a user-defined primary key.
+
+An epoch separates row identities after `PACK`, a schema or record-layout change, or another explicit layout reset.
+
+A logical delete is stored as a row version with `deleted: true`, so a historical read can distinguish a deleted row from a row that never existed in the retained history.
+
+Row changes are committed only when the containing full-image MVCC record has both its prepare and commit records.
+
+MVCC GC rebuilds the first retained snapshot as a row-history baseline and recomputes later deltas, so retained row reads do not depend on removed transactions.
+
+Catalog MVCC continues to store complete table images per catalog commit.
+
+Catalog historical reads therefore retain their existing commit-level contract and do not claim to expose table-local row history for a catalog snapshot.
+
 ## 2. Commit and recovery
 
 The writer holds the existing per-table lock.
@@ -79,9 +121,11 @@ image back. A committed journal reapplies both before the next catalog read retu
 The current implementation provides table-scoped snapshot visibility for single-table commits and
 commit-level snapshot visibility for catalog transactions.
 
-Catalog history stores a full image of every discovered table per catalog commit. It does not
-provide row-level version storage, retention or garbage collection, predicate locking, serializable
-conflict detection, or a long-lived transaction object across CLI calls.
+Catalog history stores a full image of every discovered table per catalog commit.
+
+Table-local row history now has count-based retention through the existing full-image MVCC GC.
+
+The implementation does not provide predicate locking, serializable conflict detection, or a long-lived transaction object across CLI calls.
 
 The catalog transaction ID identifies one consistent multi-table image.
 
@@ -99,9 +143,9 @@ The low-level transaction engine in `src/transaction/` remains a separate WAL tr
 
 The current retention boundary is count-based GC for full-image table and catalog snapshots.
 
-The next MVCC boundary is row-level version storage with row-level retention and garbage
-collection. That work must define schema-version selection, compaction, and the interaction
-between row history and the existing full-image catalog commits.
+The current row-level boundary is physical-record history with epoch-separated identities and count-based compaction.
+
+An independent row-retention policy, schema migration history, predicate locking, and long-lived snapshot transactions remain future work.
 
 Distributed snapshots, follower reads, and serializable conflict detection remain later work.
 

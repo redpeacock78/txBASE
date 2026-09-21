@@ -5,28 +5,36 @@ use super::{
     memo_format_for_version, sync_parent_directory, transaction_error,
 };
 use crate::transaction::{FileWal, Wal};
+use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::row_mvcc::{self, RowChange};
+
 const MVCC_MAGIC: &[u8; 4] = b"TXMV";
-const MVCC_VERSION: u8 = 1;
+const LEGACY_MVCC_VERSION: u8 = 1;
+const MVCC_VERSION: u8 = 2;
 const PREPARE_KIND: u8 = 0;
 const COMMIT_KIND: u8 = 1;
 const NO_MEMO: u8 = 0xff;
-const PREPARE_HEADER_SIZE: usize = 39;
+const LEGACY_PREPARE_HEADER_SIZE: usize = 39;
+const PREPARE_HEADER_SIZE: usize = 51;
+const ROW_CHANGE_HEADER_SIZE: usize = 25;
 const COMMIT_RECORD_SIZE: usize = 14;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct Snapshot {
-    pub(super) dbf: Vec<u8>,
-    pub(super) memo: Option<MemoSnapshot>,
-    pub(super) schema: Option<Vec<u8>>,
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Snapshot {
+    pub(crate) dbf: Vec<u8>,
+    pub(crate) memo: Option<MemoSnapshot>,
+    pub(crate) schema: Option<Vec<u8>>,
+    pub(crate) row_epoch: u64,
+    pub(crate) row_changes: Option<Vec<RowChange>>,
 }
 
 pub(crate) type CatalogSnapshotParts = (Vec<u8>, Option<(u8, Vec<u8>)>, Option<Vec<u8>>);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Record {
     Prepare {
         transaction_id: u64,
@@ -47,13 +55,25 @@ pub(super) fn prepare_snapshot(
     dbf: &[u8],
     memo: Option<&MemoSnapshot>,
     schema: Option<&[u8]>,
+    force_new_epoch: bool,
 ) -> Result<(), DbfError> {
-    let snapshot = Snapshot {
+    let records = read_records(path)?;
+    let previous = committed_snapshots(&records)?.into_iter().next_back();
+    let base = Snapshot {
         dbf: dbf.to_vec(),
         memo: memo.cloned(),
         schema: schema.map(ToOwned::to_owned),
+        row_epoch: previous
+            .as_ref()
+            .map(|(_, snapshot)| snapshot.row_epoch)
+            .unwrap_or(1),
+        row_changes: Some(Vec::new()),
     };
-    let records = read_records(path)?;
+    let snapshot = row_mvcc::changes_for_commit(
+        previous.as_ref().map(|(_, snapshot)| snapshot),
+        &base,
+        force_new_epoch,
+    )?;
     if let Some(existing) = prepared_snapshot(&records, transaction_id) {
         if existing != snapshot {
             return Err(DbfError::Invalid(format!(
@@ -71,8 +91,9 @@ pub(super) fn commit_snapshot(
     dbf: &[u8],
     memo: Option<&MemoSnapshot>,
     schema: Option<&[u8]>,
+    force_new_epoch: bool,
 ) -> Result<(), DbfError> {
-    prepare_snapshot(path, transaction_id, dbf, memo, schema)?;
+    prepare_snapshot(path, transaction_id, dbf, memo, schema, force_new_epoch)?;
     let records = read_records(path)?;
     if committed_snapshots(&records)?.contains_key(&transaction_id) {
         return Ok(());
@@ -85,13 +106,21 @@ pub(super) fn commit_recovered_snapshot(
     transaction_id: u64,
     dbf: &[u8],
     memo: Option<&MemoSnapshot>,
+    force_new_epoch: bool,
 ) -> Result<(), DbfError> {
     let memo = match memo {
         Some(memo) => Some(memo.clone()),
         None => current_memo_snapshot(path, dbf)?,
     };
     let schema = schema_metadata_bytes(path)?;
-    commit_snapshot(path, transaction_id, dbf, memo.as_ref(), schema.as_deref())
+    commit_snapshot(
+        path,
+        transaction_id,
+        dbf,
+        memo.as_ref(),
+        schema.as_deref(),
+        force_new_epoch,
+    )
 }
 
 pub(super) fn versions(path: &Path) -> Result<Vec<u64>, DbfError> {
@@ -117,6 +146,7 @@ pub(super) fn gc(path: &Path, keep_last: usize) -> Result<Vec<u64>, DbfError> {
         .take(keep_last)
         .collect::<Vec<_>>();
     retained.reverse();
+    row_mvcc::compact_snapshots(&mut retained)?;
     let retained_ids = retained
         .iter()
         .map(|(transaction_id, _)| *transaction_id)
@@ -190,6 +220,8 @@ impl DbfTable {
             dbf: dbf.to_vec(),
             memo,
             schema: schema.map(ToOwned::to_owned),
+            row_epoch: 1,
+            row_changes: None,
         })?;
         table.historical_snapshot = true;
         Ok(table)
@@ -201,6 +233,31 @@ impl DbfTable {
         Self::recover_wal_with_encoding(path, None)?;
         let _ = super::schema_export::recover_schema_export_locked(path)?;
         versions(path)
+    }
+
+    pub fn mvcc_row_versions(
+        path: impl AsRef<Path>,
+        record_number: usize,
+    ) -> Result<Vec<super::RowVersion>, DbfError> {
+        let path = path.as_ref();
+        let _lock = TableLock::acquire(path)?;
+        Self::recover_wal_with_encoding(path, None)?;
+        let _ = super::schema_export::recover_schema_export_locked(path)?;
+        let snapshots = committed_snapshots(&read_records(path)?)?;
+        row_mvcc::row_history(&snapshots, record_number)
+    }
+
+    pub fn mvcc_read_row(
+        path: impl AsRef<Path>,
+        transaction_id: u64,
+        id: super::RowId,
+    ) -> Result<Option<super::RowVersion>, DbfError> {
+        let path = path.as_ref();
+        let _lock = TableLock::acquire(path)?;
+        Self::recover_wal_with_encoding(path, None)?;
+        let _ = super::schema_export::recover_schema_export_locked(path)?;
+        let snapshots = committed_snapshots(&read_records(path)?)?;
+        row_mvcc::row_at(&snapshots, transaction_id, id)
     }
 
     pub fn gc_mvcc(path: impl AsRef<Path>, keep_last: usize) -> Result<Vec<u64>, DbfError> {
@@ -231,7 +288,7 @@ impl DbfTable {
         Ok(table)
     }
 
-    fn from_snapshot(snapshot: Snapshot) -> Result<Self, DbfError> {
+    pub(crate) fn from_snapshot(snapshot: Snapshot) -> Result<Self, DbfError> {
         let schema = snapshot
             .schema
             .as_deref()
@@ -344,8 +401,13 @@ fn encode_prepare(transaction_id: u64, snapshot: &Snapshot) -> Result<Vec<u8>, D
     let schema_bytes = snapshot.schema.as_deref().unwrap_or_default();
     let schema_length = u64::try_from(schema_bytes.len())
         .map_err(|_| DbfError::Invalid("MVCC schema snapshot length overflows u64".into()))?;
+    let row_epoch = snapshot.row_epoch.max(1);
+    let row_changes = snapshot.row_changes.as_deref().unwrap_or_default();
+    let row_count = u32::try_from(row_changes.len())
+        .map_err(|_| DbfError::Invalid("MVCC row-change count overflows u32".into()))?;
     let mut payload = Vec::with_capacity(
         PREPARE_HEADER_SIZE
+            .saturating_add(row_changes.len().saturating_mul(ROW_CHANGE_HEADER_SIZE))
             .saturating_add(snapshot.dbf.len())
             .saturating_add(memo_bytes.len())
             .saturating_add(schema_bytes.len()),
@@ -357,6 +419,29 @@ fn encode_prepare(transaction_id: u64, snapshot: &Snapshot) -> Result<Vec<u8>, D
     payload.push(memo_tag);
     payload.extend_from_slice(&memo_length.to_le_bytes());
     payload.extend_from_slice(&schema_length.to_le_bytes());
+    payload.extend_from_slice(&row_epoch.to_le_bytes());
+    payload.extend_from_slice(&row_count.to_le_bytes());
+    for change in row_changes {
+        if change.epoch == 0 || change.record_number == 0 {
+            return Err(DbfError::Invalid(
+                "MVCC row changes require positive epoch and record number".into(),
+            ));
+        }
+        let values = serde_json::to_vec(&change.values).map_err(|error| {
+            DbfError::Invalid(format!("MVCC row-change encoding failed: {error}"))
+        })?;
+        let values_length = u64::try_from(values.len())
+            .map_err(|_| DbfError::Invalid("MVCC row values length overflows u64".into()))?;
+        payload.extend_from_slice(&change.epoch.to_le_bytes());
+        payload.extend_from_slice(
+            &u64::try_from(change.record_number)
+                .map_err(|_| DbfError::Invalid("MVCC record number overflows u64".into()))?
+                .to_le_bytes(),
+        );
+        payload.push(u8::from(change.deleted));
+        payload.extend_from_slice(&values_length.to_le_bytes());
+        payload.extend_from_slice(&values);
+    }
     payload.extend_from_slice(&snapshot.dbf);
     payload.extend_from_slice(memo_bytes);
     payload.extend_from_slice(schema_bytes);
@@ -378,7 +463,7 @@ fn decode_record(payload: &[u8]) -> Result<Record, DbfError> {
     let version = *payload
         .get(4)
         .ok_or_else(|| DbfError::Invalid("MVCC record header is truncated".into()))?;
-    if version != MVCC_VERSION {
+    if !matches!(version, LEGACY_MVCC_VERSION | MVCC_VERSION) {
         return Err(DbfError::Invalid(format!(
             "unknown MVCC record version {version}"
         )));
@@ -401,24 +486,95 @@ fn decode_record(payload: &[u8]) -> Result<Record, DbfError> {
             }
             Ok(Record::Commit { transaction_id })
         }
-        PREPARE_KIND => decode_prepare(payload, transaction_id),
+        PREPARE_KIND => decode_prepare(payload, transaction_id, version),
         _ => Err(DbfError::Invalid(format!(
             "unknown MVCC record kind {kind}"
         ))),
     }
 }
 
-fn decode_prepare(payload: &[u8], transaction_id: u64) -> Result<Record, DbfError> {
-    if payload.len() < PREPARE_HEADER_SIZE {
+fn decode_prepare(payload: &[u8], transaction_id: u64, version: u8) -> Result<Record, DbfError> {
+    let header_size = if version == LEGACY_MVCC_VERSION {
+        LEGACY_PREPARE_HEADER_SIZE
+    } else {
+        PREPARE_HEADER_SIZE
+    };
+    if payload.len() < header_size {
         return Err(DbfError::Invalid(
             "MVCC prepare record header is truncated".into(),
         ));
     }
+    let (row_epoch, row_changes, data_start) = if version == LEGACY_MVCC_VERSION {
+        (0, None, LEGACY_PREPARE_HEADER_SIZE)
+    } else {
+        let row_epoch = read_u64(payload, LEGACY_PREPARE_HEADER_SIZE)?;
+        if row_epoch == 0 {
+            return Err(DbfError::Invalid("MVCC row epoch must be positive".into()));
+        }
+        let row_count = usize::try_from(u32::from_le_bytes(
+            payload[LEGACY_PREPARE_HEADER_SIZE + 8..PREPARE_HEADER_SIZE]
+                .try_into()
+                .expect("MVCC row-change count is fixed"),
+        ))
+        .map_err(|_| DbfError::Invalid("MVCC row-change count overflows usize".into()))?;
+        let remaining = payload.len().saturating_sub(PREPARE_HEADER_SIZE);
+        if row_count > remaining / ROW_CHANGE_HEADER_SIZE {
+            return Err(DbfError::Invalid(
+                "MVCC row-change count is unreasonable".into(),
+            ));
+        }
+        let mut cursor = PREPARE_HEADER_SIZE;
+        let mut changes = Vec::with_capacity(row_count);
+        for _ in 0..row_count {
+            let epoch = read_u64(payload, cursor)?;
+            let record_number = usize_from_u64(read_u64(payload, cursor + 8)?, "record number")?;
+            if epoch == 0 || record_number == 0 {
+                return Err(DbfError::Invalid(
+                    "MVCC row change has a non-positive identity".into(),
+                ));
+            }
+            let deleted = match payload.get(cursor + 16).copied() {
+                Some(0) => false,
+                Some(1) => true,
+                Some(value) => {
+                    return Err(DbfError::Invalid(format!(
+                        "MVCC row change has an invalid deletion flag {value}"
+                    )));
+                }
+                None => {
+                    return Err(DbfError::Invalid(
+                        "MVCC row-change header is truncated".into(),
+                    ));
+                }
+            };
+            let values_length = usize_from_u64(read_u64(payload, cursor + 17)?, "row values")?;
+            let values_start = cursor
+                .checked_add(ROW_CHANGE_HEADER_SIZE)
+                .ok_or_else(|| DbfError::Invalid("MVCC row-change offset overflows".into()))?;
+            let values_end = values_start
+                .checked_add(values_length)
+                .ok_or_else(|| DbfError::Invalid("MVCC row values length overflows".into()))?;
+            let values: Map<String, Value> = serde_json::from_slice(
+                payload
+                    .get(values_start..values_end)
+                    .ok_or_else(|| DbfError::Invalid("MVCC row values are truncated".into()))?,
+            )
+            .map_err(|error| DbfError::Invalid(format!("invalid MVCC row values: {error}")))?;
+            changes.push(RowChange {
+                epoch,
+                record_number,
+                deleted,
+                values,
+            });
+            cursor = values_end;
+        }
+        (row_epoch, Some(changes), cursor)
+    };
     let dbf_length = usize_from_u64(read_u64(payload, 14)?, "DBF")?;
     let memo_tag = payload[22];
     let memo_length = usize_from_u64(read_u64(payload, 23)?, "memo")?;
     let schema_length = usize_from_u64(read_u64(payload, 31)?, "schema")?;
-    let data_end = PREPARE_HEADER_SIZE
+    let data_end = data_start
         .checked_add(dbf_length)
         .and_then(|end| end.checked_add(memo_length))
         .and_then(|end| end.checked_add(schema_length))
@@ -428,7 +584,7 @@ fn decode_prepare(payload: &[u8], transaction_id: u64) -> Result<Record, DbfErro
             "MVCC prepare lengths do not match the record".into(),
         ));
     }
-    let dbf_end = PREPARE_HEADER_SIZE + dbf_length;
+    let dbf_end = data_start + dbf_length;
     let memo_end = dbf_end + memo_length;
     let memo = if memo_tag == NO_MEMO {
         if memo_length != 0 {
@@ -447,9 +603,11 @@ fn decode_prepare(payload: &[u8], transaction_id: u64) -> Result<Record, DbfErro
     Ok(Record::Prepare {
         transaction_id,
         snapshot: Snapshot {
-            dbf: payload[PREPARE_HEADER_SIZE..dbf_end].to_vec(),
+            dbf: payload[data_start..dbf_end].to_vec(),
             memo,
             schema,
+            row_epoch,
+            row_changes,
         },
     })
 }

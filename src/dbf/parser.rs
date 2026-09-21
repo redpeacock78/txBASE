@@ -230,6 +230,7 @@ impl DbfTable {
             transaction_id: None,
             source: None,
             historical_snapshot: false,
+            layout_changed: false,
         })
     }
 }

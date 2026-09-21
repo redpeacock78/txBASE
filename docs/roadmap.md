@@ -36,7 +36,7 @@ The repository currently provides:
 - Schema introspection, DBF verification, sidecar-aware backup and restore, and validated DBF plus memo-sidecar copy commands.
 - A directory catalog that discovers direct-child DBF tables, loads named tables, and verifies all discovered tables.
 - A durable catalog-journal commit ID for multi-table mutation transactions.
-- Persistent table-scoped MVCC snapshots for single-table mutations, with `mvcc list` and `mvcc read` CLI commands.
+- Persistent table-scoped MVCC snapshots for single-table mutations, with `mvcc list`, `mvcc read`, `mvcc row`, and `mvcc row-at` CLI commands.
 - Catalog-wide commit-level MVCC snapshots for all discovered tables, with `Catalog::from_path_at` and `mvcc catalog` CLI commands.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
@@ -51,6 +51,7 @@ The repository currently provides:
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, bounded table-level `checks` predicates, and catalog-scoped `references` validation.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP, with normalized schema output.
 - A rebuildable external scalar and compound-key index sidecar with scalar and compound equality, compound equality-prefix, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
+- Durable table-local row history stored with MVCC prepare/commit records, epoch-separated physical row IDs, retained row reads, and baseline reconstruction during full-image GC.
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection, index-sidecar recovery, and DBF-read recovery.
 
 The baseline intentionally does not include the following:
@@ -58,7 +59,7 @@ The baseline intentionally does not include the following:
 - A full cost-based index or join model.
 - Full index-aware or cost-based merge join strategies.
 - Runtime-specific async traits.
-- Row-level version storage and row-level retention policies.
+- Independent row-retention policies, predicate locking, and long-lived snapshot transactions.
 - Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - `$project`, final `$sort`, `$skip`, and final `$limit` beyond the bounded aggregation contract.
 - Composite cross-table constraints beyond catalog-scoped `references`.
@@ -99,7 +100,7 @@ table at each successful catalog transaction.
 
 The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact scalar and compound equality, compound equality-prefix and range candidate lookup, equality-prefix compound range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support a full cost model, collation-aware index keys, or row-level historical versions.
+It does not yet support a full cost model, collation-aware index keys, or locale-aware CJK collation.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
@@ -123,8 +124,10 @@ Runtime-specific async traits remain a later contract.
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 
 A catalog-wide commit-level snapshot is implemented with commit, rollback, crash recovery, and
-visibility rules in the shared catalog journal boundary. Row-level history is not complete until
-row-level retention and garbage-collection rules are specified and tested.
+visibility rules in the shared catalog journal boundary. Table-local row history is implemented
+inside the table MVCC prepare/commit records, with epoch-separated physical row IDs and baseline
+reconstruction during full-image GC. Independent row retention and serializable transactions
+remain future work.
 The current full-image table and catalog histories have an explicit count-based GC boundary.
 
 The single-table transaction slice covers one DBF table through one snapshot/WAL persistence path and retains committed table snapshots in a `*.txbase.mvcc` sidecar.
@@ -283,7 +286,7 @@ Distributed behavior comes after the local and edge contracts are stable.
 
 ### Candidate scope
 
-- Row-level version retention and garbage collection.
+- Independent row-retention policies and long-lived snapshot transactions.
 - Change data capture.
 - Persistent WAL history.
 - Replication.
@@ -326,6 +329,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Full cost-based planners, joins, aggregation, row-level MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
+- Full cost-based planners, joins, aggregation, serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, and bounded cost choice based on record counts, index traversal, and sort work are implemented, while a full I/O-aware model and cross-table index definitions or index-aware planning remain future work.

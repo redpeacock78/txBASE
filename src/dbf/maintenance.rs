@@ -213,6 +213,7 @@ impl DbfTable {
         self.header.record_count = count;
         self.records = records;
         self.stored_values = stored_values;
+        self.layout_changed = true;
         Ok(())
     }
 

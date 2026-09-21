@@ -1,5 +1,5 @@
 use super::schema_metadata::schema_metadata_bytes;
-use super::wal::transaction_id_payload;
+use super::wal::{layout_change_payload, transaction_id_payload};
 use super::*;
 
 const TRANSACTION_STATE_MAGIC: &[u8; 4] = b"TXTS";
@@ -195,6 +195,11 @@ impl DbfTable {
         .map_err(index_error)?;
         let wal_path = path.with_extension("txbase.wal");
         let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
+        if self.layout_changed {
+            wal.append(&layout_change_payload())
+                .map_err(transaction_error)?;
+            wal.sync().map_err(transaction_error)?;
+        }
         if let Some(operation) = operation {
             wal.append(&operation_payload(operation)?)
                 .map_err(transaction_error)?;
@@ -215,6 +220,7 @@ impl DbfTable {
             &prepared.bytes,
             history_memo.as_ref(),
             schema_bytes.as_deref(),
+            self.layout_changed,
         )?;
         if let Some(memo) = &memo_snapshot {
             let memo_path = find_memo_path(path)
@@ -235,6 +241,7 @@ impl DbfTable {
             &prepared.bytes,
             history_memo.as_ref(),
             schema_bytes.as_deref(),
+            self.layout_changed,
         )?;
         wal.clear().map_err(transaction_error)?;
         drop(wal);
@@ -246,6 +253,7 @@ impl DbfTable {
             schema: schema_metadata_bytes(path)?,
             transaction_id: Some(transaction_id),
         });
+        prepared.layout_changed = false;
         *self = prepared;
         Ok(())
     }

@@ -1,4 +1,5 @@
 use super::schema_metadata::SchemaMetadata;
+use serde::Serialize;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -90,6 +91,20 @@ pub struct DbfRecord {
     pub values: Map<String, Value>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub struct RowId {
+    pub epoch: u64,
+    pub record_number: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RowVersion {
+    pub id: RowId,
+    pub transaction_id: u64,
+    pub deleted: bool,
+    pub values: Map<String, Value>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoFormat {
     Dbase3,
@@ -170,6 +185,7 @@ pub struct DbfTable {
     pub(super) transaction_id: Option<u64>,
     pub(super) source: Option<PersistedState>,
     pub(super) historical_snapshot: bool,
+    pub(super) layout_changed: bool,
 }
 
 pub(crate) struct PreparedSnapshot {

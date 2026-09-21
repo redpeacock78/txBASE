@@ -39,6 +39,7 @@ mod persistence;
 mod recovery;
 #[cfg(test)]
 mod recovery_fault_tests;
+mod row_mvcc;
 mod schema;
 mod schema_export;
 #[cfg(test)]
@@ -74,7 +75,7 @@ use memo::{
 };
 pub(crate) use types::PreparedSnapshot;
 pub(super) use types::PreparedStorage;
-pub use types::{DbfError, DbfHeader, DbfRecord, DbfTable, FieldDescriptor};
+pub use types::{DbfError, DbfHeader, DbfRecord, DbfTable, FieldDescriptor, RowId, RowVersion};
 pub(crate) use types::{
     MemoFile, MemoFormat, MemoSnapshot, MemoUpdate, NullFlagBits, PersistedState,
 };

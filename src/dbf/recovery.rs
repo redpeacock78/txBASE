@@ -1,8 +1,9 @@
 use super::persistence::{next_transaction_id, read_transaction_state, write_transaction_state};
 use super::schema_metadata::read_schema_metadata;
 use super::wal::{
-    decode_operation_payload, decode_transaction_id_payload, decode_wal_payload, delta_payload,
-    memo_snapshot_payload, snapshot_payload, transaction_id_payload,
+    decode_layout_change_payload, decode_operation_payload, decode_transaction_id_payload,
+    decode_wal_payload, delta_payload, memo_snapshot_payload, snapshot_payload,
+    transaction_id_payload,
 };
 use super::{
     DbfError, DbfTable, MemoFile, PersistedState, find_memo_path, save_bytes_to, transaction_error,
@@ -92,6 +93,13 @@ impl DbfTable {
         }
         let index_payload = find_index_payload(&wal)?;
         let transaction_id = find_transaction_id(&wal)?;
+        let force_new_epoch = wal
+            .records()
+            .iter()
+            .try_fold(false, |found, (_, payload)| {
+                let marker = decode_layout_change_payload(payload)?.unwrap_or(false);
+                Ok::<bool, DbfError>(found || marker)
+            })?;
         let snapshot =
             wal.records().iter().rev().find_map(|(_, payload)| {
                 match decode_wal_payload(path, payload) {
@@ -120,6 +128,7 @@ impl DbfTable {
                     transaction_id,
                     &snapshot.dbf,
                     snapshot.memo.as_ref(),
+                    force_new_epoch,
                 )?;
             }
             finish_recovery(wal, &wal_path);
@@ -187,6 +196,7 @@ impl DbfTable {
             transaction_id,
             &table.bytes,
             memo_snapshot.as_ref(),
+            force_new_epoch,
         )?;
         finish_recovery(wal, &wal_path);
         Ok(true)
