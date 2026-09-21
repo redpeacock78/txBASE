@@ -154,6 +154,61 @@ fn commits_named_operations_across_tables() {
 }
 
 #[test]
+fn catalog_transaction_refreshes_indexes_for_each_changed_table() {
+    let root = temporary_catalog();
+    let users = root.join("users.dbf");
+    let posts = root.join("posts.dbf");
+    fs::write(&users, fixture()).unwrap();
+    fs::write(&posts, fixture()).unwrap();
+    for path in [&users, &posts] {
+        crate::index::IndexFile::build(
+            path,
+            vec![crate::index::IndexDefinition::for_field("NAME")],
+        )
+        .unwrap()
+        .save(path)
+        .unwrap();
+    }
+    let catalog = Catalog::from_path(&root).unwrap();
+
+    catalog
+        .commit_operations_with_preconditions(
+            &[
+                OperationIr {
+                    method: OperationMethod::Patch,
+                    path: "/users/records/1".into(),
+                    body: Some(json!({"NAME": "Users changed"})),
+                },
+                OperationIr {
+                    method: OperationMethod::Patch,
+                    path: "/posts/records/1".into(),
+                    body: Some(json!({"NAME": "Posts changed"})),
+                },
+            ],
+            None,
+            None,
+        )
+        .unwrap();
+
+    assert!(
+        crate::index::IndexFile::load(&users)
+            .unwrap()
+            .lookup_eq("NAME", &json!("Users changed"))
+            .unwrap()
+            .contains(&1)
+    );
+    assert!(
+        crate::index::IndexFile::load(&posts)
+            .unwrap()
+            .lookup_eq("NAME", &json!("Posts changed"))
+            .unwrap()
+            .contains(&1)
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn rejects_a_failed_named_transaction_without_persisting_earlier_tables() {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();
