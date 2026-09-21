@@ -1,5 +1,19 @@
 use std::fs;
-use std::process::Command;
+use std::process::{Command, Output};
+
+fn users_fixture() -> Vec<u8> {
+    include_str!("fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|byte| u8::from_str_radix(byte, 16).unwrap())
+        .collect()
+}
+
+fn run_cli(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_txbase"))
+        .args(args)
+        .output()
+        .unwrap()
+}
 
 #[test]
 fn wal_inspect_cli_reports_a_torn_tail_without_mutating_the_file() {
@@ -13,10 +27,7 @@ fn wal_inspect_cli_reports_a_torn_tail_without_mutating_the_file() {
     bytes.extend_from_slice(b"TXWL");
     fs::write(&path, &bytes).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_txbase"))
-        .args(["wal", "inspect", path.to_str().unwrap()])
-        .output()
-        .unwrap();
+    let output = run_cli(&["wal", "inspect", path.to_str().unwrap()]);
     assert!(
         output.status.success(),
         "wal inspect failed: {}",
@@ -61,10 +72,7 @@ fn backup_and_restore_cli_copy_a_dbf() {
         let _ = fs::remove_file(path);
     }
 
-    let fixture = include_str!("fixtures/users.dbf.hex")
-        .split_whitespace()
-        .map(|byte| u8::from_str_radix(byte, 16).unwrap())
-        .collect::<Vec<_>>();
+    let fixture = users_fixture();
     fs::write(&source, &fixture).unwrap();
     fs::write(&source_memo, b"source memo").unwrap();
 
@@ -72,14 +80,11 @@ fn backup_and_restore_cli_copy_a_dbf() {
         ("backup", &source, &backup),
         ("restore", &backup, &restored),
     ] {
-        let output = Command::new(env!("CARGO_BIN_EXE_txbase"))
-            .args([
-                operation,
-                input.to_str().unwrap(),
-                output_path.to_str().unwrap(),
-            ])
-            .output()
-            .unwrap();
+        let output = run_cli(&[
+            operation,
+            input.to_str().unwrap(),
+            output_path.to_str().unwrap(),
+        ]);
         assert!(
             output.status.success(),
             "{operation} failed: {}",
@@ -116,60 +121,39 @@ fn dbf_maintenance_cli_commands_operate_on_a_dbf() {
         let _ = fs::remove_file(path.with_extension("txbase.lock"));
     }
 
-    let fixture = include_str!("fixtures/users.dbf.hex")
-        .split_whitespace()
-        .map(|byte| u8::from_str_radix(byte, 16).unwrap())
-        .collect::<Vec<_>>();
+    let fixture = users_fixture();
     fs::write(&recall_path, &fixture).unwrap();
     fs::write(&pack_path, &fixture).unwrap();
 
-    let schema = Command::new(env!("CARGO_BIN_EXE_txbase"))
-        .args(["schema", recall_path.to_str().unwrap()])
-        .output()
-        .unwrap();
+    let schema = run_cli(&["schema", recall_path.to_str().unwrap()]);
     assert!(schema.status.success());
     let schema_json: serde_json::Value = serde_json::from_slice(&schema.stdout).unwrap();
     assert_eq!(schema_json["format"], "dbf");
     assert_eq!(schema_json["record_count"], 2);
 
-    let verify = Command::new(env!("CARGO_BIN_EXE_txbase"))
-        .args(["verify", recall_path.to_str().unwrap()])
-        .output()
-        .unwrap();
+    let verify = run_cli(&["verify", recall_path.to_str().unwrap()]);
     assert!(verify.status.success());
     let verify_json: serde_json::Value = serde_json::from_slice(&verify.stdout).unwrap();
     assert_eq!(verify_json["valid"], true);
 
-    let recall = Command::new(env!("CARGO_BIN_EXE_txbase"))
-        .args(["recall", recall_path.to_str().unwrap(), "2"])
-        .output()
-        .unwrap();
+    let recall = run_cli(&["recall", recall_path.to_str().unwrap(), "2"]);
     assert!(
         recall.status.success(),
         "recall failed: {}",
         String::from_utf8_lossy(&recall.stderr)
     );
-    let recalled = Command::new(env!("CARGO_BIN_EXE_txbase"))
-        .arg(recall_path.to_str().unwrap())
-        .output()
-        .unwrap();
+    let recalled = run_cli(&[recall_path.to_str().unwrap()]);
     assert!(recalled.status.success());
     let recalled_json: serde_json::Value = serde_json::from_slice(&recalled.stdout).unwrap();
     assert_eq!(recalled_json.as_array().unwrap().len(), 2);
 
-    let pack = Command::new(env!("CARGO_BIN_EXE_txbase"))
-        .args(["pack", pack_path.to_str().unwrap()])
-        .output()
-        .unwrap();
+    let pack = run_cli(&["pack", pack_path.to_str().unwrap()]);
     assert!(
         pack.status.success(),
         "pack failed: {}",
         String::from_utf8_lossy(&pack.stderr)
     );
-    let packed = Command::new(env!("CARGO_BIN_EXE_txbase"))
-        .arg(pack_path.to_str().unwrap())
-        .output()
-        .unwrap();
+    let packed = run_cli(&[pack_path.to_str().unwrap()]);
     assert!(packed.status.success());
     let packed_json: serde_json::Value = serde_json::from_slice(&packed.stdout).unwrap();
     assert_eq!(packed_json.as_array().unwrap().len(), 1);
@@ -178,6 +162,110 @@ fn dbf_maintenance_cli_commands_operate_on_a_dbf() {
         for extension in ["txbase.state", "txbase.wal", "txbase.lock"] {
             let _ = fs::remove_file(path.with_extension(extension));
         }
+        fs::remove_file(path).unwrap();
+    }
+}
+
+#[test]
+fn xbf_cli_import_report_and_export_a_dbf() {
+    let source =
+        std::env::temp_dir().join(format!("txbase-cli-xbf-source-{}.dbf", std::process::id()));
+    let snapshot = std::env::temp_dir().join(format!(
+        "txbase-cli-xbf-snapshot-{}.xbf",
+        std::process::id()
+    ));
+    let exported = std::env::temp_dir().join(format!(
+        "txbase-cli-xbf-exported-{}.dbf",
+        std::process::id()
+    ));
+    let schema_exported = std::env::temp_dir().join(format!(
+        "txbase-cli-xbf-schema-exported-{}.dbf",
+        std::process::id()
+    ));
+    for path in [&source, &snapshot, &exported, &schema_exported] {
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(path.with_extension("xwl"));
+        let _ = fs::remove_file(path.with_extension("txschema.json"));
+        let _ = fs::remove_file(path.with_extension("txbase.state"));
+        let _ = fs::remove_file(path.with_extension("txbase.wal"));
+        let _ = fs::remove_file(path.with_extension("txbase.lock"));
+        let _ = fs::remove_file(path.with_extension("txidx"));
+        let _ = fs::remove_dir_all(path.with_extension("txbase-xbf-export"));
+    }
+
+    let fixture = users_fixture();
+    fs::write(&source, &fixture).unwrap();
+
+    let import = run_cli(&[
+        "xbf",
+        "import",
+        source.to_str().unwrap(),
+        snapshot.to_str().unwrap(),
+    ]);
+    assert!(
+        import.status.success(),
+        "xbf import failed: {}",
+        String::from_utf8_lossy(&import.stderr)
+    );
+
+    let report = run_cli(&["xbf", "report", snapshot.to_str().unwrap()]);
+    assert!(report.status.success());
+    let report_json: serde_json::Value = serde_json::from_slice(&report.stdout).unwrap();
+    assert_eq!(report_json["representable"], true);
+    assert_eq!(report_json["requires_schema_sidecar"], false);
+
+    let export = run_cli(&[
+        "xbf",
+        "export",
+        snapshot.to_str().unwrap(),
+        exported.to_str().unwrap(),
+    ]);
+    assert!(
+        export.status.success(),
+        "xbf export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+
+    let schema_export = run_cli(&[
+        "xbf",
+        "export",
+        snapshot.to_str().unwrap(),
+        schema_exported.to_str().unwrap(),
+        "--schema",
+    ]);
+    assert!(
+        schema_export.status.success(),
+        "schema-preserving XBF export failed: {}",
+        String::from_utf8_lossy(&schema_export.stderr)
+    );
+    assert!(schema_exported.with_extension("txschema.json").exists());
+
+    let source_table = txbase::dbf::DbfTable::from_path(&source).unwrap();
+    assert_eq!(
+        txbase::dbf::DbfTable::from_path(&exported)
+            .unwrap()
+            .active_json(),
+        source_table.active_json()
+    );
+    assert_eq!(
+        txbase::dbf::DbfTable::from_path(&schema_exported)
+            .unwrap()
+            .active_json(),
+        source_table.active_json()
+    );
+
+    for path in [source, snapshot, exported, schema_exported] {
+        for extension in [
+            "xwl",
+            "txschema.json",
+            "txbase.state",
+            "txbase.wal",
+            "txbase.lock",
+            "txidx",
+        ] {
+            let _ = fs::remove_file(path.with_extension(extension));
+        }
+        let _ = fs::remove_dir_all(path.with_extension("txbase-xbf-export"));
         fs::remove_file(path).unwrap();
     }
 }
