@@ -86,6 +86,16 @@ Object members are merged recursively, while `null` removes a member and arrays 
 
 DBF records have a fixed scalar schema, so removing a known field is persisted as its normalized `null` value, and an object value for a scalar field is rejected.
 
+It also accepts `application/json-patch+json` for record `PATCH` requests.
+
+The JSON Patch document is an array of at most 100 RFC 6902 operations.
+
+txBASE supports `add`, `remove`, `replace`, `test`, `move`, and `copy` with RFC 6901 JSON Pointer paths.
+
+The record root must remain an object.
+
+Removing a known DBF field is persisted as normalized `null`, and an operation or final DBF validation failure returns `422` without applying the mutation.
+
 It implements a strong table representation tag and optional `If-Match` protection for state-changing routes.
 
 GET and HEAD provide `If-None-Match` cache validation, and single-table mutation routes use the same condition with `412 Precondition Failed` when the weak comparison matches.
@@ -95,8 +105,6 @@ The catalog-wide transaction route exposes a catalog representation `ETag`.
 Its optional `If-Match` and `If-None-Match` conditions are evaluated under the catalog write lock.
 `If-Match` requires the current strong tag or `*`, while a matching strong or weak `If-None-Match`, or `*`, rejects the write with `412 Precondition Failed` without mutation.
 A successful commit returns the new tag.
-
-The `application/json-patch+json` JSON Patch media type is not implemented.
 
 The MongoDB-shaped update document is an application format inside the JSON body.
 
@@ -116,7 +124,6 @@ No multi-record atomicity should be inferred from `$inc` or from the current HTT
 
 The following require explicit contracts before implementation:
 
-- The `application/json-patch+json` JSON Patch media type in addition to the local update document and JSON Merge Patch.
 - Broader multi-record mutation semantics and visibility rules.
 - Differential tests against a small mutation reference model.
 

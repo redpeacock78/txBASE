@@ -86,6 +86,16 @@ Merge Patch 文書のルートはオブジェクトでなければなりませ�
 
 DBF レコードは固定されたスキーマのスカラー値を持つため、既知のフィールドの削除は正規化された `null` 値として保存し、スカラー項目へのオブジェクト値は拒否します。
 
+レコードの `PATCH` には `application/json-patch+json` も受け付けます。
+
+JSON Patch 文書は、RFC 6902 の操作を 100 件まで持つ配列です。
+
+txBASE は RFC 6901 の JSON Pointer パスを使う `add`、`remove`、`replace`、`test`、`move`、`copy` を実装します。
+
+レコードのルートはオブジェクトでなければなりません。
+
+既知の DBF フィールドを削除すると正規化した `null` として永続化し、操作または最終 DBF 検証に失敗した場合は `422` を返して更新を適用しません。
+
 状態変更経路に強いテーブル表現タグと任意の `If-Match` 保護を実装しています。
 
 GET と HEAD は `If-None-Match` によるキャッシュ検証を提供し、単一テーブルの更新経路は同じ条件の弱い比較が一致した場合に `412 Precondition Failed` を返します。
@@ -97,8 +107,6 @@ catalog 全体のトランザクション経路はカタログ表現 `ETag` を�
 `If-Match` は現在の強いタグまたは `*` を要求し、強いタグまたは弱いタグが一致する `If-None-Match`、あるいは `*` は、変更なしの `412 Precondition Failed` を返します。
 
 成功したコミットは新しいタグを返します。
-
-`application/json-patch+json` の JSON Patch メディアタイプは未実装です。
 
 MongoDB 風の更新文書は JSON 本文内のアプリケーション形式です。
 
@@ -118,7 +126,6 @@ JSON 構文は意図的に小さなローカル API です。
 
 実装前に次の項目には明示的な契約が必要です。
 
-- ローカル更新文書と JSON Merge Patch に加える `application/json-patch+json` の JSON Patch メディアタイプ。
 - 複数レコード更新の意味論と可視性規則。
 - 小さな更新参照モデルとの微分テスト。
 
