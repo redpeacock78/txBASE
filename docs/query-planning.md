@@ -152,7 +152,7 @@ It does not claim MongoDB planner compatibility or replace a future compound-ind
 
 MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a full compound-index planner must define index field order.
 
-txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, compound equality-prefix range candidates, per-field direction metadata for compound definitions, and a bounded cost estimate for scan, index traversal, and remaining sort work.
+txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, compound equality-prefix and compound equality-prefix range candidates, per-field direction metadata for compound definitions, and a bounded cost estimate for scan, index traversal, and remaining sort work.
 
 It does not have a full I/O-aware cost model.
 

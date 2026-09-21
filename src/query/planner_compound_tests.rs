@@ -194,16 +194,17 @@ fn uses_a_compound_index_for_an_equality_prefix() {
     fs::write(&path, table.to_bytes()).unwrap();
     IndexFile::build(
         &path,
-        vec![IndexDefinition::named_fields(
+        vec![IndexDefinition::named_fields_with_directions(
             "by_active_name",
             vec!["ACTIVE".into(), "NAME".into()],
+            vec![-1, 1],
         )],
     )
     .unwrap()
     .save(&path)
     .unwrap();
 
-    let request = parse(br#"{"filter":{"ACTIVE":true}}"#).unwrap();
+    let request = parse(br#"{"filter":{"ACTIVE":true,"AGE":{"$ne":0}}}"#).unwrap();
     assert_eq!(
         explain_query_at(&path, &request).unwrap(),
         QueryPlan::CompoundEqualityPrefixIndex {
