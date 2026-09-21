@@ -90,11 +90,11 @@ cargo test --all-targets --all-features
 - ロケール対応CJK照合と、より広い上流CJKフィクスチャ。
 - スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、オブジェクトストレージのマニフェスト、WASMホスティング、分散レプリケーション。
 
-これらのいずれかをCurrentにする前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。
+これらのいずれかをCurrentへ移す前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。
 
 ## 根拠となる資料
 
-品質モデルは、SQLiteの[テスト概要](https://sqlite.org/testing.html)、[品質管理計画](https://sqlite.org/qmplan.html)、[要件カタログ](https://sqlite.org/requirements.html)に記された分類に従います。
+品質モデルは、SQLiteの[テスト概要](https://sqlite.org/testing.html)、[品質管理計画](https://sqlite.org/qmplan.html)、[要件カタログ](https://sqlite.org/requirements.html)が示す分類に従います。
 
 これらの資料は、追跡可能な要件、独立した壊れた入力と障害のテスト、再現可能なリリースゲートの根拠になります。
 

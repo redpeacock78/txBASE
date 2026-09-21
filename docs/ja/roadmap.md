@@ -163,7 +163,7 @@ HTTPサーバーは`/records/stream`と`/{table}/records/stream`をこのスト�
 
 分散結合と分散トランザクションは後続の機能です。
 
-集約をHTTP APIに追加する前に、欠損、null、数値オーバーフロー、メモリ制限の動作を定義しなければなりません。
+集約をHTTP APIへ追加する前に、欠損、null、数値オーバーフロー、メモリ制限の動作を定義しなければなりません。
 
 現在の集約スライスは、終端`$count`または`$distinct`を1つ、または`$count`、フィールド参照またはリテラルによる`$sum`、`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`、グループ出力に対する有界な`$match`と`$project`、最後のsort、skip、limitを備えた`$group`を1つ許可します。
 

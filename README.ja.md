@@ -132,7 +132,7 @@ txbase xbf report path/to/users.xbf
 txbase wal inspect path/to/users.txbase.wal
 ```
 
-`wal inspect`はWALを作成も切り詰めもせずに読み取ります。
+`wal inspect`はWALを作成せず、切り詰めずに読み取ります。
 ファイルサイズ、有効なバイト境界、完全なレコードのLSNとペイロード長、最後のレコードが切断されているかどうかを表示します。
 
 インデックスのライフサイクルと保守。
@@ -189,7 +189,7 @@ cargo build --release
 
 ### 品質ゲート
 
-CIはUbuntuのdocsジョブでドキュメント検査を実行し、Ubuntu、macOS、WindowsのRustジョブで次のチェックを実行します。
+CIはUbuntuのdocsジョブでドキュメントを検査し、Ubuntu、macOS、WindowsのRustジョブで次のチェックを実行します。
 
 ```bash
 bun install --frozen-lockfile
