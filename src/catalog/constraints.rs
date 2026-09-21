@@ -26,39 +26,65 @@ fn validate_foreign_keys(tables: &BTreeMap<String, DbfTable>) -> Result<(), Cata
             name: child_name.clone(),
             source,
         })?;
-        for (local_field, parent_name, parent_field) in foreign_keys {
-            let parent = tables.get(&parent_name).ok_or_else(|| {
+        for foreign_key in foreign_keys {
+            let parent = tables.get(&foreign_key.parent_table).ok_or_else(|| {
                 CatalogError::Invalid(format!(
-                    "table {child_name} references missing table {parent_name}"
+                    "table {child_name} references missing table {}",
+                    foreign_key.parent_table
                 ))
             })?;
-            if !parent
-                .fields
-                .iter()
-                .any(|field| !field.is_system() && field.name == parent_field)
-            {
-                return Err(CatalogError::Invalid(format!(
-                    "table {child_name} references unknown field {parent_name}.{parent_field}"
-                )));
+            for parent_field in &foreign_key.parent_fields {
+                if !parent
+                    .fields
+                    .iter()
+                    .any(|field| !field.is_system() && field.name == *parent_field)
+                {
+                    return Err(CatalogError::Invalid(format!(
+                        "table {child_name} references unknown field {}.{}",
+                        foreign_key.parent_table, parent_field
+                    )));
+                }
             }
             for record in child.active_records() {
-                let value = record.values.get(&local_field).unwrap_or(&Value::Null);
-                if value.is_null() {
+                let values = foreign_key
+                    .local_fields
+                    .iter()
+                    .map(|field| record.values.get(field).unwrap_or(&Value::Null))
+                    .collect::<Vec<_>>();
+                if values.iter().any(|value| value.is_null()) {
                     continue;
                 }
                 let found = parent.active_records().any(|candidate| {
-                    let parent_value = candidate.values.get(&parent_field).unwrap_or(&Value::Null);
-                    compare_scalar_values(value, parent_value)
-                        .is_some_and(|ordering| ordering.is_eq())
-                        || value == parent_value
+                    foreign_key.parent_fields.iter().zip(values.iter()).all(
+                        |(parent_field, value)| {
+                            let parent_value =
+                                candidate.values.get(parent_field).unwrap_or(&Value::Null);
+                            values_equal(value, parent_value)
+                        },
+                    )
                 });
                 if !found {
+                    let local_fields = format_fields(&foreign_key.local_fields);
+                    let parent_fields = format_fields(&foreign_key.parent_fields);
                     return Err(CatalogError::Invalid(format!(
-                        "table {child_name} foreign key {local_field} has no matching {parent_name}.{parent_field}"
+                        "table {child_name} foreign key {local_fields} has no matching {}.{parent_fields}",
+                        foreign_key.parent_table
                     )));
                 }
             }
         }
     }
     Ok(())
+}
+
+fn format_fields(fields: &[String]) -> String {
+    if fields.len() == 1 {
+        fields[0].clone()
+    } else {
+        format!("({})", fields.join(", "))
+    }
+}
+
+fn values_equal(left: &Value, right: &Value) -> bool {
+    compare_scalar_values(left, right).is_some_and(|ordering| ordering.is_eq()) || left == right
 }

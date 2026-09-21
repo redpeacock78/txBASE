@@ -50,6 +50,22 @@ struct ConstraintMetadata {
     primary: Vec<String>,
     #[serde(default)]
     unique: Vec<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    foreign_keys: Vec<CompositeForeignKeyMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CompositeForeignKeyMetadata {
+    fields: Vec<String>,
+    references: ForeignKeyTargetMetadata,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ForeignKeyTargetMetadata {
+    table: String,
+    fields: Vec<String>,
 }
 
 impl SchemaMetadata {
@@ -103,6 +119,7 @@ impl SchemaMetadata {
         if !self.checks.is_empty()
             || !self.constraints.primary.is_empty()
             || !self.constraints.unique.is_empty()
+            || !self.constraints.foreign_keys.is_empty()
             || self
                 .fields
                 .values()

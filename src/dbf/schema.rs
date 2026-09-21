@@ -1,4 +1,6 @@
-use super::{DbfError, DbfTable, encoding_name, schema_metadata::SchemaMetadata};
+use super::{
+    DbfError, DbfTable, encoding_name, schema_metadata::SchemaMetadata, types::ForeignKey,
+};
 use serde_json::{Value, json};
 
 impl DbfTable {
@@ -6,7 +8,7 @@ impl DbfTable {
         self.encoding_override.as_deref()
     }
 
-    pub(crate) fn foreign_keys(&self) -> Result<Vec<(String, String, String)>, DbfError> {
+    pub(crate) fn foreign_keys(&self) -> Result<Vec<ForeignKey>, DbfError> {
         self.schema
             .as_ref()
             .map_or_else(|| Ok(Vec::new()), SchemaMetadata::foreign_keys)

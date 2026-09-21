@@ -1,4 +1,5 @@
-use super::SchemaMetadata;
+use super::{CompositeForeignKeyMetadata, SchemaMetadata};
+use crate::dbf::types::ForeignKey;
 use crate::dbf::{DbfError, DbfRecord, FieldDescriptor};
 use crate::json_order::compare_scalar_values;
 use crate::query::matches_filter;
@@ -36,6 +37,13 @@ impl SchemaMetadata {
             field_primary |= metadata.primary;
         }
         self.foreign_keys()?;
+        for (index, key) in self.constraints.foreign_keys.iter().enumerate() {
+            validate_composite_foreign_key(
+                key,
+                fields,
+                &format!("constraints.foreign_keys[{index}]"),
+            )?;
+        }
         if !self.constraints.primary.is_empty() {
             if field_primary {
                 return Err(DbfError::Invalid(
@@ -50,8 +58,9 @@ impl SchemaMetadata {
         Ok(())
     }
 
-    pub(in crate::dbf) fn foreign_keys(&self) -> Result<Vec<(String, String, String)>, DbfError> {
-        self.fields
+    pub(in crate::dbf) fn foreign_keys(&self) -> Result<Vec<ForeignKey>, DbfError> {
+        let mut foreign_keys = self
+            .fields
             .iter()
             .filter_map(|(local_field, metadata)| {
                 metadata
@@ -68,9 +77,31 @@ impl SchemaMetadata {
                         "schema reference for field {local_field} must be TABLE.FIELD"
                     )));
                 }
-                Ok((local_field.clone(), table.to_owned(), field.to_owned()))
+                Ok(ForeignKey {
+                    local_fields: vec![local_field.clone()],
+                    parent_table: table.to_owned(),
+                    parent_fields: vec![field.to_owned()],
+                })
             })
-            .collect()
+            .collect::<Result<Vec<_>, DbfError>>()?;
+        for key in &self.constraints.foreign_keys {
+            if key.references.table.is_empty() {
+                return Err(DbfError::Invalid(
+                    "composite foreign-key reference table must not be empty".into(),
+                ));
+            }
+            if key.references.fields.is_empty() {
+                return Err(DbfError::Invalid(
+                    "composite foreign-key reference fields must not be empty".into(),
+                ));
+            }
+            foreign_keys.push(ForeignKey {
+                local_fields: key.fields.clone(),
+                parent_table: key.references.table.clone(),
+                parent_fields: key.references.fields.clone(),
+            });
+        }
+        Ok(foreign_keys)
     }
 
     pub(in crate::dbf) fn apply_defaults(&self, values: &mut Map<String, Value>) {
@@ -183,6 +214,52 @@ fn validate_key_fields(
         {
             return Err(DbfError::Invalid(format!(
                 "schema metadata refers to unknown field {name}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_composite_foreign_key(
+    key: &CompositeForeignKeyMetadata,
+    fields: &[FieldDescriptor],
+    path: &str,
+) -> Result<(), DbfError> {
+    validate_key_fields(&key.fields, fields, &format!("{path}.fields"), 2)?;
+    validate_name_list(
+        &key.references.fields,
+        &format!("{path}.references.fields"),
+        2,
+    )?;
+    if key.references.table.is_empty() {
+        return Err(DbfError::Invalid(format!(
+            "{path}.references.table must not be empty"
+        )));
+    }
+    if key.fields.len() != key.references.fields.len() {
+        return Err(DbfError::Invalid(format!(
+            "{path}.fields and {path}.references.fields must have the same length"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_name_list(names: &[String], path: &str, minimum: usize) -> Result<(), DbfError> {
+    if names.len() < minimum {
+        return Err(DbfError::Invalid(format!(
+            "{path} must contain at least {minimum} fields"
+        )));
+    }
+    let mut seen = BTreeSet::new();
+    for name in names {
+        if name.is_empty() {
+            return Err(DbfError::Invalid(format!(
+                "{path} contains an empty field name"
+            )));
+        }
+        if !seen.insert(name) {
+            return Err(DbfError::Invalid(format!(
+                "{path} contains duplicate field {name}"
             )));
         }
     }

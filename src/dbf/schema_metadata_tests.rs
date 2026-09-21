@@ -94,6 +94,24 @@ fn composite_primary_metadata() -> Vec<u8> {
     .unwrap()
 }
 
+fn composite_foreign_key_metadata(local_fields: &[&str], parent_fields: &[&str]) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {},
+        "constraints": {
+            "foreign_keys": [{
+                "fields": local_fields,
+                "references": {
+                    "table": "users",
+                    "fields": parent_fields
+                }
+            }]
+        }
+    }))
+    .unwrap()
+}
+
 pub(super) fn encoding_metadata(name: &str) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({
         "format": "txbase-schema",
@@ -281,6 +299,51 @@ fn composite_primary_constraints_require_non_null_unique_keys() {
         )
         .unwrap_err();
     assert!(missing.to_string().contains("field NAME must not be null"));
+    cleanup(&path);
+}
+
+#[test]
+fn composite_foreign_keys_validate_shape_and_local_fields() {
+    let path = temporary_path();
+    cleanup(&path);
+    fs::write(&path, fixture()).unwrap();
+
+    fs::write(
+        path.with_extension("txschema.json"),
+        composite_foreign_key_metadata(&["ID", "ID"], &["ID", "AGE"]),
+    )
+    .unwrap();
+    let duplicate = DbfTable::from_path(&path).unwrap_err();
+    assert!(
+        duplicate
+            .to_string()
+            .contains("constraints.foreign_keys[0].fields contains duplicate field ID")
+    );
+
+    fs::write(
+        path.with_extension("txschema.json"),
+        composite_foreign_key_metadata(&["ID", "NAME"], &["ID"]),
+    )
+    .unwrap();
+    let short_parent = DbfTable::from_path(&path).unwrap_err();
+    assert!(
+        short_parent.to_string().contains(
+            "constraints.foreign_keys[0].references.fields must contain at least 2 fields"
+        )
+    );
+
+    fs::write(
+        path.with_extension("txschema.json"),
+        composite_foreign_key_metadata(&["ID", "MISSING"], &["ID", "AGE"]),
+    )
+    .unwrap();
+    let unknown_local = DbfTable::from_path(&path).unwrap_err();
+    assert!(
+        unknown_local
+            .to_string()
+            .contains("schema metadata refers to unknown field MISSING")
+    );
+
     cleanup(&path);
 }
 

@@ -177,18 +177,25 @@ The catalog journal persists a monotonically increasing commit ID in
 tables in `.txbase.catalog.mvcc` through the same journal. Recovery rolls the state and history
 back with a prepared journal or reapplies both with a committed journal.
 
-The history provides commit-level visibility, not row-level versions.
+The history provides commit-level visibility for catalog images.
 `Catalog::gc_mvcc` and the catalog GC command retain the newest positive count of full-image
 snapshots and replace only the history sidecar through a synced temporary file.
 An ID removed by GC is no longer readable, while later catalog commits append after the retained
 IDs.
-The catalog does not provide row-level versions, row-level retention or garbage collection,
-distributed snapshots, or serializable conflict detection.
+It does not expose table-local row history for a historical catalog snapshot; direct table MVCC
+exposes that history separately.
+
+The catalog does not provide independent row retention, distributed snapshots, or serializable
+conflict detection.
 
 When a field sidecar declares `references: "TABLE.FIELD"`, catalog named-table mutations and
 catalog transactions validate non-null child values against active rows in the referenced table.
 They reject parent updates or logical deletes that would leave a child dangling; nulls are allowed
 and changes are not cascaded. Direct single-table routes cannot resolve these cross-table rules.
+
+A schema sidecar can also declare `constraints.foreign_keys` with equal-length child and parent
+field lists. The catalog compares the complete tuple, skips the check when any child value is null,
+and applies the same orphan-prevention rule to parent updates and logical deletes.
 
 The catalog lock serializes catalog reads and writes, while per-table locks continue to protect
 direct DBF persistence.

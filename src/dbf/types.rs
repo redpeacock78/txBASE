@@ -105,6 +105,13 @@ pub struct RowVersion {
     pub values: Map<String, Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ForeignKey {
+    pub(crate) local_fields: Vec<String>,
+    pub(crate) parent_table: String,
+    pub(crate) parent_fields: Vec<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoFormat {
     Dbase3,
