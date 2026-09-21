@@ -92,7 +92,7 @@ The catalog currently derives table identity from direct-child DBF filenames and
 It provides table discovery, named table loading, schema output, per-table verification, and
 independent named-table HTTP mutations that reuse the single-table persistence boundary.
 
-It does not yet provide relationships, cross-table index coordination, or MVCC visibility.
+It does not yet provide relationships or catalog-wide MVCC visibility.
 
 The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact scalar and compound equality, compound equality-prefix and range candidate lookup, equality-prefix compound range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 

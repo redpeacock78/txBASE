@@ -22,9 +22,13 @@ fn prepared_journal(root: &Path, phase: Phase) {
     write_synced(&journal.join("before/0"), b"users-before").unwrap();
     write_synced(&journal.join("before/1"), b"posts-before").unwrap();
     write_synced(&journal.join("before/2"), &transaction_state_bytes(1)).unwrap();
+    write_synced(&journal.join("before/3"), b"users-index-before").unwrap();
+    write_synced(&journal.join("before/4"), b"posts-index-before").unwrap();
     write_synced(&journal.join("after/0"), b"users-after").unwrap();
     write_synced(&journal.join("after/1"), b"posts-after").unwrap();
     write_synced(&journal.join("after/2"), &transaction_state_bytes(2)).unwrap();
+    write_synced(&journal.join("after/3"), b"users-index-after").unwrap();
+    write_synced(&journal.join("after/4"), b"posts-index-after").unwrap();
     write_manifest(
         &journal,
         &Manifest {
@@ -45,6 +49,16 @@ fn prepared_journal(root: &Path, phase: Phase) {
                     before: Some("2".into()),
                     after: Some("2".into()),
                 },
+                ManifestChange {
+                    target: "users.dbf.txidx".into(),
+                    before: Some("3".into()),
+                    after: Some("3".into()),
+                },
+                ManifestChange {
+                    target: "posts.dbf.txidx".into(),
+                    before: Some("4".into()),
+                    after: Some("4".into()),
+                },
             ],
         },
     )
@@ -57,12 +71,22 @@ fn prepared_journal_rolls_back_partial_catalog_commit() {
     fs::write(root.join("users.dbf"), b"users-after").unwrap();
     fs::write(root.join("posts.dbf"), b"posts-before").unwrap();
     fs::write(root.join(TRANSACTION_STATE), transaction_state_bytes(2)).unwrap();
+    fs::write(root.join("users.dbf.txidx"), b"users-index-after").unwrap();
+    fs::write(root.join("posts.dbf.txidx"), b"posts-index-before").unwrap();
     prepared_journal(&root, Phase::Prepared);
 
     recover(&root).unwrap();
 
     assert_eq!(fs::read(root.join("users.dbf")).unwrap(), b"users-before");
     assert_eq!(fs::read(root.join("posts.dbf")).unwrap(), b"posts-before");
+    assert_eq!(
+        fs::read(root.join("users.dbf.txidx")).unwrap(),
+        b"users-index-before"
+    );
+    assert_eq!(
+        fs::read(root.join("posts.dbf.txidx")).unwrap(),
+        b"posts-index-before"
+    );
     assert_eq!(read_transaction_id_locked(&root).unwrap(), Some(1));
     assert!(!root.join(JOURNAL_DIR).exists());
     fs::remove_dir_all(root).unwrap();
@@ -74,12 +98,22 @@ fn committed_journal_replays_the_complete_catalog_commit() {
     fs::write(root.join("users.dbf"), b"users-before").unwrap();
     fs::write(root.join("posts.dbf"), b"posts-before").unwrap();
     fs::write(root.join(TRANSACTION_STATE), transaction_state_bytes(1)).unwrap();
+    fs::write(root.join("users.dbf.txidx"), b"users-index-before").unwrap();
+    fs::write(root.join("posts.dbf.txidx"), b"posts-index-before").unwrap();
     prepared_journal(&root, Phase::Committed);
 
     recover(&root).unwrap();
 
     assert_eq!(fs::read(root.join("users.dbf")).unwrap(), b"users-after");
     assert_eq!(fs::read(root.join("posts.dbf")).unwrap(), b"posts-after");
+    assert_eq!(
+        fs::read(root.join("users.dbf.txidx")).unwrap(),
+        b"users-index-after"
+    );
+    assert_eq!(
+        fs::read(root.join("posts.dbf.txidx")).unwrap(),
+        b"posts-index-after"
+    );
     assert_eq!(read_transaction_id_locked(&root).unwrap(), Some(2));
     assert!(!root.join(JOURNAL_DIR).exists());
     fs::remove_dir_all(root).unwrap();

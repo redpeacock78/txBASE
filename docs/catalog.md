@@ -82,8 +82,9 @@ single-table `QUERY /explain`. `QUERY /join` accepts the same JSON join document
 
 `POST /{table}/records` and `PUT`/`PATCH`/`DELETE /{table}/records/{id}` reuse the single-table
 mutation, WAL, ETag, validation, and constraint behavior. Each request commits only its named
-DBF. `POST /transaction` accepts named-table mutation paths and commits all affected DBFs under
-one catalog journal; an incomplete prepare is rolled back on the next catalog read. Successful
+DBF. `POST /transaction` accepts named-table mutation paths and commits all affected DBFs and
+their changed index sidecars under one catalog journal; an incomplete prepare is rolled back on
+the next catalog read. Successful
 catalog-journal commits advance a durable catalog transaction ID and return it in the JSON body
 and `X-Txbase-Transaction-Id` header. The response also returns the new catalog representation
 `ETag`. Optional `If-Match` and `If-None-Match` conditions are evaluated under the catalog write
