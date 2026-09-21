@@ -94,10 +94,15 @@ curl -i -X PATCH \
   -d '{"NAME":"Alicia","AGE":null}' \
   http://127.0.0.1:8080/records/3
 
+curl -i -X PATCH \
+  -H 'Content-Type: application/json-patch+json' \
+  -d '[{"op":"replace","path":"/NAME","value":"Alicia"}]' \
+  http://127.0.0.1:8080/records/3
+
 curl -i -X DELETE http://127.0.0.1:8080/records/3
 ```
 
-`POST`, `PUT`, `PATCH`, and `DELETE` create, replace, update, and logically delete records. `PATCH` accepts the local `application/json` update document and `application/merge-patch+json` object patches; the latter merges objects recursively, treats `null` as field removal, and replaces arrays or scalar values. It also accepts typed `$set`, `$unset`, and `$inc` operators in the local JSON document.
+`POST`, `PUT`, `PATCH`, and `DELETE` create, replace, update, and logically delete records. `PATCH` accepts the local `application/json` update document, `application/merge-patch+json` object patches, and bounded `application/json-patch+json` operation arrays. Merge Patch recursively merges objects, treats `null` as field removal, and replaces arrays or scalar values. JSON Patch supports the RFC 6902 `add`, `remove`, `replace`, `test`, `move`, and `copy` operations with RFC 6901 JSON Pointer paths. It also accepts typed `$set`, `$unset`, and `$inc` operators in the local JSON document.
 
 Single-table `POST /transaction` applies multiple operations to a private copy and commits one snapshot/WAL boundary. Catalog `POST /transaction` provides the corresponding cross-table catalog journal boundary. Neither boundary provides historical row versions or MVCC visibility.
 

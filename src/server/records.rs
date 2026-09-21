@@ -1,6 +1,6 @@
 use super::{
-    DbfTable, HttpResponse, dbf_error_response, empty_response, error, etag, header, json_response,
-    read_json_object, read_json_object_with_merge_patch,
+    DbfTable, HttpResponse, PatchMediaType, dbf_error_response, empty_response, error, etag,
+    header, json_response, read_json_object, read_json_patch_document,
 };
 use crate::dbf::DbfRecord;
 use crate::xbase::{OperationIr, OperationMethod};
@@ -138,28 +138,56 @@ pub(super) fn update_response_with_validator(
     if let Err(response) = etag::require_mutation_preconditions(request, table, true) {
         return response;
     }
-    let (values, is_merge_patch) = if replace {
+    let values = if replace {
         match read_json_object(request, "PUT", false) {
-            Ok(values) => (values, false),
-            Err(response) => return response,
-        }
-    } else {
-        match read_json_object_with_merge_patch(request, "PATCH", false) {
             Ok(values) => values,
             Err(response) => return response,
         }
-    };
-    let values = if is_merge_patch {
-        let Some(current) = table.active_record(id).map(|record| record.values.clone()) else {
-            return json_response(
-                500,
-                error("storage_error", "record disappeared during update"),
-                false,
-            );
-        };
-        apply_merge_patch(current, values)
     } else {
-        values
+        let (document, media_type) = match read_json_patch_document(request, "PATCH", false) {
+            Ok(document) => document,
+            Err(response) => return response,
+        };
+        match media_type {
+            PatchMediaType::Json => document
+                .as_object()
+                .cloned()
+                .expect("validated JSON object"),
+            PatchMediaType::MergePatch => {
+                let Some(current) = table.active_record(id).map(|record| record.values.clone())
+                else {
+                    return json_response(
+                        500,
+                        error("storage_error", "record disappeared during update"),
+                        false,
+                    );
+                };
+                apply_merge_patch(
+                    current,
+                    document
+                        .as_object()
+                        .cloned()
+                        .expect("validated merge patch object"),
+                )
+            }
+            PatchMediaType::JsonPatch => {
+                let Some(current) = table.active_record(id).map(|record| record.values.clone())
+                else {
+                    return json_response(
+                        500,
+                        error("storage_error", "record disappeared during update"),
+                        false,
+                    );
+                };
+                let patched = match super::json_patch::apply(current.clone(), &document) {
+                    Ok(values) => values,
+                    Err(message) => {
+                        return json_response(422, error("invalid_json_patch", &message), false);
+                    }
+                };
+                materialize_removed_fields(current, patched)
+            }
+        }
     };
     let operation = OperationIr {
         method: if replace {
@@ -224,6 +252,16 @@ pub(super) fn apply_merge_patch(
         target.entry(key).or_insert(Value::Null);
     }
     target
+}
+
+fn materialize_removed_fields(
+    current: Map<String, Value>,
+    mut patched: Map<String, Value>,
+) -> Map<String, Value> {
+    for key in current.keys() {
+        patched.entry(key.clone()).or_insert(Value::Null);
+    }
+    patched
 }
 
 fn merge_patch_value(target: &mut Value, patch: Value) {

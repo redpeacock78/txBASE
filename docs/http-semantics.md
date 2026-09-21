@@ -38,7 +38,7 @@ They do not by themselves provide transaction isolation, deduplication, or a ret
 
 ## 2. Current txBASE routes
 
-`OPTIONS` returns `204 No Content`, an `Allow` header for the server surface, `Accept-Query: "application/json"`, and `Accept-Patch: application/json, application/merge-patch+json`.
+`OPTIONS` returns `204 No Content`, an `Allow` header for the server surface, `Accept-Query: "application/json"`, and `Accept-Patch: application/json, application/merge-patch+json, application/json-patch+json`.
 
 The response does not authorize a method on a resource that its route rules would otherwise reject.
 
@@ -62,10 +62,10 @@ The response does not authorize a method on a resource that its route rules woul
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |
 | `POST /transaction` | JSON object containing a non-empty `operations` array | `200` after one-table atomic snapshot commit |
 | `PUT /records/{id}` | JSON object replacing fields | Resulting record |
-| `PATCH /records/{id}` | `application/json` update document or `application/merge-patch+json` object | Resulting record |
+| `PATCH /records/{id}` | `application/json` update document, `application/merge-patch+json` object, or `application/json-patch+json` array | Resulting record |
 | `DELETE /records/{id}` | No JSON body | `204 No Content` |
 
-`PUT` requires `application/json`, while `PATCH` accepts `application/json` and `application/merge-patch+json`.
+`PUT` requires `application/json`, while `PATCH` accepts `application/json`, `application/merge-patch+json`, and `application/json-patch+json`.
 
 Unknown fields, malformed JSON, unsupported update operators, and invalid field values are rejected before persistence.
 
@@ -129,11 +129,19 @@ Object members are merged recursively, while `null` removes a member and arrays 
 
 DBF records have a fixed scalar schema, so removing a known field is persisted as its normalized `null` value, and an object value for a scalar field is rejected.
 
+It also accepts `application/json-patch+json` for record `PATCH` requests.
+
+The JSON Patch document is an array of at most 100 RFC 6902 operations.
+
+txBASE supports `add`, `remove`, `replace`, `test`, `move`, and `copy` with RFC 6901 JSON Pointer paths.
+
+The record root must remain an object.
+
+Removing a known DBF field is persisted as normalized `null`, and an operation or final DBF validation failure returns `422` without applying the mutation.
+
 txBASE implements strong table and catalog representation tags, optional `If-Match` protection for
 the state-changing routes described above, and `If-None-Match` validation for reads, single-table
 mutations, and catalog-wide transactions.
-
-It does not yet implement the `application/json-patch+json` JSON Patch media type.
 
 The MongoDB-shaped update document is an application format inside the JSON body.
 
@@ -234,7 +242,6 @@ The following require explicit contracts before implementation:
 - `Content-Location` and cache-key rules for QUERY bodies.
 - Runtime-specific async traits for long-lived query streams.
 - CORS and authentication policy.
-- The `application/json-patch+json` JSON Patch media type in addition to the local update document and JSON Merge Patch.
 
 ## Primary references
 

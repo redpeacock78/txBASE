@@ -137,6 +137,72 @@ fn merge_patch_updates_known_fields_and_preserves_the_rest() {
 }
 
 #[test]
+fn json_patch_updates_and_removes_fields() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-server-json-patch-{}.dbf",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&path);
+    fs::write(&path, fixture()).unwrap();
+    let mut table = DbfTable::from_path(&path).unwrap();
+    let mut request = TestRequest::new()
+        .with_method(Method::Patch)
+        .with_path("/records/1")
+        .with_header(header("Content-Type", JSON_PATCH_MEDIA_TYPE))
+        .with_body(
+            r#"[
+                {"op":"test","path":"/ID","value":1},
+                {"op":"replace","path":"/NAME","value":"Alicia"},
+                {"op":"remove","path":"/AGE"},
+                {"op":"add","path":"/ACTIVE","value":false}
+            ]"#,
+        )
+        .into();
+
+    assert_eq!(
+        update_response(&mut request, "/records/1", &mut table, &path, false).status_code(),
+        StatusCode(200)
+    );
+    let record = table.active_record(1).unwrap();
+    assert_eq!(record.values["NAME"], "Alicia");
+    assert_eq!(record.values["AGE"], Value::Null);
+    assert_eq!(record.values["ACTIVE"], false);
+    assert_eq!(
+        DbfTable::from_path(&path)
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["NAME"],
+        "Alicia"
+    );
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn json_patch_rejects_invalid_operations_without_mutation() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-server-json-patch-invalid-{}.dbf",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&path);
+    fs::write(&path, fixture()).unwrap();
+    let mut table = DbfTable::from_path(&path).unwrap();
+    let mut request = TestRequest::new()
+        .with_method(Method::Patch)
+        .with_path("/records/1")
+        .with_header(header("Content-Type", JSON_PATCH_MEDIA_TYPE))
+        .with_body(r#"[{"op":"remove","path":"/MISSING"}]"#)
+        .into();
+
+    assert_eq!(
+        update_response(&mut request, "/records/1", &mut table, &path, false).status_code(),
+        StatusCode(422)
+    );
+    assert_eq!(table.active_record(1).unwrap().values["NAME"], "Alice");
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn merge_patch_recursively_merges_object_members() {
     let current = serde_json::json!({
         "NESTED": {"KEEP": 1, "REMOVE": 2},
@@ -342,7 +408,7 @@ fn options_advertises_supported_methods_and_query_media_type() {
             .iter()
             .find(|header| header.field.equiv("Accept-Patch"))
             .map(|header| header.value.as_str()),
-        Some("application/json, application/merge-patch+json")
+        Some("application/json, application/merge-patch+json, application/json-patch+json")
     );
 }
 

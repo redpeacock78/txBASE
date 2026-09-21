@@ -9,6 +9,7 @@ mod catalog;
 mod catalog_transaction;
 mod etag;
 mod explain;
+mod json_patch;
 mod range;
 mod records;
 mod stream;
@@ -16,6 +17,14 @@ mod transaction;
 
 const MAX_BODY: usize = 1024 * 1024;
 const JSON_MERGE_PATCH_MEDIA_TYPE: &str = "application/merge-patch+json";
+const JSON_PATCH_MEDIA_TYPE: &str = "application/json-patch+json";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum PatchMediaType {
+    Json,
+    MergePatch,
+    JsonPatch,
+}
 
 pub(super) enum ServerBody {
     Buffered(Cursor<Vec<u8>>),
@@ -175,28 +184,47 @@ fn read_json_object(
     parse_json_object(&body, accept_query)
 }
 
-fn read_json_object_with_merge_patch(
+fn read_json_patch_document(
     request: &mut Request,
     operation: &str,
     accept_query: bool,
-) -> Result<(Map<String, Value>, bool), HttpResponse> {
-    let (body, is_merge_patch) =
-        read_json_body_with_options(request, operation, accept_query, true)?;
-    Ok((parse_json_object(&body, accept_query)?, is_merge_patch))
+) -> Result<(Value, PatchMediaType), HttpResponse> {
+    let (body, media_type) = read_json_body_with_options(request, operation, accept_query, true)?;
+    let value = parse_json_value(&body, accept_query)?;
+    let valid_root = match media_type {
+        PatchMediaType::Json | PatchMediaType::MergePatch => value.is_object(),
+        PatchMediaType::JsonPatch => value.is_array(),
+    };
+    if !valid_root {
+        let message = match media_type {
+            PatchMediaType::Json | PatchMediaType::MergePatch => "JSON body must be an object",
+            PatchMediaType::JsonPatch => "JSON Patch body must be an array",
+        };
+        return Err(json_response(
+            422,
+            error("invalid_json", message),
+            accept_query,
+        ));
+    }
+    Ok((value, media_type))
 }
 
 fn parse_json_object(body: &[u8], accept_query: bool) -> Result<Map<String, Value>, HttpResponse> {
-    let value = serde_json::from_slice::<Value>(body).map_err(|parse_error| {
-        json_response(
-            422,
-            error("invalid_json", &format!("invalid JSON body: {parse_error}")),
-            accept_query,
-        )
-    })?;
+    let value = parse_json_value(body, accept_query)?;
     value.as_object().cloned().ok_or_else(|| {
         json_response(
             422,
             error("invalid_json", "JSON body must be an object"),
+            accept_query,
+        )
+    })
+}
+
+fn parse_json_value(body: &[u8], accept_query: bool) -> Result<Value, HttpResponse> {
+    serde_json::from_slice::<Value>(body).map_err(|parse_error| {
+        json_response(
+            422,
+            error("invalid_json", &format!("invalid JSON body: {parse_error}")),
             accept_query,
         )
     })
@@ -214,11 +242,11 @@ fn read_json_body_with_options(
     request: &mut Request,
     operation: &str,
     accept_query: bool,
-    allow_merge_patch: bool,
-) -> Result<(Vec<u8>, bool), HttpResponse> {
+    allow_patch_formats: bool,
+) -> Result<(Vec<u8>, PatchMediaType), HttpResponse> {
     let Some(content_type) = content_type(request) else {
-        let required = if allow_merge_patch {
-            "application/json or application/merge-patch+json"
+        let required = if allow_patch_formats {
+            "application/json, application/merge-patch+json, or application/json-patch+json"
         } else {
             "application/json"
         };
@@ -234,12 +262,15 @@ fn read_json_body_with_options(
     let media_type = content_type.split(';').next().map(str::trim);
     let is_json =
         media_type.is_some_and(|media_type| media_type.eq_ignore_ascii_case(JSON_QUERY_MEDIA_TYPE));
-    let is_merge_patch = allow_merge_patch
+    let is_merge_patch = allow_patch_formats
         && media_type
             .is_some_and(|media_type| media_type.eq_ignore_ascii_case(JSON_MERGE_PATCH_MEDIA_TYPE));
-    if !is_json && !is_merge_patch {
-        let supported = if allow_merge_patch {
-            "application/json or application/merge-patch+json"
+    let is_json_patch = allow_patch_formats
+        && media_type
+            .is_some_and(|media_type| media_type.eq_ignore_ascii_case(JSON_PATCH_MEDIA_TYPE));
+    if !is_json && !is_merge_patch && !is_json_patch {
+        let supported = if allow_patch_formats {
+            "application/json, application/merge-patch+json, or application/json-patch+json"
         } else {
             "application/json"
         };
@@ -272,7 +303,14 @@ fn read_json_body_with_options(
             accept_query,
         ));
     }
-    Ok((body, is_merge_patch))
+    let media_type = if is_merge_patch {
+        PatchMediaType::MergePatch
+    } else if is_json_patch {
+        PatchMediaType::JsonPatch
+    } else {
+        PatchMediaType::Json
+    };
+    Ok((body, media_type))
 }
 
 fn dbf_error_response(dbf_error: DbfError) -> HttpResponse {
@@ -328,7 +366,7 @@ pub(super) fn options_response(allow: &str) -> HttpResponse {
         .with_header(header("Accept-Query", "\"application/json\""))
         .with_header(header(
             "Accept-Patch",
-            "application/json, application/merge-patch+json",
+            "application/json, application/merge-patch+json, application/json-patch+json",
         ))
 }
 
