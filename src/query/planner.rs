@@ -79,7 +79,10 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
     candidates
         .into_iter()
         .min_by_key(|access| {
-            cost::estimated_cost(access, &index_file, active_record_count, request)
+            let cost = cost::estimated_cost(access, &index_file, active_record_count, request);
+            let is_equality_prefix =
+                matches!(&access.plan, QueryPlan::CompoundEqualityPrefixIndex { .. });
+            (cost, is_equality_prefix)
         })
         .unwrap_or_else(table_scan)
 }

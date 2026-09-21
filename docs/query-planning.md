@@ -140,7 +140,7 @@ An ordered path that supplies the complete requested order has no sort term.
 
 Compound definitions use their shortest definition and stable name tie-breakers when candidate counts are equal.
 
-An exact cost tie preserves the existing candidate order, so the table scan wins a tie with an index path.
+An exact cost tie preserves the table scan and established access paths before a compound equality-prefix prefilter.
 
 This bounded model estimates in-memory index traversal but does not estimate physical index I/O, memory, cache state, collation, or compound-range selectivity.
 

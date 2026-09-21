@@ -190,7 +190,7 @@ with a bounded integer cost. A table scan costs the active-record count plus rem
 An index path costs its exact candidate count plus a bounded logarithmic traversal term derived
 from the sidecar entry count, plus remaining sort work. An index intersection adds one traversal
 term per selected sidecar. An ordered path that supplies the complete requested order has no sort
-term. Equal costs preserve the existing candidate order, so the table scan wins an exact tie.
+term. Equal costs preserve the table scan and established access paths before a compound equality-prefix prefilter.
 
 This is a local cardinality, traversal, and sort model, not a full physical I/O, memory, or cache
 cost model.
