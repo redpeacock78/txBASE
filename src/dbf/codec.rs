@@ -8,6 +8,8 @@ mod encode;
 mod fields;
 #[path = "codec_temporal.rs"]
 mod temporal;
+#[path = "codec_values.rs"]
+mod values;
 
 pub(super) use cjk::canonical_encoding_name;
 #[cfg(test)]
@@ -17,13 +19,14 @@ pub(super) use decode::{
 };
 #[cfg(test)]
 pub(super) use encode::encode_field;
-pub(super) use encode::{encode_character_with_encoding, encode_field_with_encoding, value_text};
+pub(super) use encode::{encode_character_with_encoding, encode_field_with_encoding};
 pub(super) use fields::{
     encode_null_flags, flag_is_set, null_flag_layout, parse_fields, read_u16, read_u32,
     system_field_index, update_null_flags,
 };
 #[cfg(test)]
 pub(super) use temporal::foxpro_datetime_bytes;
+pub(super) use values::value_text;
 
 pub(super) fn encoding_name(language_driver: u8) -> Option<&'static str> {
     Some(match language_driver {
