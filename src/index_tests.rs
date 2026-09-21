@@ -83,6 +83,44 @@ fn index_definition_wire_shape_validates_fields_and_directions() {
 }
 
 #[test]
+fn index_metadata_exposes_bounded_cost_inputs() {
+    let path = temporary_dbf();
+    IndexFile::build(
+        &path,
+        vec![
+            IndexDefinition::for_field("NAME"),
+            IndexDefinition::named_fields("by_name_age", vec!["NAME".into(), "AGE".into()]),
+        ],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let loaded = IndexFile::load(&path).unwrap();
+    let compound_indexes = loaded
+        .compound_indexes()
+        .map(|(name, fields)| (name.to_owned(), fields.to_vec()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        compound_indexes,
+        vec![(
+            "by_name_age".to_owned(),
+            vec!["NAME".to_owned(), "AGE".to_owned()]
+        )]
+    );
+    assert!(loaded.has_exact_fields(&["NAME"]));
+    assert!(loaded.has_exact_fields(&["NAME", "AGE"]));
+    assert!(!loaded.has_exact_fields(&["AGE", "NAME"]));
+    assert_eq!(loaded.equality_selectivity_estimate("NAME"), Some(1));
+    assert_eq!(loaded.equality_fanout_estimate(&["NAME"]), Some(1));
+    assert_eq!(loaded.equality_fanout_estimate(&["NAME", "AGE"]), Some(1));
+    assert_eq!(loaded.index_traversal_cost("NAME"), Some(0));
+    assert_eq!(loaded.index_traversal_cost("missing"), None);
+
+    remove_table_files(&path);
+}
+
+#[test]
 fn builds_and_loads_an_external_scalar_index() {
     let path = temporary_dbf();
     let index = IndexFile::build(&path, vec![IndexDefinition::for_field("NAME")]).unwrap();
