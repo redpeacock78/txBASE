@@ -312,4 +312,4 @@ The number of files is not a quality metric by itself.
 - Automatic CJK conversion when the declared encoding is ambiguous.
 - Full cost-based planners, joins, aggregation, MVCC, durable XBF, object-storage, or distributed code without a contract and end-to-end test.
 
-The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, and bounded cost choice based on record counts, index traversal, and sort work are implemented, while a full I/O-aware model and cross-table coordination remain future work.
+The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, and bounded cost choice based on record counts, index traversal, and sort work are implemented, while a full I/O-aware model and cross-table index definitions or index-aware planning remain future work.

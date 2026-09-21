@@ -222,6 +222,6 @@ It still materializes candidate record numbers and sorts them by physical DBF or
 
 Freshness validation still reads the DBF and memo bytes, and the query executor still materializes candidate record numbers, so this is not a claim of zero-copy or end-to-end index I/O.
 
-A full I/O-aware cost model, collation-aware planning, and cross-table atomic commits require separate contracts.
+A full I/O-aware cost model, collation-aware planning, and cross-table index definitions or query planning require separate contracts.
 
-The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs a full I/O-aware model and cross-table contracts.
+The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs a full I/O-aware model and cross-table index or planning contracts.

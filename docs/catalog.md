@@ -4,7 +4,7 @@ The catalog boundary maps one database directory to the DBF tables stored direct
 
 This is the first multi-table slice in the roadmap.
 
-It does not add relationships, cross-table indexes, or a second storage format.
+It does not add relationships, cross-table index definitions, or a second storage format.
 
 ## Filesystem contract
 
