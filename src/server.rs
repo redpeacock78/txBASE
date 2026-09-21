@@ -1,10 +1,11 @@
-use crate::dbf::{DbfError, DbfTable};
+use crate::dbf::DbfTable;
 use crate::query::{self, JSON_QUERY_MEDIA_TYPE};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use std::io::{Cursor, Read};
 use std::path::Path;
-use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
+use tiny_http::{Method, Request, Response, Server};
 
+mod body;
 mod catalog;
 mod catalog_transaction;
 mod etag;
@@ -12,6 +13,7 @@ mod explain;
 mod json_patch;
 mod range;
 mod records;
+mod response;
 mod stream;
 mod transaction;
 
@@ -55,6 +57,12 @@ impl Read for ServerBody {
 }
 
 type HttpResponse = Response<ServerBody>;
+
+pub(super) use body::{read_json_body, read_json_object, read_json_patch_document, request_header};
+pub(super) use response::{
+    dbf_error_response, empty_response, error, header, json_bytes_response, json_response,
+    options_response,
+};
 
 use range::query_result_response;
 use records::{delete_response, get_response, post_response, update_response};
@@ -173,215 +181,6 @@ fn query_response_with_path(
             json_response(422, error("invalid_query", &query_error.to_string()), true)
         }
     }
-}
-
-fn read_json_object(
-    request: &mut Request,
-    operation: &str,
-    accept_query: bool,
-) -> Result<Map<String, Value>, HttpResponse> {
-    let body = read_json_body(request, operation, accept_query)?;
-    parse_json_object(&body, accept_query)
-}
-
-fn read_json_patch_document(
-    request: &mut Request,
-    operation: &str,
-    accept_query: bool,
-) -> Result<(Value, PatchMediaType), HttpResponse> {
-    let (body, media_type) = read_json_body_with_options(request, operation, accept_query, true)?;
-    let value = parse_json_value(&body, accept_query)?;
-    let valid_root = match media_type {
-        PatchMediaType::Json | PatchMediaType::MergePatch => value.is_object(),
-        PatchMediaType::JsonPatch => value.is_array(),
-    };
-    if !valid_root {
-        let message = match media_type {
-            PatchMediaType::Json | PatchMediaType::MergePatch => "JSON body must be an object",
-            PatchMediaType::JsonPatch => "JSON Patch body must be an array",
-        };
-        return Err(json_response(
-            422,
-            error("invalid_json", message),
-            accept_query,
-        ));
-    }
-    Ok((value, media_type))
-}
-
-fn parse_json_object(body: &[u8], accept_query: bool) -> Result<Map<String, Value>, HttpResponse> {
-    let value = parse_json_value(body, accept_query)?;
-    value.as_object().cloned().ok_or_else(|| {
-        json_response(
-            422,
-            error("invalid_json", "JSON body must be an object"),
-            accept_query,
-        )
-    })
-}
-
-fn parse_json_value(body: &[u8], accept_query: bool) -> Result<Value, HttpResponse> {
-    serde_json::from_slice::<Value>(body).map_err(|parse_error| {
-        json_response(
-            422,
-            error("invalid_json", &format!("invalid JSON body: {parse_error}")),
-            accept_query,
-        )
-    })
-}
-
-fn read_json_body(
-    request: &mut Request,
-    operation: &str,
-    accept_query: bool,
-) -> Result<Vec<u8>, HttpResponse> {
-    read_json_body_with_options(request, operation, accept_query, false).map(|(body, _)| body)
-}
-
-fn read_json_body_with_options(
-    request: &mut Request,
-    operation: &str,
-    accept_query: bool,
-    allow_patch_formats: bool,
-) -> Result<(Vec<u8>, PatchMediaType), HttpResponse> {
-    let Some(content_type) = content_type(request) else {
-        let required = if allow_patch_formats {
-            "application/json, application/merge-patch+json, or application/json-patch+json"
-        } else {
-            "application/json"
-        };
-        return Err(json_response(
-            400,
-            error(
-                "missing_content_type",
-                &format!("{operation} requires Content-Type: {required}"),
-            ),
-            accept_query,
-        ));
-    };
-    let media_type = content_type.split(';').next().map(str::trim);
-    let is_json =
-        media_type.is_some_and(|media_type| media_type.eq_ignore_ascii_case(JSON_QUERY_MEDIA_TYPE));
-    let is_merge_patch = allow_patch_formats
-        && media_type
-            .is_some_and(|media_type| media_type.eq_ignore_ascii_case(JSON_MERGE_PATCH_MEDIA_TYPE));
-    let is_json_patch = allow_patch_formats
-        && media_type
-            .is_some_and(|media_type| media_type.eq_ignore_ascii_case(JSON_PATCH_MEDIA_TYPE));
-    if !is_json && !is_merge_patch && !is_json_patch {
-        let supported = if allow_patch_formats {
-            "application/json, application/merge-patch+json, or application/json-patch+json"
-        } else {
-            "application/json"
-        };
-        return Err(json_response(
-            415,
-            error(
-                "unsupported_media_type",
-                &format!("only {supported} request content is supported"),
-            ),
-            accept_query,
-        ));
-    }
-    let mut body = Vec::new();
-    if request
-        .as_reader()
-        .take((MAX_BODY + 1) as u64)
-        .read_to_end(&mut body)
-        .is_err()
-    {
-        return Err(json_response(
-            400,
-            error("invalid_body", "could not read request content"),
-            accept_query,
-        ));
-    }
-    if body.len() > MAX_BODY {
-        return Err(json_response(
-            413,
-            error("body_too_large", "request body exceeds 1 MiB"),
-            accept_query,
-        ));
-    }
-    let media_type = if is_merge_patch {
-        PatchMediaType::MergePatch
-    } else if is_json_patch {
-        PatchMediaType::JsonPatch
-    } else {
-        PatchMediaType::Json
-    };
-    Ok((body, media_type))
-}
-
-fn dbf_error_response(dbf_error: DbfError) -> HttpResponse {
-    match dbf_error {
-        DbfError::Invalid(message) if message == "record not found" => {
-            json_response(404, error("not_found", "record not found"), false)
-        }
-        DbfError::Invalid(message) => json_response(422, error("invalid_record", &message), false),
-        DbfError::Io(io_error) => {
-            json_response(500, error("storage_error", &io_error.to_string()), false)
-        }
-    }
-}
-
-fn request_header<'a>(request: &'a Request, name: &'static str) -> Option<&'a str> {
-    request
-        .headers()
-        .iter()
-        .find(|header| header.field.equiv(name))
-        .map(|header| header.value.as_str())
-}
-
-fn content_type(request: &Request) -> Option<&str> {
-    request_header(request, "Content-Type")
-}
-
-fn error(code: &str, message: &str) -> Value {
-    json!({"error": {"code": code, "message": message}})
-}
-
-fn json_response(status: u16, body: Value, accept_query: bool) -> HttpResponse {
-    json_bytes_response(status, body.to_string().into_bytes(), accept_query)
-}
-
-fn json_bytes_response(status: u16, body: Vec<u8>, accept_query: bool) -> HttpResponse {
-    let body_length = body.len();
-    let mut response = Response::new(
-        StatusCode(status),
-        vec![header("Content-Type", "application/json")],
-        ServerBody::Buffered(Cursor::new(body)),
-        Some(body_length),
-        None,
-    );
-    if accept_query {
-        response = response.with_header(header("Accept-Query", "\"application/json\""));
-    }
-    response
-}
-
-pub(super) fn options_response(allow: &str) -> HttpResponse {
-    empty_response(204)
-        .with_header(header("Allow", allow))
-        .with_header(header("Accept-Query", "\"application/json\""))
-        .with_header(header(
-            "Accept-Patch",
-            "application/json, application/merge-patch+json, application/json-patch+json",
-        ))
-}
-
-pub(super) fn empty_response(status: u16) -> HttpResponse {
-    Response::new(
-        StatusCode(status),
-        Vec::new(),
-        ServerBody::Buffered(Cursor::new(Vec::new())),
-        Some(0),
-        None,
-    )
-}
-
-fn header(name: &str, value: &str) -> Header {
-    Header::from_bytes(name.as_bytes(), value.as_bytes()).expect("static HTTP header is valid")
 }
 
 #[cfg(test)]
