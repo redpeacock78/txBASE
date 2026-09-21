@@ -220,11 +220,12 @@ fn xbf_cli_import_report_and_export_a_dbf() {
         snapshot.to_str().unwrap(),
         exported.to_str().unwrap(),
     ]);
+    assert!(!export.status.success());
     assert!(
-        export.status.success(),
-        "xbf export failed: {}",
         String::from_utf8_lossy(&export.stderr)
+            .contains("DBF export cannot preserve a not-null constraint")
     );
+    assert!(!exported.exists());
 
     let schema_export = run_cli(&[
         "xbf",
@@ -241,12 +242,6 @@ fn xbf_cli_import_report_and_export_a_dbf() {
     assert!(schema_exported.with_extension("txschema.json").exists());
 
     let source_table = txbase::dbf::DbfTable::from_path(&source).unwrap();
-    assert_eq!(
-        txbase::dbf::DbfTable::from_path(&exported)
-            .unwrap()
-            .active_json(),
-        source_table.active_json()
-    );
     assert_eq!(
         txbase::dbf::DbfTable::from_path(&schema_exported)
             .unwrap()
