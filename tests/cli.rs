@@ -261,6 +261,6 @@ fn xbf_cli_import_report_and_export_a_dbf() {
             let _ = fs::remove_file(path.with_extension(extension));
         }
         let _ = fs::remove_dir_all(path.with_extension("txbase-xbf-export"));
-        fs::remove_file(path).unwrap();
+        let _ = fs::remove_file(path);
     }
 }
