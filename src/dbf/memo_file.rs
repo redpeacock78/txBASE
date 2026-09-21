@@ -47,15 +47,22 @@ impl MemoFile {
                 }
             }
         };
-        if block_size < 8 || bytes.len() < block_size {
-            return Err(DbfError::Invalid(
-                "memo block size or header is invalid".into(),
-            ));
-        }
-        if format != MemoFormat::FoxPro
-            && (block_size < DBT_BLOCK_SIZE || block_size % DBT_BLOCK_SIZE != 0)
-        {
-            return Err(DbfError::Invalid("dBASE DBT block size is invalid".into()));
+        match format {
+            MemoFormat::FoxPro if block_size < 8 || bytes.len() < block_size => {
+                return Err(DbfError::Invalid(
+                    "FPT block size or header is invalid".into(),
+                ));
+            }
+            MemoFormat::Dbase3 | MemoFormat::Dbase4
+                if block_size < DBT_BLOCK_SIZE
+                    || block_size % DBT_BLOCK_SIZE != 0
+                    || bytes.len() < block_size =>
+            {
+                return Err(DbfError::Invalid(
+                    "dBASE DBT block size or header is invalid".into(),
+                ));
+            }
+            _ => {}
         }
         Ok(Self {
             bytes,
