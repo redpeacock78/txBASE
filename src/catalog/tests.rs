@@ -279,6 +279,75 @@ fn catalog_mvcc_preserves_consistent_cross_table_snapshots() {
 }
 
 #[test]
+fn catalog_mvcc_gc_retains_latest_commits_and_allows_future_appends() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.dbf"), fixture()).unwrap();
+    let catalog = Catalog::from_path(&root).unwrap();
+
+    for operation in [
+        OperationIr {
+            method: OperationMethod::Post,
+            path: "/users/records".into(),
+            body: Some(json!({
+                "ID": 3,
+                "NAME": "Carol",
+                "AGE": 42,
+                "ACTIVE": true
+            })),
+        },
+        OperationIr {
+            method: OperationMethod::Patch,
+            path: "/users/records/1".into(),
+            body: Some(json!({"NAME": "Current"})),
+        },
+        OperationIr {
+            method: OperationMethod::Patch,
+            path: "/posts/records/1".into(),
+            body: Some(json!({"AGE": 31})),
+        },
+    ] {
+        catalog
+            .commit_operations_with_preconditions(&[operation], None, None)
+            .unwrap();
+    }
+
+    assert_eq!(Catalog::gc_mvcc(&root, 2).unwrap(), vec![2, 3]);
+    assert!(Catalog::from_path_at(&root, 1).is_err());
+    assert_eq!(
+        Catalog::from_path_at(&root, 2)
+            .unwrap()
+            .open_table("users")
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["NAME"],
+        "Current"
+    );
+    assert!(Catalog::gc_mvcc(&root, 0).is_err());
+
+    catalog
+        .commit_operations_with_preconditions(
+            &[OperationIr {
+                method: OperationMethod::Post,
+                path: "/posts/records".into(),
+                body: Some(json!({
+                    "ID": 3,
+                    "NAME": "Carol",
+                    "AGE": 42,
+                    "ACTIVE": true
+                })),
+            }],
+            None,
+            None,
+        )
+        .unwrap();
+    assert_eq!(Catalog::mvcc_versions(&root).unwrap(), vec![2, 3, 4]);
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn catalog_transaction_refreshes_indexes_for_each_changed_table() {
     let root = temporary_catalog();
     let users = root.join("users.dbf");

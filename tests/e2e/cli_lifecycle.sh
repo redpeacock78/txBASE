@@ -60,5 +60,17 @@ if ! grep -Eq '"ID"[[:space:]]*:[[:space:]]*1' <<<"$snapshot" || grep -Eq '"ID"[
     exit 1
 fi
 
+step=$((step + 1))
+printf '[%02d] garbage-collect old MVCC snapshots through the CLI\n' "$step" >&2
+retained=$("$binary" mvcc gc "$dbf" --keep 1)
+if ! grep -Fq '[2]' <<<"$retained" || grep -Fq '[1]' <<<"$retained"; then
+    printf 'unexpected retained MVCC versions: %s\n' "$retained" >&2
+    exit 1
+fi
+if "$binary" mvcc read "$dbf" 1 >/dev/null 2>&1; then
+    printf 'garbage-collected snapshot 1 remained readable\n' >&2
+    exit 1
+fi
+
 run_step "verify the table through the CLI" "$binary" verify "$dbf"
 printf 'CLI E2E passed\n'

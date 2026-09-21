@@ -19,6 +19,7 @@ The CLI exposes the committed versions and reads one exact historical snapshot:
 ```bash
 txbase mvcc list path/to/users.dbf
 txbase mvcc read path/to/users.dbf 2
+txbase mvcc gc path/to/users.dbf --keep 5
 ```
 
 `mvcc read` returns active records as JSON.
@@ -26,6 +27,16 @@ txbase mvcc read path/to/users.dbf 2
 The requested ID must identify a committed snapshot.
 
 Historical snapshots are read-only and cannot be saved as a new current state.
+
+`mvcc gc` retains the newest positive `--keep` count of committed snapshots and
+rewrites only the MVCC history sidecar.
+
+It takes the table lock, recovers a pending table WAL, writes the compacted history to a synced
+temporary file, and replaces the old history file.
+
+The current DBF, memo, schema, index, and transaction-state files are not changed.
+
+An ID removed by GC is no longer readable, and a later commit appends after the retained IDs.
 
 Catalog transactions retain a commit-level image of every discovered table:
 
@@ -42,6 +53,7 @@ The catalog CLI exposes the same boundary:
 ```bash
 txbase mvcc catalog list path/to/database
 txbase mvcc catalog read path/to/database 2
+txbase mvcc catalog gc path/to/database --keep 5
 ```
 
 All tables opened from one historical catalog have the same catalog commit ID and are read-only.
@@ -73,12 +85,22 @@ conflict detection, or a long-lived transaction object across CLI calls.
 
 The catalog transaction ID identifies one consistent multi-table image.
 
+`Catalog::gc_mvcc` and the catalog GC command retain the newest positive `keep_last` count of
+catalog images.
+
+Catalog GC takes the catalog write lock, recovers any prepared journal first, writes the retained
+history to a synced temporary file, and replaces `.txbase.catalog.mvcc`.
+
+It does not change DBF, memo, schema, index, or catalog transaction-state files.
+
 The low-level transaction engine in `src/transaction/` remains a separate WAL transaction primitive.
 
 ## 4. Roadmap
 
-The next MVCC boundary is row-level version storage with an explicit retention and garbage
-collection policy. That work must define schema-version selection, compaction, and the interaction
+The current retention boundary is count-based GC for full-image table and catalog snapshots.
+
+The next MVCC boundary is row-level version storage with row-level retention and garbage
+collection. That work must define schema-version selection, compaction, and the interaction
 between row history and the existing full-image catalog commits.
 
 Distributed snapshots, follower reads, and serializable conflict detection remain later work.

@@ -228,6 +228,8 @@ The CLI now exposes the first local-database maintenance boundary:
 | `txbase recall FILE RECORD` | Restores one logically deleted record through the existing WAL |
 | `txbase backup SOURCE DEST` | Validates `SOURCE`, then copies its DBF, detected `.dbt` or `.fpt`, schema, and valid `.txidx` sidecars |
 | `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as `SOURCE` |
+| `txbase mvcc gc FILE --keep COUNT` | Retains the newest positive count of full-image table snapshots and replaces only the MVCC history sidecar through a synced temporary file |
+| `txbase mvcc catalog gc DIRECTORY --keep COUNT` | Retains the newest positive count of full-image catalog snapshots and replaces only the catalog MVCC history sidecar through a synced temporary file |
 | `txbase wal inspect WAL` | Reads a WAL without creating or truncating it, reports complete record LSN/payload lengths, and marks an incomplete final tail |
 
 The copy operation replaces each destination file through a synced temporary file.

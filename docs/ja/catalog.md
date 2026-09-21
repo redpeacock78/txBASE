@@ -158,6 +158,7 @@ txbase verify-catalog path/to/database
 ```bash
 txbase mvcc catalog list path/to/database
 txbase mvcc catalog read path/to/database 1
+txbase mvcc catalog gc path/to/database --keep 5
 ```
 
 カタログ出力の形は次のとおりです。
@@ -194,7 +195,11 @@ txbase mvcc catalog read path/to/database 1
 
 履歴が提供するのはcommit単位の可視性であり、行単位のバージョンではありません。
 
-保持期間とガベージコレクションの方針はまだなく、分散スナップショットやserializableな競合検出も提供しません。
+`Catalog::gc_mvcc`とカタログGCコマンドは、完全イメージのうち新しいものを指定した正の件数だけ保持し、同期済み一時ファイルを通して履歴サイドカーだけを置き換えます。
+
+GCで削除したIDは読み取れず、次のカタログcommitは保持されたIDの後ろに追加されます。
+
+行単位のバージョン、行単位の保持とガベージコレクション、分散スナップショット、serializableな競合検出は提供しません。
 
 フィールドサイドカーが`references: "TABLE.FIELD"`を宣言すると、カタログの名前付き更新とカタログトランザクションは、非nullの子値が参照テーブルのアクティブ行に存在するか検証します。
 

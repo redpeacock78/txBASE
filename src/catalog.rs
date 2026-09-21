@@ -170,6 +170,12 @@ impl Catalog {
         mvcc::versions(root)
     }
 
+    pub fn gc_mvcc(path: impl AsRef<Path>, keep_last: usize) -> Result<Vec<u64>, CatalogError> {
+        let root = path.as_ref();
+        let _lock = transaction::write_lock(root)?;
+        mvcc::gc(root, keep_last)
+    }
+
     pub fn table_names(&self) -> Vec<String> {
         self.tables.keys().cloned().collect()
     }

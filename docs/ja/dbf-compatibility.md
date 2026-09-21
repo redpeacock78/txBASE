@@ -235,6 +235,8 @@ CLIはローカルデータベースの最初の保守境界を公開します�
 | `txbase recall FILE RECORD` | 既存 WAL で一つの論理削除レコードを復元する |
 | `txbase backup SOURCE DEST` | `SOURCE`を検証し、DBF、検出した`.dbt`または`.fpt`、スキーマ、有効な`.txidx`サイドカーをコピーする |
 | `txbase restore SOURCE DEST` | バックアップを`SOURCE`として同じ検証済みコピー手順を使う |
+| `txbase mvcc gc FILE --keep COUNT` | 完全イメージのうち新しい正の件数を保持し、同期済み一時ファイルを通してMVCC履歴サイドカーだけを置き換える |
+| `txbase mvcc catalog gc DIRECTORY --keep COUNT` | 完全イメージのうち新しい正の件数を保持し、同期済み一時ファイルを通してカタログMVCC履歴サイドカーだけを置き換える |
 | `txbase wal inspect WAL` | WAL を作成も切り詰めもせずに読み取り、完全なレコードの LSN とペイロード長を表示し、切断された末尾を示す |
 
 コピー操作は、同期済みの一時ファイルを通して各宛先ファイルを置き換えます。

@@ -58,7 +58,7 @@ The baseline intentionally does not include the following:
 - A full cost-based index or join model.
 - Full index-aware or cost-based merge join strategies.
 - Runtime-specific async traits.
-- Row-level version storage and retention policies.
+- Row-level version storage and row-level retention policies.
 - Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - `$project`, final `$sort`, `$skip`, and final `$limit` beyond the bounded aggregation contract.
 - Composite cross-table constraints beyond catalog-scoped `references`.
@@ -124,7 +124,8 @@ An index is not complete for the broader roadmap until insert, update, logical d
 
 A catalog-wide commit-level snapshot is implemented with commit, rollback, crash recovery, and
 visibility rules in the shared catalog journal boundary. Row-level history is not complete until
-retention and garbage-collection rules are specified and tested.
+row-level retention and garbage-collection rules are specified and tested.
+The current full-image table and catalog histories have an explicit count-based GC boundary.
 
 The single-table transaction slice covers one DBF table through one snapshot/WAL persistence path and retains committed table snapshots in a `*.txbase.mvcc` sidecar.
 The catalog transaction slice prepares named operations across multiple DBFs under a catalog
@@ -132,7 +133,8 @@ lock, commits DBF and changed-sidecar images through a directory journal, persis
 journal commit ID, and records a full image of every discovered table in `.txbase.catalog.mvcc`
 through that same journal. It recovers an incomplete prepare before the next catalog read and
 exposes read-only historical catalog images through the Rust API and CLI. The history is
-commit-level, not row-level, and has no retention or garbage-collection policy yet.
+commit-level, not row-level, and `mvcc gc` retains the newest positive count of full-image
+snapshots without changing current table files.
 
 The lower-level `TransactionManager` is separate from those DBF persistence paths. Its
 `TransactionId` allocator resumes after reopening a WAL that retains completed transaction

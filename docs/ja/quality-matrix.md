@@ -46,6 +46,7 @@ cargo test --all-targets --all-features
 | TXN-002 | 単一テーブル DBF WAL コミットが正の永続 ID を割り当て、`TXTI`から復旧し、古いトランザクション状態の writer を拒否し、状態サイドカーをコピーし、HTTP 更新へ ID を公開する。 | `src/dbf/persistence.rs`; `src/dbf/recovery.rs`; `src/dbf/maintenance.rs`; `src/server/etag.rs` | `wal_commit_ids_persist_and_resume_after_reload`; `snapshot_recovery_persists_the_wal_transaction_id`; `copy_table_files_preserves_transaction_state`; `mutation_etag_prevents_lost_update` | Current |
 | MVCC-001 | 単一テーブル DBF commit が耐久的な prepare と commit の記録をDBF、memo、スキーマのイメージとともに保持し、commit済みIDの完全なスナップショットをライブラリとCLIから読み取れるようにし、過去テーブルを読み取り専用にする。 | `src/dbf/mvcc.rs`; `src/dbf/persistence.rs`; `src/dbf/recovery.rs`; `src/cli/commands/mvcc.rs`; `docs/ja/mvcc.md` | `persistent_snapshots_keep_each_committed_table_image`; `tests/e2e/cli_lifecycle.sh` | Current |
 | MVCC-002 | 成功したカタログジャーナルcommitが、検出したすべてのテーブルの完全なイメージをバージョン付きの`.txbase.catalog.mvcc`履歴へ保持し、`Catalog::from_path_at`とカタログMVCC CLIがcommit単位の一貫したスナップショットを読み取り、過去カタログを読み取り専用にする。 | `src/catalog/mvcc.rs`; `src/catalog/transaction.rs`; `src/catalog/journal.rs`; `src/catalog.rs`; `src/cli/commands/mvcc.rs`; `docs/ja/mvcc.md` | `catalog_mvcc_preserves_consistent_cross_table_snapshots`; `catalog_history_round_trips_binary_table_images`; `prepared_journal_rolls_back_partial_catalog_commit`; `committed_journal_replays_the_complete_catalog_commit` | Boundary |
+| MVCC-003 | テーブルとカタログのMVCC GCが書き込みロックを取得して保留状態を復旧し、完全イメージのうち新しい正の件数を保持し、同期済み一時ファイルを通して履歴サイドカーだけを置き換え、0件を拒否し、現在データを変更せず削除したIDを読めなくする。 | `src/dbf/mvcc.rs`; `src/catalog/mvcc.rs`; `src/catalog.rs`; `src/cli/commands/mvcc.rs`; `tests/e2e/cli_lifecycle.sh`; `docs/ja/mvcc.md` | `gc_retains_latest_table_snapshots_and_rejects_zero`; `catalog_mvcc_gc_retains_latest_commits_and_allows_future_appends`; `bash tests/e2e/cli_lifecycle.sh` | Boundary |
 | CLI-001 | backup と restore が DBF のソースを検証し、サポート対象のサイドカーとともにサイドカー対応保守境界を通して DBF をコピーする。 | `src/cli.rs`; `src/dbf/maintenance.rs`; `src/dbf/tests/maintenance.rs`; `tests/cli.rs`; `docs/ja/dbf-compatibility.md` | `backup_and_restore_cli_copy_a_dbf`; `copy_table_files_preserves_dbf_and_memo_sidecar`; `copy_table_files_preserves_transaction_state`; `copy_table_files_preserves_a_valid_index_sidecar` | Current |
 | CLI-002 | schema、verify、pack、recall コマンドが CLI 引数を解析し、公開バイナリ経路を通して検証済み DBF を操作する。verify は存在する`.txidx`サイドカーも検証する。 | `src/cli.rs`; `src/dbf/parser.rs`; `src/dbf/persistence.rs`; `src/index.rs`; `tests/cli.rs`; `docs/ja/dbf-compatibility.md` | `dbf_maintenance_cli_commands_operate_on_a_dbf`; `verify_cli_rejects_a_stale_index_sidecar` | Current |
 | CLI-003 | XBF の import と表現可能性レポートが公開バイナリ経路で動作し、DBF が保持できない not-null 制約を直接 export が拒否し、スキーマ保持 export がアクティブな DBF レコードを保持する。 | `src/cli.rs`; `src/xbf/`; `src/dbf/schema_export.rs`; `tests/cli.rs`; `docs/ja/xbf.md` | `xbf_cli_import_report_and_export_a_dbf` | Current |
@@ -92,7 +93,7 @@ cargo test --all-targets --all-features
 
 - 長寿命ストリーム向けのランタイム固有非同期トレイト。
 - 完全なコストベースプランナー、完全なインデックス対応またはコストベースのマージ結合戦略、入力およびグループ出力の有界`$match`、`$count`、`$distinct`、`$group`の`$sum`、`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を超える集約ステージまたはアキュムレータ。
-- 行単位の過去バージョン、保持期間、ガベージコレクション。
+- 行単位の過去バージョン、行単位の保持期間、行単位のガベージコレクション。
 - ロケール対応CJK照合と、より広い上流CJKフィクスチャ。
 - スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、オブジェクトストレージのマニフェスト、WASMホスティング、分散レプリケーション。
 

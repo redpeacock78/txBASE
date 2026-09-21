@@ -130,8 +130,12 @@ txbase schema path/to/users.dbf
 txbase verify path/to/users.dbf
 txbase catalog path/to/database
 txbase verify-catalog path/to/database
+txbase mvcc list path/to/users.dbf
+txbase mvcc read path/to/users.dbf 1
+txbase mvcc gc path/to/users.dbf --keep 5
 txbase mvcc catalog list path/to/database
 txbase mvcc catalog read path/to/database 1
+txbase mvcc catalog gc path/to/database --keep 5
 txbase index verify path/to/users.dbf
 txbase xbf report path/to/users.xbf
 txbase wal inspect path/to/users.txbase.wal
@@ -139,6 +143,10 @@ txbase wal inspect path/to/users.txbase.wal
 
 `wal inspect`はWALを作成せず、切り詰めずに読み取ります。
 ファイルサイズ、有効なバイト境界、完全なレコードのLSNとペイロード長、最後のレコードが切断されているかどうかを表示します。
+
+`mvcc gc`と`mvcc catalog gc`は、完全イメージのうち新しいものを指定した正の件数だけ保持し、同期済み一時ファイルを通してMVCC履歴サイドカーだけを書き替えます。
+
+現在のDBFとカタログ状態は変更せず、GCで削除したスナップショットIDは読み取れなくなります。
 
 インデックスのライフサイクルと保守。
 

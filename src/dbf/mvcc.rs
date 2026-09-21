@@ -2,7 +2,7 @@ use super::lock::TableLock;
 use super::schema_metadata::{SchemaMetadata, schema_metadata_bytes};
 use super::{
     DbfError, DbfTable, MemoFile, MemoFormat, MemoSnapshot, find_memo_path,
-    memo_format_for_version, transaction_error,
+    memo_format_for_version, sync_parent_directory, transaction_error,
 };
 use crate::transaction::{FileWal, Wal};
 use std::collections::{BTreeMap, BTreeSet};
@@ -99,6 +99,51 @@ pub(super) fn versions(path: &Path) -> Result<Vec<u64>, DbfError> {
     Ok(committed_snapshots(&records)?.into_keys().collect())
 }
 
+pub(super) fn gc(path: &Path, keep_last: usize) -> Result<Vec<u64>, DbfError> {
+    if keep_last == 0 {
+        return Err(DbfError::Invalid(
+            "MVCC GC keep count must be positive".into(),
+        ));
+    }
+    let history_path = path_for(path);
+    if !history_path.exists() {
+        return Ok(Vec::new());
+    }
+    let records = read_records(path)?;
+    let snapshots = committed_snapshots(&records)?;
+    let mut retained = snapshots
+        .into_iter()
+        .rev()
+        .take(keep_last)
+        .collect::<Vec<_>>();
+    retained.reverse();
+    let retained_ids = retained
+        .iter()
+        .map(|(transaction_id, _)| *transaction_id)
+        .collect::<Vec<_>>();
+
+    let temporary = history_path.with_extension("txbase.mvcc.gc.tmp");
+    let _ = fs::remove_file(&temporary);
+    let result = (|| {
+        let mut wal = FileWal::open(&temporary).map_err(transaction_error)?;
+        for (transaction_id, snapshot) in &retained {
+            let prepare = encode_prepare(*transaction_id, snapshot)?;
+            wal.append(&prepare).map_err(transaction_error)?;
+            wal.append(&encode_commit(*transaction_id))
+                .map_err(transaction_error)?;
+        }
+        wal.sync().map_err(transaction_error)?;
+        drop(wal);
+        replace_history(&temporary, &history_path)?;
+        sync_parent_directory(&history_path)?;
+        Ok(retained_ids)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
 pub(super) fn snapshot_at(path: &Path, transaction_id: u64) -> Result<Snapshot, DbfError> {
     if transaction_id == 0 {
         return Err(DbfError::Invalid(
@@ -156,6 +201,14 @@ impl DbfTable {
         Self::recover_wal_with_encoding(path, None)?;
         let _ = super::schema_export::recover_schema_export_locked(path)?;
         versions(path)
+    }
+
+    pub fn gc_mvcc(path: impl AsRef<Path>, keep_last: usize) -> Result<Vec<u64>, DbfError> {
+        let path = path.as_ref();
+        let _lock = TableLock::acquire(path)?;
+        Self::recover_wal_with_encoding(path, None)?;
+        let _ = super::schema_export::recover_schema_export_locked(path)?;
+        gc(path, keep_last)
     }
 
     pub(crate) fn catalog_snapshot_parts(
@@ -264,6 +317,15 @@ fn append_record(path: &Path, payload: &[u8]) -> Result<(), DbfError> {
     let mut wal = FileWal::open(history_path).map_err(transaction_error)?;
     wal.append(payload).map_err(transaction_error)?;
     wal.sync().map_err(transaction_error)
+}
+
+fn replace_history(source: &Path, destination: &Path) -> Result<(), DbfError> {
+    #[cfg(windows)]
+    if destination.exists() {
+        fs::remove_file(destination)?;
+    }
+    fs::rename(source, destination)?;
+    Ok(())
 }
 
 fn encode_prepare(transaction_id: u64, snapshot: &Snapshot) -> Result<Vec<u8>, DbfError> {

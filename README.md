@@ -138,14 +138,22 @@ txbase schema path/to/users.dbf
 txbase verify path/to/users.dbf
 txbase catalog path/to/database
 txbase verify-catalog path/to/database
+txbase mvcc list path/to/users.dbf
+txbase mvcc read path/to/users.dbf 1
+txbase mvcc gc path/to/users.dbf --keep 5
 txbase mvcc catalog list path/to/database
 txbase mvcc catalog read path/to/database 1
+txbase mvcc catalog gc path/to/database --keep 5
 txbase index verify path/to/users.dbf
 txbase xbf report path/to/users.xbf
 txbase wal inspect path/to/users.txbase.wal
 ```
 
 `wal inspect` never creates or truncates the WAL. It reports the file size, valid byte boundary, complete record LSN and payload length, and whether the final record is torn.
+
+`mvcc gc` and `mvcc catalog gc` retain the newest positive count of full-image snapshots and
+rewrite only their MVCC history sidecar through a synced temporary file. The current DBF and catalog state are
+unchanged; removed snapshot IDs are no longer readable.
 
 Index lifecycle and maintenance:
 

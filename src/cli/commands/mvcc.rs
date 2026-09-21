@@ -27,6 +27,14 @@ pub(crate) fn mvcc(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn
             let table = DbfTable::from_path_at(path, transaction_id)?;
             println!("{}", serde_json::to_string(&table.active_json())?);
         }
+        "gc" => {
+            let path = PathBuf::from(args.next().ok_or("mvcc gc requires a DBF path")?);
+            let keep_last = parse_keep_last(&mut args, "mvcc gc")?;
+            println!(
+                "{}",
+                serde_json::to_string(&DbfTable::gc_mvcc(path, keep_last)?)?
+            );
+        }
         "catalog" => catalog_mvcc(args)?,
         _ => return Err(format!("unknown mvcc command: {action}").into()),
     }
@@ -72,6 +80,14 @@ fn catalog_mvcc(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Er
                 }))?
             );
         }
+        "gc" => {
+            let path = PathBuf::from(args.next().ok_or("mvcc catalog gc requires a directory")?);
+            let keep_last = parse_keep_last(&mut args, "mvcc catalog gc")?;
+            println!(
+                "{}",
+                serde_json::to_string(&Catalog::gc_mvcc(path, keep_last)?)?
+            );
+        }
         _ => return Err(format!("unknown mvcc catalog command: {action}").into()),
     }
     Ok(())
@@ -82,4 +98,24 @@ fn reject_extra(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Er
         return Err(format!("unexpected argument: {extra}").into());
     }
     Ok(())
+}
+
+fn parse_keep_last(
+    args: &mut impl Iterator<Item = String>,
+    command: &str,
+) -> Result<usize, Box<dyn Error>> {
+    if args.next().as_deref() != Some("--keep") {
+        return Err(format!("{command} requires --keep COUNT").into());
+    }
+    let value = args
+        .next()
+        .ok_or_else(|| format!("{command} requires a keep count"))?;
+    let keep_last = value
+        .parse::<usize>()
+        .map_err(|_| format!("{command} keep count must be a positive integer"))?;
+    if keep_last == 0 {
+        return Err(format!("{command} keep count must be a positive integer").into());
+    }
+    reject_extra(args)?;
+    Ok(keep_last)
 }

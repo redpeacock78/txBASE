@@ -140,6 +140,7 @@ List retained catalog commits and read one consistent historical image:
 ```bash
 txbase mvcc catalog list path/to/database
 txbase mvcc catalog read path/to/database 1
+txbase mvcc catalog gc path/to/database --keep 5
 ```
 
 The catalog output has this shape:
@@ -176,9 +177,13 @@ The catalog journal persists a monotonically increasing commit ID in
 tables in `.txbase.catalog.mvcc` through the same journal. Recovery rolls the state and history
 back with a prepared journal or reapplies both with a committed journal.
 
-The history provides commit-level visibility, not row-level versions. It has no retention or
-garbage-collection policy yet, and it does not provide distributed snapshots or serializable
-conflict detection.
+The history provides commit-level visibility, not row-level versions.
+`Catalog::gc_mvcc` and the catalog GC command retain the newest positive count of full-image
+snapshots and replace only the history sidecar through a synced temporary file.
+An ID removed by GC is no longer readable, while later catalog commits append after the retained
+IDs.
+The catalog does not provide row-level versions, row-level retention or garbage collection,
+distributed snapshots, or serializable conflict detection.
 
 When a field sidecar declares `references: "TABLE.FIELD"`, catalog named-table mutations and
 catalog transactions validate non-null child values against active rows in the referenced table.

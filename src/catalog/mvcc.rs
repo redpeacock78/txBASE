@@ -1,6 +1,7 @@
 use super::CatalogError;
 use std::collections::BTreeMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 const HISTORY_FILE: &str = ".txbase.catalog.mvcc";
@@ -53,6 +54,45 @@ pub(crate) fn versions(root: &Path) -> Result<Vec<u64>, CatalogError> {
         .collect())
 }
 
+pub(crate) fn gc(root: &Path, keep_last: usize) -> Result<Vec<u64>, CatalogError> {
+    if keep_last == 0 {
+        return Err(CatalogError::Invalid(
+            "catalog MVCC GC keep count must be positive".into(),
+        ));
+    }
+    let path = path_for(root);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let history = read_history(root)?;
+    let mut retained = history
+        .into_iter()
+        .rev()
+        .take(keep_last)
+        .collect::<Vec<_>>();
+    retained.reverse();
+    let retained_ids = retained
+        .iter()
+        .map(|snapshot| snapshot.transaction_id)
+        .collect::<Vec<_>>();
+    let bytes = encode(&retained)?;
+    let temporary = root.join(".txbase.catalog.mvcc.gc.tmp");
+    let _ = fs::remove_file(&temporary);
+    let result = (|| {
+        let mut file = File::create(&temporary)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        drop(file);
+        replace_history(&temporary, &path)?;
+        sync_directory(root)?;
+        Ok(retained_ids)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
 pub(crate) fn snapshot_at(root: &Path, transaction_id: u64) -> Result<Snapshot, CatalogError> {
     if transaction_id == 0 {
         return Err(CatalogError::Invalid(
@@ -82,6 +122,26 @@ fn read_history(root: &Path) -> Result<Vec<Snapshot>, CatalogError> {
         Err(error) => return Err(error.into()),
     };
     decode(&bytes)
+}
+
+fn replace_history(source: &Path, destination: &Path) -> Result<(), CatalogError> {
+    #[cfg(windows)]
+    if destination.exists() {
+        fs::remove_file(destination)?;
+    }
+    fs::rename(source, destination)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn sync_directory(path: &Path) -> Result<(), CatalogError> {
+    File::open(path)?.sync_all()?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_path: &Path) -> Result<(), CatalogError> {
+    Ok(())
 }
 
 fn encode(history: &[Snapshot]) -> Result<Vec<u8>, CatalogError> {
