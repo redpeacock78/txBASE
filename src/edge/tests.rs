@@ -63,6 +63,7 @@ fn commits_and_reads_one_consistent_xbf_generation() {
     assert!(removed.is_empty());
     let removed = object_table.retain_generations(1).unwrap();
     assert!(removed.iter().any(|key| key.ends_with("snapshots/0.xbf")));
+    assert_eq!(object_table.manifest().unwrap().unwrap().history, vec![1]);
     assert_eq!(object_table.read_at(0).unwrap(), None);
     assert_eq!(object_table.read().unwrap(), Some(second));
 }
@@ -263,6 +264,47 @@ fn filesystem_object_table_reopens_and_recovers_an_interrupted_commit() {
         let object_table = ObjectTable::new(store, "users").unwrap();
         assert_eq!(object_table.recover().unwrap(), 1);
         assert_eq!(object_table.read().unwrap(), Some(table(4, "Carol")));
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn filesystem_object_table_persists_history_and_retention() {
+    let root = temporary_directory("history");
+    {
+        let store = FilesystemObjectStore::new(&root).unwrap();
+        let object_table = ObjectTable::new(store, "users").unwrap();
+        for (generation, name) in [(0, "Alice"), (1, "Bob"), (2, "Carol")] {
+            object_table.commit(&table(generation, name)).unwrap();
+        }
+    }
+    {
+        let store = FilesystemObjectStore::new(&root).unwrap();
+        let object_table = ObjectTable::new(store, "users").unwrap();
+        assert_eq!(object_table.read_at(0).unwrap(), Some(table(0, "Alice")));
+        assert_eq!(object_table.read_at(2).unwrap(), Some(table(2, "Carol")));
+        assert_eq!(
+            object_table.retain_generations(2).unwrap(),
+            vec!["users/snapshots/0.xbf".to_owned(),]
+        );
+        assert_eq!(
+            object_table.manifest().unwrap().unwrap().history,
+            vec![1, 2]
+        );
+        assert_eq!(object_table.read_at(0).unwrap(), None);
+        assert_eq!(object_table.read_at(1).unwrap(), Some(table(1, "Bob")));
+    }
+    {
+        let store = FilesystemObjectStore::new(&root).unwrap();
+        let object_table = ObjectTable::new(store, "users").unwrap();
+        assert_eq!(object_table.read_at(0).unwrap(), None);
+        assert_eq!(object_table.read_at(1).unwrap(), Some(table(1, "Bob")));
+        assert_eq!(object_table.read().unwrap(), Some(table(2, "Carol")));
+        object_table.commit(&table(3, "Dave")).unwrap();
+        assert_eq!(
+            object_table.manifest().unwrap().unwrap().history,
+            vec![1, 2, 3]
+        );
     }
     let _ = std::fs::remove_dir_all(root);
 }

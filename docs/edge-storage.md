@@ -93,7 +93,9 @@ It removes stale WAL objects and snapshot objects that are not in the committed 
 
 The method does not remove a recoverable pending commit.
 
-`ObjectTable::retain_generations(keep_last)` explicitly removes older snapshot objects while preserving the newest committed generations and the current manifest.
+`ObjectTable::retain_generations(keep_last)` first publishes a compacted manifest containing only the newest committed generations, then removes older snapshot objects.
+The manifest update uses compare-and-swap, so a concurrent commit fails the retention operation instead of being silently deleted.
+If deletion is interrupted, the compacted manifest remains authoritative and a later orphan cleanup can remove the leftover objects.
 It does not run automatically, so an adapter can select a retention and expiration policy appropriate to its storage service.
 
 ## 5. XBF relationship

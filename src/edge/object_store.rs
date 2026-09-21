@@ -180,21 +180,34 @@ impl<S: ObjectStore> ObjectTable<S> {
             ));
         }
         self.recover()?;
-        let (_, manifest) = self.current_manifest()?;
+        let (expected_bytes, manifest) = self.current_manifest()?;
         let Some(manifest) = manifest else {
             return Ok(Vec::new());
         };
         self.validate_manifest_root(&manifest)?;
-        let retained = manifest_history(&manifest)
+        let history = manifest_history(&manifest);
+        let retained = history
             .into_iter()
             .rev()
             .take(keep_last)
             .collect::<BTreeSet<_>>();
+        let mut retained_history = retained.iter().copied().collect::<Vec<_>>();
+        retained_history.sort_unstable();
+        let compacted_manifest = Manifest {
+            history: retained_history,
+            ..manifest.clone()
+        };
+        self.store.compare_and_swap(
+            &self.manifest_key,
+            expected_bytes.as_deref(),
+            &compacted_manifest.to_bytes()?,
+        )?;
         let prefix = self.snapshot_prefix();
         let mut removed = Vec::new();
         for key in self.store.list(&prefix)? {
-            let keep = snapshot_generation(&prefix, &key)
-                .is_some_and(|generation| retained.contains(&generation));
+            let keep = snapshot_generation(&prefix, &key).is_some_and(|generation| {
+                retained.contains(&generation) || generation > manifest.generation
+            });
             if !keep {
                 self.store.delete(&key)?;
                 removed.push(key);
