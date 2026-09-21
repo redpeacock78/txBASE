@@ -131,6 +131,8 @@ A delta with the wrong base must be rejected.
 
 `src/query/planner_compound_tests.rs::uses_a_compound_index_for_an_equality_prefix` covers an equality-prefix lookup through a compound index and compares the result with the table scan.
 
+`src/query/planner_compound_tests.rs::uses_a_compound_index_for_a_multi_field_equality_prefix` covers a multi-field equality-prefix lookup with a residual predicate and compares the result with the table scan.
+
 `src/query/planner_tests.rs::uses_an_ordered_index_prefix_for_multi_key_sort` covers first-key index traversal, secondary-key tie sorting, and table-scan equivalence.
 
 `src/query/planner_tests.rs::uses_a_compound_index_for_multi_key_sort` covers ascending compound-key prefix order, complete reverse traversal, mixed-direction fallback, and table-scan equivalence.
