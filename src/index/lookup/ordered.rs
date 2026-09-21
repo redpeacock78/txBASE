@@ -1,5 +1,5 @@
 use super::super::{IndexFile, IndexKey};
-use super::{CompoundOrdered, equality_prefix};
+use super::{CompoundOrdered, equality::equality_prefix};
 use serde_json::{Map, Value};
 
 impl IndexFile {
