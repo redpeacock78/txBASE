@@ -1,4 +1,5 @@
 use super::*;
+use crate::index::{IndexDefinition, IndexFile};
 use std::fs;
 use std::io::Read;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -83,7 +84,12 @@ fn catalog_server_query_join_executes_and_exposes_schema() {
 #[test]
 fn catalog_server_reads_named_tables_through_record_routes() {
     let root = temporary_catalog();
-    fs::write(root.join("left.dbf"), fixture()).unwrap();
+    let left_path = root.join("left.dbf");
+    fs::write(&left_path, fixture()).unwrap();
+    IndexFile::build(&left_path, vec![IndexDefinition::named("by_age", "AGE")])
+        .unwrap()
+        .save(&left_path)
+        .unwrap();
     let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
 
     let get = TestRequest::new()
@@ -151,7 +157,8 @@ fn catalog_server_reads_named_tables_through_record_routes() {
         .into_reader()
         .read_to_string(&mut explain_body)
         .unwrap();
-    assert!(explain_body.contains("table_scan"));
+    assert!(explain_body.contains(r#""kind":"equality_index""#));
+    assert!(explain_body.contains("by_age"));
 
     let missing = TestRequest::new()
         .with_method(Method::Get)
