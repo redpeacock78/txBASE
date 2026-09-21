@@ -82,7 +82,9 @@ For a large direct equality join with compatible fresh ordered indexes on both i
 
 When an index is unavailable, stale, malformed, or more expensive than the hash estimate, larger inputs select `Hash` and build one in-memory equality map for the right table, or the left table for a `right` join.
 
-A `full` join always uses the bounded hash fallback and does not select an index-nested-loop or merge strategy.
+A `full` join uses the compatible ordered-index merge path when both sides are fresh and that bounded merge cost wins; otherwise it uses the bounded hash fallback.
+
+It does not use an index-nested-loop strategy.
 
 The selector preserves left-major output order for non-right joins and right-major output order for right joins.
 

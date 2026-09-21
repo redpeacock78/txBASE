@@ -90,9 +90,25 @@ pub(super) fn execute(
             }
         }
         JoinType::Full => {
-            return Err(JoinError::Invalid(
-                "merge join does not support full joins".into(),
-            ));
+            for (left_position, &left_record) in left_records.iter().enumerate() {
+                if let Some(right_range) = left_matches[left_position].as_ref() {
+                    for right_row in &right_sorted[right_range.start..right_range.end] {
+                        emit(
+                            &mut output,
+                            request,
+                            Some(left_record),
+                            Some(right_records[right_row.position]),
+                        )?;
+                    }
+                } else {
+                    emit(&mut output, request, Some(left_record), None)?;
+                }
+            }
+            for (right_position, &right_record) in right_records.iter().enumerate() {
+                if right_matches[right_position].is_none() {
+                    emit(&mut output, request, None, Some(right_record))?;
+                }
+            }
         }
         JoinType::Cross => return Err(JoinError::Invalid("merge join cannot be cross".into())),
     }

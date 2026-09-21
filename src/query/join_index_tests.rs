@@ -3,6 +3,8 @@ use super::join_tests::{
     catalog_with_many_indexed_posts, catalog_with_many_indexed_posts_and_comments,
 };
 use crate::catalog::Catalog;
+use crate::dbf::DbfTable;
+use serde_json::json;
 use std::fs;
 
 #[test]
@@ -85,6 +87,56 @@ fn large_single_key_join_uses_fresh_ordered_indexes() {
         row.get("users.ID")
             .zip(row.get("posts.ID"))
             .is_some_and(|(left, right)| left == right)
+    }));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn large_full_join_preserves_unmatched_rows_with_ordered_indexes() {
+    let root = catalog_with_many_indexed_posts();
+    let users_path = root.join("users.dbf");
+    let mut users = DbfTable::from_path(&users_path).unwrap();
+    users
+        .insert_record(
+            json!({"ID": 99, "NAME": "LeftOnly", "AGE": 99, "ACTIVE": true})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    users.save_with_wal(&users_path).unwrap();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let request = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "full",
+            "table": "posts",
+            "on": {
+              "users.ID": {"$eq": {"$field": "posts.ID"}}
+            }
+          },
+          "projection": {"users.ID": 1, "posts.ID": 1}
+        }"#,
+    )
+    .unwrap();
+
+    let rows = execute(&catalog, &request).unwrap();
+    let left_only = json!(99);
+    let right_only = json!(80);
+    let matched = json!(1);
+    assert!(
+        rows.iter().any(|row| {
+            row.get("users.ID") == Some(&left_only) && row.get("posts.ID").is_none()
+        })
+    );
+    assert!(
+        rows.iter().any(|row| {
+            row.get("users.ID").is_none() && row.get("posts.ID") == Some(&right_only)
+        })
+    );
+    assert!(rows.iter().any(|row| {
+        row.get("users.ID") == Some(&matched) && row.get("posts.ID") == Some(&matched)
     }));
     fs::remove_dir_all(root).unwrap();
 }
