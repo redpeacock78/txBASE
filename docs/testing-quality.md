@@ -143,9 +143,29 @@ A delta with the wrong base must be rejected.
 
 `src/query/planner_compound_tests.rs::chooses_a_table_scan_for_a_non_selective_index` covers the bounded cost tie that rejects an index when it returns every active record.
 
-`src/query/aggregation_tests.rs::groups_filtered_records_with_count_and_integer_sum` covers group `$count` and integer `$sum`; `filters_group_output_before_projection_and_sorting` covers a bounded post-group `$match`; `sums_fractional_and_integer_numbers` covers mixed numeric `$sum` input and preserves integer output for all-integral input; `groups_numeric_average_and_returns_null_for_missing_values` covers `$avg`; and `groups_comparable_extremes_and_returns_null_for_missing_values` covers `$min` and `$max`.
+`src/query/aggregation_tests/accumulator_tests.rs::groups_filtered_records_with_count_and_integer_sum` covers group `$count` and integer `$sum`.
 
-`src/query/join_strategy.rs::chooses_nested_loop_for_small_join_inputs`, `chooses_hash_for_large_unindexed_inputs`, `chooses_index_nested_loop_when_the_outer_side_is_small`, `chooses_hash_when_index_fanout_is_expensive`, and `chooses_merge_for_large_dual_indexed_inputs` cover the bounded equality-join cost choices; `src/query/join_merge.rs::scans_equal_key_runs_and_maps_them_to_outer_positions` covers the linear ordered-key merge scan, `large_full_join_preserves_unmatched_rows_with_ordered_indexes` covers the full-join merge path and both unmatched sides, and the join tests cover output order, chained-stage semantics, and indexed fallback paths.
+`src/query/aggregation_tests/pipeline_tests.rs::filters_group_output_before_projection_and_sorting` covers a bounded post-group `$match`.
+
+`src/query/aggregation_tests/accumulator_tests.rs::sums_fractional_and_integer_numbers` covers mixed numeric `$sum` input and preserves integer output for all-integral input.
+
+`src/query/aggregation_tests/accumulator_tests.rs::groups_numeric_average_and_returns_null_for_missing_values` covers `$avg`.
+
+`src/query/aggregation_tests/accumulator_tests.rs::groups_comparable_extremes_and_returns_null_for_missing_values` covers `$min` and `$max`.
+
+`src/query/join_strategy.rs::chooses_nested_loop_for_small_join_inputs`, `chooses_hash_for_large_unindexed_inputs`, `chooses_index_nested_loop_when_the_outer_side_is_small`, `chooses_hash_when_index_fanout_is_expensive`, and `chooses_merge_for_large_dual_indexed_inputs` cover the bounded equality-join cost choices.
+
+`src/query/join_merge.rs::scans_equal_key_runs_and_maps_them_to_outer_positions` covers the linear ordered-key merge scan.
+
+`src/query/join_index_tests.rs::large_single_key_join_uses_fresh_ordered_indexes` covers the direct ordered-index path.
+
+`src/query/join_index_tests.rs::large_full_join_preserves_unmatched_rows_with_ordered_indexes` covers the full-join merge path and both unmatched sides.
+
+The compound-key branch in the same test covers the direct compound ordered-index path.
+
+`src/query/join_index_tests.rs::chained_single_key_join_uses_a_fresh_foreign_index`, `chained_right_single_key_join_uses_a_fresh_foreign_index`, `chained_compound_join_uses_a_fresh_foreign_index`, and `chained_right_compound_join_uses_a_fresh_foreign_index` cover indexed paths in chained stages.
+
+`src/query/join_tests.rs` covers output order and chained-stage semantics.
 
 `src/query/field_expression_tests.rs` covers dotted field references, missing or nonnumeric operands, bounded numeric `$abs`, `$add`/`$subtract`/`$multiply`/`$divide`/`$mod`, zero divisors, and malformed or unsupported `$expr` documents.
 
