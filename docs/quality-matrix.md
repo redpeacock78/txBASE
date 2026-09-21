@@ -84,7 +84,7 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 The following topics have documentation or design notes but do not have a current implementation claim in the matrix:
 
 - runtime-specific async traits for long-lived streams;
-- a full cost-based planner, full index-aware or cost-based merge join strategies, and aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, and group-output `$project`;
+- a full cost-based planner, full index-aware or cost-based merge join strategies, and aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`;
 - catalog-wide MVCC visibility and historical row versions;
 - locale-aware CJK collation and broader upstream CJK fixtures;
 - Strict multi-file reader atomicity for schema-preserving XBF-to-DBF export, object-storage manifests, WASM hosting, and distributed replication.
