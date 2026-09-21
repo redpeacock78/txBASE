@@ -233,7 +233,7 @@ fn catalog_mvcc_preserves_consistent_cross_table_snapshots() {
             .active_record(1)
             .unwrap()
             .values["NAME"],
-        "Current"
+        "Alice"
     );
     assert!(
         second
