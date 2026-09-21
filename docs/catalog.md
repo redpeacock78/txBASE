@@ -153,7 +153,7 @@ direct DBF persistence.
 
 It does not infer relationships from field names.
 
-The local join supports `inner`, `left`, `right`, `semi`, and `anti` equality joins plus a bounded
+The local join supports `inner`, `left`, `right`, `full`, `semi`, and `anti` equality joins plus a bounded
 `cross` join, with a hard result bound.
 It does not provide a full cost-based planner, full index-aware or cost-based merge join strategies,
 runtime-specific async stream traits, or MVCC visibility.
