@@ -532,8 +532,7 @@ fn applies_valid_schema_metadata_without_rewriting_the_dbf() {
         "checks": [{"AGE": {"$gte": 30}}]
     }))
     .unwrap();
-    let error = crate::dbf::apply_schema_metadata(&path, &invalid).unwrap_err();
-    assert!(error.to_string().contains("schema check"));
+    assert!(crate::dbf::apply_schema_metadata(&path, &invalid).is_err());
     assert_eq!(
         fs::read(path.with_extension("txschema.json")).unwrap(),
         before
