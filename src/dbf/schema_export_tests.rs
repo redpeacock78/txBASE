@@ -236,6 +236,60 @@ fn schema_export_read_rejects_an_external_target_change() {
 }
 
 #[test]
+fn schema_export_recovery_preflights_every_target_before_replacement() {
+    let destination = path("preflight");
+    cleanup(&destination);
+    let old_bytes = fixture();
+    let mut table = DbfTable::from_bytes(&old_bytes).unwrap();
+    table.delete_record(1).unwrap();
+    let new_bytes = table.to_bytes();
+    let schema = schema_bytes();
+    let old_state = super::persistence::transaction_state_bytes(1).unwrap();
+    let new_state = super::persistence::transaction_state_bytes(2).unwrap();
+    let memo_path = destination.with_extension("dbt");
+    let old_memo = b"old memo";
+    let external_memo = b"external memo";
+
+    fs::write(&destination, &new_bytes).unwrap();
+    fs::write(destination.with_extension("txbase.state"), &old_state).unwrap();
+    fs::write(&memo_path, external_memo).unwrap();
+
+    let directory = schema_export::test_transaction_directory(&destination);
+    fs::create_dir(&directory).unwrap();
+    schema_export::test_write_file(&schema_export::test_stage_path(&directory, 0), &new_bytes)
+        .unwrap();
+    schema_export::test_write_file(&schema_export::test_stage_path(&directory, 1), &schema)
+        .unwrap();
+    schema_export::test_write_file(&schema_export::test_stage_path(&directory, 6), &new_state)
+        .unwrap();
+    schema_export::test_write_file(&schema_export::test_base_path(&directory, 0), &old_bytes)
+        .unwrap();
+    schema_export::test_write_file(&schema_export::test_base_path(&directory, 2), old_memo)
+        .unwrap();
+    schema_export::test_write_file(&schema_export::test_base_path(&directory, 6), &old_state)
+        .unwrap();
+    schema_export::test_write_journal(&destination, 1 | (1 << 2) | (1 << 6)).unwrap();
+
+    let error = DbfTable::from_path(&destination).unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("XBF schema export target changed during recovery")
+    );
+    assert_eq!(fs::read(&destination).unwrap(), new_bytes);
+    assert!(!destination.with_extension("txschema.json").exists());
+    assert_eq!(
+        fs::read(destination.with_extension("txbase.state")).unwrap(),
+        old_state
+    );
+    assert_eq!(fs::read(&memo_path).unwrap(), external_memo);
+    assert!(schema_export::test_journal_path(&destination).exists());
+
+    cleanup(&destination);
+}
+
+#[test]
 fn schema_export_rejects_malformed_journal_records() {
     let cases = [
         (

@@ -23,7 +23,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 | グループ | コマンド | 境界 |
 | --- | --- | --- |
 | 読み取りと検査 | `read`、`schema`、`verify`、`catalog`、`verify-catalog`、`wal inspect`、`mvcc list`、`mvcc read`、`mvcc row`、`mvcc row-at`、`mvcc catalog list`、`mvcc catalog read`、`xbf report`、`index verify` | 読み取り専用の出力です。これらのコマンドは、意図的に更新を公開しません。 |
-| 作成と更新 | `init`、`insert`、`pack`、`recall`、`schema apply`、`mvcc gc`、`mvcc catalog gc`、`index build`、`index rebuild`、`xbf import`、`xbf export` | コマンド契約に従って、DBFバイト列、サイドカー、永続履歴を書き換えることがあります。 |
+| 作成と更新 | `init`、`insert`、`pack`、`recall`、`schema apply`、`mvcc gc`、`mvcc catalog gc`、`index build`、`index build-compound`、`index rebuild`、`xbf import`、`xbf export` | コマンド契約に従って、DBFバイト列、サイドカー、永続履歴を書き換えることがあります。 |
 | コピーと提供 | `backup`、`restore`、`serve`、`serve-catalog` | 別の文書で定義する境界を通して、データをコピーまたは公開します。 |
 
 `schema apply`を`schema`から分けているのは意図的です。

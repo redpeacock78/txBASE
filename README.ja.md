@@ -251,6 +251,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - [複数テーブルのcatalog](docs/ja/catalog.md)
 - [セカンダリインデックスのサイドカー](docs/ja/indexes.md)
 - [クエリモデル](docs/ja/query-model.md)
+- [CLIコマンド設計](docs/ja/cli.md)
 - [非同期クエリストリーム](docs/ja/async-streaming.md)
 - [集約モデル](docs/ja/aggregation.md)
 - [結合モデル](docs/ja/joins.md)

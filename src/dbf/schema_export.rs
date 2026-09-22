@@ -137,26 +137,24 @@ fn apply_export(path: &Path, flags: u16) -> Result<(), DbfError> {
         if index == STATE_TARGET && state_bytes.is_none() {
             continue;
         }
-        let current = read_optional(target)?;
         let base = if flags & (1 << index) != 0 {
             Some(fs::read(base_path(&directory, index))?)
         } else {
             None
         };
-        if current.as_deref() == desired[index] {
-            continue;
-        }
-        if current.as_deref() != base.as_deref() {
-            return Err(DbfError::Invalid(format!(
-                "XBF schema export target changed during recovery: {}",
-                target.display()
-            )));
-        }
-        replace[index] = true;
+        replace[index] = target_needs_replacement(target, desired[index], base.as_deref())?;
     }
 
     for (index, target) in targets.iter().enumerate() {
         if !replace[index] {
+            continue;
+        }
+        let base = if flags & (1 << index) != 0 {
+            Some(fs::read(base_path(&directory, index))?)
+        } else {
+            None
+        };
+        if !target_needs_replacement(target, desired[index], base.as_deref())? {
             continue;
         }
         if let Some(bytes) = desired[index] {
@@ -167,6 +165,24 @@ fn apply_export(path: &Path, flags: u16) -> Result<(), DbfError> {
         }
     }
     Ok(())
+}
+
+fn target_needs_replacement(
+    target: &Path,
+    desired: Option<&[u8]>,
+    base: Option<&[u8]>,
+) -> Result<bool, DbfError> {
+    let current = read_optional(target)?;
+    if current.as_deref() == desired {
+        return Ok(false);
+    }
+    if current.as_deref() != base {
+        return Err(DbfError::Invalid(format!(
+            "XBF schema export target changed during recovery: {}",
+            target.display()
+        )));
+    }
+    Ok(true)
 }
 
 fn validate_staged_export(dbf_bytes: &[u8], schema_bytes: &[u8]) -> Result<(), DbfError> {

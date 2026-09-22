@@ -257,6 +257,7 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 - [Multi-table catalog](docs/catalog.md)
 - [Secondary-index sidecar](docs/indexes.md)
 - [Query model](docs/query-model.md)
+- [CLI command design](docs/cli.md)
 - [Asynchronous query streaming](docs/async-streaming.md)
 - [Aggregation model](docs/aggregation.md)
 - [Join model](docs/joins.md)

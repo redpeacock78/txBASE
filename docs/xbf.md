@@ -306,6 +306,14 @@ recovers a pending journal before loading records. The export rebuilds the
 existing index definitions from the target DBF; it does not copy an index from
 the XBF input.
 
+Recovery validates every staged target against its captured base before
+replacing any target, and checks each replacement again immediately before it
+is applied. A txBASE reader therefore either finishes the pending bundle under
+the table lock or leaves the journal in place after a detected external target
+change; it does not load a known partially applied bundle through
+`DbfTable::from_path`. This is stronger than the guarantee available to a
+legacy reader that ignores the txBASE lock and opens flat sidecars directly.
+
 The CLI also exposes `xbf report XBF`, which prints the representability report
 without writing a DBF or schema sidecar.
 
@@ -334,8 +342,9 @@ section, directory, UTF-8, and payload cases, and a sync-and-reload path
 round trip. Before XBF is advertised as a complete supported format, the
 repository still needs:
 
-- A strict externally visible atomic snapshot contract for legacy readers; the
-  current `TXSE` protocol deliberately provides recoverability and conflict
-  detection rather than multi-file reader atomicity.
+- A strict externally visible atomic snapshot contract for legacy readers. The
+  current `TXSE` protocol provides txBASE-reader preflight, recoverability, and
+  conflict detection, but it deliberately does not make a flat DBF plus
+  multiple sidecars physically atomic to a reader that ignores the txBASE lock.
 
 Until those gates exist, XBF remains a draft and is not advertised as a supported format.

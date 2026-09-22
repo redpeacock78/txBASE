@@ -22,7 +22,7 @@ Options are named when they change interpretation, such as `--encoding`, `--sche
 | Group | Commands | Boundary |
 | --- | --- | --- |
 | Read and inspect | `read`, `schema`, `verify`, `catalog`, `verify-catalog`, `wal inspect`, `mvcc list`, `mvcc read`, `mvcc row`, `mvcc row-at`, `mvcc catalog list`, `mvcc catalog read`, `xbf report`, `index verify` | Read-only output; these commands do not intentionally publish a mutation. |
-| Create and mutate | `init`, `insert`, `pack`, `recall`, `schema apply`, `mvcc gc`, `mvcc catalog gc`, `index build`, `index rebuild`, `xbf import`, `xbf export` | May write DBF bytes, sidecars, or durable history according to the command contract. |
+| Create and mutate | `init`, `insert`, `pack`, `recall`, `schema apply`, `mvcc gc`, `mvcc catalog gc`, `index build`, `index build-compound`, `index rebuild`, `xbf import`, `xbf export` | May write DBF bytes, sidecars, or durable history according to the command contract. |
 | Copy and serve | `backup`, `restore`, `serve`, `serve-catalog` | Copy or expose data through a separately documented boundary. |
 
 `schema apply` is deliberately separate from `schema`: `schema` inspects the current metadata, while `schema apply` validates and installs a candidate sidecar.
