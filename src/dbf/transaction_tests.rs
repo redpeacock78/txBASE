@@ -50,11 +50,11 @@ fn snapshot_transaction_queries_private_changes_and_commits_once() {
     fs::write(&destination, fixture()).unwrap();
 
     let mut transaction = DbfTransaction::begin(&destination).unwrap();
-    transaction.apply(&patch("transactional")).unwrap();
+    transaction.apply(&patch("committed")).unwrap();
     let rows = transaction
         .execute(&crate::query::parse(br#"{}"#).unwrap())
         .unwrap();
-    assert_eq!(rows[0]["NAME"], "transactional");
+    assert_eq!(rows[0]["NAME"], "committed");
     assert_eq!(
         DbfTable::from_path(&destination).unwrap().active_json()[0]["NAME"],
         "Alice"
@@ -64,7 +64,7 @@ fn snapshot_transaction_queries_private_changes_and_commits_once() {
     assert_eq!(committed.transaction_id(), Some(1));
     assert_eq!(
         DbfTable::from_path(&destination).unwrap().active_json()[0]["NAME"],
-        "transactional"
+        "committed"
     );
     cleanup(&destination);
 }
