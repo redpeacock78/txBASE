@@ -47,6 +47,24 @@ fn patch_record(number: usize, name: &str) -> OperationIr {
     }
 }
 
+fn add_third_record(path: &Path) {
+    let mut table = DbfTable::from_path(path).unwrap();
+    table
+        .insert_record(
+            json!({
+                "ID": 3,
+                "NAME": "Carol",
+                "AGE": 42,
+                "ACTIVE": true
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        )
+        .unwrap();
+    table.save_with_wal(path).unwrap();
+}
+
 #[test]
 fn snapshot_transaction_queries_private_changes_and_commits_once() {
     let destination = path("commit");
@@ -108,6 +126,7 @@ fn snapshot_transaction_merges_disjoint_row_changes_when_explicitly_requested() 
     let destination = path("row-merge");
     cleanup(&destination);
     fs::write(&destination, fixture()).unwrap();
+    add_third_record(&destination);
 
     let mut transaction = DbfTransaction::begin(&destination).unwrap();
     transaction
@@ -118,13 +137,13 @@ fn snapshot_transaction_merges_disjoint_row_changes_when_explicitly_requested() 
         })
         .unwrap();
     let mut concurrent = DbfTransaction::begin(&destination).unwrap();
-    concurrent.apply(&patch_record(2, "Bobby")).unwrap();
+    concurrent.apply(&patch_record(3, "Bobby")).unwrap();
     concurrent.commit().unwrap();
 
     transaction.commit_with_row_merge().unwrap();
     let current = DbfTable::from_path(&destination).unwrap();
     assert_eq!(current.active_record(1).unwrap().values["AGE"], 31);
-    assert_eq!(current.active_record(2).unwrap().values["NAME"], "Bobby");
+    assert_eq!(current.active_record(3).unwrap().values["NAME"], "Bobby");
     cleanup(&destination);
 }
 
@@ -133,6 +152,7 @@ fn snapshot_transaction_merges_a_disjoint_row_delete_when_explicitly_requested()
     let destination = path("row-delete-merge");
     cleanup(&destination);
     fs::write(&destination, fixture()).unwrap();
+    add_third_record(&destination);
 
     let mut transaction = DbfTransaction::begin(&destination).unwrap();
     transaction
@@ -143,13 +163,13 @@ fn snapshot_transaction_merges_a_disjoint_row_delete_when_explicitly_requested()
         })
         .unwrap();
     let mut concurrent = DbfTransaction::begin(&destination).unwrap();
-    concurrent.apply(&patch_record(2, "Bobby")).unwrap();
+    concurrent.apply(&patch_record(3, "Bobby")).unwrap();
     concurrent.commit().unwrap();
 
     transaction.commit_with_row_merge().unwrap();
     let current = DbfTable::from_path(&destination).unwrap();
     assert!(current.active_record(1).is_none());
-    assert_eq!(current.active_record(2).unwrap().values["NAME"], "Bobby");
+    assert_eq!(current.active_record(3).unwrap().values["NAME"], "Bobby");
     cleanup(&destination);
 }
 
