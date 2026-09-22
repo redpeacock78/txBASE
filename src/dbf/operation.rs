@@ -86,6 +86,7 @@ mod tests {
     #[test]
     fn applies_all_mutation_methods_through_one_contract() {
         let mut table = DbfTable::from_bytes(&fixture()).unwrap();
+        let inserted_number = table.records().len() + 1;
         table
             .apply_operation(&operation(
                 OperationMethod::Patch,
@@ -111,12 +112,16 @@ mod tests {
                 Some(json!({"ID": 2, "NAME": "Eve", "AGE": 22, "ACTIVE": true})),
             ))
             .unwrap();
-        assert_eq!(table.records().len(), 2);
+        assert_eq!(table.records().len(), inserted_number);
 
         table
-            .apply_operation(&operation(OperationMethod::Delete, "/records/2", None))
+            .apply_operation(&operation(
+                OperationMethod::Delete,
+                &format!("/records/{inserted_number}"),
+                None,
+            ))
             .unwrap();
-        assert!(table.records()[1].deleted);
+        assert!(table.records()[inserted_number - 1].deleted);
     }
 
     #[test]

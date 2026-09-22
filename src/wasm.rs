@@ -207,7 +207,11 @@ mod tests {
         .unwrap();
 
         let error = core.apply_operations_json(&batch).unwrap_err();
-        assert!(error.to_string().contains("positive integer"));
+        assert!(
+            error
+                .to_string()
+                .contains("operation record id must be positive")
+        );
         let rows: Vec<Value> = serde_json::from_slice(&core.query_json(b"{}").unwrap()).unwrap();
         assert_eq!(rows[0]["NAME"], "Alice");
     }
