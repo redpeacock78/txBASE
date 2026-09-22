@@ -16,6 +16,7 @@
 | --- | --- | --- |
 | dBASE と Visual FoxPro のファイル構造 | [DBF 互換性](dbf-compatibility.md) | 現在の対応と将来のエンコーディング作業 |
 | クエリ文書、述語、カーソル、ストリーム | [クエリモデル](query-model.md) | 現在のサブセット |
+| ランタイム非依存の非同期クエリストリーム | [非同期クエリストリーム](async-streaming.md) | 現在のポーリング境界と将来のホストアダプター |
 | 有界集約契約 | [集約モデル](aggregation.md) | 現在のサブセット |
 | 有界ローカル結合契約 | [結合モデル](joins.md)と[カタログ](catalog.md) | 現在の境界 |
 | MongoDB の述語とクエリ計画 | [クエリ計画](query-planning.md) | 現在のサブセットと参照資料 |
@@ -53,6 +54,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 | --- | --- | --- | --- |
 | dBASEとVisual FoxProのフォーマット資料 | dBASEのページはベンダー所有です。Visual FoxProのページはベンダーのヘルプを保存またはミラーしたものであり、現在の標準レジストリではありません。 | パーサー、memo読み取り、コードページ処理、フィールド幅規則は、フィクスチャでカバーする文書化済みサブセットだけを実装します。未対応形式はエラーのままであり、FoxPro全体の互換性は主張しません。 | フォーマットと互換性の詳細は[DBF互換性](dbf-compatibility.md)に置きます。ミラー資料の注意書きはこのインデックスに残し、互換性の主張ごとにフィクスチャを要求します。 |
 | MongoDBマニュアル | 公式製品文書です。 | クエリ、インデックス、集約、結合の文書は語彙と一部の動作を借りますが、txBASE固有の有界性を追加します。MongoDBのwire、プランナー、パイプライン互換性は主張しません。 | 演算子の意味と比較語彙は、クエリ、集約、結合、インデックスの文書に残します。未実装のMongoDB動作を現在の契約へ取り込みません。 |
+| Rust標準ライブラリのタスク文書 | 公式Rust API文書です。 | `AsyncQueryStream`境界は、executorを選択せず、ランタイム互換性を主張せずに`Context`、`Poll`、`Waker`、`Pin`のタスクモデルを再利用します。 | ポーリング契約とホストアダプターの責務は[非同期クエリストリーム](async-streaming.md)に置き、txBASEのクエリ意味論は[クエリモデル](query-model.md)に置きます。 |
 | FirestoreとRealtime Databaseの文書 | 公式製品文書です。 | Firebase文書はアーキテクチャ参照だけです。txBASEはFirebaseのトランザクション、オフラインキュー、セキュリティルール、イベント同期を実装しません。 | 比較は[Firebaseモデル](firebase-model.md)に残し、DBF、HTTP、トランザクション契約へ持ち込みません。 |
 | SQLite文書 | 公式プロジェクト文書です。 | 制約語彙、WALとアトミックコミットの根拠、クエリ計画語彙、テスト品質の実践を参照します。txBASEはDBFサイドカーと独自WALを使い、SQLiteのファイル、SQL、永続性互換性を主張しません。 | 根拠はスキーマ、MVCC、クエリ計画、テストの文書に置き、txBASEの動作は別に記述します。 |
 | Gitのコマンドラインインターフェース文書 | CLI設計の参照に使う公式プロジェクト文書です。 | txBASEの明示的なサブコマンドとオプションの形だけに影響します。Gitのコマンド群、リポジトリモデル、オプションの意味はコピーしません。 | 設計判断は[CLIコマンド設計](cli.md)に置き、MVCCやストレージの契約には置きません。 |
@@ -135,6 +137,12 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 ### CLI設計
 
 - [Gitのコマンドラインインターフェース規約](https://git-scm.com/docs/gitcli)
+
+### Rustのタスクシステム
+
+- [Rustの`Context`](https://doc.rust-lang.org/std/task/struct.Context.html)
+- [Rustの`Poll`](https://doc.rust-lang.org/std/task/enum.Poll.html)
+- [Rustの`Pin`](https://doc.rust-lang.org/std/pin/index.html)
 
 ### ファイルシステムのコミットプリミティブ
 

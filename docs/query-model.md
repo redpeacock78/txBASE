@@ -142,7 +142,15 @@ There is no resume token, ETag, or byte-range contract for a stream.
 If evaluation fails after headers are sent, the response terminates and the client must retry the
 whole query.
 
-Runtime-specific async traits remain a separate future boundary.
+`query::AsyncQueryStream` defines an executor-neutral `poll_next` boundary for long-lived query streams.
+
+`QueryStream` and `QuerySnapshotStream` implement it with immediate in-memory polls.
+
+`BoundedQueryStream` remains a blocking iterator because polling a standard-library `recv` call would block the host task.
+
+Host-specific scheduling, backpressure, timeout, cancellation, and transport behavior remain outside the shared query contract.
+
+The complete boundary is documented in [asynchronous query streaming](async-streaming.md).
 
 ## 2. Current predicate vocabulary
 

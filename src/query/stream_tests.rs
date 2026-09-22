@@ -1,4 +1,16 @@
 use super::*;
+use std::pin::Pin;
+use std::task::{Context, Poll, Waker};
+
+fn poll_ready<S>(stream: &mut S, context: &mut Context<'_>) -> Option<Result<Value, QueryError>>
+where
+    S: AsyncQueryStream<Item = Result<Value, QueryError>> + Unpin,
+{
+    match AsyncQueryStream::poll_next(Pin::new(stream), context) {
+        Poll::Ready(item) => item,
+        Poll::Pending => panic!("in-memory query stream unexpectedly returned Pending"),
+    }
+}
 
 fn table_with_two_active_records() -> DbfTable {
     let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
@@ -97,4 +109,29 @@ fn bounded_stream_requires_positive_capacity() {
     let table = table_with_two_active_records();
     let request = parse(br#"{"projection":{"NAME":1}}"#).unwrap();
     assert!(stream_query_bounded(&table, &request, 0).is_err());
+}
+
+#[test]
+fn in_memory_streams_implement_the_runtime_neutral_async_boundary() {
+    let table = table_with_two_active_records();
+    let request = parse(br#"{"projection":{"NAME":1}}"#).unwrap();
+    let waker = Waker::noop();
+    let mut context = Context::from_waker(waker);
+
+    let mut borrowed = stream_query(&table, &request).unwrap();
+    assert_eq!(
+        poll_ready(&mut borrowed, &mut context).unwrap().unwrap(),
+        serde_json::json!({"NAME": "Alice"})
+    );
+
+    let mut snapshot = stream_query_snapshot(&table, &request).unwrap();
+    assert_eq!(
+        poll_ready(&mut snapshot, &mut context).unwrap().unwrap(),
+        serde_json::json!({"NAME": "Alice"})
+    );
+    assert_eq!(
+        poll_ready(&mut snapshot, &mut context).unwrap().unwrap(),
+        serde_json::json!({"NAME": "Bob"})
+    );
+    assert!(poll_ready(&mut snapshot, &mut context).is_none());
 }

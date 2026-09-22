@@ -30,6 +30,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - Explicit CJK codec selection without changing legacy DBF bytes.
 - A host-independent DBF WASM core with the shared bounded query and mutation contracts.
 - A runtime-neutral asynchronous object-store and manifest contract for future worker and WASI hosts.
+- An executor-neutral asynchronous query-stream polling contract for in-memory stream adapters.
 
 The detailed compatibility and behavior contracts live in the [documentation index](docs/README.md).
 
@@ -255,6 +256,7 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 - [Multi-table catalog](docs/catalog.md)
 - [Secondary-index sidecar](docs/indexes.md)
 - [Query model](docs/query-model.md)
+- [Asynchronous query streaming](docs/async-streaming.md)
 - [Aggregation model](docs/aggregation.md)
 - [Join model](docs/joins.md)
 - [Query planning and external vocabulary](docs/query-planning.md)
@@ -278,7 +280,7 @@ The current implementation prioritizes bounded, recoverable local operations ove
 
 The roadmap still leaves the following areas as future work:
 
-- Runtime-specific async stream traits.
+- Host-specific `AsyncQueryStream` scheduling, backpressure, timeout, and cancellation.
 - Full cost-based index and join planning.
 - Broader aggregation.
 - Row-level MVCC history and retention.

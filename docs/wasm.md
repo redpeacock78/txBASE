@@ -63,6 +63,10 @@ It should expose the same bounded query, mutation, validation, and recovery sema
 
 It should not introduce a second query language, a second transaction model, or a host-specific interpretation of DBF bytes.
 
+The runtime-neutral `AsyncQueryStream` contract provides the same query stream item semantics to a host poller without selecting an executor.
+
+Its in-memory implementations complete immediately; a worker or WASI host must still provide scheduling, wake-up, backpressure, timeout, cancellation, and transport behavior.
+
 The object-store contract belongs below the shared table and transaction interfaces.
 The runtime-neutral `AsyncObjectStore` contract is implemented for the five primitive object operations.
 `AsyncObjectTable` reuses the manifest, generation, recovery, retention, and conditional-publication contract through those operations.

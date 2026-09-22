@@ -21,6 +21,7 @@ txBASEは、元のDBF表現を保ったまま、dBASEとVisual FoxProの一部�
 - 既存のDBFバイト列を変更しない明示的なCJK codec選択。
 - 共有する有界クエリと更新の契約を持つホスト非依存DBF WASMコア。
 - 将来のワーカーとWASIホスト向けに、ランタイムから独立した非同期オブジェクトストレージとマニフェストの契約。
+- メモリ内ストリームアダプター向けに、executorから独立した非同期クエリストリームのポーリング契約。
 
 互換性と動作の詳細は、[ドキュメント一覧](docs/ja/README.md)にまとめています。
 
@@ -249,6 +250,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - [複数テーブルのcatalog](docs/ja/catalog.md)
 - [セカンダリインデックスのサイドカー](docs/ja/indexes.md)
 - [クエリモデル](docs/ja/query-model.md)
+- [非同期クエリストリーム](docs/ja/async-streaming.md)
 - [集約モデル](docs/ja/aggregation.md)
 - [結合モデル](docs/ja/joins.md)
 - [クエリ計画と外部語彙](docs/ja/query-planning.md)
@@ -272,7 +274,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 
 次の領域は引き続き将来の作業です。
 
-- runtime固有のasync stream trait。
+- ホスト固有の`AsyncQueryStream`スケジューリング、バックプレッシャー、タイムアウト、キャンセル。
 - 完全なcost-based index／join planner。
 - より広い集約。
 - 行単位のMVCC履歴と保持期間。

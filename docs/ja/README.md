@@ -17,6 +17,7 @@
 ## クエリとプロトコルの契約
 
 - [クエリモデル](query-model.md)
+- [非同期クエリストリーム](async-streaming.md)
 - [集約モデル](aggregation.md)
 - [結合モデル](joins.md)
 - [クエリ計画と外部語彙](query-planning.md)

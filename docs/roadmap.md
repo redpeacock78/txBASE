@@ -47,6 +47,7 @@ The repository currently provides:
 - A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
 - A bounded thread-backed snapshot stream whose producer applies channel backpressure and stops when its consumer is dropped.
+- A runtime-neutral `AsyncQueryStream` polling boundary for long-lived query streams, with immediate in-memory implementations.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950, plus the legacy dBASE aliases `0x13`, `0x4d`, `0x4e`, and `0x4f`.
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, bounded table-level `checks` predicates, and catalog-scoped scalar and composite foreign-key validation with restrict, cascade, and set-null actions.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP, with normalized schema output.
@@ -78,7 +79,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - Schema introspection.
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
-- Runtime-specific async traits for long-lived streams and host-specific asynchronous object-table adapters.
+- Host-specific `AsyncQueryStream` implementations and host-specific asynchronous object-table adapters.
 - Catalog-wide MVCC snapshots and independently visible multi-record reads.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
@@ -121,7 +122,10 @@ caller consumes the pull-based iterator.
 channel, so the producer blocks on a full channel and stops when the consumer is dropped.
 The HTTP servers expose `/records/stream` and `/{table}/records/stream` as bounded NDJSON chunked
 responses over this stream.
-Runtime-specific async traits remain a later contract.
+`query::AsyncQueryStream` now defines the executor-neutral `poll_next` contract, and the borrowed and
+owned in-memory streams implement it with immediate polls.
+Host-specific scheduling, backpressure, timeout, cancellation, and transport behavior remain later
+work, as does the asynchronous object-table adapter for a worker or WASI host.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 

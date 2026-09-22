@@ -1,0 +1,69 @@
+# Asynchronous query streaming
+
+This document defines the runtime-neutral polling boundary for long-lived query streams.
+
+It does not select an executor, a worker runtime, a network protocol, or a storage service.
+
+## 1. Poll contract
+
+`AsyncQueryStream` exposes `poll_next` with the same three-state result shape used by Rust's task system.
+
+| Result | Meaning |
+| --- | --- |
+| `Poll::Ready(Some(item))` | One query result is available. |
+| `Poll::Ready(None)` | The stream is finished and must not yield another item. |
+| `Poll::Pending` | The stream is not ready; it must arrange for the supplied waker to be called before the next poll. |
+
+The caller pins the stream for each poll.
+
+Dropping the stream is the cancellation boundary for resources owned by an implementation.
+
+The trait does not require `Send`, `Sync`, or a particular executor because worker and WASM hosts may use local tasks.
+
+An implementation must not perform a blocking operation inside `poll_next`.
+
+## 2. Current implementations
+
+`QueryStream` and `QuerySnapshotStream` implement `AsyncQueryStream`.
+
+Both streams read an in-memory table, so their polls complete immediately with `Ready` and do not need the task context.
+
+`QueryStream` borrows the source table.
+
+`QuerySnapshotStream` owns a cloned table and keeps the result stable after the source table changes.
+
+`BoundedQueryStream` remains a blocking iterator over a standard-library channel.
+
+It does not implement `AsyncQueryStream` because calling `recv` from `poll_next` would block the host task.
+
+## 3. Host responsibilities
+
+A host-specific stream implementation owns the behavior that the shared contract cannot decide.
+
+- The runtime schedules polling and supplies the task waker.
+- The producer wakes the task after an asynchronous read or write makes an item available.
+- The producer applies the desired queue or channel bound and defines what happens when the consumer is slow.
+- Dropping the stream releases or cancels host resources.
+- The host maps transport, storage, timeout, and cancellation failures into the stream's item error type.
+
+The shared query layer owns filtering, projection, skip, limit, and the distinction between an item, end of stream, and pending work.
+
+## 4. Relation to other contracts
+
+The synchronous iterator and bounded NDJSON HTTP contracts remain unchanged.
+
+`AsyncQueryStream` is a library boundary for native, worker, WASM, and WASI adapters.
+
+It does not make the filesystem channel non-blocking, add resume tokens, or define a remote storage protocol.
+
+The host-backed stream, timeout, cancellation, and transport contracts require separate fixtures before a worker or WASI runtime can be called complete.
+
+## Primary references and scope
+
+- [Rust `Context`](https://doc.rust-lang.org/std/task/struct.Context.html)
+- [Rust `Poll`](https://doc.rust-lang.org/std/task/enum.Poll.html)
+- [Rust `Pin`](https://doc.rust-lang.org/std/pin/index.html)
+
+These references define the task context, readiness states, waker contract, and pinning model used by the boundary.
+
+They do not define txBASE query semantics or imply compatibility with a particular async runtime.

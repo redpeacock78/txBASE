@@ -24,6 +24,7 @@ mod pagination;
 mod planner;
 mod predicate;
 mod stream;
+mod stream_async;
 mod validation;
 
 #[cfg(test)]
@@ -38,6 +39,7 @@ pub use stream::{
     BoundedQueryStream, QuerySnapshotStream, QueryStream, stream_query, stream_query_bounded,
     stream_query_snapshot,
 };
+pub use stream_async::AsyncQueryStream;
 pub(crate) use validation::validate_filter;
 
 #[cfg(test)]

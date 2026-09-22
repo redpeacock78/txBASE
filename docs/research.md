@@ -16,6 +16,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | --- | --- | --- |
 | dBASE and Visual FoxPro file structure | [DBF compatibility](dbf-compatibility.md) | Current plus future encoding work |
 | Query document, predicates, cursors, and streams | [Query model](query-model.md) | Current subset |
+| Runtime-neutral asynchronous query streaming | [Asynchronous query streaming](async-streaming.md) | Current polling boundary plus future host adapters |
 | Bounded aggregation contract | [Aggregation model](aggregation.md) | Current subset |
 | Bounded local join contract | [Join model](joins.md) and [Catalog](catalog.md) | Current boundary |
 | MongoDB predicates and query planning | [Query planning](query-planning.md) | Current subset plus reference |
@@ -53,6 +54,7 @@ The following audit separates normative sources from product documentation, impl
 | --- | --- | --- | --- |
 | dBASE and Visual FoxPro format pages | The dBASE page is vendor-owned; the Visual FoxPro pages are archived or mirrored vendor help, not a current standards registry. | The parser, memo reader, code-page handling, and field-width rules implement only the documented subset covered by fixtures. Unsupported formats remain errors; the repository does not claim complete FoxPro compatibility. | Format and compatibility details belong in [DBF compatibility](dbf-compatibility.md). Keep the mirror caveat in this index and require a fixture for each compatibility claim. |
 | MongoDB manual | Official product documentation. | Query, index, aggregation, and join documents borrow vocabulary and selected behavior, then add explicit txBASE bounds. They do not claim MongoDB wire, planner, or pipeline compatibility. | Keep operator meaning and comparison vocabulary in the query, aggregation, join, and index documents. Do not copy unimplemented MongoDB behavior into the current contract. |
+| Rust standard-library task documentation | Official Rust API documentation. | The `AsyncQueryStream` boundary reuses the `Context`, `Poll`, `Waker`, and `Pin` task model without selecting an executor or claiming runtime compatibility. | Keep the polling contract and host-adapter responsibilities in [asynchronous query streaming](async-streaming.md); keep txBASE query semantics in [query model](query-model.md). |
 | Firestore and Realtime Database documentation | Official product documentation. | The Firebase document is architecture reference only. txBASE does not implement Firebase transactions, offline queues, security rules, or event synchronization. | Keep these comparisons in [Firebase model](firebase-model.md), not in the DBF, HTTP, or transaction contracts. |
 | SQLite documentation | Official project documentation. | Constraint terminology, WAL and atomic-commit rationale, query-planning vocabulary, and test-quality practices are references. txBASE uses DBF sidecars and its own WAL and does not claim SQLite file, SQL, or durability compatibility. | Keep the rationale in schema, MVCC, query-planning, and testing documents; describe txBASE behavior separately. |
 | Git command-line interface documentation | Official project documentation used as a CLI design reference. | It informs txBASE's explicit subcommand and option shape only. txBASE does not copy Git's command set, repository model, or option semantics. | Keep the design decision in [CLI command design](cli.md), not in MVCC or storage contracts. |
@@ -135,6 +137,12 @@ Second, POSIX durability language is limited to the Unix path; cross-platform re
 ### CLI design
 
 - [Git command-line interface conventions](https://git-scm.com/docs/gitcli)
+
+### Rust task system
+
+- [Rust `Context`](https://doc.rust-lang.org/std/task/struct.Context.html)
+- [Rust `Poll`](https://doc.rust-lang.org/std/task/enum.Poll.html)
+- [Rust `Pin`](https://doc.rust-lang.org/std/pin/index.html)
 
 ### File-system commit primitives
 
