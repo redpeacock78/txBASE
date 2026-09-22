@@ -3,8 +3,8 @@ use super::{AsyncQueryStream, QueryError, QueryRequest};
 use serde_json::Value;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, TryRecvError, sync_channel};
-use std::sync::{Arc, Mutex, MutexGuard, mpsc::SyncSender};
+use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, TrySendError, sync_channel};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll, Waker};
 use std::thread::{self, JoinHandle};
 
@@ -72,12 +72,36 @@ fn produce(
     };
 
     for item in stream {
-        if cancelled.load(Ordering::Acquire) || sender.send(item).is_err() {
+        if !send_item(item, &sender, &cancelled, &waker) {
             return;
         }
-        wake(&waker);
     }
     wake(&waker);
+}
+
+fn send_item(
+    mut item: Result<Value, QueryError>,
+    sender: &SyncSender<Result<Value, QueryError>>,
+    cancelled: &AtomicBool,
+    waker: &Mutex<Option<Waker>>,
+) -> bool {
+    loop {
+        if cancelled.load(Ordering::Acquire) {
+            return false;
+        }
+        match sender.try_send(item) {
+            Ok(()) => {
+                wake(waker);
+                return true;
+            }
+            Err(TrySendError::Disconnected(_)) => return false,
+            Err(TrySendError::Full(returned)) => {
+                item = returned;
+                wake(waker);
+                thread::yield_now();
+            }
+        }
+    }
 }
 
 fn lock_waker(waker: &Mutex<Option<Waker>>) -> MutexGuard<'_, Option<Waker>> {
