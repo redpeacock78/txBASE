@@ -111,7 +111,7 @@ fn catalog_cdc_http_route_pages_atomic_events() {
         .commit_operations_with_preconditions(
             &[OperationIr {
                 method: OperationMethod::Patch,
-                path: "/posts/records/2".into(),
+                path: "/posts/records/1".into(),
                 body: Some(serde_json::json!({"$inc": {"AGE": 1}})),
             }],
             None,
