@@ -1,7 +1,6 @@
 use crate::dbf::{DbfError, DbfTable};
 use crate::query::{self, QueryError};
-use crate::xbase::OperationIr;
-use serde::Deserialize;
+use crate::xbase::{OperationBatch, OperationIr};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
@@ -46,12 +45,6 @@ impl From<QueryError> for WasmError {
 
 pub struct WasmCore {
     table: DbfTable,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct OperationBatch {
-    operations: Vec<OperationIr>,
 }
 
 impl WasmCore {

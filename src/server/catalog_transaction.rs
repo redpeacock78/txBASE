@@ -1,15 +1,8 @@
 use super::{HttpResponse, error, etag, header, json_response, read_json_body, request_header};
 use crate::catalog::{Catalog, CatalogTransactionError};
-use crate::xbase::OperationIr;
-use serde::Deserialize;
+use crate::xbase::OperationBatch;
 use serde_json::json;
 use tiny_http::Request;
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct TransactionRequest {
-    operations: Vec<OperationIr>,
-}
 
 pub(super) fn response(request: &mut Request, catalog: &Catalog) -> HttpResponse {
     if catalog.is_historical() {
@@ -29,7 +22,7 @@ pub(super) fn response(request: &mut Request, catalog: &Catalog) -> HttpResponse
         Ok(body) => body,
         Err(response) => return response,
     };
-    let transaction = match serde_json::from_slice::<TransactionRequest>(&body) {
+    let transaction = match serde_json::from_slice::<OperationBatch>(&body) {
         Ok(transaction) if !transaction.operations.is_empty() => transaction,
         Ok(_) => {
             return json_response(

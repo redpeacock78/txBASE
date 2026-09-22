@@ -1,16 +1,9 @@
 use super::{HttpResponse, dbf_error_response, error, etag, json_response, read_json_body};
 use crate::dbf::{DbfTable, DbfTransaction};
-use crate::xbase::OperationIr;
-use serde::Deserialize;
+use crate::xbase::OperationBatch;
 use serde_json::json;
 use std::path::Path;
 use tiny_http::Request;
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct TransactionRequest {
-    operations: Vec<OperationIr>,
-}
 
 pub(super) fn response(
     request: &mut Request,
@@ -24,7 +17,7 @@ pub(super) fn response(
         Ok(body) => body,
         Err(response) => return response,
     };
-    let transaction = match serde_json::from_slice::<TransactionRequest>(&body) {
+    let transaction = match serde_json::from_slice::<OperationBatch>(&body) {
         Ok(transaction) if !transaction.operations.is_empty() => transaction,
         Ok(_) => {
             return json_response(
