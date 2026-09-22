@@ -82,6 +82,29 @@ fn table_cdc_http_route_pages_committed_events() {
 }
 
 #[test]
+fn cdc_http_rejects_malformed_repeated_and_unknown_parameters() {
+    let path = Path::new("ignored.dbf");
+    for url in [
+        "/cdc?after",
+        "/cdc?after=abc",
+        "/cdc?after=-1",
+        "/cdc?after=0",
+        "/cdc?after=1&after=2",
+        "/cdc?limit=abc",
+        "/cdc?limit=0",
+        "/cdc?limit=1001",
+        "/cdc?limit=1&limit=2",
+        "/cdc?unknown=1",
+    ] {
+        let response = cdc::table_response(url, path);
+        assert_eq!(response.status_code(), StatusCode(400), "{url}");
+        let body = response_json(response);
+        assert_eq!(body["error"]["code"], "invalid_cdc_cursor", "{url}");
+        assert!(body["error"]["message"].as_str().is_some(), "{url}");
+    }
+}
+
+#[test]
 fn catalog_cdc_http_route_pages_atomic_events() {
     let root =
         std::env::temp_dir().join(format!("txbase-server-catalog-cdc-{}", std::process::id()));
