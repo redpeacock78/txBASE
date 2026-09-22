@@ -132,8 +132,9 @@ The Rust API also exposes `DbfTransaction::begin_serializable` for an opt-in coa
 It captures the DBF name and file-name set at begin and rejects a changed set at commit.
 Single-table mutations retain table-scoped historical snapshots through the `mvcc` CLI.
 Catalog `POST /transaction` also retains one full-image historical snapshot for every discovered
-table. `Catalog::from_path_at` and `mvcc catalog` read one consistent catalog commit; the catalog
-HTTP server currently serves the current image only.
+table. `Catalog::from_path_at` and `mvcc catalog` read one consistent catalog commit. Catalog
+HTTP read routes can select the same retained image with `?at=TRANSACTION_ID`; historical
+mutations remain rejected.
 
 Successful mutations return `X-Txbase-Transaction-Id` and persist the commit ID in a state sidecar.
 Strong `ETag`, `If-Match`, and `If-None-Match` conditions reject stale writes without partial mutation.

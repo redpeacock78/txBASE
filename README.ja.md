@@ -125,7 +125,8 @@ Rust APIは、beginからcommitまたはrollbackまで排他テーブルロッ�
 単一テーブルの更新は、`mvcc` CLIを通してテーブル単位の過去スナップショットを保持します。
 カタログの`POST /transaction`も、検出したすべてのテーブルの完全なイメージによる過去スナップショットを保持します。
 `Catalog::from_path_at`と`mvcc catalog`は、一貫したカタログcommitを読み取ります。
-カタログHTTPサーバーは、現在のイメージだけを提供します。
+カタログHTTPの読み取りルートは、`?at=TRANSACTION_ID`で同じ保持済みイメージを選択できます。
+過去の更新は引き続き拒否します。
 
 成功した更新は`X-Txbase-Transaction-Id`を返し、commit IDをstateサイドカーへ保存します。
 strongな`ETag`と`If-Match`、`If-None-Match`によって、古い更新を部分変更なしで拒否できます。
