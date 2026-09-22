@@ -11,6 +11,11 @@ host-specific asynchronous-storage adapters remain future work.
 `wasm::WasmCore` owns an in-memory `DbfTable` and reuses the native parser,
 query validator, query executor, and mutation methods.
 
+The shared `DbfTable::apply_operation` implementation is owned by
+`src/dbf/operation.rs` and is used by DBF transactions, WAL recovery, catalog
+table application, and WASM. WASM does not maintain a second path or body
+validation implementation.
+
 Its versioned boundary currently provides:
 
 - `ABI_VERSION = 1`;

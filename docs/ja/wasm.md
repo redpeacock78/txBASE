@@ -9,6 +9,9 @@
 
 `wasm::WasmCore`はインメモリの`DbfTable`を所有し、ネイティブのパーサー、クエリ検証、クエリ実行、更新メソッドを再利用します。
 
+共有する`DbfTable::apply_operation`の実装は`src/dbf/operation.rs`が所有し、DBFトランザクション、WAL復旧、カタログのテーブル操作、WASMから利用します。
+WASMはパスとbodyの検証を二重に実装しません。
+
 現在のバージョン付き境界は次を提供します。
 
 - `ABI_VERSION = 1`。

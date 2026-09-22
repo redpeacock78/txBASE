@@ -36,6 +36,7 @@ mod mvcc;
 mod mvcc_codec;
 #[cfg(test)]
 mod mvcc_tests;
+mod operation;
 mod parser;
 #[cfg(test)]
 mod parser_fuzz_tests;

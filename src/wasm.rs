@@ -1,8 +1,7 @@
 use crate::dbf::{DbfError, DbfTable};
 use crate::query::{self, QueryError};
-use crate::xbase::{OperationIr, OperationMethod};
+use crate::xbase::OperationIr;
 use serde::Deserialize;
-use serde_json::{Map, Value};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
@@ -89,81 +88,15 @@ impl WasmCore {
         }
         let mut working = self.table.clone();
         for operation in batch.operations {
-            apply_operation(&mut working, operation)?;
+            working.apply_operation(&operation)?;
         }
         self.table = working;
         Ok(self.snapshot())
     }
 
     pub fn apply_operation(&mut self, operation: OperationIr) -> Result<(), WasmError> {
-        apply_operation(&mut self.table, operation)
+        self.table.apply_operation(&operation).map_err(Into::into)
     }
-}
-
-fn apply_operation(table: &mut DbfTable, operation: OperationIr) -> Result<(), WasmError> {
-    match operation.method {
-        OperationMethod::Post => {
-            require_path(&operation.path, "/records")?;
-            let values = object_body(operation.body)?;
-            table.insert_record(values)?;
-        }
-        OperationMethod::Put => {
-            let id = record_id(&operation.path)?;
-            let values = object_body(operation.body)?;
-            table.replace_record(id, values)?;
-        }
-        OperationMethod::Patch => {
-            let id = record_id(&operation.path)?;
-            let patch = object_body(operation.body)?;
-            table.patch_record(id, patch)?;
-        }
-        OperationMethod::Delete => {
-            let id = record_id(&operation.path)?;
-            if operation.body.is_some() {
-                return Err(WasmError::InvalidOperation(
-                    "DELETE operation must not have a body".into(),
-                ));
-            }
-            table.delete_record(id)?;
-        }
-        OperationMethod::Get | OperationMethod::Query => {
-            return Err(WasmError::InvalidOperation(
-                "read operations must use query_json".into(),
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn object_body(body: Option<Value>) -> Result<Map<String, Value>, WasmError> {
-    body.and_then(|body| body.as_object().cloned())
-        .ok_or_else(|| WasmError::InvalidOperation("operation body must be a JSON object".into()))
-}
-
-fn require_path(actual: &str, expected: &str) -> Result<(), WasmError> {
-    if actual == expected {
-        Ok(())
-    } else {
-        Err(WasmError::InvalidOperation(format!(
-            "operation path must be {expected}"
-        )))
-    }
-}
-
-fn record_id(path: &str) -> Result<usize, WasmError> {
-    let value = path
-        .strip_prefix("/records/")
-        .filter(|value| !value.is_empty() && !value.contains('/'))
-        .ok_or_else(|| WasmError::InvalidOperation("operation path must be /records/:id".into()))?;
-    let id = value
-        .parse::<usize>()
-        .map_err(|_| WasmError::InvalidOperation("record id must be a positive integer".into()))?;
-    if id == 0 {
-        return Err(WasmError::InvalidOperation(
-            "record id must be a positive integer".into(),
-        ));
-    }
-    Ok(id)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -214,7 +147,7 @@ mod bindings {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     fn fixture() -> Vec<u8> {
         include_str!("../tests/fixtures/users.dbf.hex")

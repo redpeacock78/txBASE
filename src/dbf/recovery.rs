@@ -9,8 +9,6 @@ use super::{
     DbfError, DbfTable, MemoFile, PersistedState, find_memo_path, save_bytes_to, transaction_error,
 };
 use crate::transaction::{FileWal, Wal};
-use crate::xbase::{OperationIr, OperationMethod};
-use serde_json::{Map, Value};
 use std::fs;
 use std::path::Path;
 
@@ -235,65 +233,6 @@ impl DbfTable {
         finish_recovery(wal, &wal_path);
         Ok(true)
     }
-
-    pub(crate) fn apply_operation(&mut self, operation: &OperationIr) -> Result<(), DbfError> {
-        match operation.method {
-            OperationMethod::Post => {
-                if operation.path != "/records" {
-                    return Err(DbfError::Invalid(
-                        "operation POST path must be /records".into(),
-                    ));
-                }
-                let values = operation_object(operation, "POST")?;
-                self.insert_record(values)?;
-            }
-            OperationMethod::Put => {
-                let number = operation_record_id(&operation.path)?;
-                self.replace_record(number, operation_object(operation, "PUT")?)?;
-            }
-            OperationMethod::Patch => {
-                let number = operation_record_id(&operation.path)?;
-                self.patch_record(number, operation_object(operation, "PATCH")?)?;
-            }
-            OperationMethod::Delete => {
-                if operation.body.is_some() {
-                    return Err(DbfError::Invalid(
-                        "operation DELETE body must be absent".into(),
-                    ));
-                }
-                self.delete_record(operation_record_id(&operation.path)?)?;
-            }
-            OperationMethod::Get | OperationMethod::Query => {
-                return Err(DbfError::Invalid(
-                    "read operation cannot be replayed from a mutation WAL".into(),
-                ));
-            }
-        }
-        Ok(())
-    }
-}
-
-fn operation_object(operation: &OperationIr, method: &str) -> Result<Map<String, Value>, DbfError> {
-    operation
-        .body
-        .as_ref()
-        .and_then(Value::as_object)
-        .cloned()
-        .ok_or_else(|| DbfError::Invalid(format!("operation {method} body must be an object")))
-}
-
-fn operation_record_id(path: &str) -> Result<usize, DbfError> {
-    let Some(raw_id) = path.strip_prefix("/records/") else {
-        return Err(DbfError::Invalid(
-            "operation path must be /records/{id}".into(),
-        ));
-    };
-    let id = raw_id
-        .parse::<usize>()
-        .map_err(|_| DbfError::Invalid("operation record id is invalid".into()))?;
-    (id > 0)
-        .then_some(id)
-        .ok_or_else(|| DbfError::Invalid("operation record id must be positive".into()))
 }
 
 fn find_index_payload(wal: &FileWal) -> Result<Option<Vec<u8>>, DbfError> {
