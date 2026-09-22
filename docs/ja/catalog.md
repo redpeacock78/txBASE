@@ -125,6 +125,10 @@ txbase serve-catalog path/to/database --bind 127.0.0.1:8080
 
 これは順序と識別の境界であり、MVCCの可視性ではありません。
 
+成功した`POST /transaction`は、`.txbase.catalog.cdc`へ`TXCC`イベントを1つ公開します。
+イベントは、そのカタログcommitで変更したすべてのテーブルについて、物理レコードの状態差分を持ちます。
+カタログジャーナルは、DBF、インデックス、MVCC、トランザクション状態の対象と一緒にCDCサイドカーを適用またはロールバックします。
+
 カタログの検出はサーバー起動時に一度行います。
 
 各リクエストは既存の復旧経路を通して名前付きテーブルをロードします。
@@ -159,6 +163,8 @@ txbase verify-catalog path/to/database
 txbase mvcc catalog list path/to/database
 txbase mvcc catalog read path/to/database 1
 txbase mvcc catalog gc path/to/database --keep 5
+txbase cdc catalog path/to/database
+txbase cdc catalog path/to/database --after 10
 ```
 
 カタログ出力の形は次のとおりです。
@@ -186,6 +192,9 @@ txbase mvcc catalog gc path/to/database --keep 5
 カタログは現在、検出、検索、スキーマの内省、検証、有界ローカル結合が使う入力境界、名前付きテーブルを独立して読み書きする任意のHTTP境界、読み取り専用のカタログ全体の過去スナップショットを提供します。
 
 名前付きレコードの更新を横断するアトミックなトランザクション境界も提供します。
+
+この複数テーブルcommitは`Catalog::cdc_events`と`txbase cdc catalog DIRECTORY`で公開します。
+カタログCDCストリームは明示的な複数テーブルトランザクションの境界に限られ、独立した名前付きテーブル経路はテーブル単位のCDCイベントを保持します。
 
 カタログジャーナルは単調増加するコミットIDを`.txbase.catalog.state`に永続化します。
 

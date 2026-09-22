@@ -44,6 +44,46 @@ A logical delete keeps the `after` state and sets its `deleted` flag to `true`.
 
 An empty `changes` array is valid when a committed operation changes no row values.
 
+Catalog transactions use a separate catalog sidecar.
+
+For a catalog directory, the sidecar is `.txbase.catalog.cdc`.
+
+It uses the same `TXWL` record container with one `TXCC` payload per committed multi-table catalog transaction.
+
+`TXCC` version 1 contains one catalog transaction ID and a table-name map:
+
+```json
+{
+  "transaction_id": 1,
+  "tables": {
+    "posts": {
+      "reset": false,
+      "changes": [
+        {
+          "record_number": 1,
+          "before": {"deleted": false, "values": {"AGE": 29}},
+          "after": {"deleted": false, "values": {"AGE": 30}}
+        }
+      ]
+    },
+    "users": {
+      "reset": false,
+      "changes": [
+        {
+          "record_number": 3,
+          "before": null,
+          "after": {"deleted": false, "values": {"ID": 3, "NAME": "Carol"}}
+        }
+      ]
+    }
+  }
+}
+```
+
+The table map is ordered by table name, and each table's changes are ordered by physical record number.
+
+The catalog transaction ID is the same ID exposed by catalog schema JSON and `POST /transaction`.
+
 ## 2. Commit and recovery
 
 The CDC payload is written to the DBF WAL before target replacement.
@@ -60,6 +100,10 @@ The CDC reader accepts the same torn final `TXWL` boundary as the WAL reader and
 
 The recovery path validates the CDC transaction ID against `TXTI` and publishes the event only after the DBF recovery has completed.
 
+Catalog journal recovery applies or rolls back the catalog CDC sidecar together with the DBF, index, MVCC, and transaction-state targets.
+
+Catalog CDC publication is idempotent for the same transaction ID and event data, and rejects conflicting or out-of-order events.
+
 ## 3. Layout changes
 
 `reset` is `true` when a physical layout change can invalidate record-number identity, such as `PACK`.
@@ -70,9 +114,9 @@ Consumers must treat a reset event as a replacement boundary instead of applying
 
 The current event does not include schema-sidecar edits.
 
-Catalog transactions do not yet publish one multi-table CDC envelope.
+Catalog CDC covers the explicit multi-table catalog transaction boundary.
 
-Those cases require a catalog-level event contract before they can be presented as one atomic change stream.
+Independent named-table mutation routes keep their table-scoped `TXCD` events and are not combined into a catalog event.
 
 ## 4. Reading events
 
@@ -84,11 +128,20 @@ use txbase::dbf::DbfTable;
 let events = DbfTable::cdc_events("users.dbf", Some(10))?;
 ```
 
+The catalog API returns the atomic multi-table events:
+
+```rust
+use txbase::catalog::Catalog;
+
+let events = Catalog::cdc_events("catalog", Some(10))?;
+```
+
 The CLI exposes the same read boundary:
 
 ```bash
 txbase cdc users.dbf
 txbase cdc users.dbf --after 10
+txbase cdc catalog ./catalog --after 10
 ```
 
 An absent sidecar returns an empty JSON array.
@@ -101,11 +154,9 @@ CDC retention is explicit file maintenance and is not performed automatically.
 
 ## 5. Scope and future work
 
-The event records state differences for one DBF commit and preserve commit order.
+The event records state differences for one DBF commit or one catalog commit and preserve commit order.
 
 They do not provide a network transport, consumer leases, acknowledgements, backpressure, schema evolution, or replay into another table.
-
-They do not include catalog transaction IDs as a cross-table envelope.
 
 An adapter for replication or an external consumer must define those behaviors separately.
 
@@ -125,4 +176,4 @@ Those systems provide broader contracts than this local sidecar and do not make 
 
 The external documents provide terminology and design lessons.
 
-The `TXCD` payload, physical-record reset rule, sidecar path, recovery ordering, and CLI cursor are txBASE contracts.
+The `TXCD` and `TXCC` payloads, physical-record reset rule, sidecar paths, recovery ordering, and CLI cursor are txBASE contracts.

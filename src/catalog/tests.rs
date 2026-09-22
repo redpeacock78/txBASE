@@ -207,6 +207,61 @@ fn commits_named_operations_across_tables() {
 }
 
 #[test]
+fn catalog_cdc_records_one_atomic_event_for_changed_tables() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.dbf"), fixture()).unwrap();
+    let catalog = Catalog::from_path(&root).unwrap();
+
+    catalog
+        .commit_operations_with_preconditions(
+            &[
+                OperationIr {
+                    method: OperationMethod::Post,
+                    path: "/users/records".into(),
+                    body: Some(json!({
+                        "ID": 3,
+                        "NAME": "Carol",
+                        "AGE": 42,
+                        "ACTIVE": true
+                    })),
+                },
+                OperationIr {
+                    method: OperationMethod::Patch,
+                    path: "/posts/records/1".into(),
+                    body: Some(json!({"$inc": {"AGE": 1}})),
+                },
+            ],
+            None,
+            None,
+        )
+        .unwrap();
+
+    let events = Catalog::cdc_events(&root, None).unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].transaction_id, 1);
+    assert_eq!(
+        events[0].tables["users"].changes[0]
+            .after
+            .as_ref()
+            .unwrap()
+            .values["ID"],
+        3
+    );
+    assert_eq!(
+        events[0].tables["posts"].changes[0]
+            .after
+            .as_ref()
+            .unwrap()
+            .values["AGE"],
+        30
+    );
+    assert!(Catalog::cdc_events(&root, Some(1)).unwrap().is_empty());
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn catalog_mvcc_preserves_consistent_cross_table_snapshots() {
     let root = temporary_catalog();
     let users = root.join("users.dbf");

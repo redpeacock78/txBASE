@@ -21,7 +21,7 @@ Options are named when they change interpretation, such as `--encoding`, `--sche
 
 | Group | Commands | Boundary |
 | --- | --- | --- |
-| Read and inspect | `read`, `cdc`, `schema`, `verify`, `catalog`, `verify-catalog`, `wal inspect`, `mvcc list`, `mvcc read`, `mvcc row`, `mvcc row-at`, `mvcc catalog list`, `mvcc catalog read`, `xbf report`, `index verify` | Read-only output; these commands do not intentionally publish a mutation. |
+| Read and inspect | `read`, `cdc`, `cdc catalog`, `schema`, `verify`, `catalog`, `verify-catalog`, `wal inspect`, `mvcc list`, `mvcc read`, `mvcc row`, `mvcc row-at`, `mvcc catalog list`, `mvcc catalog read`, `xbf report`, `index verify` | Read-only output; these commands do not intentionally publish a mutation. |
 | Create and mutate | `init`, `insert`, `pack`, `recall`, `schema apply`, `mvcc gc`, `mvcc catalog gc`, `index build`, `index build-compound`, `index rebuild`, `xbf import`, `xbf export` | May write DBF bytes, sidecars, or durable history according to the command contract. |
 | Copy and serve | `backup`, `restore`, `serve`, `serve-catalog` | Copy or expose data through a separately documented boundary. |
 
@@ -31,9 +31,13 @@ Options are named when they change interpretation, such as `--encoding`, `--sche
 
 Its optional `--after` argument is an exclusive transaction-ID cursor over the committed events in the table's CDC sidecar.
 
+`cdc catalog DIRECTORY` reads the atomic events emitted by multi-table catalog transactions from the catalog CDC sidecar.
+
+The catalog form uses the same exclusive `--after` cursor over catalog transaction IDs.
+
 ## Design rules
 
-- Read-only inspection commands must not create or truncate a file merely to inspect it.
+- Read-only inspection commands must not create or truncate a data, history, or event file merely to inspect it. Lock files and documented torn-tail repair are allowed.
 - Mutation commands must reuse the DBF, catalog, or XBF lock and recovery path that owns the target.
 - A command that changes a sidecar without changing DBF bytes must say so explicitly in its help and topic document.
 - A new command belongs in the smallest responsibility group that matches its failure behavior and fixtures.

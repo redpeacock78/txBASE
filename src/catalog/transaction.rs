@@ -189,6 +189,17 @@ impl Catalog {
             before: history_before,
             after: Some(history_after),
         });
+        let cdc_path = super::cdc::path_for(&self.root);
+        let cdc_event = super::cdc::event_for_tables(transaction_id, &before, &replacements)
+            .map_err(CatalogTransactionError::Catalog)?;
+        let cdc_after = super::cdc::staged_bytes(&cdc_path, &cdc_event)
+            .map_err(CatalogTransactionError::Catalog)?;
+        let cdc_before = read_optional(&cdc_path).map_err(CatalogTransactionError::Catalog)?;
+        changes.push(FileChange {
+            target: cdc_path,
+            before: cdc_before,
+            after: Some(cdc_after),
+        });
         commit(&self.root, changes).map_err(CatalogTransactionError::Catalog)
     }
 }

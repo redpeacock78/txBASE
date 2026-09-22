@@ -203,6 +203,7 @@ txBASE uses these records in its WAL:
 | `TXDB` | Complete DBF snapshot |
 | `TXDM` | Complete DBF and memo snapshot |
 | `TXCD` | Committed single-table row-change event staged with the DBF transaction |
+| `TXCC` | Committed multi-table catalog row-change event staged with the catalog journal |
 
 The WAL is synced before the replacement of the DBF or memo sidecar.
 
@@ -213,6 +214,9 @@ without the sidecar start at commit ID 1 on their first WAL-backed save.
 The `*.txbase.cdc` sidecar stores the committed `TXCD` events in the same transaction-ID order.
 Recovery publishes a staged event only after the DBF target and transaction state have been
 recovered, and republishes an identical event idempotently.
+
+The `.txbase.catalog.cdc` sidecar stores `TXCC` events for explicit multi-table catalog transactions.
+The catalog journal applies or rolls back that sidecar with the DBF, index, MVCC, and transaction-state targets.
 
 Startup recovery accepts an already-applied target, rejects a mismatched delta base, and replays a supported `TXOP` when no state payload exists.
 
@@ -233,6 +237,7 @@ The CLI now exposes the first local-database maintenance boundary:
 | `txbase pack FILE` | Removes logically deleted records, renumbers the remaining physical records, and persists the result through the existing WAL |
 | `txbase recall FILE RECORD` | Restores one logically deleted record through the existing WAL |
 | `txbase cdc FILE [--after TRANSACTION_ID]` | Reads committed single-table row-change events from the CDC sidecar, optionally after an exclusive transaction-ID cursor |
+| `txbase cdc catalog DIRECTORY [--after TRANSACTION_ID]` | Reads atomic multi-table row-change events from the catalog CDC sidecar, optionally after an exclusive catalog transaction-ID cursor |
 | `txbase backup SOURCE DEST` | Validates `SOURCE`, then copies its DBF, detected `.dbt` or `.fpt`, schema, CDC, and valid `.txidx` sidecars |
 | `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as `SOURCE` |
 | `txbase mvcc row FILE RECORD` | Lists retained row versions for one positive physical DBF record number |

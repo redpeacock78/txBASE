@@ -111,6 +111,27 @@ fn cdc_cli_reads_committed_events_and_supports_an_after_cursor() {
 }
 
 #[test]
+fn catalog_cdc_cli_reads_an_empty_catalog_stream() {
+    let root = std::env::temp_dir().join(format!("txbase-cli-catalog-cdc-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("users.dbf"), users_fixture()).unwrap();
+
+    let output = run_cli(&["cdc", "catalog", root.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "catalog CDC CLI failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap(),
+        serde_json::json!([])
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn backup_and_restore_cli_copy_a_dbf() {
     let source = std::env::temp_dir().join(format!(
         "txbase-cli-backup-source-{}.dbf",

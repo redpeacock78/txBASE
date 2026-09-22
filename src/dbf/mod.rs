@@ -100,6 +100,16 @@ use wal::{
 use wal::{delta_payload, memo_snapshot_payload, operation_payload, snapshot_payload};
 
 pub use cdc::{ChangeEvent, ChangeRecord, ChangeState};
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn cdc_event_for_tables(
+    transaction_id: u64,
+    before: &DbfTable,
+    after: &DbfTable,
+    reset: bool,
+) -> Result<ChangeEvent, DbfError> {
+    cdc::event_for_tables(transaction_id, before, after, reset)
+}
 pub use maintenance::copy_table_files;
 pub use transaction::DbfTransaction;
 

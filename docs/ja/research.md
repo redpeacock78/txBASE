@@ -21,7 +21,7 @@
 | 有界ローカル結合契約 | [結合モデル](joins.md)と[カタログ](catalog.md) | 現在の境界 |
 | MongoDB の述語とクエリ計画 | [クエリ計画](query-planning.md) | 現在のサブセットと参照資料 |
 | 更新演算子とアトミック性 | [更新モデル](mutation-model.md) | 現在のサブセットと将来の境界 |
-| ローカル変更データ取得 | [変更データ取得](change-data-capture.md) | 現在の単一テーブルのコミット済みイベント境界と、将来のカタログおよび転送作業 |
+| ローカル変更データ取得 | [変更データ取得](change-data-capture.md) | 現在の単一テーブルと明示的な複数テーブルカタログのコミット済みイベント境界、将来の転送作業 |
 | 単一テーブルのスナップショットトランザクションと分離 | [スナップショットトランザクション](transactions.md)と[MVCC](mvcc.md) | 現在のオプティミスティックな境界と将来のserializable作業 |
 | Firestore と Realtime Database の設計 | [Firebase モデル](firebase-model.md) | 参照資料 |
 | SQLite のテスト範囲と品質 | [テストと品質](testing-quality.md) | 現在のテストマップと参照資料 |
@@ -60,7 +60,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 | FirestoreとRealtime Databaseの文書 | 公式製品文書です。 | Firebase文書はアーキテクチャ参照だけです。txBASEはFirebaseのトランザクション、オフラインキュー、セキュリティルール、イベント同期を実装しません。 | 比較は[Firebaseモデル](firebase-model.md)に残し、DBF、HTTP、トランザクション契約へ持ち込みません。 |
 | SQLite文書 | 公式プロジェクト文書です。 | 制約語彙、WALとアトミックコミットの根拠、クエリ計画語彙、テスト品質の実践を参照します。txBASEはDBFサイドカーと独自WALを使い、SQLiteのファイル、SQL、永続性互換性を主張しません。 | 根拠はスキーマ、MVCC、クエリ計画、テストの文書に置き、txBASEの動作は別に記述します。 |
 | PostgreSQLのトランザクション分離とMVCC文書 | 公式プロジェクト文書です。 | トランザクションとMVCCの文書で、現在のオプティミスティックな古い元データの検査と、未実装の述語ロックおよびserializableな競合検出を区別するために使います。 | 区別は[スナップショットトランザクション](transactions.md)と[MVCC](mvcc.md)に置き、PostgreSQLの分離保証を現在の契約へコピーしません。 |
-| SQLiteセッション拡張とPostgreSQL論理デコード | 公式プロジェクト文書です。 | CDC文書は変更セットとコミット済みWAL利用者の語彙を参照しますが、利用者スロット、再生、レプリケーション互換性を持たない、物理レコードの状態差分サイドカーを定義します。 | 外部資料との比較と範囲の境界は[変更データ取得](change-data-capture.md)に置き、コミットと復旧の仕組みは[DBF互換性](dbf-compatibility.md)に置きます。 |
+| SQLiteセッション拡張とPostgreSQL論理デコード | 公式プロジェクト文書です。 | CDC文書は変更セットとコミット済みWAL利用者の語彙を参照しますが、単一テーブルcommit向けの`TXCD`と明示的な複数テーブルカタログcommit向けの`TXCC`という、物理レコードの状態差分サイドカーを定義します。利用者スロット、再生、レプリケーション互換性は提供しません。 | 外部資料との比較と範囲の境界は[変更データ取得](change-data-capture.md)に置き、DBFのcommit機構は[DBF互換性](dbf-compatibility.md)に、カタログジャーナル機構は[カタログ](catalog.md)に置きます。 |
 | Gitのコマンドラインインターフェース文書 | CLI設計の参照に使う公式プロジェクト文書です。 | txBASEの明示的なサブコマンドとオプションの形だけに影響します。Gitのコマンド群、リポジトリモデル、オプションの意味はコピーしません。 | 設計判断は[CLIコマンド設計](cli.md)に置き、MVCCやストレージの契約には置きません。 |
 | RFC 9110、RFC 5789、RFC 10008 | IETFの標準化過程にある仕様です。 | HTTPメソッドの安全性、PATCHの意味、QUERYの安全性と冪等性をHTTP契約へ反映します。txBASEは対応メディアタイプ、応答形状、範囲上限、ルート上限を別に定義します。 | 規範的なHTTP意味論は[HTTPの意味](http-semantics.md)に置き、txBASE固有の制約は実装契約のそばに置きます。 |
 | POSIXの`rename()`と`fsync()` | The Open Groupの仕様です。 | Unixコードはrenameによる置換と`sync_all`を使います。Windowsには別の置換経路があるため、POSIXのディレクトリ永続性保証と同一とは記述しません。 | ファイルシステムの永続性の前提は永続化とXBFの文書に置き、Unix限定であることを明記します。 |

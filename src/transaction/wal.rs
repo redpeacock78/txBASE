@@ -144,6 +144,23 @@ impl FileWal {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn encode_records(records: &[Vec<u8>]) -> Result<Vec<u8>, TransactionError> {
+    let mut bytes = Vec::new();
+    for (index, record) in records.iter().enumerate() {
+        validate_record_size(record)?;
+        let length = u32::try_from(record.len())
+            .map_err(|_| TransactionError::Invalid("WAL record length overflows".into()))?;
+        let lsn = u64::try_from(index)
+            .map_err(|_| TransactionError::Invalid("WAL LSN overflows".into()))?;
+        bytes.extend_from_slice(&WAL_MAGIC);
+        bytes.extend_from_slice(&length.to_le_bytes());
+        bytes.extend_from_slice(&lsn.to_le_bytes());
+        bytes.extend_from_slice(record);
+    }
+    Ok(bytes)
+}
+
 fn parse_wal(bytes: &[u8]) -> Result<ParsedWal, TransactionError> {
     let mut records = Vec::new();
     let mut offset = 0usize;

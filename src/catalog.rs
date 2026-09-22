@@ -6,6 +6,7 @@ use std::fmt::{self, Display, Formatter};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod cdc;
 mod constraint_actions;
 mod constraints;
 mod discovery;
@@ -13,6 +14,10 @@ mod journal;
 mod mvcc;
 mod transaction;
 
+pub use cdc::{CatalogChangeEvent, CatalogTableChange};
+
+#[cfg(test)]
+mod cdc_tests;
 #[cfg(test)]
 mod tests;
 
@@ -163,6 +168,21 @@ impl Catalog {
             return Ok(Some(snapshot.transaction_id));
         }
         journal::transaction_id(&self.root)
+    }
+
+    pub fn cdc_events(
+        path: impl AsRef<Path>,
+        after: Option<u64>,
+    ) -> Result<Vec<CatalogChangeEvent>, CatalogError> {
+        let root = path.as_ref();
+        if !fs::metadata(root)?.is_dir() {
+            return Err(CatalogError::Invalid(format!(
+                "catalog path is not a directory: {}",
+                root.display()
+            )));
+        }
+        let _lock = transaction::write_lock(root)?;
+        cdc::read(root, after)
     }
 
     pub fn mvcc_versions(path: impl AsRef<Path>) -> Result<Vec<u64>, CatalogError> {

@@ -22,7 +22,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 
 | グループ | コマンド | 境界 |
 | --- | --- | --- |
-| 読み取りと検査 | `read`、`cdc`、`schema`、`verify`、`catalog`、`verify-catalog`、`wal inspect`、`mvcc list`、`mvcc read`、`mvcc row`、`mvcc row-at`、`mvcc catalog list`、`mvcc catalog read`、`xbf report`、`index verify` | 読み取り専用の出力です。これらのコマンドは、意図的に更新を公開しません。 |
+| 読み取りと検査 | `read`、`cdc`、`cdc catalog`、`schema`、`verify`、`catalog`、`verify-catalog`、`wal inspect`、`mvcc list`、`mvcc read`、`mvcc row`、`mvcc row-at`、`mvcc catalog list`、`mvcc catalog read`、`xbf report`、`index verify` | 読み取り専用の出力です。これらのコマンドは、意図的に更新を公開しません。 |
 | 作成と更新 | `init`、`insert`、`pack`、`recall`、`schema apply`、`mvcc gc`、`mvcc catalog gc`、`index build`、`index build-compound`、`index rebuild`、`xbf import`、`xbf export` | コマンド契約に従って、DBFバイト列、サイドカー、永続履歴を書き換えることがあります。 |
 | コピーと提供 | `backup`、`restore`、`serve`、`serve-catalog` | 別の文書で定義する境界を通して、データをコピーまたは公開します。 |
 
@@ -33,9 +33,13 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 
 任意の`--after`引数は、テーブルのCDCサイドカーにあるコミット済みイベントをトランザクションIDで排他的に絞り込むカーソルです。
 
+`cdc catalog DIRECTORY`は、複数テーブルのカタログトランザクションがカタログCDCサイドカーへ公開した原子的なイベントを読み取ります。
+
+カタログ形式でも、カタログトランザクションIDに対して同じ排他的な`--after`カーソルを使います。
+
 ## 設計規則
 
-- 読み取り専用の検査コマンドは、検査だけのためにファイルを作成または切り詰めてはいけません。
+- 読み取り専用の検査コマンドは、検査だけのためにデータ、履歴、イベントのファイルを作成または切り詰めてはいけません。ロックファイルと、文書化した切断末尾の修復は許可する。
 - 更新コマンドは、対象を所有するDBF、カタログ、XBFのロックと復旧経路を再利用しなければなりません。
 - DBFバイト列を変更せずにサイドカーを変更するコマンドは、ヘルプとトピック文書でそのことを明記しなければなりません。
 - 新しいコマンドは、失敗時の動作とフィクスチャに合う最小の責務グループへ置く。

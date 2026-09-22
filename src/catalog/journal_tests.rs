@@ -25,12 +25,14 @@ fn prepared_journal(root: &Path, phase: Phase) {
     write_synced(&journal.join("before/3"), b"users-index-before").unwrap();
     write_synced(&journal.join("before/4"), b"posts-index-before").unwrap();
     write_synced(&journal.join("before/5"), b"history-before").unwrap();
+    write_synced(&journal.join("before/6"), b"catalog-cdc-before").unwrap();
     write_synced(&journal.join("after/0"), b"users-after").unwrap();
     write_synced(&journal.join("after/1"), b"posts-after").unwrap();
     write_synced(&journal.join("after/2"), &transaction_state_bytes(2)).unwrap();
     write_synced(&journal.join("after/3"), b"users-index-after").unwrap();
     write_synced(&journal.join("after/4"), b"posts-index-after").unwrap();
     write_synced(&journal.join("after/5"), b"history-after").unwrap();
+    write_synced(&journal.join("after/6"), b"catalog-cdc-after").unwrap();
     write_manifest(
         &journal,
         &Manifest {
@@ -66,6 +68,11 @@ fn prepared_journal(root: &Path, phase: Phase) {
                     before: Some("5".into()),
                     after: Some("5".into()),
                 },
+                ManifestChange {
+                    target: ".txbase.catalog.cdc".into(),
+                    before: Some("6".into()),
+                    after: Some("6".into()),
+                },
             ],
         },
     )
@@ -81,6 +88,7 @@ fn prepared_journal_rolls_back_partial_catalog_commit() {
     fs::write(root.join("users.dbf.txidx"), b"users-index-after").unwrap();
     fs::write(root.join("posts.dbf.txidx"), b"posts-index-before").unwrap();
     fs::write(root.join(".txbase.catalog.mvcc"), b"history-after").unwrap();
+    fs::write(root.join(".txbase.catalog.cdc"), b"catalog-cdc-after").unwrap();
     prepared_journal(&root, Phase::Prepared);
 
     recover(&root).unwrap();
@@ -99,6 +107,10 @@ fn prepared_journal_rolls_back_partial_catalog_commit() {
         fs::read(root.join(".txbase.catalog.mvcc")).unwrap(),
         b"history-before"
     );
+    assert_eq!(
+        fs::read(root.join(".txbase.catalog.cdc")).unwrap(),
+        b"catalog-cdc-before"
+    );
     assert_eq!(read_transaction_id_locked(&root).unwrap(), Some(1));
     assert!(!root.join(JOURNAL_DIR).exists());
     fs::remove_dir_all(root).unwrap();
@@ -113,6 +125,7 @@ fn committed_journal_replays_the_complete_catalog_commit() {
     fs::write(root.join("users.dbf.txidx"), b"users-index-before").unwrap();
     fs::write(root.join("posts.dbf.txidx"), b"posts-index-before").unwrap();
     fs::write(root.join(".txbase.catalog.mvcc"), b"history-before").unwrap();
+    fs::write(root.join(".txbase.catalog.cdc"), b"catalog-cdc-before").unwrap();
     prepared_journal(&root, Phase::Committed);
 
     recover(&root).unwrap();
@@ -130,6 +143,10 @@ fn committed_journal_replays_the_complete_catalog_commit() {
     assert_eq!(
         fs::read(root.join(".txbase.catalog.mvcc")).unwrap(),
         b"history-after"
+    );
+    assert_eq!(
+        fs::read(root.join(".txbase.catalog.cdc")).unwrap(),
+        b"catalog-cdc-after"
     );
     assert_eq!(read_transaction_id_locked(&root).unwrap(), Some(2));
     assert!(!root.join(JOURNAL_DIR).exists());

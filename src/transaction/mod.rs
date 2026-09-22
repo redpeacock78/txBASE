@@ -4,6 +4,8 @@ use std::io;
 mod wal;
 
 pub(crate) use wal::MAX_WAL_RECORD_SIZE;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use wal::encode_records;
 pub use wal::{FileWal, MemoryWal, WalInspection, WalRecordInfo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

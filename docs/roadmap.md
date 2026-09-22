@@ -58,6 +58,7 @@ The repository currently provides:
 - A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and mutation contracts, a `wasm-bindgen` wrapper, and a `wasm32-unknown-unknown` CI compile check.
 - A runtime-neutral `AsyncObjectStore` primitive contract, `AsyncObjectTable` manifest protocol, and synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, and a read-only API and CLI cursor.
+- A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, and a read-only API and CLI cursor.
 
 The baseline intentionally does not include the following:
 

@@ -111,6 +111,9 @@ lock. `If-Match` requires the current strong tag or `*`; a weak or non-matching 
 `412 Precondition Failed`. A matching strong or weak `If-None-Match`, or `*`, returns the same
 status without changing any DBF or sidecar. This is an ordering/identification boundary, not
 MVCC visibility.
+Each successful `POST /transaction` also publishes one `TXCC` event to `.txbase.catalog.cdc`.
+The event contains the physical-record state differences for every changed table in that catalog commit.
+The catalog journal applies or rolls back the CDC sidecar with the DBF, index, MVCC, and transaction-state targets.
 The catalog is discovered once at server startup, while each request loads the named table through
 the existing recovery path. Named-table mutations do not add or remove tables.
 
@@ -141,6 +144,8 @@ List retained catalog commits and read one consistent historical image:
 txbase mvcc catalog list path/to/database
 txbase mvcc catalog read path/to/database 1
 txbase mvcc catalog gc path/to/database --keep 5
+txbase cdc catalog path/to/database
+txbase cdc catalog path/to/database --after 10
 ```
 
 The catalog output has this shape:
@@ -170,6 +175,9 @@ input boundary used by the bounded local join, an optional HTTP surface for inde
 named-table reads and mutations, and read-only catalog-wide historical snapshots.
 
 It provides a cross-table atomic transaction boundary for named record mutations.
+
+It exposes those multi-table commits through `Catalog::cdc_events` and `txbase cdc catalog DIRECTORY`.
+The catalog CDC stream is limited to the explicit multi-table transaction boundary; independent named-table routes keep their table-scoped CDC events.
 
 The catalog journal persists a monotonically increasing commit ID in
 `.txbase.catalog.state`. Recovery rolls that state back with a prepared journal or reapplies it
