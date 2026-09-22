@@ -10,8 +10,7 @@ pub struct GroupSpec {
 
 #[derive(Debug, Clone)]
 pub struct AggregationPlan {
-    pub matches: Vec<Map<String, Value>>,
-    pub unwinds: Vec<String>,
+    pub input: Vec<InputStage>,
     pub group_matches: Vec<Map<String, Value>>,
     pub group: Option<GroupSpec>,
     pub count: Option<String>,
@@ -20,6 +19,15 @@ pub struct AggregationPlan {
     pub sort: Option<IndexMap<String, i8>>,
     pub skip: Option<u64>,
     pub limit: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub enum InputStage {
+    Match(Map<String, Value>),
+    Unwind(String),
+    Sort(IndexMap<String, i8>),
+    Skip(u64),
+    Limit(u64),
 }
 
 #[derive(Debug, Clone)]

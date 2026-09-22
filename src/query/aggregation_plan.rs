@@ -7,7 +7,9 @@ mod group;
 mod types;
 
 use group::parse_group;
-pub(super) use types::{AccumulatorKind, AccumulatorSpec, AggregationPlan, GroupSpec, SumOperand};
+pub(super) use types::{
+    AccumulatorKind, AccumulatorSpec, AggregationPlan, GroupSpec, InputStage, SumOperand,
+};
 
 pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
     let Some(stages) = request.aggregate.as_ref() else {
@@ -36,9 +38,10 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
         ));
     }
 
-    let mut matches = Vec::new();
-    let mut unwinds = Vec::new();
-    let mut unwind_seen = false;
+    let mut input = Vec::new();
+    let mut input_sort_seen = false;
+    let mut input_skip_seen = false;
+    let mut input_limit_seen = false;
     let mut group_matches = Vec::new();
     let mut group = None;
     let mut count = None;
@@ -55,18 +58,36 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
         }
         let (operator, value) = stage.iter().next().expect("one aggregate operator");
         match operator.as_str() {
-            "$match"
-                if group.is_none() && count.is_none() && distinct.is_none() && !unwind_seen =>
-            {
+            "$match" if group.is_none() && count.is_none() && distinct.is_none() => {
                 let filter = value.as_object().ok_or_else(|| {
                     QueryError::Invalid(format!("aggregate stage {index}.$match must be an object"))
                 })?;
                 validation::validate_filter(filter, &format!("aggregate[{index}].$match"))?;
-                matches.push(filter.clone());
+                input.push(InputStage::Match(filter.clone()));
             }
             "$unwind" if group.is_none() && count.is_none() && distinct.is_none() => {
-                unwinds.push(parse_unwind(value, index)?);
-                unwind_seen = true;
+                input.push(InputStage::Unwind(parse_unwind(value, index)?));
+            }
+            "$sort"
+                if group.is_none() && count.is_none() && distinct.is_none() && !input_sort_seen =>
+            {
+                input.push(InputStage::Sort(parse_sort(value, index)?));
+                input_sort_seen = true;
+            }
+            "$skip"
+                if group.is_none() && count.is_none() && distinct.is_none() && !input_skip_seen =>
+            {
+                input.push(InputStage::Skip(parse_skip(value, index)?));
+                input_skip_seen = true;
+            }
+            "$limit"
+                if group.is_none()
+                    && count.is_none()
+                    && distinct.is_none()
+                    && !input_limit_seen =>
+            {
+                input.push(InputStage::Limit(parse_limit(value, index)?));
+                input_limit_seen = true;
             }
             "$match"
                 if group.is_some()
@@ -125,17 +146,17 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
             }
             "$sort" => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate stage {index}.$sort must follow $group, precede $skip/$limit, and appear once"
+                    "aggregate stage {index}.$sort must be an input stage or follow $group, and appear once in its phase"
                 )));
             }
             "$skip" => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate stage {index}.$skip must follow $group and precede $limit, and appear once"
+                    "aggregate stage {index}.$skip must be an input stage or follow $group, and appear once in its phase"
                 )));
             }
             "$limit" => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate stage {index}.$limit must follow $group and appear once"
+                    "aggregate stage {index}.$limit must be an input stage or follow $group, and appear once in its phase"
                 )));
             }
             "$distinct" => {
@@ -145,7 +166,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
             }
             "$unwind" => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate stage {index}.$unwind must follow input $match stages and precede $group, $count, or $distinct"
+                    "aggregate stage {index}.$unwind must precede $group, $count, or $distinct"
                 )));
             }
             _ => {
@@ -162,8 +183,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
         ));
     }
     Ok(AggregationPlan {
-        matches,
-        unwinds,
+        input,
         group_matches,
         group,
         count,

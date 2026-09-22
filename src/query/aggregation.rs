@@ -17,32 +17,116 @@ pub(super) const MAX_DISTINCT_VALUES: usize = 10_000;
 pub(super) const MAX_COLLECTED_VALUES: usize = 10_000;
 pub(super) use super::aggregation_plan::validate;
 
+enum InputRecords<'a> {
+    Borrowed(Vec<&'a DbfRecord>),
+    Owned(Vec<DbfRecord>),
+}
+
 pub(super) fn execute(
     records: &[&DbfRecord],
     stages: &[Map<String, Value>],
 ) -> Result<Vec<Value>, QueryError> {
     let plan = aggregation_plan::parse(stages)?;
-    let mut records = records.to_vec();
-    for filter in &plan.matches {
-        let mut filtered = Vec::with_capacity(records.len());
-        for record in records {
-            if matches_filter(&record.values, filter)? {
-                filtered.push(record);
-            }
-        }
-        records = filtered;
-    }
-
-    if plan.unwinds.is_empty() {
-        return execute_materialized(records, &plan);
-    }
-
-    let mut records = records.into_iter().cloned().collect::<Vec<_>>();
+    let mut records = InputRecords::Borrowed(records.to_vec());
     let mut unwound_records = 0;
-    for field in &plan.unwinds {
-        records = unwind_records(records, field, &mut unwound_records)?;
+    for stage in &plan.input {
+        records = apply_input_stage(records, stage, &mut unwound_records)?;
     }
-    execute_materialized(records.iter(), &plan)
+    match records {
+        InputRecords::Borrowed(records) => execute_materialized(records, &plan),
+        InputRecords::Owned(records) => execute_materialized(records.iter(), &plan),
+    }
+}
+
+fn apply_input_stage<'a>(
+    records: InputRecords<'a>,
+    stage: &aggregation_plan::InputStage,
+    unwound_records: &mut usize,
+) -> Result<InputRecords<'a>, QueryError> {
+    match stage {
+        aggregation_plan::InputStage::Match(filter) => match records {
+            InputRecords::Borrowed(records) => {
+                Ok(InputRecords::Borrowed(filter_borrowed(records, filter)?))
+            }
+            InputRecords::Owned(records) => Ok(InputRecords::Owned(filter_owned(records, filter)?)),
+        },
+        aggregation_plan::InputStage::Unwind(field) => {
+            let records = match records {
+                InputRecords::Borrowed(records) => records.into_iter().cloned().collect(),
+                InputRecords::Owned(records) => records,
+            };
+            Ok(InputRecords::Owned(unwind_records(
+                records,
+                field,
+                unwound_records,
+            )?))
+        }
+        aggregation_plan::InputStage::Sort(sort) => match records {
+            InputRecords::Borrowed(mut records) => {
+                records.sort_by(|left, right| {
+                    super::ordering::compare_records_with_collation(left, right, sort, None)
+                });
+                Ok(InputRecords::Borrowed(records))
+            }
+            InputRecords::Owned(mut records) => {
+                records.sort_by(|left, right| {
+                    super::ordering::compare_records_with_collation(left, right, sort, None)
+                });
+                Ok(InputRecords::Owned(records))
+            }
+        },
+        aggregation_plan::InputStage::Skip(skip) => match records {
+            InputRecords::Borrowed(mut records) => {
+                skip_records(&mut records, *skip);
+                Ok(InputRecords::Borrowed(records))
+            }
+            InputRecords::Owned(mut records) => {
+                skip_records(&mut records, *skip);
+                Ok(InputRecords::Owned(records))
+            }
+        },
+        aggregation_plan::InputStage::Limit(limit) => match records {
+            InputRecords::Borrowed(mut records) => {
+                records.truncate((*limit).try_into().unwrap_or(usize::MAX));
+                Ok(InputRecords::Borrowed(records))
+            }
+            InputRecords::Owned(mut records) => {
+                records.truncate((*limit).try_into().unwrap_or(usize::MAX));
+                Ok(InputRecords::Owned(records))
+            }
+        },
+    }
+}
+
+fn filter_borrowed<'a>(
+    records: Vec<&'a DbfRecord>,
+    filter: &Map<String, Value>,
+) -> Result<Vec<&'a DbfRecord>, QueryError> {
+    let mut filtered = Vec::with_capacity(records.len());
+    for record in records {
+        if matches_filter(&record.values, filter)? {
+            filtered.push(record);
+        }
+    }
+    Ok(filtered)
+}
+
+fn filter_owned(
+    records: Vec<DbfRecord>,
+    filter: &Map<String, Value>,
+) -> Result<Vec<DbfRecord>, QueryError> {
+    let mut filtered = Vec::with_capacity(records.len());
+    for record in records {
+        if matches_filter(&record.values, filter)? {
+            filtered.push(record);
+        }
+    }
+    Ok(filtered)
+}
+
+fn skip_records<T>(records: &mut Vec<T>, skip: u64) {
+    let skip = skip.try_into().unwrap_or(usize::MAX).min(records.len());
+    records.drain(..skip);
 }
 
 fn execute_materialized<'a>(

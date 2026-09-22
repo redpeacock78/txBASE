@@ -23,11 +23,19 @@ The query document can contain one terminal `$count` or `$distinct` stage, or on
 }
 ```
 
-The current aggregation boundary accepts zero or more `$match` stages, followed by zero or more `$unwind` stages, and then one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
+The input portion accepts zero or more `$match` and `$unwind` stages, and at most one input `$sort`, `$skip`, and `$limit` stage each before one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
+
+Input stages execute in the order listed in the pipeline.
 
 `$unwind` uses the form `{"$unwind": "$FIELD"}` and accepts only a top-level field reference.
 
-Every input `$match` must precede the first `$unwind`, and multiple `$unwind` stages apply sequentially in their listed order.
+Multiple `$unwind` stages apply sequentially in their listed order.
+
+An input `$match` after `$unwind` filters the expanded records.
+
+An input `$sort` uses the existing JSON sort order and stable physical-record ties before the terminal stage.
+
+Input `$skip` and `$limit` discard or truncate records before the terminal stage.
 
 For an array field, `$unwind` emits one copy of the input record for each element in input array order and replaces the field with that element.
 
@@ -121,7 +129,9 @@ Both stages are terminal and cannot be combined with group-output stages.
 
 Distinct output is capped at 10,000 values.
 
-Stages after `$limit`, additional grouping, count, distinct, or skip stages remain unsupported.
+Additional grouping, count, or distinct stages remain unsupported.
+
+After `$group`, stages after the group-output `$limit` remain unsupported.
 
 `$expr` operands are supported only in the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` forms described in the query model.
 
