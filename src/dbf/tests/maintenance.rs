@@ -19,6 +19,7 @@ fn remove_table_files(path: &std::path::Path) {
         "txbase.lock",
         "txbase.state",
         "txbase.mvcc",
+        "txbase.cdc",
     ] {
         let candidate = if extension == "dbf" {
             path.to_path_buf()
@@ -114,6 +115,44 @@ fn copy_table_files_preserves_transaction_state() {
         Some(1)
     );
     assert_eq!(DbfTable::mvcc_versions(&destination).unwrap(), vec![1]);
+
+    remove_table_files(&source);
+    remove_table_files(&destination);
+}
+
+#[test]
+fn copy_table_files_preserves_change_events() {
+    let source = std::env::temp_dir().join(format!(
+        "txbase-maintenance-cdc-source-{}.dbf",
+        std::process::id()
+    ));
+    let destination = std::env::temp_dir().join(format!(
+        "txbase-maintenance-cdc-destination-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&source);
+    remove_table_files(&destination);
+
+    fs::write(&source, fixture()).unwrap();
+    let mut table = DbfTable::from_path(&source).unwrap();
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"AGE": 30}).as_object().unwrap().clone(),
+        )
+        .unwrap();
+    table.save_with_wal(&source).unwrap();
+
+    copy_table_files(&source, &destination).unwrap();
+
+    assert_eq!(
+        DbfTable::cdc_events(&destination, None)
+            .unwrap()
+            .iter()
+            .map(|event| event.transaction_id)
+            .collect::<Vec<_>>(),
+        vec![1]
+    );
 
     remove_table_files(&source);
     remove_table_files(&destination);

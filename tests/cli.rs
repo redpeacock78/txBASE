@@ -47,6 +47,70 @@ fn wal_inspect_cli_reports_a_torn_tail_without_mutating_the_file() {
 }
 
 #[test]
+fn cdc_cli_reads_committed_events_and_supports_an_after_cursor() {
+    let path = std::env::temp_dir().join(format!("txbase-cli-cdc-{}.dbf", std::process::id()));
+    for extension in [
+        "txbase.cdc",
+        "txbase.state",
+        "txbase.wal",
+        "txbase.mvcc",
+        "txbase.lock",
+    ] {
+        let _ = fs::remove_file(path.with_extension(extension));
+    }
+    let _ = fs::remove_file(&path);
+
+    for args in [
+        vec!["init", path.to_str().unwrap(), "--field", "ID:N:4:0"],
+        vec!["insert", path.to_str().unwrap(), r#"{"ID":1}"#],
+        vec!["insert", path.to_str().unwrap(), r#"{"ID":2}"#],
+    ] {
+        let output = run_cli(&args);
+        assert!(
+            output.status.success(),
+            "CLI command failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let output = run_cli(&["cdc", path.to_str().unwrap()]);
+    assert!(output.status.success());
+    let events: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(events.as_array().unwrap().len(), 2);
+    assert_eq!(events[0]["transaction_id"], 1);
+    assert_eq!(events[1]["transaction_id"], 2);
+
+    let output = run_cli(&["cdc", path.to_str().unwrap(), "--after", "1"]);
+    assert!(output.status.success());
+    let events: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        events,
+        serde_json::json!([
+            {
+                "transaction_id": 2,
+                "reset": false,
+                "changes": [{
+                    "record_number": 2,
+                    "before": null,
+                    "after": {"deleted": false, "values": {"ID": 2}}
+                }]
+            }
+        ])
+    );
+
+    for extension in [
+        "txbase.cdc",
+        "txbase.state",
+        "txbase.wal",
+        "txbase.mvcc",
+        "txbase.lock",
+    ] {
+        let _ = fs::remove_file(path.with_extension(extension));
+    }
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn backup_and_restore_cli_copy_a_dbf() {
     let source = std::env::temp_dir().join(format!(
         "txbase-cli-backup-source-{}.dbf",

@@ -208,6 +208,7 @@ txBASEはWALで次のレコードを使います。
 | `TXDP` | 完全置換より小さい場合のバイト範囲差分 |
 | `TXDB` | 完全な DBF スナップショット |
 | `TXDM` | 完全な DBF と memo のスナップショット |
+| `TXCD` | DBFトランザクションとともに準備する、単一テーブルのコミット済み行変更イベント |
 
 DBFまたはmemoサイドカーを置き換える前にWALを同期します。
 
@@ -216,6 +217,10 @@ WAL付き単一テーブルコミットは正のコミットIDを`TXTI` WALレ�
 復旧はWALをクリアする前にそのサイドカーを書き込みます。
 
 従来のDBFは、最初のWAL付き保存でコミットID 1から始まります。
+
+`*.txbase.cdc`サイドカーは、コミット済みの`TXCD`イベントを同じトランザクションID順で保存します。
+
+復旧は、DBF対象とトランザクション状態を復旧した後で準備済みイベントを公開し、同一イベントの再公開を冪等に処理します。
 
 起動時の復旧は、すでに適用された対象を受け付け、基底が一致しない差分を拒否し、状態ペイロードがない場合にサポート対象の`TXOP`を再実行します。
 
@@ -234,7 +239,8 @@ CLIはローカルデータベースの最初の保守境界を公開します�
 | `txbase verify FILE` | DBF をロードし、検出した memo データと`.txidx`サイドカーがあれば検証し、シリアライズ済み DBF を再解析してレコード境界を検査する |
 | `txbase pack FILE` | 論理削除したレコードを取り除き、残りの物理レコードを振り直し、既存 WAL で結果を永続化する |
 | `txbase recall FILE RECORD` | 既存 WAL で一つの論理削除レコードを復元する |
-| `txbase backup SOURCE DEST` | `SOURCE`を検証し、DBF、検出した`.dbt`または`.fpt`、スキーマ、有効な`.txidx`サイドカーをコピーする |
+| `txbase cdc FILE [--after TRANSACTION_ID]` | CDCサイドカーから単一テーブルのコミット済み行変更イベントを読み取り、任意で排他的なトランザクションIDカーソル以後に絞り込む |
+| `txbase backup SOURCE DEST` | `SOURCE`を検証し、DBF、検出した`.dbt`または`.fpt`、スキーマ、CDC、有効な`.txidx`サイドカーをコピーする |
 | `txbase restore SOURCE DEST` | バックアップを`SOURCE`として同じ検証済みコピー手順を使う |
 | `txbase mvcc row FILE RECORD` | 正の物理DBFレコード番号一つについて、保持中の行バージョンを表示する |
 | `txbase mvcc row-at FILE TRANSACTION_ID EPOCH RECORD` | commit済みテーブルトランザクション、行epoch、正の物理レコード番号で、保持中の行バージョン一つを読み取る |

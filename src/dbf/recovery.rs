@@ -93,6 +93,19 @@ impl DbfTable {
         }
         let index_payload = find_index_payload(&wal)?;
         let transaction_id = find_transaction_id(&wal)?;
+        let wal_cdc_event = super::cdc::event_from_wal(&wal)?;
+        if let (Some(event), Some(transaction_id)) = (&wal_cdc_event, transaction_id) {
+            if event.transaction_id != transaction_id {
+                return Err(DbfError::Invalid(
+                    "CDC event transaction ID does not match the WAL transaction ID".into(),
+                ));
+            }
+        }
+        if wal_cdc_event.is_some() && transaction_id.is_none() {
+            return Err(DbfError::Invalid(
+                "CDC event WAL payload has no transaction ID".into(),
+            ));
+        }
         let force_new_epoch = wal
             .records()
             .iter()
@@ -130,6 +143,9 @@ impl DbfTable {
                     snapshot.memo.as_ref(),
                     force_new_epoch,
                 )?;
+                if let Some(event) = &wal_cdc_event {
+                    super::cdc::append(path, event)?;
+                }
             }
             finish_recovery(wal, &wal_path);
             return Ok(true);
@@ -155,8 +171,21 @@ impl DbfTable {
         };
         let transaction_id = read_transaction_state(path)?
             .map_or(transaction_id, |current| current.max(transaction_id));
-        let mut table = Self::load_path_with_encoding(path, encoding_override)?;
+        let before = Self::load_path_with_encoding(path, encoding_override)?;
+        let mut table = before.clone();
         table.apply_operation(&operation)?;
+        let generated_cdc_event =
+            super::cdc::event_for_tables(transaction_id, &before, &table, force_new_epoch)?;
+        let cdc_event = match wal_cdc_event {
+            Some(event) if event != generated_cdc_event => {
+                return Err(DbfError::Invalid(
+                    "WAL CDC event does not match the recovered operation".into(),
+                ));
+            }
+            Some(event) => event,
+            None => generated_cdc_event,
+        };
+        let cdc_payload = super::cdc::payload(&cdc_event)?;
         let memo_snapshot = table.apply_memo_updates(path)?;
         let full_payload = match &memo_snapshot {
             Some(memo) => memo_snapshot_payload(&table.bytes, memo)?,
@@ -174,6 +203,10 @@ impl DbfTable {
         wal.append(&transaction_id_payload(transaction_id))
             .map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
+        if super::cdc::event_from_wal(&wal)?.is_none() {
+            wal.append(&cdc_payload).map_err(transaction_error)?;
+            wal.sync().map_err(transaction_error)?;
+        }
         wal.append(&payload).map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
         if let Some(index_payload) = &index_payload {
@@ -198,6 +231,7 @@ impl DbfTable {
             memo_snapshot.as_ref(),
             force_new_epoch,
         )?;
+        super::cdc::append(path, &cdc_event)?;
         finish_recovery(wal, &wal_path);
         Ok(true)
     }

@@ -57,6 +57,7 @@ The repository currently provides:
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection, index-sidecar recovery, and DBF-read recovery.
 - A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and mutation contracts, a `wasm-bindgen` wrapper, and a `wasm32-unknown-unknown` CI compile check.
 - A runtime-neutral `AsyncObjectStore` primitive contract, `AsyncObjectTable` manifest protocol, and synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
+- A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, and a read-only API and CLI cursor.
 
 The baseline intentionally does not include the following:
 
@@ -306,7 +307,6 @@ Distributed behavior comes after the local and edge contracts are stable.
 ### Candidate scope
 
 - Independent row-retention policies and cross-table or distributed long-lived snapshot transactions.
-- Change data capture.
 - Persistent WAL history.
 - Replication.
 - Raft or another explicitly selected authority protocol.
@@ -319,6 +319,8 @@ These features require an authority model, conflict semantics, schema-version ha
 No consensus or multi-region feature is implied by the current exclusive table lock.
 
 The detailed future boundary is described in [distributed evolution](distributed-evolution.md).
+
+The current single-table CDC boundary is described separately in [change data capture](change-data-capture.md).
 
 ## 9. XBF and shared upper layers
 

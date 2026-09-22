@@ -6,6 +6,9 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+mod cdc;
+#[cfg(test)]
+mod cdc_tests;
 #[cfg(test)]
 mod cjk_fields_tests;
 #[cfg(test)]
@@ -96,6 +99,7 @@ use wal::{
 };
 use wal::{delta_payload, memo_snapshot_payload, operation_payload, snapshot_payload};
 
+pub use cdc::{ChangeEvent, ChangeRecord, ChangeState};
 pub use maintenance::copy_table_files;
 pub use transaction::DbfTransaction;
 

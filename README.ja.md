@@ -23,6 +23,7 @@ txBASEは、元のDBF表現を保ったまま、dBASEとVisual FoxProの一部�
 - 将来のワーカーとWASIホスト向けに、ランタイムから独立した非同期オブジェクトストレージとマニフェストの契約。
 - メモリ内ストリームアダプター向けに、executorから独立した非同期クエリストリームのポーリング契約。
 - 有界バックプレッシャーと破棄時キャンセルを備えた、ネイティブスレッド非同期クエリストリームアダプター。
+- WAL復旧と検査CLIを備えた、単一テーブルのコミット済み変更データ取得サイドカー。
 
 互換性と動作の詳細は、[ドキュメント一覧](docs/ja/README.md)にまとめています。
 
@@ -248,6 +249,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - [ドキュメント一覧](docs/ja/README.md)
 - [英語ドキュメント](docs/README.md)
 - [DBFとdBASEの互換性](docs/ja/dbf-compatibility.md)
+- [変更データ取得](docs/ja/change-data-capture.md)
 - [複数テーブルのcatalog](docs/ja/catalog.md)
 - [セカンダリインデックスのサイドカー](docs/ja/indexes.md)
 - [クエリモデル](docs/ja/query-model.md)

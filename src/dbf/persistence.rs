@@ -168,6 +168,7 @@ impl DbfTable {
         let _lock = TableLock::acquire(path)?;
         let _ = Self::recover_wal_with_encoding(path, self.encoding_override.as_deref())?;
         let current_transaction_id = read_transaction_state(path)?;
+        let before = Self::load_path_with_encoding(path, self.encoding_override.as_deref())?;
         self.bind_schema_if_present(path)?;
         self.ensure_source_current(path)?;
         let transaction_id = next_transaction_id(current_transaction_id)?;
@@ -194,6 +195,9 @@ impl DbfTable {
             memo_snapshot.as_ref().map(|memo| memo.bytes.as_slice()),
         )
         .map_err(index_error)?;
+        let cdc_event =
+            super::cdc::event_for_tables(transaction_id, &before, &prepared, self.layout_changed)?;
+        let cdc_payload = super::cdc::payload(&cdc_event)?;
         let wal_path = path.with_extension("txbase.wal");
         let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
         if self.layout_changed {
@@ -208,6 +212,8 @@ impl DbfTable {
         }
         wal.append(&transaction_id_payload(transaction_id))
             .map_err(transaction_error)?;
+        wal.sync().map_err(transaction_error)?;
+        wal.append(&cdc_payload).map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
         wal.append(&payload).map_err(transaction_error)?;
         wal.sync().map_err(transaction_error)?;
@@ -244,6 +250,7 @@ impl DbfTable {
             schema_bytes.as_deref(),
             self.layout_changed,
         )?;
+        super::cdc::append(path, &cdc_event)?;
         wal.clear().map_err(transaction_error)?;
         drop(wal);
         fs::remove_file(wal_path)?;

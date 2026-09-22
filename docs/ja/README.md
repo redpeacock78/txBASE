@@ -7,6 +7,7 @@
 ## ストレージと互換性
 
 - [DBF と dBASE の互換性](dbf-compatibility.md)
+- [変更データ取得](change-data-capture.md)
 - [スキーマメタデータとローカル制約](schema-metadata.md)
 - [セカンダリインデックスのサイドカー](indexes.md)
 - [複数テーブルカタログ](catalog.md)

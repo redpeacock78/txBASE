@@ -9,6 +9,7 @@ Research and future work do not imply an implemented feature.
 ## Storage and compatibility
 
 - [DBF and dBASE compatibility](dbf-compatibility.md)
+- [Change data capture](change-data-capture.md)
 - [Schema metadata and local constraints](schema-metadata.md)
 - [Secondary-index sidecar](indexes.md)
 - [Multi-table catalog](catalog.md)

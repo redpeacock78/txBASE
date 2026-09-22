@@ -1,3 +1,4 @@
+use super::cdc::{path_for as cdc_path, read as read_cdc};
 use super::mvcc::path_for as mvcc_path;
 use super::persistence::transaction_state_path;
 use super::schema_metadata::schema_metadata_path;
@@ -59,6 +60,15 @@ pub fn copy_table_files(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(error.into()),
     };
+    let source_cdc = cdc_path(source);
+    let cdc_bytes = match fs::read(&source_cdc) {
+        Ok(bytes) => {
+            read_cdc(source, None)?;
+            Some(bytes)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
     let destination_memo = source_memo.as_ref().and_then(|path| {
         path.extension()
             .map(|extension| destination.with_extension(extension))
@@ -67,6 +77,7 @@ pub fn copy_table_files(
     let destination_state = transaction_state_path(destination);
     let destination_index = sidecar_path(destination);
     let destination_history = mvcc_path(destination);
+    let destination_cdc = cdc_path(destination);
 
     let dbf_temp = write_temp(destination, &dbf_bytes, "dbf")?;
     let memo_temp = match (&destination_memo, &memo_bytes) {
@@ -89,6 +100,10 @@ pub fn copy_table_files(
         .as_ref()
         .map(|bytes| write_temp(&destination_history, bytes, "mvcc"))
         .transpose()?;
+    let cdc_temp = cdc_bytes
+        .as_ref()
+        .map(|bytes| write_temp(&destination_cdc, bytes, "cdc"))
+        .transpose()?;
 
     if let Err(error) = replace_file(&dbf_temp, destination) {
         let _ = fs::remove_file(&dbf_temp);
@@ -105,6 +120,9 @@ pub fn copy_table_files(
             let _ = fs::remove_file(path);
         }
         if let Some(path) = history_temp {
+            let _ = fs::remove_file(path);
+        }
+        if let Some(path) = cdc_temp {
             let _ = fs::remove_file(path);
         }
         return Err(error.into());
@@ -134,6 +152,11 @@ pub fn copy_table_files(
     } else {
         remove_file_if_exists(&destination_history)?;
     }
+    if let Some(temp) = cdc_temp {
+        replace_file(&temp, &destination_cdc)?;
+    } else {
+        remove_file_if_exists(&destination_cdc)?;
+    }
     sync_parent_directory(destination)?;
     if let Some(path) = destination_memo.as_ref() {
         sync_parent_directory(path)?;
@@ -141,6 +164,7 @@ pub fn copy_table_files(
     sync_parent_directory(&destination_state)?;
     sync_parent_directory(&destination_index)?;
     sync_parent_directory(&destination_history)?;
+    sync_parent_directory(&destination_cdc)?;
     Ok(())
 }
 

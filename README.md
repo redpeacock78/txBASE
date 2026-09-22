@@ -32,6 +32,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - A runtime-neutral asynchronous object-store and manifest contract for future worker and WASI hosts.
 - An executor-neutral asynchronous query-stream polling contract for in-memory stream adapters.
 - A native threaded asynchronous query-stream adapter with bounded backpressure and drop cancellation.
+- A committed single-table change-data-capture sidecar with WAL recovery and an inspection CLI.
 
 The detailed compatibility and behavior contracts live in the [documentation index](docs/README.md).
 
@@ -254,6 +255,7 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 - [Documentation index](docs/README.md)
 - [Japanese documentation](docs/ja/README.md)
 - [DBF and dBASE compatibility](docs/dbf-compatibility.md)
+- [Change data capture](docs/change-data-capture.md)
 - [Multi-table catalog](docs/catalog.md)
 - [Secondary-index sidecar](docs/indexes.md)
 - [Query model](docs/query-model.md)
