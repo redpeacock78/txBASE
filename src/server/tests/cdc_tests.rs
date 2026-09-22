@@ -1,12 +1,13 @@
-use super::super::{JSON_QUERY_MEDIA_TYPE, cdc, header};
+use super::super::cdc;
 use super::fixture;
 use crate::catalog::Catalog;
 use crate::dbf::DbfTable;
+use crate::xbase::{OperationIr, OperationMethod};
 use serde_json::Value;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use tiny_http::{Method, StatusCode, TestRequest};
+use tiny_http::StatusCode;
 
 fn table_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
@@ -90,25 +91,33 @@ fn catalog_cdc_http_route_pages_atomic_events() {
     fs::write(root.join("posts.dbf"), fixture()).unwrap();
     let catalog = Catalog::from_path(&root).unwrap();
 
-    for table in ["users", "posts"] {
-        let body = match table {
-            "users" => {
-                r#"{"operations":[{"method":"PATCH","path":"/users/records/1","body":{"$inc":{"AGE":1}}}]}"#
-            }
-            "posts" => {
-                r#"{"operations":[{"method":"PATCH","path":"/posts/records/2","body":{"$inc":{"AGE":1}}}]}"#
-            }
-            _ => unreachable!(),
-        };
-        let mut request = TestRequest::new()
-            .with_method(Method::Post)
-            .with_path("/transaction")
-            .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
-            .with_body(body)
-            .into();
-        let response = super::super::catalog_transaction::response(&mut request, &catalog);
-        assert_eq!(response.status_code(), StatusCode(200));
-    }
+    catalog
+        .commit_operations_with_preconditions(
+            &[OperationIr {
+                method: OperationMethod::Post,
+                path: "/users/records".into(),
+                body: Some(serde_json::json!({
+                    "ID": 3,
+                    "NAME": "Carol",
+                    "AGE": 42,
+                    "ACTIVE": true
+                })),
+            }],
+            None,
+            None,
+        )
+        .unwrap();
+    catalog
+        .commit_operations_with_preconditions(
+            &[OperationIr {
+                method: OperationMethod::Patch,
+                path: "/posts/records/2".into(),
+                body: Some(serde_json::json!({"$inc": {"AGE": 1}})),
+            }],
+            None,
+            None,
+        )
+        .unwrap();
 
     let response = cdc::catalog_response("/cdc?limit=1", &catalog);
     assert_eq!(response.status_code(), StatusCode(200));
