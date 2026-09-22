@@ -75,9 +75,14 @@ fi
 
 step=$((step + 1))
 printf '[%02d] garbage-collect old MVCC snapshots through the CLI\n' "$step" >&2
-retained=$("$binary" mvcc gc "$dbf" --keep 1)
+retained=$("$binary" mvcc gc "$dbf" --keep 1 --keep-rows 1)
 if ! grep -Fq '[2]' <<<"$retained" || grep -Fq '[1]' <<<"$retained"; then
     printf 'unexpected retained MVCC versions: %s\n' "$retained" >&2
+    exit 1
+fi
+retained_rows=$("$binary" mvcc row "$dbf" 1)
+if ! grep -Eq '"transaction_id"[[:space:]]*:[[:space:]]*1' <<<"$retained_rows"; then
+    printf 'independently retained row version was missing: %s\n' "$retained_rows" >&2
     exit 1
 fi
 if "$binary" mvcc read "$dbf" 1 >/dev/null 2>&1; then

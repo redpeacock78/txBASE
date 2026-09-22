@@ -70,24 +70,24 @@ pub(crate) fn compact_snapshots(snapshots: &mut [(u64, Snapshot)]) -> Result<(),
 }
 
 pub(crate) fn row_history(
-    snapshots: &BTreeMap<u64, Snapshot>,
+    changes_by_transaction: &BTreeMap<u64, Vec<RowChange>>,
     record_number: usize,
 ) -> Result<Vec<RowVersion>, DbfError> {
     validate_record_number(record_number)?;
     let mut versions = Vec::new();
-    for (transaction_id, snapshot) in snapshots {
-        for change in changes_for_snapshot(snapshot)? {
+    for (transaction_id, changes) in changes_by_transaction {
+        for change in changes {
             if change.record_number != record_number {
                 continue;
             }
-            versions.push(to_version(*transaction_id, change));
+            versions.push(to_version(*transaction_id, change.clone()));
         }
     }
     Ok(versions)
 }
 
 pub(crate) fn row_at(
-    snapshots: &BTreeMap<u64, Snapshot>,
+    changes_by_transaction: &BTreeMap<u64, Vec<RowChange>>,
     transaction_id: u64,
     id: RowId,
 ) -> Result<Option<RowVersion>, DbfError> {
@@ -97,28 +97,61 @@ pub(crate) fn row_at(
         ));
     }
     validate_id(id)?;
-    if !snapshots.contains_key(&transaction_id) {
+    if !changes_by_transaction.contains_key(&transaction_id) {
         return Err(DbfError::Invalid(format!(
-            "MVCC snapshot {transaction_id} is not committed"
+            "MVCC row history transaction {transaction_id} is not retained"
         )));
     }
     let mut current = None;
-    for (version, snapshot) in snapshots.range(..=transaction_id) {
-        for change in changes_for_snapshot(snapshot)? {
+    for (version, changes) in changes_by_transaction.range(..=transaction_id) {
+        for change in changes {
             if change.epoch == id.epoch && change.record_number == id.record_number {
-                current = Some(to_version(*version, change));
+                current = Some(to_version(*version, change.clone()));
             }
         }
     }
     Ok(current)
 }
 
-fn changes_for_snapshot(snapshot: &Snapshot) -> Result<Vec<RowChange>, DbfError> {
+pub(crate) fn changes_for_snapshot(snapshot: &Snapshot) -> Result<Vec<RowChange>, DbfError> {
     if let Some(changes) = &snapshot.row_changes {
         return Ok(changes.clone());
     }
     let table = DbfTable::from_snapshot(snapshot.clone())?;
     Ok(current_rows(&table, effective_epoch(snapshot)))
+}
+
+pub(crate) fn detached_history(
+    changes_by_transaction: &BTreeMap<u64, Vec<RowChange>>,
+    first_retained_transaction: u64,
+    keep_last_per_row: usize,
+) -> BTreeMap<u64, Vec<RowChange>> {
+    let mut by_row = BTreeMap::<(u64, usize), Vec<(u64, RowChange)>>::new();
+    for (transaction_id, changes) in changes_by_transaction.range(..first_retained_transaction) {
+        for change in changes {
+            by_row
+                .entry((change.epoch, change.record_number))
+                .or_default()
+                .push((*transaction_id, change.clone()));
+        }
+    }
+
+    let mut selected = by_row
+        .values()
+        .flat_map(|versions| versions.iter().rev().take(keep_last_per_row).cloned())
+        .collect::<Vec<_>>();
+    selected.sort_by_key(|(transaction_id, change)| {
+        (*transaction_id, change.epoch, change.record_number)
+    });
+
+    let mut detached = BTreeMap::new();
+    for (transaction_id, change) in selected {
+        detached
+            .entry(transaction_id)
+            .or_insert_with(Vec::new)
+            .push(change);
+    }
+    detached
 }
 
 fn current_rows(table: &DbfTable, epoch: u64) -> Vec<RowChange> {

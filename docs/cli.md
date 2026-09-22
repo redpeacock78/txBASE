@@ -15,7 +15,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 The first token selects one responsibility. Nested subcommands are used when a family has its own lifecycle, such as `mvcc`, `wal`, `xbf`, and `index`.
 
 Paths and JSON values are positional where the operation has one unambiguous target.
-Options are named when they change interpretation, such as `--encoding`, `--schema`, `--bind`, or `--keep`.
+Options are named when they change interpretation, such as `--encoding`, `--schema`, `--bind`, `--keep`, or `--keep-rows`.
 
 ## Responsibility groups
 
@@ -34,6 +34,10 @@ Its optional `--after` argument is an exclusive transaction-ID cursor over the c
 `cdc catalog DIRECTORY` reads the atomic events emitted by multi-table catalog transactions from the catalog CDC sidecar.
 
 The catalog form uses the same exclusive `--after` cursor over catalog transaction IDs.
+
+`mvcc gc FILE --keep COUNT` retains the newest full-image table snapshots.
+Adding `--keep-rows COUNT` also retains up to `COUNT` older versions for each physical row before the oldest retained full snapshot.
+The row history is stored in the same MVCC sidecar; the current DBF and full snapshots are not changed by GC.
 
 ## Design rules
 

@@ -249,7 +249,7 @@ CLIはローカルデータベースの最初の保守境界を公開します�
 | `txbase restore SOURCE DEST` | バックアップを`SOURCE`として同じ検証済みコピー手順を使う |
 | `txbase mvcc row FILE RECORD` | 正の物理DBFレコード番号一つについて、保持中の行バージョンを表示する |
 | `txbase mvcc row-at FILE TRANSACTION_ID EPOCH RECORD` | commit済みテーブルトランザクション、行epoch、正の物理レコード番号で、保持中の行バージョン一つを読み取る |
-| `txbase mvcc gc FILE --keep COUNT` | 完全イメージのうち新しい正の件数を保持し、同期済み一時ファイルを通してMVCC履歴サイドカーだけを置き換える |
+| `txbase mvcc gc FILE --keep COUNT [--keep-rows COUNT]` | 完全イメージのうち新しい正の件数を保持する。任意の`--keep-rows`は、最も古い保持対象より前の物理行ごとの古いバージョンを保持し、同期済み一時ファイルを通してMVCC履歴サイドカーだけを置き換える |
 | `txbase mvcc catalog gc DIRECTORY --keep COUNT` | 完全イメージのうち新しい正の件数を保持し、同期済み一時ファイルを通してカタログMVCC履歴サイドカーだけを置き換える |
 | `txbase wal inspect WAL` | WAL を作成も切り詰めもせずに読み取り、完全なレコードの LSN とペイロード長を表示し、切断された末尾を示す |
 

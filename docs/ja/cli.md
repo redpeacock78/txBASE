@@ -16,7 +16,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 `mvcc`、`wal`、`xbf`、`index`のように、固有のライフサイクルを持つ機能群には入れ子のサブコマンドを使います。
 
 対象が一意な操作では、パスとJSON値を位置引数にします。
-`--encoding`、`--schema`、`--bind`、`--keep`のように解釈を変えるものは名前付きオプションにします。
+`--encoding`、`--schema`、`--bind`、`--keep`、`--keep-rows`のように解釈を変えるものは名前付きオプションにします。
 
 ## 責務のグループ
 
@@ -36,6 +36,10 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 `cdc catalog DIRECTORY`は、複数テーブルのカタログトランザクションがカタログCDCサイドカーへ公開した原子的なイベントを読み取ります。
 
 カタログ形式でも、カタログトランザクションIDに対して同じ排他的な`--after`カーソルを使います。
+
+`mvcc gc FILE --keep COUNT`は、新しい完全イメージのテーブルスナップショットを保持します。
+`--keep-rows COUNT`を追加すると、最も古い保持対象の完全スナップショットより前について、物理行ごとに古いバージョンを最大`COUNT`件保持します。
+行履歴は同じMVCCサイドカーに保存され、GCは現在のDBFと完全スナップショットを変更しません。
 
 ## 設計規則
 

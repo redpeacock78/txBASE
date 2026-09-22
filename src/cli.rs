@@ -54,7 +54,9 @@ fn print_help() {
     println!(
         "\nCDC reads committed row-change events in transaction order; the catalog form reads atomic multi-table events; --after returns only later transaction IDs."
     );
-    println!("\nMVCC retention:\n  txbase mvcc gc FILE --keep COUNT");
+    println!(
+        "\nMVCC retention:\n  txbase mvcc gc FILE --keep COUNT [--keep-rows COUNT]\n\n--keep retains full snapshots; --keep-rows additionally retains older row versions per physical row."
+    );
     println!(
         "\nCatalog MVCC commands:\n  txbase mvcc catalog list DIRECTORY\n  txbase mvcc catalog read DIRECTORY TRANSACTION_ID\n  txbase mvcc catalog gc DIRECTORY --keep COUNT"
     );

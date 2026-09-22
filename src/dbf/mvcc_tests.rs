@@ -120,7 +120,7 @@ fn gc_retains_latest_table_snapshots_and_rejects_zero() {
 }
 
 #[test]
-fn row_mvcc_tracks_changes_reads_deleted_versions_and_compacts_with_gc() {
+fn row_mvcc_retains_independent_older_row_versions_and_compacts_with_gc() {
     let path = std::env::temp_dir().join(format!(
         "txbase-mvcc-row-history-{}.dbf",
         std::process::id()
@@ -195,15 +195,26 @@ fn row_mvcc_tracks_changes_reads_deleted_versions_and_compacts_with_gc() {
             .deleted
     );
 
-    assert_eq!(DbfTable::gc_mvcc(&path, 2).unwrap(), vec![3, 4]);
+    assert_eq!(
+        DbfTable::gc_mvcc_with_row_retention(&path, 2, 1).unwrap(),
+        vec![3, 4]
+    );
     assert_eq!(
         DbfTable::mvcc_row_versions(&path, 1)
             .unwrap()
             .iter()
             .map(|version| version.transaction_id)
             .collect::<Vec<_>>(),
-        vec![3, 4]
+        vec![2, 3, 4]
     );
+    assert_eq!(
+        DbfTable::mvcc_read_row(&path, 2, id)
+            .unwrap()
+            .unwrap()
+            .values["NAME"],
+        json!("Bob")
+    );
+    assert!(DbfTable::mvcc_read_row(&path, 1, id).is_err());
     assert!(
         !DbfTable::mvcc_read_row(&path, 4, id)
             .unwrap()

@@ -147,7 +147,9 @@ txbase catalog path/to/database
 txbase verify-catalog path/to/database
 txbase mvcc list path/to/users.dbf
 txbase mvcc read path/to/users.dbf 1
-txbase mvcc gc path/to/users.dbf --keep 5
+txbase mvcc row path/to/users.dbf 1
+txbase mvcc row-at path/to/users.dbf 1 1 1
+txbase mvcc gc path/to/users.dbf --keep 5 --keep-rows 10
 txbase mvcc catalog list path/to/database
 txbase mvcc catalog read path/to/database 1
 txbase mvcc catalog gc path/to/database --keep 5
@@ -159,8 +161,9 @@ txbase wal inspect path/to/users.txbase.wal
 `wal inspect` never creates or truncates the WAL. It reports the file size, valid byte boundary, complete record LSN and payload length, and whether the final record is torn.
 
 `mvcc gc` and `mvcc catalog gc` retain the newest positive count of full-image snapshots and
-rewrite only their MVCC history sidecar through a synced temporary file. The current DBF and catalog state are
-unchanged; removed snapshot IDs are no longer readable.
+rewrite only their MVCC history sidecar through a synced temporary file. `mvcc gc --keep-rows COUNT`
+also retains up to `COUNT` older versions for each physical row before the oldest retained full snapshot.
+The current DBF and catalog state are unchanged; removed full-snapshot IDs are no longer readable.
 
 Index lifecycle and maintenance:
 
@@ -288,7 +291,7 @@ The roadmap still leaves the following areas as future work:
 - Worker/WASI-specific `AsyncQueryStream` timeout, transport, cancellation, and asynchronous-storage behavior.
 - Full cost-based index and join planning.
 - Broader aggregation.
-- Row-level MVCC history and retention.
+- Predicate locking and serializable MVCC conflict detection.
 - Locale-aware CJK collation.
 - Broader upstream CJK fixtures.
 - Strict multi-file reader atomicity for XBF export.

@@ -69,11 +69,14 @@ pub(crate) fn mvcc(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn
         }
         "gc" => {
             let path = PathBuf::from(args.next().ok_or("mvcc gc requires a DBF path")?);
-            let keep_last = parse_keep_last(&mut args, "mvcc gc")?;
-            println!(
-                "{}",
-                serde_json::to_string(&DbfTable::gc_mvcc(path, keep_last)?)?
-            );
+            let (keep_last, keep_rows) = parse_table_gc_options(&mut args)?;
+            let retained = match keep_rows {
+                Some(keep_rows) => {
+                    DbfTable::gc_mvcc_with_row_retention(path, keep_last, keep_rows)?
+                }
+                None => DbfTable::gc_mvcc(path, keep_last)?,
+            };
+            println!("{}", serde_json::to_string(&retained)?);
         }
         "catalog" => catalog_mvcc(args)?,
         _ => return Err(format!("unknown mvcc command: {action}").into()),
@@ -158,6 +161,35 @@ fn parse_keep_last(
     }
     reject_extra(args)?;
     Ok(keep_last)
+}
+
+fn parse_table_gc_options(
+    args: &mut impl Iterator<Item = String>,
+) -> Result<(usize, Option<usize>), Box<dyn Error>> {
+    let mut keep_last = None;
+    let mut keep_rows = None;
+    while let Some(option) = args.next() {
+        let target = match option.as_str() {
+            "--keep" => &mut keep_last,
+            "--keep-rows" => &mut keep_rows,
+            _ => return Err(format!("unexpected argument: {option}").into()),
+        };
+        if target.is_some() {
+            return Err(format!("{option} may only be specified once").into());
+        }
+        let value = args
+            .next()
+            .ok_or_else(|| format!("{option} requires a positive integer"))?;
+        let parsed = value
+            .parse::<usize>()
+            .map_err(|_| format!("{option} requires a positive integer"))?;
+        if parsed == 0 {
+            return Err(format!("{option} requires a positive integer").into());
+        }
+        *target = Some(parsed);
+    }
+    let keep_last = keep_last.ok_or("mvcc gc requires --keep COUNT")?;
+    Ok((keep_last, keep_rows))
 }
 
 fn parse_positive_u64(value: String, label: &str) -> Result<u64, Box<dyn Error>> {

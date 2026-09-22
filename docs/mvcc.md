@@ -2,7 +2,7 @@
 
 txBASE provides persistent MVCC snapshots for DBF mutations and catalog transactions.
 
-This document defines the current visibility contract and the remaining row-level boundary.
+This document defines the current visibility and retention contract.
 
 ## 1. Current contract
 
@@ -21,7 +21,7 @@ txbase mvcc list path/to/users.dbf
 txbase mvcc read path/to/users.dbf 2
 txbase mvcc row path/to/users.dbf 1
 txbase mvcc row-at path/to/users.dbf 2 1 1
-txbase mvcc gc path/to/users.dbf --keep 5
+txbase mvcc gc path/to/users.dbf --keep 5 --keep-rows 10
 ```
 
 `mvcc read` returns active records as JSON.
@@ -30,21 +30,28 @@ txbase mvcc gc path/to/users.dbf --keep 5
 
 `mvcc row-at` reads one retained row version by transaction ID, epoch, and physical record number.
 
-Both commands return JSON and use the same committed-history and GC boundaries as the Rust API.
+With `--keep-rows`, `mvcc row` can include row versions whose full-image snapshot is no longer retained.
+`mvcc row-at` accepts a retained full-snapshot transaction or a transaction that has a retained row-history record.
 
-The requested ID must identify a committed snapshot.
+Both commands return JSON and use the same retained-history boundaries as the Rust API.
+
+The requested ID for `mvcc read` must identify a committed full snapshot.
 
 Historical snapshots are read-only and cannot be saved as a new current state.
 
 `mvcc gc` retains the newest positive `--keep` count of committed snapshots and
 rewrites only the MVCC history sidecar.
 
+Optional `--keep-rows COUNT` also retains up to `COUNT` older versions for each physical row
+before the oldest retained full snapshot.
+
 It takes the table lock, recovers a pending table WAL, writes the compacted history to a synced
 temporary file, and replaces the old history file.
 
 The current DBF, memo, schema, index, and transaction-state files are not changed.
 
-An ID removed by GC is no longer readable, and a later commit appends after the retained IDs.
+An ID removed from full-image history is no longer readable through `mvcc read`.
+Retained row-history IDs remain readable through `mvcc row-at`, and a later commit appends after the retained IDs.
 
 Catalog transactions retain a commit-level image of every discovered table:
 
@@ -83,7 +90,7 @@ API for reopening a retained catalog commit.
 
 ### Row-level history
 
-The table MVCC sidecar also stores row changes inside the same prepare and commit records.
+The table MVCC sidecar stores live-commit row changes inside the same prepare and commit records.
 
 The public API exposes the retained row history and one row at a committed table snapshot:
 
@@ -107,9 +114,13 @@ An epoch separates row identities after `PACK`, a schema or record-layout change
 
 A logical delete is stored as a row version with `deleted: true`, so a historical read can distinguish a deleted row from a row that never existed in the retained history.
 
-Row changes are committed only when the containing full-image MVCC record has both its prepare and commit records.
+Row changes from a live commit become visible only when the containing full-image MVCC record has both its prepare and commit records.
 
-MVCC GC rebuilds the first retained snapshot as a row-history baseline and recomputes later deltas, so retained row reads do not depend on removed transactions.
+When `--keep-rows` is used, GC copies selected older changes into compact row-history records in the same sidecar.
+These records do not create a readable full table snapshot.
+
+MVCC GC rebuilds the first retained snapshot as a row-history baseline and recomputes later deltas.
+With `--keep-rows`, it also keeps the newest selected older versions per physical row, so row reads can outlive the full-image retention window.
 
 Catalog MVCC continues to store complete table images per catalog commit.
 
@@ -142,7 +153,7 @@ commit-level snapshot visibility for catalog transactions.
 
 Catalog history stores a full image of every discovered table per catalog commit.
 
-Table-local row history now has count-based retention through the existing full-image MVCC GC.
+Table-local row history has baseline retention through full-image MVCC GC and independent per-row retention through `--keep-rows`.
 
 The public table transaction provides optimistic stale-source rejection by default.
 The explicit `DbfTransaction::commit_with_row_merge` API can merge disjoint physical-row updates or
@@ -170,11 +181,11 @@ The low-level transaction engine in `src/transaction/` remains a separate WAL tr
 
 ## 4. Roadmap
 
-The current retention boundary is count-based GC for full-image table and catalog snapshots.
+The current retention boundary is count-based GC for full-image table and catalog snapshots, plus optional per-row retention for older table history.
 
-The current row-level boundary is physical-record history with epoch-separated identities and count-based compaction.
+The current row-level boundary is physical-record history with epoch-separated identities, baseline compaction, and optional detached row-history records.
 
-An independent row-retention policy, schema migration history, predicate locking, and serializable conflict detection remain future work.
+Schema migration history, predicate locking, and serializable conflict detection remain future work.
 
 Distributed snapshots, follower reads, and serializable conflict detection remain later work.
 

@@ -88,7 +88,7 @@ Neither API provides predicate locking or serializable conflict detection.
 `commit_with_row_merge()` is limited to explicit physical-row update and delete merging and does not
 provide predicate or serializable semantics.
 
-Independent row-retention policies and long-lived distributed transactions remain future work.
+Predicate locking, serializable conflict detection, independent catalog retention, and long-lived distributed transactions remain future work.
 
 ## 5. Example
 

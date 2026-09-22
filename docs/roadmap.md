@@ -55,7 +55,7 @@ The repository currently provides:
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, bounded table-level `checks` predicates, and catalog-scoped scalar and composite foreign-key validation with restrict, cascade, and set-null actions.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP, with normalized schema output.
 - A rebuildable external scalar and compound-key index sidecar with scalar and compound equality, compound equality-prefix, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
-- Durable table-local row history stored with MVCC prepare/commit records, epoch-separated physical row IDs, retained row reads, and baseline reconstruction during full-image GC.
+- Durable table-local row history stored with MVCC prepare/commit records, epoch-separated physical row IDs, retained row reads, baseline reconstruction during full-image GC, and optional independent per-row retention through `mvcc gc --keep-rows`.
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection, index-sidecar recovery, and DBF-read recovery.
 - A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and mutation contracts, a `wasm-bindgen` wrapper, and a `wasm32-unknown-unknown` CI compile check.
 - A runtime-neutral `AsyncObjectStore` primitive contract, `AsyncObjectTable` manifest protocol, and synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
@@ -67,7 +67,7 @@ The baseline intentionally does not include the following:
 - A full cost-based index or join model.
 - Full index-aware or cost-based merge join strategies.
 - Worker/WASI-specific timeout, transport, cancellation, and asynchronous-storage semantics, and remote object-store adapters.
-- Independent row-retention policies, predicate locking, and serializable conflict detection.
+- Predicate locking and serializable conflict detection.
 - Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export.
@@ -149,9 +149,9 @@ snapshot for one DBF table, and the HTTP transaction route reuses that boundary.
 supports stable table reads and bounded joins after capture. `DbfTransaction::commit_with_row_merge`
 explicitly merges disjoint physical-row updates or deletes under the table lock when schema, layout,
 and record count are unchanged; inserts and different changes to the same row remain errors.
-An identical resulting row is a no-op. Independent row retention, predicate locking, and
-serializable conflict detection remain future work.
-The current full-image table and catalog histories have an explicit count-based GC boundary.
+An identical resulting row is a no-op. Table MVCC also supports optional independent per-row
+retention with `mvcc gc --keep-rows`; predicate locking and serializable conflict detection remain
+future work. The current full-image table and catalog histories have an explicit count-based GC boundary.
 
 The single-table transaction slice covers one DBF table through one snapshot/WAL persistence path and retains committed table snapshots in a `*.txbase.mvcc` sidecar.
 The catalog transaction slice prepares named operations across multiple DBFs under a catalog
@@ -317,7 +317,7 @@ Distributed behavior comes after the local and edge contracts are stable.
 
 ### Candidate scope
 
-- Independent row-retention policies and cross-table or distributed long-lived snapshot transactions.
+- Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history.
 - Replication.
 - Raft or another explicitly selected authority protocol.

@@ -242,7 +242,7 @@ The CLI now exposes the first local-database maintenance boundary:
 | `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as `SOURCE` |
 | `txbase mvcc row FILE RECORD` | Lists retained row versions for one positive physical DBF record number |
 | `txbase mvcc row-at FILE TRANSACTION_ID EPOCH RECORD` | Reads one retained row version by committed table transaction, row epoch, and positive physical record number |
-| `txbase mvcc gc FILE --keep COUNT` | Retains the newest positive count of full-image table snapshots and replaces only the MVCC history sidecar through a synced temporary file |
+| `txbase mvcc gc FILE --keep COUNT [--keep-rows COUNT]` | Retains the newest positive count of full-image table snapshots; optional `--keep-rows` retains older versions per physical row before the oldest retained snapshot, replacing only the MVCC history sidecar through a synced temporary file |
 | `txbase mvcc catalog gc DIRECTORY --keep COUNT` | Retains the newest positive count of full-image catalog snapshots and replaces only the catalog MVCC history sidecar through a synced temporary file |
 | `txbase wal inspect WAL` | Reads a WAL without creating or truncating it, reports complete record LSN/payload lengths, and marks an incomplete final tail |
 
