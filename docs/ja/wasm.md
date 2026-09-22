@@ -15,6 +15,8 @@
 - DBFバイト列を入出力する`open_dbf`と`snapshot`。
 - 既存の有界クエリ文書を受け取る`query_json`。
 - 既存の`POST`、`PUT`、`PATCH`、`DELETE`操作IRを受け取る`apply_operation_json`。
+- 同じ操作IRを有界な`{"operations":[...]}`トランザクション文書で受け取る`apply_operations_json`。
+  すべての操作が成功した場合だけ、非公開コピーからスナップショットを公開する。
 - `wasm32`で同じメソッドを公開する`wasm-bindgen`の`WasmDatabase`ラッパー。
 - ネイティブ契約テストと、CIでの`wasm32-unknown-unknown`ライブラリ検査。
 

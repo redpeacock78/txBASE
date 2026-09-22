@@ -1,6 +1,7 @@
 use crate::dbf::{DbfError, DbfTable};
 use crate::query::{self, QueryError};
 use crate::xbase::{OperationIr, OperationMethod};
+use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
@@ -48,6 +49,12 @@ pub struct WasmCore {
     table: DbfTable,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OperationBatch {
+    operations: Vec<OperationIr>,
+}
+
 impl WasmCore {
     pub fn open_dbf(bytes: &[u8]) -> Result<Self, WasmError> {
         Ok(Self {
@@ -72,40 +79,60 @@ impl WasmCore {
         Ok(self.snapshot())
     }
 
+    pub fn apply_operations_json(&mut self, body: &[u8]) -> Result<Vec<u8>, WasmError> {
+        let batch =
+            serde_json::from_slice::<OperationBatch>(body).map_err(WasmError::InvalidJson)?;
+        if batch.operations.is_empty() {
+            return Err(WasmError::InvalidOperation(
+                "operations must not be empty".into(),
+            ));
+        }
+        let mut working = self.table.clone();
+        for operation in batch.operations {
+            apply_operation(&mut working, operation)?;
+        }
+        self.table = working;
+        Ok(self.snapshot())
+    }
+
     pub fn apply_operation(&mut self, operation: OperationIr) -> Result<(), WasmError> {
-        match operation.method {
-            OperationMethod::Post => {
-                require_path(&operation.path, "/records")?;
-                let values = object_body(operation.body)?;
-                self.table.insert_record(values)?;
-            }
-            OperationMethod::Put => {
-                let id = record_id(&operation.path)?;
-                let values = object_body(operation.body)?;
-                self.table.replace_record(id, values)?;
-            }
-            OperationMethod::Patch => {
-                let id = record_id(&operation.path)?;
-                let patch = object_body(operation.body)?;
-                self.table.patch_record(id, patch)?;
-            }
-            OperationMethod::Delete => {
-                let id = record_id(&operation.path)?;
-                if operation.body.is_some() {
-                    return Err(WasmError::InvalidOperation(
-                        "DELETE operation must not have a body".into(),
-                    ));
-                }
-                self.table.delete_record(id)?;
-            }
-            OperationMethod::Get | OperationMethod::Query => {
+        apply_operation(&mut self.table, operation)
+    }
+}
+
+fn apply_operation(table: &mut DbfTable, operation: OperationIr) -> Result<(), WasmError> {
+    match operation.method {
+        OperationMethod::Post => {
+            require_path(&operation.path, "/records")?;
+            let values = object_body(operation.body)?;
+            table.insert_record(values)?;
+        }
+        OperationMethod::Put => {
+            let id = record_id(&operation.path)?;
+            let values = object_body(operation.body)?;
+            table.replace_record(id, values)?;
+        }
+        OperationMethod::Patch => {
+            let id = record_id(&operation.path)?;
+            let patch = object_body(operation.body)?;
+            table.patch_record(id, patch)?;
+        }
+        OperationMethod::Delete => {
+            let id = record_id(&operation.path)?;
+            if operation.body.is_some() {
                 return Err(WasmError::InvalidOperation(
-                    "read operations must use query_json".into(),
+                    "DELETE operation must not have a body".into(),
                 ));
             }
+            table.delete_record(id)?;
         }
-        Ok(())
+        OperationMethod::Get | OperationMethod::Query => {
+            return Err(WasmError::InvalidOperation(
+                "read operations must use query_json".into(),
+            ));
+        }
     }
+    Ok(())
 }
 
 fn object_body(body: Option<Value>) -> Result<Map<String, Value>, WasmError> {
@@ -173,6 +200,10 @@ mod bindings {
         pub fn apply_operation_json(&mut self, body: &[u8]) -> Result<Vec<u8>, JsValue> {
             self.core.apply_operation_json(body).map_err(to_js_error)
         }
+
+        pub fn apply_operations_json(&mut self, body: &[u8]) -> Result<Vec<u8>, JsValue> {
+            self.core.apply_operations_json(body).map_err(to_js_error)
+        }
     }
 
     fn to_js_error(error: WasmError) -> JsValue {
@@ -208,5 +239,52 @@ mod tests {
         core.apply_operation_json(&operation).unwrap();
         let rows: Vec<Value> = serde_json::from_slice(&core.query_json(b"{}").unwrap()).unwrap();
         assert_eq!(rows[0]["NAME"], "wasm");
+    }
+
+    #[test]
+    fn wasm_core_batch_mutation_commits_all_operations() {
+        let mut core = WasmCore::open_dbf(&fixture()).unwrap();
+        let batch = serde_json::to_vec(&json!({
+            "operations": [
+                {"method": "PATCH", "path": "/records/1", "body": {"NAME": "Carol"}},
+                {"method": "POST", "path": "/records", "body": {
+                    "ID": 3, "NAME": "Dave", "AGE": 42, "ACTIVE": true
+                }}
+            ]
+        }))
+        .unwrap();
+
+        core.apply_operations_json(&batch).unwrap();
+        let rows: Vec<Value> =
+            serde_json::from_slice(&core.query_json(br#"{"sort":{"ID":1}}"#).unwrap()).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["NAME"], "Carol");
+        assert_eq!(rows[1]["NAME"], "Dave");
+    }
+
+    #[test]
+    fn wasm_core_batch_mutation_is_atomic_on_error() {
+        let mut core = WasmCore::open_dbf(&fixture()).unwrap();
+        let batch = serde_json::to_vec(&json!({
+            "operations": [
+                {"method": "PATCH", "path": "/records/1", "body": {"NAME": "Carol"}},
+                {"method": "DELETE", "path": "/records/0"}
+            ]
+        }))
+        .unwrap();
+
+        let error = core.apply_operations_json(&batch).unwrap_err();
+        assert!(error.to_string().contains("positive integer"));
+        let rows: Vec<Value> = serde_json::from_slice(&core.query_json(b"{}").unwrap()).unwrap();
+        assert_eq!(rows[0]["NAME"], "Alice");
+    }
+
+    #[test]
+    fn wasm_core_rejects_empty_operation_batches() {
+        let mut core = WasmCore::open_dbf(&fixture()).unwrap();
+        let error = core
+            .apply_operations_json(br#"{"operations":[]}"#)
+            .unwrap_err();
+        assert!(error.to_string().contains("must not be empty"));
     }
 }

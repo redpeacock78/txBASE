@@ -18,8 +18,11 @@ Its versioned boundary currently provides:
 - `query_json` for the existing bounded query document;
 - `apply_operation_json` for the existing `POST`, `PUT`, `PATCH`, and `DELETE`
   operation IR;
+- `apply_operations_json` for the same operation IR in the bounded
+  `{"operations":[...]}` transaction document; it applies the whole batch to
+  a private copy and publishes a snapshot only when every operation succeeds;
 - a `wasm-bindgen` `WasmDatabase` wrapper on `wasm32` with the same methods;
-- a native contract test and a CI `wasm32-unknown-unknown` library check.
+- native contract tests and a CI `wasm32-unknown-unknown` library check.
 
 The core does not write files, access a network, schedule tasks, or commit a
 transaction. The host must persist the returned snapshot and provide
