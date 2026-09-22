@@ -66,7 +66,7 @@ txBASEでの実用的な適用は、各形式またはプロトコル規則を�
 | 永続化 | `src/dbf/tests/persistence.rs`、`src/dbf/tests/recovery.rs`、`recovery_fault_tests.rs`、`src/dbf/recovery.rs` |
 | 保守 | `src/dbf/tests/maintenance.rs`、`src/dbf/schema.rs`、`src/dbf/maintenance.rs` |
 | 壊れた入力 | `src/dbf/malformed_tests.rs`、`src/dbf/parser_fuzz_tests.rs`、`src/query/malformed_tests.rs`、`src/transaction/malformed_tests.rs`、`src/xbf/malformed_tests.rs`、`tests/corpus/xbf/` |
-| クエリと HTTP | `src/query/tests.rs`、`src/query/cursor_tests.rs`、`src/query/aggregation_tests.rs`、`src/server/tests.rs`、`src/server/catalog_tests.rs`、`src/server/range.rs` |
+| クエリと HTTP | `src/query/tests.rs`、`src/query/array_predicate_tests.rs`、`src/query/cursor_tests.rs`、`src/query/aggregation_tests.rs`、`src/server/tests.rs`、`src/server/catalog_tests.rs`、`src/server/range.rs` |
 | トランザクション | `src/transaction/tests.rs`、`src/transaction/malformed_tests.rs`、`src/server/tests.rs`、`src/server/catalog_tests.rs` |
 
 リポジトリは`tests/fixtures/`に外部形式のフィクスチャを、`tests/corpus/`に壊れた入力コーパスを保持します。
@@ -181,6 +181,8 @@ DBF、memo、WAL、JSON入力について決定的なコーパスを保ちます
 `src/query/join_tests.rs`は、出力順と連鎖ステージの意味論を検査します。
 
 `src/query/field_expression_tests.rs`は、ドット区切りフィールド参照、欠損または非数値オペランド、有界な数値`$abs`、`$add`/`$subtract`/`$multiply`/`$divide`/`$mod`、0による除算と剰余、壊れたまたは未サポートの`$expr`文書を検査します。
+
+`src/query/array_predicate_tests.rs`は、有界な`$all`、`$elemMatch`、正確な`$size`照合、同一要素への条件束縛、壊れた配列述語文書を検査します。
 
 `src/query/aggregation_tests/accumulator_tests.rs::evaluates_bounded_numeric_accumulator_expressions`は、欠損値と非数値を含む、`$sum`と`$avg`で共有する有界な数値式を検査します。
 

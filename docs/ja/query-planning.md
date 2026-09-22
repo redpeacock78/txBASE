@@ -10,7 +10,7 @@ txBASEはMongoDBのクエリ互換性やプランナー互換性を主張しま�
 
 [MongoDB のクエリ述語リファレンス](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)は、述語を比較、論理、配列、要素、評価、ビット演算、地理空間、その他の分類に分けています。
 
-現在のtxBASEのサブセットは、比較、所属、論理、有界なフィールド式までです。
+現在のtxBASEのサブセットは、比較、所属、論理、有界な配列、有界なフィールド式を含みます。
 
 MongoDBの[find コマンド](https://www.mongodb.com/docs/manual/reference/command/find/)は、フィルターとプロジェクション、ソート、スキップ、リミット、ヒント、その他のカーソル制御を分けています。
 
@@ -58,9 +58,13 @@ txBASEは有界な式木を実装します。
 
 フィールド間比較は定数境界のインデックス検索ではないため、式の経路はテーブルスキャンを使います。
 
-正規表現、配列、文書の式は未サポートです。
+正規表現と文書の式は未サポートです。
 
-MongoDBの[配列述語リファレンス](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)には、txBASEが実装していない`$all`、`$elemMatch`、`$size`などがあります。
+txBASEは有界な`$all`、`$elemMatch`、`$size`述語をテーブルスキャンで実装します。
+
+`$all`は配列オペランドを受け付け、空のオペランドはどのレコードにも一致せず、空でないオペランドは配列値のフィールドにすべての候補を要求し、`$elemMatch`はすべての条件を1つの配列要素に束ね、`$size`は0以上の指定した長さだけに一致します。
+
+現在のインデックス契約はマルチキーのキーと配列長の統計を定義しないため、これらの述語はインデックス候補になりません。
 
 MongoDBには正規表現や式評価を含む広い[その他の述語分類](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/misc/)もあります。
 
@@ -180,6 +184,9 @@ I/Oを考慮した完全なコストモデルは持ちません。
 - [MongoDB logical predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)
 - [MongoDB `$expr` predicate](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)
 - [MongoDB array predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
+- [MongoDB `$all` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/all/)
+- [MongoDB `$elemMatch` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/elemmatch/)
+- [MongoDB `$size` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/size/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
 - [MongoDB query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)

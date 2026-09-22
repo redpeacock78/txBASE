@@ -165,6 +165,7 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 | --- | --- | --- |
 | 比較 | `$eq`、`$ne`、`$gt`、`$gte`、`$lt`、`$lte` | エンジン固有の型規則でデコード済み JSON 値を比較する |
 | 所属 | `$in`、`$nin` | 値を候補値のリストと照合する |
+| 配列 | `$all`、`$elemMatch`、`$size` | 配列の内容、1つの配列要素の条件、または配列の正確な長さを照合する |
 | 論理 | `$and`、`$or`、`$not` | 述語文書を合成または反転する |
 | 式 | `$expr` | 同じレコードのスカラーリテラル、フィールド参照、または有界な数値`$abs` / `$add` / `$subtract` / `$multiply` / `$divide` / `$mod`式を比較する |
 
@@ -175,6 +176,16 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 欠損フィールドは、現在の実行器契約に従って`$ne`と`$nin`に一致します。
 
 フィールドが配列の場合、配列要素の1つが述語を満たせば一致することがあります。
+
+`$all`は配列オペランドを受け付け、空のオペランドはどのレコードにも一致せず、空でないオペランドは配列値のフィールドがすべての候補値を要素として持つ場合に一致します。
+
+`$all`には有界な`$elemMatch`候補を含められ、各候補は1つの配列要素に一致しなければなりません。
+
+`$elemMatch`は配列値のフィールドを要求し、1つの要素がすべてのスカラー演算子または同じ要素内のすべてのフィールド条件を満たす場合に一致します。
+
+`$size`は0以上の整数を要求し、要素数が指定値と一致する配列だけに一致します。
+
+これらの配列述語は有界なテーブルスキャンを使い、インデックス候補にはなりません。
 
 これらの選択は`src/query/tests.rs`と`src/query/malformed_tests.rs`でテストします。
 
@@ -226,5 +237,9 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 
 - [MongoDB documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
+- [MongoDB array predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
+- [MongoDB `$all` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/all/)
+- [MongoDB `$elemMatch` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/elemmatch/)
+- [MongoDB `$size` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/size/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)

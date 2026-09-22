@@ -24,7 +24,7 @@ The repository currently provides:
 
 - DBF parsing and writing for selected classic and Visual FoxPro fields.
 - DBT and FPT memo or binary sidecar paths for the supported formats.
-- JSON query execution with a small MongoDB-inspired predicate vocabulary.
+- JSON query execution with a bounded MongoDB-inspired predicate vocabulary covering comparison, membership, logical, array, and field-expression predicates.
 - Bounded `$expr` boolean trees over field-to-field comparison leaves, including numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` operands, that remain on the table-scan reference path.
 - HTTP `GET`, `QUERY`, `POST`, `PUT`, `PATCH`, and `DELETE` routes, including bounded JSON Merge Patch and JSON Patch for record updates.
 - File or memory WAL types with `TXOP`, `TXTI`, `TXDP`, `TXDB`, and `TXDM` persistence paths.

@@ -91,6 +91,10 @@ Second, POSIX durability language is limited to the Unix path; cross-platform re
 
 - [Documents](https://www.mongodb.com/docs/manual/core/document/)
 - [Query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
+- [Array query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
+- [`$all` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/all/)
+- [`$elemMatch` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/elemmatch/)
+- [`$size` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/size/)
 - [Find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [`$expr` field expressions](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)
 - [Query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)

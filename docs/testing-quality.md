@@ -65,7 +65,7 @@ The current Rust test layout is already split by ownership:
 | Persistence | `src/dbf/tests/persistence.rs`, `src/dbf/tests/recovery.rs`, `recovery_fault_tests.rs`, `src/dbf/recovery.rs` |
 | Maintenance | `src/dbf/tests/maintenance.rs`, `src/dbf/schema.rs`, `src/dbf/maintenance.rs` |
 | Malformed input | `src/dbf/malformed_tests.rs`, `src/dbf/parser_fuzz_tests.rs`, `src/query/malformed_tests.rs`, `src/transaction/malformed_tests.rs`, `src/xbf/malformed_tests.rs`, `tests/corpus/xbf/` |
-| Query and HTTP | `src/query/tests.rs`, `src/query/cursor_tests.rs`, `src/query/aggregation_tests.rs`, `src/server/tests.rs`, `src/server/catalog_tests.rs`, `src/server/range.rs` |
+| Query and HTTP | `src/query/tests.rs`, `src/query/array_predicate_tests.rs`, `src/query/cursor_tests.rs`, `src/query/aggregation_tests.rs`, `src/server/tests.rs`, `src/server/catalog_tests.rs`, `src/server/range.rs` |
 | Transactions | `src/transaction/tests.rs`, `src/transaction/malformed_tests.rs`, `src/server/tests.rs`, `src/server/catalog_tests.rs` |
 
 The repository also keeps external-format fixtures under `tests/fixtures/` and malformed corpora under `tests/corpus/`.
@@ -178,6 +178,8 @@ The compound-key branch in the same test covers the direct compound ordered-inde
 `src/query/join_tests.rs` covers output order and chained-stage semantics.
 
 `src/query/field_expression_tests.rs` covers dotted field references, missing or nonnumeric operands, bounded numeric `$abs`, `$add`/`$subtract`/`$multiply`/`$divide`/`$mod`, zero divisors, and malformed or unsupported `$expr` documents.
+
+`src/query/array_predicate_tests.rs` covers bounded `$all`, `$elemMatch`, and exact `$size` matching, same-element condition binding, and malformed array predicate documents.
 
 `src/query/aggregation_tests/accumulator_tests.rs::evaluates_bounded_numeric_accumulator_expressions` covers the shared bounded numeric expressions in `$sum` and `$avg`, including missing and nonnumeric values.
 

@@ -166,6 +166,7 @@ The complete boundary is documented in [asynchronous query streaming](async-stre
 | --- | --- | --- |
 | Comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` | Compare decoded JSON values using the engine's explicit type rules |
 | Membership | `$in`, `$nin` | Match a value against a list of candidate values |
+| Array | `$all`, `$elemMatch`, `$size` | Match array contents, one array element's conditions, or exact array length |
 | Logical | `$and`, `$or`, `$not` | Compose or invert predicate documents |
 | Expression | `$expr` | Compare scalar literals, field references, or bounded numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` expressions from the same record |
 
@@ -176,6 +177,16 @@ An empty `$or` matches no record.
 Missing fields match `$ne` and `$nin` according to the current executor contract.
 
 When a field contains an array, a predicate can match when an array element satisfies the predicate.
+
+`$all` accepts an array operand; an empty operand matches no records, while a non-empty operand requires an array-valued field whose elements match every candidate value.
+
+`$all` may contain bounded `$elemMatch` candidates, and each candidate must match one array element.
+
+`$elemMatch` requires an array-valued field and matches when one element satisfies all scalar operators or all field conditions in the same element.
+
+`$size` requires a non-negative integer and matches only an array with exactly that many elements.
+
+These array predicates use a bounded table scan and are not index candidates.
 
 These choices are tested in `src/query/tests.rs` and `src/query/malformed_tests.rs`.
 
@@ -227,5 +238,9 @@ The current implementation does not promise every MongoDB projection rule, posit
 
 - [MongoDB documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
+- [MongoDB array predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
+- [MongoDB `$all` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/all/)
+- [MongoDB `$elemMatch` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/elemmatch/)
+- [MongoDB `$size` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/size/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)

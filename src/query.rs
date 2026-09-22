@@ -9,6 +9,7 @@ use std::fmt::{self, Display, Formatter};
 
 mod aggregation;
 mod aggregation_plan;
+mod array_predicate;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod join;
 #[cfg(not(target_arch = "wasm32"))]
@@ -53,7 +54,21 @@ use std::cmp::Ordering;
 
 pub const JSON_QUERY_MEDIA_TYPE: &str = "application/json";
 pub const SUPPORTED_FILTER_OPERATORS: &[&str] = &[
-    "$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin", "$and", "$or", "$not", "$expr",
+    "$eq",
+    "$ne",
+    "$gt",
+    "$gte",
+    "$lt",
+    "$lte",
+    "$in",
+    "$nin",
+    "$all",
+    "$elemMatch",
+    "$size",
+    "$and",
+    "$or",
+    "$not",
+    "$expr",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -230,6 +245,9 @@ mod planner_compound_tests;
 
 #[cfg(test)]
 mod field_expression_tests;
+
+#[cfg(test)]
+mod array_predicate_tests;
 
 #[cfg(test)]
 mod cursor_tests;

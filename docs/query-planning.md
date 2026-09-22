@@ -10,7 +10,7 @@ txBASE does not claim MongoDB query or planner compatibility.
 
 The [MongoDB query predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/) groups predicates into comparison, logical, array, element, evaluation, bitwise, geospatial, and miscellaneous families.
 
-The current txBASE subset stops at comparison, membership, logical, and bounded field-expression predicates.
+The current txBASE subset includes comparison, membership, logical, bounded array, and bounded field-expression predicates.
 
 MongoDB's [find command](https://www.mongodb.com/docs/manual/reference/command/find/) separates a filter from projection, sort, skip, limit, hint, and related cursor controls.
 
@@ -58,9 +58,13 @@ If either field reference is missing, the expression does not match.
 
 The expression path uses a table scan because a field-to-field comparison is not a constant-bound index lookup.
 
-Regular-expression, array, and document expressions remain unsupported.
+Regular-expression and document expressions remain unsupported.
 
-MongoDB's [array predicate reference](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/) covers operators such as `$all`, `$elemMatch`, and `$size` that txBASE does not implement.
+txBASE implements bounded `$all`, `$elemMatch`, and `$size` predicates through a table scan.
+
+`$all` accepts an array operand and an empty operand matches no records; non-empty operands require every candidate in an array-valued field, `$elemMatch` binds every condition to one array element, and `$size` matches one exact non-negative length.
+
+These predicates are not index candidates because the current index contract does not define multikey keys or array-length statistics.
 
 MongoDB also has a broad [miscellaneous predicate family](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/misc/) including regular expressions and expression evaluation.
 
@@ -179,6 +183,9 @@ Until those contracts exist, the record scan remains the simpler reference execu
 - [MongoDB logical predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/logical/)
 - [MongoDB `$expr` predicate](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)
 - [MongoDB array predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
+- [MongoDB `$all` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/all/)
+- [MongoDB `$elemMatch` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/elemmatch/)
+- [MongoDB `$size` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/size/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
 - [MongoDB query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)

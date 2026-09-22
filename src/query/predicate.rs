@@ -1,3 +1,4 @@
+use super::array_predicate::{matches_all, matches_elem_match, matches_size};
 use super::{QueryError, ordering::compare_values};
 use crate::query_path::field_value;
 use serde_json::{Map, Value};
@@ -96,6 +97,9 @@ pub(crate) fn matches_condition(
                             .all(|expected| !equality_matches(value, expected))
                     }))
                 }
+                "$all" => matches_all(actual, operand),
+                "$elemMatch" => matches_elem_match(actual, operand),
+                "$size" => matches_size(actual, operand),
                 "$not" => Ok(!matches_condition(actual, operand)?),
                 _ => Err(QueryError::Invalid(format!(
                     "unsupported operator {operator}"
@@ -104,7 +108,7 @@ pub(crate) fn matches_condition(
         })
 }
 
-fn equality_matches(actual: &Value, expected: &Value) -> bool {
+pub(super) fn equality_matches(actual: &Value, expected: &Value) -> bool {
     actual == expected
         || actual
             .as_array()

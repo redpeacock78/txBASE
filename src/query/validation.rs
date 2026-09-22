@@ -88,6 +88,42 @@ fn validate_condition(condition: &Value, path: &str) -> Result<(), QueryError> {
                     )));
                 }
             }
+            "$all" => {
+                let values = operand
+                    .as_array()
+                    .ok_or_else(|| QueryError::Invalid(format!("{path}.$all must be an array")))?;
+                for (index, value) in values.iter().enumerate() {
+                    if let Some(object) = value
+                        .as_object()
+                        .filter(|object| object.keys().any(|key| key.starts_with('$')))
+                    {
+                        let Some(element) = object.get("$elemMatch") else {
+                            return Err(QueryError::Invalid(format!(
+                                "{path}.$all[{index}] supports only $elemMatch expressions"
+                            )));
+                        };
+                        if object.len() != 1 {
+                            return Err(QueryError::Invalid(format!(
+                                "{path}.$all[{index}] must contain only $elemMatch"
+                            )));
+                        }
+                        validate_elem_match(element, &format!("{path}.$all[{index}].$elemMatch"))?;
+                    }
+                }
+            }
+            "$elemMatch" => validate_elem_match(operand, &format!("{path}.$elemMatch"))?,
+            "$size" => {
+                let Some(size) = operand.as_u64() else {
+                    return Err(QueryError::Invalid(format!(
+                        "{path}.$size must be a non-negative integer"
+                    )));
+                };
+                if usize::try_from(size).is_err() {
+                    return Err(QueryError::Invalid(format!(
+                        "{path}.$size does not fit the platform size"
+                    )));
+                }
+            }
             "$not" => {
                 if !operand.is_object() {
                     return Err(QueryError::Invalid(format!(
@@ -104,4 +140,15 @@ fn validate_condition(condition: &Value, path: &str) -> Result<(), QueryError> {
         }
     }
     Ok(())
+}
+
+fn validate_elem_match(condition: &Value, path: &str) -> Result<(), QueryError> {
+    let condition = condition
+        .as_object()
+        .ok_or_else(|| QueryError::Invalid(format!("{path} must be an object")))?;
+    if condition.keys().any(|key| key.starts_with('$')) {
+        validate_condition(&Value::Object(condition.clone()), path)
+    } else {
+        validate_filter(condition, path)
+    }
 }
