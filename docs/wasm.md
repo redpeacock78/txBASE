@@ -2,8 +2,9 @@
 
 This document isolates the WASM and edge-runtime boundary.
 
-The repository now contains a host-independent DBF core slice. Worker and
-asynchronous-storage adapters remain future work.
+The repository now contains a host-independent DBF core slice and a
+runtime-neutral asynchronous object-store boundary. Worker and
+host-specific asynchronous-storage adapters remain future work.
 
 ## 0. Current implementation slice
 
@@ -63,6 +64,9 @@ It should expose the same bounded query, mutation, validation, and recovery sema
 It should not introduce a second query language, a second transaction model, or a host-specific interpretation of DBF bytes.
 
 The object-store contract belongs below the shared table and transaction interfaces.
+The runtime-neutral `AsyncObjectStore` contract is implemented for the five primitive object operations.
+`AsyncObjectTable` reuses the manifest, generation, recovery, retention, and conditional-publication contract through those operations.
+Neither boundary selects an executor or turns blocking filesystem calls into non-blocking work.
 
 ## 4. Target hosts
 
@@ -100,13 +104,14 @@ The current core slice meets the following initial conditions:
 - a versioned host-neutral ABI;
 - one native host fixture;
 - identical query and mutation implementation paths across native and WASM;
+- an asynchronous object-table fixture using the runtime-neutral store contract;
 - explicit malformed-input errors at the byte and JSON boundaries.
 
 The following conditions remain before calling a worker or WASI host complete:
 
 - one worker or WASI runtime smoke test;
 - explicit storage, timeout, and cancellation error mapping;
-- an asynchronous object-store adapter with conditional publication.
+- a host-backed asynchronous object-store adapter that supplies the conditional-publication contract.
 
 Until then, WASM hosting is a current core boundary with future host adapters.
 
@@ -127,4 +132,4 @@ Those would be separate products and would obscure the shared core contract.
 The WebAssembly and WASI specifications define the core module and host-interface vocabulary.
 The Component Model and the Cloudflare Workers and Node.js pages are implementation references for possible hosts, not txBASE compatibility commitments.
 
-The repository has a WASM core implementation and target compile check, but it does not claim that a worker or WASI runtime, asynchronous storage, or native recovery path is already supported.
+The repository has a WASM core implementation, target compile check, and runtime-neutral asynchronous object-store and object-table contracts, but it does not claim that a worker or WASI runtime, host-specific asynchronous persistence, or native recovery path is already supported.

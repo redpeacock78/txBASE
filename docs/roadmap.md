@@ -54,12 +54,13 @@ The repository currently provides:
 - Durable table-local row history stored with MVCC prepare/commit records, epoch-separated physical row IDs, retained row reads, and baseline reconstruction during full-image GC.
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection, index-sidecar recovery, and DBF-read recovery.
 - A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and mutation contracts, a `wasm-bindgen` wrapper, and a `wasm32-unknown-unknown` CI compile check.
+- A runtime-neutral `AsyncObjectStore` primitive contract, `AsyncObjectTable` manifest protocol, and synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
 
 The baseline intentionally does not include the following:
 
 - A full cost-based index or join model.
 - Full index-aware or cost-based merge join strategies.
-- Runtime-specific async traits.
+- Host-specific async scheduling, timeout and cancellation semantics, and remote object-store adapters.
 - Independent row-retention policies, predicate locking, and long-lived snapshot transactions.
 - Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - `$project`, final `$sort`, `$skip`, and final `$limit` beyond the bounded aggregation contract.
@@ -77,7 +78,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - Schema introspection.
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
-- Runtime-specific async traits for long-lived streams.
+- Runtime-specific async traits for long-lived streams and host-specific asynchronous object-table adapters.
 - Catalog-wide MVCC snapshots and independently visible multi-record reads.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
@@ -281,7 +282,8 @@ The filesystem backend persists the same contract under one directory with exclu
 The remaining cloud boundary needs a consistency contract, service-specific retention and orphan-page cleanup policy, retry behavior, and a remote adapter fixture.
 
 The current WASM slice exposes DBF bytes, query execution, and record mutation through the shared implementation.
-It does not yet persist asynchronously, publish object-store generations, or expose a worker or WASI runtime adapter.
+The current slice also exposes the five object-store primitives and the manifest protocol through runtime-neutral future contracts.
+It does not yet supply host-specific timeout and cancellation mapping, a remote object-store adapter, or a worker or WASI runtime adapter.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 

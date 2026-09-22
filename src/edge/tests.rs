@@ -1,6 +1,6 @@
 use super::{
-    CommitResult, FilesystemObjectStore, Manifest, MemoryObjectStore, ObjectStore,
-    ObjectStoreError, ObjectTable,
+    AsyncObjectStore, AsyncObjectTable, CommitResult, FilesystemObjectStore, Manifest,
+    MemoryObjectStore, ObjectStore, ObjectStoreError, ObjectTable, SyncObjectStoreAdapter,
 };
 use crate::xbf::{XbfField, XbfRecord, XbfTable, XbfType, XbfValue, encode};
 use serde_json::json;
@@ -8,6 +8,18 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::task::{Context, Poll, Waker};
+
+fn block_on<F: std::future::Future>(future: F) -> F::Output {
+    let waker = Waker::noop();
+    let mut context = Context::from_waker(waker);
+    let mut future = Box::pin(future);
+    loop {
+        if let Poll::Ready(output) = future.as_mut().poll(&mut context) {
+            return output;
+        }
+    }
+}
 
 fn temporary_directory(label: &str) -> PathBuf {
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -307,6 +319,75 @@ fn filesystem_object_table_persists_history_and_retention() {
         );
     }
     let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn async_adapter_preserves_object_store_operations_and_errors() {
+    let store = SyncObjectStoreAdapter::new(MemoryObjectStore::new());
+    block_on(store.put_if_absent("users/0", b"Alice")).unwrap();
+    assert_eq!(
+        block_on(store.get("users/0")).unwrap(),
+        Some(b"Alice".to_vec())
+    );
+    block_on(store.compare_and_swap("users/0", Some(b"Alice"), b"Bob")).unwrap();
+    assert!(matches!(
+        block_on(store.compare_and_swap("users/0", Some(b"Alice"), b"Carol")),
+        Err(ObjectStoreError::Conflict(_))
+    ));
+    assert!(matches!(
+        block_on(store.get("")),
+        Err(ObjectStoreError::Invalid(_))
+    ));
+    assert_eq!(
+        block_on(store.list("users/")).unwrap(),
+        vec!["users/0".to_owned()]
+    );
+    block_on(store.delete("users/0")).unwrap();
+    assert_eq!(block_on(store.get("users/0")).unwrap(), None);
+}
+
+#[test]
+fn async_object_table_reuses_generation_commit_and_retention_contracts() {
+    let store = SyncObjectStoreAdapter::new(MemoryObjectStore::new());
+    let object_table = AsyncObjectTable::new(store, "users").unwrap();
+    let first = table(0, "Alice");
+    assert_eq!(
+        block_on(object_table.commit(&first)).unwrap(),
+        CommitResult::Committed { generation: 0 }
+    );
+    assert_eq!(block_on(object_table.read()).unwrap(), Some(first.clone()));
+
+    let second = table(1, "Bob");
+    assert_eq!(
+        block_on(object_table.commit(&second)).unwrap(),
+        CommitResult::Committed { generation: 1 }
+    );
+    assert_eq!(block_on(object_table.read_at(0)).unwrap(), Some(first));
+    assert_eq!(
+        block_on(object_table.retain_generations(1)).unwrap(),
+        vec!["users/snapshots/0.xbf".to_owned()]
+    );
+    assert_eq!(block_on(object_table.read_at(0)).unwrap(), None);
+    assert_eq!(block_on(object_table.read()).unwrap(), Some(second));
+}
+
+#[test]
+fn async_object_table_recovers_after_manifest_publication_failure() {
+    let failure = Arc::new(AtomicBool::new(true));
+    let store = SyncObjectStoreAdapter::new(FailingCasStore {
+        inner: MemoryObjectStore::new(),
+        failure: failure.clone(),
+    });
+    let object_table = AsyncObjectTable::new(store, "users").unwrap();
+    let pending = table(3, "Carol");
+
+    assert!(matches!(
+        block_on(object_table.commit(&pending)),
+        Err(ObjectStoreError::Unavailable(_))
+    ));
+    assert!(block_on(object_table.manifest()).unwrap().is_none());
+    assert_eq!(block_on(object_table.recover()).unwrap(), 1);
+    assert_eq!(block_on(object_table.read()).unwrap(), Some(pending));
 }
 
 #[derive(Clone)]

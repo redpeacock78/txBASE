@@ -7,8 +7,10 @@ mod store;
 #[cfg(not(target_arch = "wasm32"))]
 pub use filesystem::FilesystemObjectStore;
 pub use memory::MemoryObjectStore;
-pub use object_store::{CommitResult, Manifest, ObjectTable};
-pub use store::{ObjectStore, ObjectStoreError};
+pub use object_store::{AsyncObjectTable, CommitResult, Manifest, ObjectTable};
+pub use store::{
+    AsyncObjectStore, AsyncObjectStoreFuture, ObjectStore, ObjectStoreError, SyncObjectStoreAdapter,
+};
 
 #[cfg(test)]
 mod tests;

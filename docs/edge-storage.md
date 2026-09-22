@@ -18,7 +18,12 @@ The `txbase::edge::ObjectTable` API adds a separate object-store commit boundary
 It creates parent directories, publishes immutable objects with exclusive creation, serializes store operations with a lock file, and replaces manifests through a synced temporary file.
 The filesystem backend is a local durable adapter and does not claim cloud-provider consistency.
 
-An object-store adapter can implement the same trait for a remote service without changing the XBF snapshot or generation rules.
+`AsyncObjectStore` defines the same five primitive operations as a runtime-neutral future boundary.
+`SyncObjectStoreAdapter` exposes the existing synchronous stores through already-ready futures, so native tests can exercise the asynchronous contract without selecting an executor.
+`AsyncObjectTable` reuses the manifest, generation, recovery, retention, and orphan-cleanup rules through that future boundary.
+The synchronous adapter does not make filesystem I/O non-blocking, but it exercises the same high-level protocol without selecting an executor.
+
+A remote object-store adapter can implement `AsyncObjectStore` directly without changing the XBF snapshot or generation rules.
 
 ## 2. Manifest schema
 
@@ -121,9 +126,13 @@ These concerns do not belong in `MemoryObjectStore` or in the XBF codec.
 
 `FilesystemObjectStore` supplies a local persistence fixture for those tests, but its lock file and filesystem durability behavior are not a substitute for a remote service's consistency contract.
 
+The remote adapter may implement `ObjectStore` for a blocking native client or `AsyncObjectStore` for a host-managed client.
+The high-level asynchronous manifest protocol covers commit, recovery, retention, and conditional publication.
+Timeout and cancellation mapping remain host responsibilities until a worker or WASI adapter defines them.
+
 ## 7. Explicit non-goals
 
-This slice does not promise an R2 adapter, a specific cloud vendor, multi-region consensus, automatic background garbage collection, immutable page splitting, or WASM hosting.
+This slice does not promise an R2 adapter, a specific cloud vendor, host-specific timeout and cancellation mapping, multi-region consensus, automatic background garbage collection, immutable page splitting, or WASM hosting.
 
 Those features can reuse the manifest and generation contract after their host-specific failure behavior has a deterministic test.
 
