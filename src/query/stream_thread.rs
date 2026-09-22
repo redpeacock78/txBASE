@@ -66,6 +66,7 @@ fn produce(
         Ok(stream) => stream,
         Err(error) => {
             let _ = sender.send(Err(error));
+            drop(sender);
             wake(&waker);
             return;
         }
@@ -76,6 +77,7 @@ fn produce(
             return;
         }
     }
+    drop(sender);
     wake(&waker);
 }
 
