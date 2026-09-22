@@ -165,17 +165,41 @@ fn rejects_header_and_section_corruption() {
 #[test]
 fn enforces_explicit_size_limits_before_decoding() {
     let bytes = encode(&fixture()).unwrap();
-    let limits = XbfLimits {
-        max_file_size: bytes.len() - 1,
-        ..XbfLimits::default()
-    };
-    assert!(decode_with_limits(&bytes, &limits).is_err());
-
-    let limits = XbfLimits {
-        max_record_size: 1,
-        ..XbfLimits::default()
-    };
-    assert!(decode_with_limits(&bytes, &limits).is_err());
+    let limits = [
+        XbfLimits {
+            max_file_size: bytes.len() - 1,
+            ..XbfLimits::default()
+        },
+        XbfLimits {
+            max_section_size: 1,
+            ..XbfLimits::default()
+        },
+        XbfLimits {
+            max_record_size: 1,
+            ..XbfLimits::default()
+        },
+        XbfLimits {
+            max_value_size: 1,
+            ..XbfLimits::default()
+        },
+        XbfLimits {
+            max_field_name: 1,
+            ..XbfLimits::default()
+        },
+        XbfLimits {
+            max_fields: 1,
+            ..XbfLimits::default()
+        },
+        XbfLimits {
+            max_records: 0,
+            ..XbfLimits::default()
+        },
+    ];
+    for limits in limits {
+        assert!(decode_with_limits(&bytes, &limits).is_err());
+    }
+    assert!(encode_with_limits(&fixture(), &limits[5]).is_err());
+    assert!(encode_with_limits(&fixture(), &limits[6]).is_err());
 }
 
 #[test]
