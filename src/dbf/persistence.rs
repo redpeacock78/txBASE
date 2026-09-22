@@ -149,7 +149,11 @@ impl DbfTable {
     }
 
     pub fn save_with_wal(&mut self, path: impl AsRef<Path>) -> Result<(), DbfError> {
-        self.save_with_wal_inner(path.as_ref(), None)
+        self.save_with_wal_inner(path.as_ref(), None, false)
+    }
+
+    pub(crate) fn save_with_row_merge(&mut self, path: impl AsRef<Path>) -> Result<(), DbfError> {
+        self.save_with_wal_inner(path.as_ref(), None, true)
     }
 
     pub fn save_with_operation(
@@ -157,13 +161,14 @@ impl DbfTable {
         path: impl AsRef<Path>,
         operation: &OperationIr,
     ) -> Result<(), DbfError> {
-        self.save_with_wal_inner(path.as_ref(), Some(operation))
+        self.save_with_wal_inner(path.as_ref(), Some(operation), false)
     }
 
     fn save_with_wal_inner(
         &mut self,
         path: &Path,
         operation: Option<&OperationIr>,
+        allow_row_merge: bool,
     ) -> Result<(), DbfError> {
         let _lock = TableLock::acquire(path)?;
         let _ = Self::recover_wal_with_encoding(path, self.encoding_override.as_deref())?;
@@ -177,7 +182,13 @@ impl DbfTable {
             before
         };
         self.bind_schema_if_present(path)?;
-        self.ensure_source_current(path)?;
+        match self.ensure_source_current(path) {
+            Ok(()) => {}
+            Err(_error) if allow_row_merge && !self.historical_snapshot => {
+                row_merge::merge_disjoint_rows(self, &before)?;
+            }
+            Err(error) => return Err(error),
+        }
         let transaction_id = next_transaction_id(current_transaction_id)?;
         let mut prepared = self.clone();
         prepared.transaction_id = Some(transaction_id);

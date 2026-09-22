@@ -42,6 +42,7 @@ mod persistence;
 mod recovery;
 #[cfg(test)]
 mod recovery_fault_tests;
+mod row_merge;
 mod row_mvcc;
 mod schema;
 mod schema_export;

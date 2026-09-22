@@ -48,6 +48,16 @@ impl DbfTransaction {
         Ok(self.table)
     }
 
+    /// Commits disjoint row changes on top of a newer table image.
+    ///
+    /// This explicit opt-in preserves the default stale-source rejection.
+    /// Inserts, layout changes, schema changes, and different changes to the
+    /// same row remain conflicts; an identical resulting row is a no-op.
+    pub fn commit_with_row_merge(mut self) -> Result<DbfTable, DbfError> {
+        self.table.save_with_row_merge(&self.path)?;
+        Ok(self.table)
+    }
+
     /// Discards the private snapshot without touching the path.
     pub fn rollback(self) {}
 }

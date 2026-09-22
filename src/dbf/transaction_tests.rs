@@ -36,9 +36,13 @@ fn cleanup(path: &Path) {
 }
 
 fn patch(name: &str) -> OperationIr {
+    patch_record(1, name)
+}
+
+fn patch_record(number: usize, name: &str) -> OperationIr {
     OperationIr {
         method: OperationMethod::Patch,
-        path: "/records/1".into(),
+        path: format!("/records/{number}"),
         body: Some(json!({"NAME": name})),
     }
 }
@@ -95,6 +99,121 @@ fn snapshot_transaction_rejects_a_concurrent_commit_without_overwriting_it() {
     assert_eq!(
         DbfTable::from_path(&destination).unwrap().active_json()[0]["NAME"],
         "concurrent"
+    );
+    cleanup(&destination);
+}
+
+#[test]
+fn snapshot_transaction_merges_disjoint_row_changes_when_explicitly_requested() {
+    let destination = path("row-merge");
+    cleanup(&destination);
+    fs::write(&destination, fixture()).unwrap();
+
+    let mut transaction = DbfTransaction::begin(&destination).unwrap();
+    transaction
+        .apply(&OperationIr {
+            method: OperationMethod::Patch,
+            path: "/records/1".into(),
+            body: Some(json!({"AGE": 31})),
+        })
+        .unwrap();
+    let mut concurrent = DbfTransaction::begin(&destination).unwrap();
+    concurrent.apply(&patch_record(2, "Bobby")).unwrap();
+    concurrent.commit().unwrap();
+
+    transaction.commit_with_row_merge().unwrap();
+    let current = DbfTable::from_path(&destination).unwrap();
+    assert_eq!(current.active_record(1).unwrap().values["AGE"], 31);
+    assert_eq!(current.active_record(2).unwrap().values["NAME"], "Bobby");
+    cleanup(&destination);
+}
+
+#[test]
+fn snapshot_transaction_merges_a_disjoint_row_delete_when_explicitly_requested() {
+    let destination = path("row-delete-merge");
+    cleanup(&destination);
+    fs::write(&destination, fixture()).unwrap();
+
+    let mut transaction = DbfTransaction::begin(&destination).unwrap();
+    transaction
+        .apply(&OperationIr {
+            method: OperationMethod::Delete,
+            path: "/records/1".into(),
+            body: None,
+        })
+        .unwrap();
+    let mut concurrent = DbfTransaction::begin(&destination).unwrap();
+    concurrent.apply(&patch_record(2, "Bobby")).unwrap();
+    concurrent.commit().unwrap();
+
+    transaction.commit_with_row_merge().unwrap();
+    let current = DbfTable::from_path(&destination).unwrap();
+    assert!(current.active_record(1).is_none());
+    assert_eq!(current.active_record(2).unwrap().values["NAME"], "Bobby");
+    cleanup(&destination);
+}
+
+#[test]
+fn snapshot_transaction_rejects_an_insert_during_row_merge() {
+    let destination = path("row-insert-conflict");
+    cleanup(&destination);
+    fs::write(&destination, fixture()).unwrap();
+
+    let mut transaction = DbfTransaction::begin(&destination).unwrap();
+    transaction.apply(&patch("stale")).unwrap();
+    let mut concurrent = DbfTransaction::begin(&destination).unwrap();
+    concurrent
+        .apply(&OperationIr {
+            method: OperationMethod::Post,
+            path: "/records".into(),
+            body: Some(json!({
+                "ID": 3,
+                "NAME": "Carol",
+                "AGE": 42,
+                "ACTIVE": true
+            })),
+        })
+        .unwrap();
+    concurrent.commit().unwrap();
+
+    let error = transaction.commit_with_row_merge().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("unchanged schema, layout, and record count")
+    );
+    assert_eq!(
+        DbfTable::from_path(&destination).unwrap().records().len(),
+        3
+    );
+    cleanup(&destination);
+}
+
+#[test]
+fn snapshot_transaction_rejects_a_same_row_merge_conflict() {
+    let destination = path("row-merge-conflict");
+    cleanup(&destination);
+    fs::write(&destination, fixture()).unwrap();
+
+    let mut transaction = DbfTransaction::begin(&destination).unwrap();
+    transaction.apply(&patch("first")).unwrap();
+    let mut concurrent = DbfTransaction::begin(&destination).unwrap();
+    concurrent.apply(&patch("other")).unwrap();
+    concurrent.commit().unwrap();
+
+    let error = transaction.commit_with_row_merge().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("row-level merge conflict at record 1")
+    );
+    assert_eq!(
+        DbfTable::from_path(&destination)
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["NAME"],
+        "other"
     );
     cleanup(&destination);
 }

@@ -34,6 +34,13 @@ The result is one table commit and the returned `DbfTable` contains its durable 
 
 If the DBF, memo, schema, or transaction-state source changed after `begin`, the commit is rejected instead of overwriting the newer state.
 
+`commit_with_row_merge()` is an explicit opt-in for a narrower conflict contract.
+Under the table lock, it reloads the current image and applies only this transaction's updates or
+deletes to physical records where the current image has no different change.
+An identical resulting row is treated as a no-op.
+It rejects inserts, different changes to the same row, record-count changes, layout changes, and schema changes.
+The merged result uses the same WAL, MVCC, sidecar, and transaction-state persistence path.
+
 ### Rollback
 
 `rollback()` drops the private copy without writing the table path.
@@ -48,9 +55,12 @@ It does not hold a table lock from `begin` through `commit`.
 
 The commit-time source check is the write-write conflict boundary for independently loaded table snapshots.
 
-On a conflict, the caller must discard the failed transaction, reload the current table, and decide whether to retry the operations.
+With the default `commit()`, the caller must discard the failed transaction, reload the current table, and decide whether to retry the operations.
 
-The API does not merge concurrent operations automatically and does not promise exactly-once effects across a lost network response.
+When the application contract is limited to disjoint physical-row updates or deletes, the caller may
+explicitly choose `commit_with_row_merge()` instead.
+
+The API does not select the merge policy automatically and does not promise exactly-once effects across a lost network response.
 
 ## 3. Relationship to other transaction boundaries
 
@@ -74,7 +84,9 @@ The current API provides a private snapshot for one DBF table and optimistic sta
 `CatalogReadTransaction` provides a separate in-memory snapshot boundary for cross-table reads and
 bounded joins.
 
-Neither API provides predicate locking, serializable conflict detection, or row-level write-write merging.
+Neither API provides predicate locking or serializable conflict detection.
+`commit_with_row_merge()` is limited to explicit physical-row update and delete merging and does not
+provide predicate or serializable semantics.
 
 Independent row-retention policies and long-lived distributed transactions remain future work.
 
@@ -89,6 +101,8 @@ transaction.apply(&operation)?;
 let rows = transaction.execute(&parse(br#"{}"#)?)?;
 let committed_table = transaction.commit()?;
 ```
+
+Use `commit_with_row_merge()` only when that narrower physical-row conflict contract is sufficient.
 
 The HTTP route and this Rust API share the same table mutation and persistence path, so a behavior change must update both the API tests and the HTTP contract tests.
 

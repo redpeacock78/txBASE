@@ -67,7 +67,7 @@ The baseline intentionally does not include the following:
 - A full cost-based index or join model.
 - Full index-aware or cost-based merge join strategies.
 - Worker/WASI-specific timeout, transport, cancellation, and asynchronous-storage semantics, and remote object-store adapters.
-- Independent row-retention policies, predicate locking, serializable conflict detection, and row-level write-write merging.
+- Independent row-retention policies, predicate locking, and serializable conflict detection.
 - Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export.
@@ -146,8 +146,11 @@ inside the table MVCC prepare/commit records, with epoch-separated physical row 
 reconstruction during full-image GC. The public `DbfTransaction` API provides an optimistic private
 snapshot for one DBF table, and the HTTP transaction route reuses that boundary. The public
 `CatalogReadTransaction` API captures all discovered tables into one process-local read image and
-supports stable table reads and bounded joins after capture. Independent row retention, predicate
-locking, serializable conflict detection, and row-level write-write merging remain future work.
+supports stable table reads and bounded joins after capture. `DbfTransaction::commit_with_row_merge`
+explicitly merges disjoint physical-row updates or deletes under the table lock when schema, layout,
+and record count are unchanged; inserts and different changes to the same row remain errors.
+An identical resulting row is a no-op. Independent row retention, predicate locking, and
+serializable conflict detection remain future work.
 The current full-image table and catalog histories have an explicit count-based GC boundary.
 
 The single-table transaction slice covers one DBF table through one snapshot/WAL persistence path and retains committed table snapshots in a `*.txbase.mvcc` sidecar.

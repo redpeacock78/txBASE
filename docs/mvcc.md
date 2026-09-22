@@ -144,14 +144,19 @@ Catalog history stores a full image of every discovered table per catalog commit
 
 Table-local row history now has count-based retention through the existing full-image MVCC GC.
 
-The public table transaction provides optimistic stale-source rejection at commit, but it does not provide predicate locking, serializable conflict detection, row-level write-write merging, or a long-lived transaction object across CLI calls.
+The public table transaction provides optimistic stale-source rejection by default.
+The explicit `DbfTransaction::commit_with_row_merge` API can merge disjoint physical-row updates or
+deletes under the table lock when schema, layout, and record count are unchanged.
+Inserts and different changes to the same row remain errors; an identical resulting row is a no-op.
+Neither table transaction API provides predicate locking, serializable conflict detection, or a
+long-lived transaction object across CLI calls.
 
 The catalog transaction ID identifies one consistent multi-table image and can select that image
 for one catalog HTTP request or identify a `CatalogReadTransaction` capture.
 
 The HTTP selector does not create a long-lived transaction object.
-The Rust read transaction is stable after capture, but it does not provide predicate locking,
-serializable conflict detection, or row-level write-write merging.
+The Rust read transaction is stable after capture, but it does not provide predicate locking or
+serializable conflict detection.
 
 `Catalog::gc_mvcc` and the catalog GC command retain the newest positive `keep_last` count of
 catalog images.
@@ -169,7 +174,7 @@ The current retention boundary is count-based GC for full-image table and catalo
 
 The current row-level boundary is physical-record history with epoch-separated identities and count-based compaction.
 
-An independent row-retention policy, schema migration history, predicate locking, serializable conflict detection, and row-level write-write merging remain future work.
+An independent row-retention policy, schema migration history, predicate locking, and serializable conflict detection remain future work.
 
 Distributed snapshots, follower reads, and serializable conflict detection remain later work.
 
