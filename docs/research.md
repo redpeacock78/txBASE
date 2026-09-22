@@ -21,6 +21,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | Bounded local join contract | [Join model](joins.md) and [Catalog](catalog.md) | Current boundary |
 | MongoDB predicates and query planning | [Query planning](query-planning.md) | Current subset plus reference |
 | Mutation operators and atomicity | [Mutation model](mutation-model.md) | Current subset plus future boundary |
+| Single-table snapshot transactions and isolation | [Snapshot transactions](transactions.md) and [MVCC](mvcc.md) | Current optimistic boundary plus future serializable work |
 | Firestore and Realtime Database design | [Firebase model](firebase-model.md) | Reference |
 | SQLite test breadth and quality | [Testing and quality](testing-quality.md) | Current test map plus reference |
 | Contract-to-test traceability | [Quality contract matrix](quality-matrix.md) | Current evidence map |
@@ -57,6 +58,7 @@ The following audit separates normative sources from product documentation, impl
 | Rust standard-library task documentation | Official Rust API documentation. | The `AsyncQueryStream` boundary reuses the `Context`, `Poll`, `Waker`, and `Pin` task model without selecting an executor or claiming runtime compatibility. | Keep the polling contract and host-adapter responsibilities in [asynchronous query streaming](async-streaming.md); keep txBASE query semantics in [query model](query-model.md). |
 | Firestore and Realtime Database documentation | Official product documentation. | The Firebase document is architecture reference only. txBASE does not implement Firebase transactions, offline queues, security rules, or event synchronization. | Keep these comparisons in [Firebase model](firebase-model.md), not in the DBF, HTTP, or transaction contracts. |
 | SQLite documentation | Official project documentation. | Constraint terminology, WAL and atomic-commit rationale, query-planning vocabulary, and test-quality practices are references. txBASE uses DBF sidecars and its own WAL and does not claim SQLite file, SQL, or durability compatibility. | Keep the rationale in schema, MVCC, query-planning, and testing documents; describe txBASE behavior separately. |
+| PostgreSQL transaction isolation and MVCC documentation | Official project documentation. | The transaction and MVCC documents use it to distinguish the current optimistic stale-source check from predicate locking and serializable conflict detection that are not implemented. | Keep the distinction in [Snapshot transactions](transactions.md) and [MVCC](mvcc.md); do not copy PostgreSQL isolation guarantees into the current contract. |
 | Git command-line interface documentation | Official project documentation used as a CLI design reference. | It informs txBASE's explicit subcommand and option shape only. txBASE does not copy Git's command set, repository model, or option semantics. | Keep the design decision in [CLI command design](cli.md), not in MVCC or storage contracts. |
 | RFC 9110, RFC 5789, and RFC 10008 | IETF standards-track specifications. | HTTP method safety, PATCH meaning, and QUERY safety/idempotency inform the HTTP contract. txBASE still defines its own supported media types, response shapes, range limits, and route bounds. | Normative HTTP semantics belong in [HTTP semantics](http-semantics.md); txBASE-specific restrictions belong beside the implementation contract. |
 | POSIX `rename()` and `fsync()` | The Open Group specifications. | Unix code uses rename-based replacement and `sync_all`; Windows has a separate replacement path and must not be described as having identical POSIX directory-durability guarantees. | Keep filesystem durability assumptions in persistence and XBF documents, with the Unix-only qualification. |
@@ -127,6 +129,13 @@ Second, POSIX durability language is limited to the Unix path; cross-platform re
 - [SQLite limits](https://sqlite.org/limits.html)
 - [SQLite `CREATE TABLE` constraints](https://sqlite.org/lang_createtable.html)
 - [SQLite foreign-key support](https://www.sqlite.org/foreignkeys.html)
+
+### Transactions and concurrency
+
+- [PostgreSQL transaction isolation](https://www.postgresql.org/docs/current/transaction-iso.html)
+- [PostgreSQL concurrency control](https://www.postgresql.org/docs/current/mvcc.html)
+- [SQLite isolation](https://sqlite.org/isolation.html)
+- [SQLite write-ahead logging](https://sqlite.org/wal.html)
 
 ### HTTP
 

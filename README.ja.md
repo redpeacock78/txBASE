@@ -255,6 +255,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - [結合モデル](docs/ja/joins.md)
 - [クエリ計画と外部語彙](docs/ja/query-planning.md)
 - [更新モデル](docs/ja/mutation-model.md)
+- [スナップショットトランザクション](docs/ja/transactions.md)
 - [Firebaseのデータモデルと同期から得た知見](docs/ja/firebase-model.md)
 - [SQLiteのテストと品質モデル](docs/ja/testing-quality.md)
 - [品質契約マトリクス](docs/ja/quality-matrix.md)

@@ -42,6 +42,8 @@ Startup recovery replays a supported intent when no state payload exists.
 
 `POST /transaction` applies all operations to a private table copy and persists one snapshot/WAL commit.
 
+The public Rust `DbfTransaction` exposes the same single-table apply, query, stale-source check, and commit boundary; the HTTP route reuses it.
+
 If validation or any operation fails, the copy is discarded and the current DBF is unchanged.
 
 The commit ID is durable for that DBF and resumes after restart or WAL recovery.
@@ -64,6 +66,8 @@ The table lock serializes save paths, and a stale independently loaded table is 
 Automatic network retry, request deduplication, and multi-writer merge are not implemented.
 
 Clients must not infer exactly-once effects from a successful TCP exchange alone.
+
+The lifecycle and isolation limits of the Rust transaction API are defined in [Snapshot transactions](transactions.md).
 
 ## 3. HTTP boundary
 

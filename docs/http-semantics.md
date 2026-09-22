@@ -217,10 +217,11 @@ The current mutation path records a durable `TXOP` intent before its state paylo
 Startup recovery replays a supported intent when no state payload exists.
 
 `POST /transaction` applies all operations to a private table copy and persists one snapshot/WAL
-commit. If validation or any operation fails, the copy is discarded and the current DBF is not
-changed. The commit ID is durable for that DBF and resumes after restart or WAL recovery. The
-current boundary is one DBF table; it does not provide cross-table atomicity, catalog-wide
-transaction IDs, or MVCC visibility.
+commit through `DbfTransaction`. If validation or any operation fails, the copy is discarded and
+the current DBF is not changed. The commit ID is durable for that DBF and resumes after restart
+or WAL recovery. The current boundary is one DBF table; it does not provide cross-table atomicity,
+catalog-wide transaction IDs, or MVCC visibility. The Rust API boundary is defined in
+[Snapshot transactions](transactions.md).
 
 The catalog server's `POST /transaction` accepts `/table/records` and
 `/table/records/{id}` mutation paths. It prepares every affected table under one catalog lock,

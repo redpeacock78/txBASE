@@ -100,6 +100,10 @@ Catalog MVCC continues to store complete table images per catalog commit.
 
 Catalog historical reads therefore retain their existing commit-level contract and do not claim to expose table-local row history for a catalog snapshot.
 
+The public [`DbfTransaction`](transactions.md) API provides an optimistic private snapshot for one path-backed table.
+
+It applies operations and queries against the private copy, then publishes one WAL-backed commit or discards the copy.
+
 ## 2. Commit and recovery
 
 The writer holds the existing per-table lock.
@@ -125,7 +129,7 @@ Catalog history stores a full image of every discovered table per catalog commit
 
 Table-local row history now has count-based retention through the existing full-image MVCC GC.
 
-The implementation does not provide predicate locking, serializable conflict detection, or a long-lived transaction object across CLI calls.
+The public table transaction provides optimistic stale-source rejection at commit, but it does not provide predicate locking, serializable conflict detection, row-level write-write merging, or a long-lived transaction object across CLI calls.
 
 The catalog transaction ID identifies one consistent multi-table image.
 
@@ -145,7 +149,7 @@ The current retention boundary is count-based GC for full-image table and catalo
 
 The current row-level boundary is physical-record history with epoch-separated identities and count-based compaction.
 
-An independent row-retention policy, schema migration history, predicate locking, and long-lived snapshot transactions remain future work.
+An independent row-retention policy, schema migration history, predicate locking, serializable conflict detection, and cross-table long-lived snapshot transactions remain future work.
 
 Distributed snapshots, follower reads, and serializable conflict detection remain later work.
 

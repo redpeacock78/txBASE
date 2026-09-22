@@ -24,6 +24,7 @@ Research and future work do not imply an implemented feature.
 - [Join model](joins.md)
 - [Query planning and external vocabulary](query-planning.md)
 - [Mutation model](mutation-model.md)
+- [Snapshot transactions](transactions.md)
 - [HTTP method semantics and QUERY](http-semantics.md)
 
 ## Command-line interface

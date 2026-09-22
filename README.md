@@ -261,6 +261,7 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 - [Join model](docs/joins.md)
 - [Query planning and external vocabulary](docs/query-planning.md)
 - [Mutation model](docs/mutation-model.md)
+- [Snapshot transactions](docs/transactions.md)
 - [Firebase data-model and synchronization lessons](docs/firebase-model.md)
 - [SQLite testing and quality model](docs/testing-quality.md)
 - [Quality contract matrix](docs/quality-matrix.md)

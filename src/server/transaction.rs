@@ -1,5 +1,5 @@
 use super::{HttpResponse, dbf_error_response, error, etag, json_response, read_json_body};
-use crate::dbf::DbfTable;
+use crate::dbf::{DbfTable, DbfTransaction};
 use crate::xbase::OperationIr;
 use serde::Deserialize;
 use serde_json::json;
@@ -46,18 +46,21 @@ pub(super) fn response(
     };
 
     let original = table.clone();
-    let mut working = original.clone();
+    let mut working = DbfTransaction::from_table(dbf_path, original.clone());
     for operation in &transaction.operations {
-        if let Err(dbf_error) = working.apply_operation(operation) {
+        if let Err(dbf_error) = working.apply(operation) {
             return dbf_error_response(dbf_error);
         }
     }
-    if let Err(dbf_error) = working.save_with_wal(dbf_path) {
-        let encoding = original.effective_encoding_override().map(str::to_owned);
-        *table =
-            DbfTable::from_path_with_encoding(dbf_path, encoding.as_deref()).unwrap_or(original);
-        return dbf_error_response(dbf_error);
-    }
+    let working = match working.commit() {
+        Ok(table) => table,
+        Err(dbf_error) => {
+            let encoding = original.effective_encoding_override().map(str::to_owned);
+            *table = DbfTable::from_path_with_encoding(dbf_path, encoding.as_deref())
+                .unwrap_or(original);
+            return dbf_error_response(dbf_error);
+        }
+    };
     *table = working;
     etag::with_transaction(
         json_response(

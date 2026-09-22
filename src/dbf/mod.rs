@@ -47,6 +47,9 @@ mod schema_export_tests;
 mod schema_metadata;
 #[cfg(test)]
 mod schema_metadata_tests;
+mod transaction;
+#[cfg(test)]
+mod transaction_tests;
 mod types;
 #[cfg(test)]
 mod upstream_cjk_tests;
@@ -94,6 +97,7 @@ use wal::{
 use wal::{delta_payload, memo_snapshot_payload, operation_payload, snapshot_payload};
 
 pub use maintenance::copy_table_files;
+pub use transaction::DbfTransaction;
 
 pub(crate) use schema_export::commit_schema_export;
 
