@@ -142,6 +142,46 @@ fn large_full_join_preserves_unmatched_rows_with_ordered_indexes() {
 }
 
 #[test]
+fn large_join_ignores_a_stale_ordered_index_and_reads_new_rows() {
+    let root = catalog_with_many_indexed_posts();
+    let users_path = root.join("users.dbf");
+    let posts_path = root.join("posts.dbf");
+    let users = DbfTable::from_path(&users_path).unwrap();
+    let matching_id = users.active_records().next().unwrap().values["ID"].clone();
+    let mut posts = DbfTable::from_path(&posts_path).unwrap();
+    posts
+        .insert_record(
+            json!({"ID": matching_id, "NAME": "Stale", "AGE": 99, "ACTIVE": true})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    fs::write(&posts_path, posts.to_bytes()).unwrap();
+
+    let catalog = Catalog::from_path(&root).unwrap();
+    let request = parse(
+        br#"{
+          "from": "users",
+          "join": {
+            "type": "inner",
+            "table": "posts",
+            "on": {
+              "users.ID": {"$eq": {"$field": "posts.ID"}}
+            }
+          },
+          "projection": {"users.ID": 1, "posts.NAME": 1}
+        }"#,
+    )
+    .unwrap();
+
+    let rows = execute(&catalog, &request).unwrap();
+
+    assert!(rows.iter().any(|row| row["posts.NAME"] == "Stale"));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn chained_single_key_join_uses_a_fresh_foreign_index() {
     let root = catalog_with_many_indexed_posts_and_comments();
     let catalog = Catalog::from_path(&root).unwrap();
