@@ -38,10 +38,11 @@ pub fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, J
         return Ok(output);
     }
 
-    let large_join = matches!(
-        join_strategy::choose(left_records.len(), right_records.len(), false),
-        join_strategy::JoinStrategy::Hash
-    );
+    let large_join = !catalog.is_historical()
+        && matches!(
+            join_strategy::choose(left_records.len(), right_records.len(), false),
+            join_strategy::JoinStrategy::Hash
+        );
     let left_ordered = if large_join {
         join_index::load_ordered_fields(catalog, &request.from, &local_fields)
     } else {

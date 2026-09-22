@@ -4,6 +4,14 @@ use std::path::Path;
 use tiny_http::Request;
 
 pub(super) fn response(request: &mut Request, dbf_path: &Path) -> HttpResponse {
+    response_with_path(request, Some(dbf_path))
+}
+
+pub(super) fn response_for_snapshot(request: &mut Request) -> HttpResponse {
+    response_with_path(request, None)
+}
+
+fn response_with_path(request: &mut Request, dbf_path: Option<&Path>) -> HttpResponse {
     let body = match read_json_body(request, "QUERY /explain", true) {
         Ok(body) => body,
         Err(response) => return response,
@@ -14,7 +22,11 @@ pub(super) fn response(request: &mut Request, dbf_path: &Path) -> HttpResponse {
             return json_response(422, error("invalid_query", &query_error.to_string()), true);
         }
     };
-    match query::explain_query_at(dbf_path, &query) {
+    let plan = match dbf_path {
+        Some(dbf_path) => query::explain_query_at(dbf_path, &query),
+        None => Ok(query::QueryPlan::TableScan),
+    };
+    match plan {
         Ok(plan) => json_response(200, serde_json::json!({"plan": plan}), true),
         Err(query_error) => {
             json_response(422, error("invalid_query", &query_error.to_string()), true)

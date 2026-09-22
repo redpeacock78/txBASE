@@ -38,6 +38,7 @@ The repository currently provides:
 - A durable catalog-journal commit ID for multi-table mutation transactions.
 - Persistent table-scoped MVCC snapshots for single-table mutations, with `mvcc list`, `mvcc read`, `mvcc row`, and `mvcc row-at` CLI commands.
 - Catalog-wide commit-level MVCC snapshots for all discovered tables, with `Catalog::from_path_at` and `mvcc catalog` CLI commands.
+- Catalog HTTP schema, named-table, query, stream, explain, and join reads can select one retained catalog image with `?at=<transaction ID>`; historical execution does not reuse current index sidecars and catalog mutations remain rejected.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - A public `DbfTransaction` API that exposes the same optimistic single-table snapshot, query, stale-source check, commit, and rollback boundary used by the HTTP transaction route.
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
@@ -67,7 +68,6 @@ The baseline intentionally does not include the following:
 - Worker/WASI-specific timeout, transport, cancellation, and asynchronous-storage semantics, and remote object-store adapters.
 - Independent row-retention policies, predicate locking, serializable conflict detection, and cross-table long-lived snapshot transactions.
 - Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
-- `$project`, final `$sort`, `$skip`, and final `$limit` beyond the bounded aggregation contract.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export.
 - Cloud object-storage adapters and retention policy.
@@ -83,7 +83,6 @@ This phase keeps the database local and makes its operational boundary useful be
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
 - Worker/WASI-specific `AsyncQueryStream` implementations and host-specific asynchronous object-table adapters.
-- Catalog-wide MVCC snapshots and independently visible multi-record reads.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
 - Read-only WAL inspection.
@@ -103,6 +102,12 @@ independent named-table HTTP mutations that reuse the single-table persistence b
 
 It provides catalog-wide commit-level MVCC visibility through a full image of every discovered
 table at each successful catalog transaction.
+
+The catalog HTTP server exposes that visibility as one-request historical reads with `at` across
+schema, named-table records, query, stream, explain, and join routes.
+
+The selector does not create a long-lived transaction, and historical execution does not reuse
+current index sidecars.
 
 The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact scalar and compound equality, compound equality-prefix and range candidate lookup, equality-prefix compound range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 

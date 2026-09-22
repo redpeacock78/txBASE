@@ -73,6 +73,27 @@ Unknown fields, malformed JSON, unsupported update operators, and invalid field 
 
 `DELETE` is a logical DBF deletion.
 
+### Historical catalog reads
+
+Catalog read routes accept an optional `at` query parameter with a positive committed catalog
+transaction ID.
+
+The parameter applies to `GET` and `HEAD /catalog`, named-table record reads, named-table
+`QUERY` routes including streams and explain, and `QUERY /join`.
+
+Every table read by one request comes from the same retained catalog image.
+
+Historical query and join execution does not use current index sidecars, so historical explain
+responses use a table-scan plan.
+
+`at` is not a long-lived session or a row-level transaction.
+
+Catalog mutations with `at` return `405`; zero, malformed, or repeated values return `400`; an
+ID that is not a retained committed catalog snapshot returns `422`.
+
+The parameter is not accepted by `/cdc`, whose `after` and `limit` parameters read the current
+CDC sidecar, and it is not part of the single-table server.
+
 The physical record number is not reused by the current mutation layer.
 
 Successful `GET /records` and `GET /records/{id}` responses expose a strong `ETag` for the
@@ -254,7 +275,8 @@ The catalog server's `POST /transaction` accepts `/table/records` and
 commits the DBF and changed sidecars through a directory journal, and rolls back an incomplete
 prepare on the next catalog read. It provides cross-table atomic commit and crash recovery, and
 returns a durable catalog-journal transaction ID in JSON and `X-Txbase-Transaction-Id`. The ID is
-an ordering/identification boundary; it does not provide MVCC visibility.
+an ordering and identification boundary, and it can select a retained one-request HTTP snapshot
+with `at`; it does not create a long-lived transaction.
 
 The table lock serializes save paths, and a stale independently loaded table is rejected.
 

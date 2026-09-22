@@ -12,6 +12,17 @@ struct TransactionRequest {
 }
 
 pub(super) fn response(request: &mut Request, catalog: &Catalog) -> HttpResponse {
+    if catalog.is_historical() {
+        return json_response(
+            405,
+            error(
+                "historical_snapshot_read_only",
+                "historical catalog snapshots are read-only",
+            ),
+            false,
+        )
+        .with_header(header("Allow", "GET, HEAD, QUERY"));
+    }
     let if_match = request_header(request, "If-Match").map(str::to_owned);
     let if_none_match = request_header(request, "If-None-Match").map(str::to_owned);
     let body = match read_json_body(request, "POST /transaction", false) {

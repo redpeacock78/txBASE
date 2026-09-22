@@ -460,3 +460,130 @@ fn catalog_server_transaction_rolls_back_when_a_named_operation_fails() {
     );
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn catalog_server_reads_historical_snapshot_without_live_indexes() {
+    let root = temporary_catalog();
+    let users_path = root.join("users.dbf");
+    fs::write(&users_path, fixture()).unwrap();
+    IndexFile::build(&users_path, vec![IndexDefinition::named("by_age", "AGE")])
+        .unwrap()
+        .save(&users_path)
+        .unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+
+    let mut insert = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{"operations":[{"method":"POST","path":"/users/records","body":{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}}]}"#,
+    );
+    assert_eq!(
+        super::catalog_transaction::response(&mut insert, &catalog).status_code(),
+        StatusCode(200)
+    );
+    let mut delete = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{"operations":[{"method":"DELETE","path":"/users/records/3"}]}"#,
+    );
+    assert_eq!(
+        super::catalog_transaction::response(&mut delete, &catalog).status_code(),
+        StatusCode(200)
+    );
+
+    let historical = crate::catalog::Catalog::from_path_at(&root, 1).unwrap();
+    let schema_request = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/catalog")
+        .into();
+    let mut schema_body = String::new();
+    super::catalog::schema_response(&schema_request, &historical)
+        .into_reader()
+        .read_to_string(&mut schema_body)
+        .unwrap();
+    assert!(schema_body.contains(r#""transaction_id":1"#));
+
+    let get_record = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/users/records/3")
+        .into();
+    let mut record_body = String::new();
+    let record_response =
+        super::catalog::table_response(&get_record, "/users/records/3", &historical);
+    assert_eq!(record_response.status_code(), StatusCode(200));
+    record_response
+        .into_reader()
+        .read_to_string(&mut record_body)
+        .unwrap();
+    assert!(record_body.contains("Carol"));
+
+    let mut query = json_request(
+        "QUERY".parse().unwrap(),
+        "/users/records",
+        r#"{"filter":{"AGE":42}}"#,
+    );
+    let mut query_body = String::new();
+    let query_response =
+        super::catalog::table_query_response(&mut query, "/users/records", &historical);
+    assert_eq!(query_response.status_code(), StatusCode(200));
+    query_response
+        .into_reader()
+        .read_to_string(&mut query_body)
+        .unwrap();
+    assert!(query_body.contains("Carol"));
+
+    let mut explain = json_request(
+        "QUERY".parse().unwrap(),
+        "/users/explain",
+        r#"{"filter":{"AGE":42}}"#,
+    );
+    let mut explain_body = String::new();
+    let explain_response =
+        super::catalog::table_explain_response(&mut explain, "/users/explain", &historical);
+    assert_eq!(explain_response.status_code(), StatusCode(200));
+    explain_response
+        .into_reader()
+        .read_to_string(&mut explain_body)
+        .unwrap();
+    assert!(explain_body.contains(r#""kind":"table_scan""#));
+
+    let parsed = match super::catalog::catalog_for_url("/catalog?at=1", &Method::Get, &catalog) {
+        Ok(Some(parsed)) => parsed,
+        Ok(None) => panic!("snapshot parameter must create a historical catalog"),
+        Err(_) => panic!("committed snapshot must be accepted"),
+    };
+    assert_eq!(parsed.transaction_id().unwrap(), Some(1));
+    let invalid_zero =
+        match super::catalog::catalog_for_url("/catalog?at=0", &Method::Get, &catalog) {
+            Ok(_) => panic!("zero snapshot ID must be rejected"),
+            Err(response) => response,
+        };
+    assert_eq!(invalid_zero.status_code(), StatusCode(400));
+    let repeated =
+        match super::catalog::catalog_for_url("/catalog?at=1&at=1", &Method::Get, &catalog) {
+            Ok(_) => panic!("repeated snapshot ID must be rejected"),
+            Err(response) => response,
+        };
+    assert_eq!(repeated.status_code(), StatusCode(400));
+    let missing_value = match super::catalog::catalog_for_url("/catalog?at", &Method::Get, &catalog)
+    {
+        Ok(_) => panic!("missing snapshot ID must be rejected"),
+        Err(response) => response,
+    };
+    assert_eq!(missing_value.status_code(), StatusCode(400));
+    assert_eq!(
+        super::catalog::table_mutation_response(
+            &mut json_request(
+                Method::Post,
+                "/users/records",
+                r#"{"ID":4,"NAME":"never committed","AGE":43,"ACTIVE":true}"#,
+            ),
+            "/users/records",
+            &historical,
+        )
+        .status_code(),
+        StatusCode(405)
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}

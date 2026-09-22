@@ -109,16 +109,30 @@ and `X-Txbase-Transaction-Id` header. The response also returns the new catalog 
 `ETag`. Optional `If-Match` and `If-None-Match` conditions are evaluated under the catalog write
 lock. `If-Match` requires the current strong tag or `*`; a weak or non-matching value returns
 `412 Precondition Failed`. A matching strong or weak `If-None-Match`, or `*`, returns the same
-status without changing any DBF or sidecar. This is an ordering/identification boundary, not
-MVCC visibility.
+status without changing any DBF or sidecar. The transaction ID is also the selector for one-request
+historical reads on the catalog HTTP server. It does not create a long-lived transaction or
+provide row-level visibility.
 Each successful `POST /transaction` also publishes one `TXCC` event to `.txbase.catalog.cdc`.
 The event contains the physical-record state differences for every changed table in that catalog commit.
 The catalog journal applies or rolls back the CDC sidecar with the DBF, index, MVCC, and transaction-state targets.
 The catalog is discovered once at server startup, while each request loads the named table through
 the existing recovery path. Named-table mutations do not add or remove tables.
 
-Historical catalog images are currently exposed through the Rust API and CLI. The catalog HTTP
-server continues to serve the current image only.
+Historical catalog images are also exposed through the catalog HTTP server.
+
+`GET` or `HEAD /catalog`, `GET` or `HEAD /{table}/records[/{id}]`, `QUERY /{table}/records` and
+`/{table}/records/stream`, `QUERY /{table}/explain`, and `QUERY /join` accept
+`?at=<positive committed catalog transaction ID>`.
+
+The request reads one exact image of every table from that catalog commit.
+
+Historical query and join execution does not reuse current index sidecars, and historical explain
+responses report a table scan.
+
+`at` is read-only: a catalog mutation with the parameter returns `405`.
+
+Zero, malformed, or repeated `at` parameters return `400`; an ID that is not retained as a
+committed catalog snapshot returns `422`.
 
 An invalid DBF does not prevent directory discovery because discovery only identifies files.
 

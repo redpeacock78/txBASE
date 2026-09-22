@@ -66,6 +66,14 @@ txbase mvcc catalog gc path/to/database --keep 5
 
 All tables opened from one historical catalog have the same catalog commit ID and are read-only.
 
+The catalog HTTP server accepts that commit ID as `?at=<transaction ID>` on catalog schema,
+named-table records, query, stream, explain, and join reads.
+
+One request reads one exact catalog image.
+
+Historical HTTP queries and joins do not reuse current index sidecars, and catalog mutations with
+`at` are rejected.
+
 ### Row-level history
 
 The table MVCC sidecar also stores row changes inside the same prepare and commit records.
@@ -131,7 +139,10 @@ Table-local row history now has count-based retention through the existing full-
 
 The public table transaction provides optimistic stale-source rejection at commit, but it does not provide predicate locking, serializable conflict detection, row-level write-write merging, or a long-lived transaction object across CLI calls.
 
-The catalog transaction ID identifies one consistent multi-table image.
+The catalog transaction ID identifies one consistent multi-table image and can select that image
+for one catalog HTTP request.
+
+The HTTP selector does not create a long-lived transaction object.
 
 `Catalog::gc_mvcc` and the catalog GC command retain the newest positive `keep_last` count of
 catalog images.

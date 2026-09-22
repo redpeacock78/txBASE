@@ -38,18 +38,22 @@ pub(super) fn apply(
         .iter()
         .map(|field| unqualified_field(field, &spec.table).map(str::to_owned))
         .collect::<Option<Vec<_>>>();
-    let right_index = if let Some(index_fields) = index_fields.as_deref() {
-        let should_try = if matches!(&spec.kind, JoinType::Right) {
-            local_fields.len() == index_fields.len()
+    let right_index = if !catalog.is_historical() {
+        if let Some(index_fields) = index_fields.as_deref() {
+            let should_try = if matches!(&spec.kind, JoinType::Right) {
+                local_fields.len() == index_fields.len()
+            } else {
+                matches!(
+                    super::super::join_strategy::choose(left.len(), right.len(), false),
+                    super::super::join_strategy::JoinStrategy::Hash
+                )
+            };
+            should_try
+                .then(|| super::super::join_index::load_fields(catalog, &spec.table, index_fields))
+                .flatten()
         } else {
-            matches!(
-                super::super::join_strategy::choose(left.len(), right.len(), false),
-                super::super::join_strategy::JoinStrategy::Hash
-            )
-        };
-        should_try
-            .then(|| super::super::join_index::load_fields(catalog, &spec.table, index_fields))
-            .flatten()
+            None
+        }
     } else {
         None
     };

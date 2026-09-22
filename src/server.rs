@@ -134,6 +134,14 @@ fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
 
 #[cfg(test)]
 fn query_response(request: &mut Request, path: &str, table: &DbfTable) -> HttpResponse {
+    query_response_without_path(request, path, table)
+}
+
+pub(super) fn query_response_without_path(
+    request: &mut Request,
+    path: &str,
+    table: &DbfTable,
+) -> HttpResponse {
     query_response_with_path(request, path, table, None)
 }
 

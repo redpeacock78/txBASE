@@ -22,7 +22,7 @@
 | MongoDB の述語とクエリ計画 | [クエリ計画](query-planning.md) | 現在のサブセットと参照資料 |
 | 更新演算子とアトミック性 | [更新モデル](mutation-model.md) | 現在のサブセットと将来の境界 |
 | ローカル変更データ取得 | [変更データ取得](change-data-capture.md) | 現在の単一テーブルと明示的な複数テーブルカタログのコミット済みイベント境界、有界な読み取り専用HTTP転送、将来の配信と再生 |
-| 単一テーブルのスナップショットトランザクションと分離 | [スナップショットトランザクション](transactions.md)と[MVCC](mvcc.md) | 現在のオプティミスティックな境界と将来のserializable作業 |
+| 単一テーブルのスナップショットトランザクションと分離 | [スナップショットトランザクション](transactions.md)と[MVCC](mvcc.md) | 現在のオプティミスティックな境界、カタログHTTPの過去読み取り、将来のserializable作業 |
 | Firestore と Realtime Database の設計 | [Firebase モデル](firebase-model.md) | 参照資料 |
 | SQLite のテスト範囲と品質 | [テストと品質](testing-quality.md) | 現在のテストマップと参照資料 |
 | 契約からテストへの追跡 | [品質契約マトリクス](quality-matrix.md) | 現在の証拠マップ |
