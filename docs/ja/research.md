@@ -104,6 +104,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 - [MongoDB cursors](https://www.mongodb.com/docs/manual/core/cursors/)
 - [MongoDB `$group` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
+- [MongoDB `$unwind` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)
 - [MongoDB `$lookup` join stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/)
 
 ### Firebase

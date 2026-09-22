@@ -23,7 +23,21 @@ The query document can contain one terminal `$count` or `$distinct` stage, or on
 }
 ```
 
-The current aggregation boundary accepts zero or more `$match` stages followed by one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
+The current aggregation boundary accepts zero or more `$match` stages, followed by zero or more `$unwind` stages, and then one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
+
+`$unwind` uses the form `{"$unwind": "$FIELD"}` and accepts only a top-level field reference.
+
+Every input `$match` must precede the first `$unwind`, and multiple `$unwind` stages apply sequentially in their listed order.
+
+For an array field, `$unwind` emits one copy of the input record for each element in input array order and replaces the field with that element.
+
+Missing fields, explicit `null`, and empty arrays emit no records.
+
+A non-null, non-array field rejects the aggregate instead of being coerced to a one-element array.
+
+The total number of records emitted by all `$unwind` stages is capped at 10,000 before `$count`, `$distinct`, or `$group` runs.
+
+Dotted field paths, `preserveNullAndEmptyArrays`, `includeArrayIndex`, and other extended `$unwind` forms remain unsupported.
 
 Group output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, at most one `$skip`, and at most one final `$limit` stage.
 
@@ -127,3 +141,4 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 
 - [MongoDB `$group` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
+- [MongoDB `$unwind` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

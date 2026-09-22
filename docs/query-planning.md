@@ -165,7 +165,7 @@ The roadmap keeps index design separate from query syntax so a query document do
 The following require separate public contracts:
 
 1. Full expression evaluation and cost-based index choice with explicit missing, null, collation, and compound-range selectivity rules.
-2. Additional aggregation stages and accumulators beyond the current bounded group contract, with bounded memory behavior.
+2. Additional aggregation stages and accumulators beyond the current bounded aggregation contract, with bounded memory behavior.
 3. Full index-aware and cost-based merge join strategies with broader join semantics.
 4. Host-specific scheduling, backpressure, timeout, cancellation, and transport implementations for `AsyncQueryStream`.
 5. Differential tests against a small reference evaluator.

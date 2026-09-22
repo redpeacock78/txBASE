@@ -37,6 +37,8 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
     }
 
     let mut matches = Vec::new();
+    let mut unwinds = Vec::new();
+    let mut unwind_seen = false;
     let mut group_matches = Vec::new();
     let mut group = None;
     let mut count = None;
@@ -53,12 +55,18 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
         }
         let (operator, value) = stage.iter().next().expect("one aggregate operator");
         match operator.as_str() {
-            "$match" if group.is_none() && count.is_none() && distinct.is_none() => {
+            "$match"
+                if group.is_none() && count.is_none() && distinct.is_none() && !unwind_seen =>
+            {
                 let filter = value.as_object().ok_or_else(|| {
                     QueryError::Invalid(format!("aggregate stage {index}.$match must be an object"))
                 })?;
                 validation::validate_filter(filter, &format!("aggregate[{index}].$match"))?;
                 matches.push(filter.clone());
+            }
+            "$unwind" if group.is_none() && count.is_none() && distinct.is_none() => {
+                unwinds.push(parse_unwind(value, index)?);
+                unwind_seen = true;
             }
             "$match"
                 if group.is_some()
@@ -135,6 +143,11 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
                     "aggregate supports only one terminal $distinct stage".into(),
                 ));
             }
+            "$unwind" => {
+                return Err(QueryError::Invalid(format!(
+                    "aggregate stage {index}.$unwind must follow input $match stages and precede $group, $count, or $distinct"
+                )));
+            }
             _ => {
                 return Err(QueryError::Invalid(format!(
                     "unsupported aggregate stage {operator}"
@@ -150,6 +163,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
     }
     Ok(AggregationPlan {
         matches,
+        unwinds,
         group_matches,
         group,
         count,
@@ -159,6 +173,21 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
         skip,
         limit,
     })
+}
+
+fn parse_unwind(value: &Value, index: usize) -> Result<String, QueryError> {
+    let Some(value) = value.as_str() else {
+        return Err(QueryError::Invalid(format!(
+            "aggregate stage {index}.$unwind must be a field reference"
+        )));
+    };
+    let field = field_reference(value, &format!("aggregate stage {index}.$unwind"))?;
+    if field.contains('.') {
+        return Err(QueryError::Invalid(format!(
+            "aggregate stage {index}.$unwind must reference a top-level field"
+        )));
+    }
+    Ok(field)
 }
 
 fn parse_count(value: &Value, index: usize) -> Result<String, QueryError> {

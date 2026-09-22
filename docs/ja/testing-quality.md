@@ -154,6 +154,12 @@ DBF、memo、WAL、JSON入力について決定的なコーパスを保ちます
 
 `src/query/aggregation_tests/accumulator_tests.rs::groups_comparable_extremes_and_returns_null_for_missing_values`は`$min`と`$max`を検査します。
 
+`src/query/aggregation_tests/pipeline_tests.rs::unwinds_array_values_before_grouping`は、配列展開、空配列、欠損フィールド、明示的な`null`を検査します。
+
+`src/query/aggregation_tests/pipeline_tests.rs::preserves_unwind_order_for_array_accumulators`は、`$unwind`後の入力順と配列順を検査します。
+
+`src/query/aggregation_tests/pipeline_tests.rs::rejects_non_array_unwind_values`と`bounds_unwound_records`は、スカラー値の拒否と10,000件の展開上限を検査します。
+
 `src/query/join_strategy.rs::chooses_nested_loop_for_small_join_inputs`、`chooses_hash_for_large_unindexed_inputs`、`chooses_index_nested_loop_when_the_outer_side_is_small`は、有界な等値結合コストの選択を検査します。
 `chooses_hash_when_index_fanout_is_expensive`と`chooses_merge_for_large_dual_indexed_inputs`も同じ選択を検査します。
 

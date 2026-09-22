@@ -23,7 +23,21 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 }
 ```
 
-現在の集約境界は、0個以上の`$match`の後に終端`$count`、終端`$distinct`、または`$group`を1つだけ受け付けます。
+現在の集約境界は、0個以上の`$match`、0個以上の`$unwind`、終端`$count`、終端`$distinct`、または`$group`をこの順序で受け付けます。
+
+`$unwind`は`{"$unwind": "$FIELD"}`の形式を使い、トップレベルのフィールド参照だけを受け付けます。
+
+入力に対するすべての`$match`は最初の`$unwind`より前に置き、複数の`$unwind`は記載順に順番に適用します。
+
+配列フィールドに対する`$unwind`は、入力配列の順序で要素ごとに入力レコードのコピーを1つ出力し、対象フィールドを要素で置き換えます。
+
+存在しないフィールド、明示的な`null`、空配列はレコードを出力しません。
+
+`null`でない配列以外のフィールドは、1要素配列へ変換せず集約を拒否します。
+
+すべての`$unwind`が出力するレコード数の合計は、`$count`、`$distinct`、または`$group`の前に10,000件までに制限します。
+
+ドット区切りのフィールドパス、`preserveNullAndEmptyArrays`、`includeArrayIndex`、その他の拡張された`$unwind`形式は未サポートです。
 
 グループ出力には0個以上の`$match`を置けます。
 その後に任意の`$project`を1つ、最後の`$sort`、`$skip`、`$limit`をそれぞれ最大1つ置けます。
@@ -128,3 +142,4 @@ txBASEはMongoDBの完全なパイプライン互換性を主張せず、その�
 
 - [MongoDB の`$group`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
 - [MongoDB の`$count`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
+- [MongoDB の`$unwind`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

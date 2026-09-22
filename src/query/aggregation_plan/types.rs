@@ -11,6 +11,7 @@ pub struct GroupSpec {
 #[derive(Debug, Clone)]
 pub struct AggregationPlan {
     pub matches: Vec<Map<String, Value>>,
+    pub unwinds: Vec<String>,
     pub group_matches: Vec<Map<String, Value>>,
     pub group: Option<GroupSpec>,
     pub count: Option<String>,

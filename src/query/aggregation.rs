@@ -9,6 +9,8 @@ use std::collections::{BTreeMap, btree_map::Entry};
 mod accumulators;
 
 pub(super) const MAX_GROUPS: usize = 10_000;
+// ponytail: bound expanded input rows at the existing query scale; add streaming or spill-to-disk only if larger reports become required.
+pub(super) const MAX_UNWOUND_RECORDS: usize = 10_000;
 // ponytail: bound distinct materialization at the existing query scale; add spill-to-disk only if larger reports become required.
 pub(super) const MAX_DISTINCT_VALUES: usize = 10_000;
 // ponytail: bound group-array materialization globally; add spill-to-disk only if larger reports become required.
@@ -31,8 +33,25 @@ pub(super) fn execute(
         records = filtered;
     }
 
+    if plan.unwinds.is_empty() {
+        return execute_materialized(records, &plan);
+    }
+
+    let mut records = records.into_iter().cloned().collect::<Vec<_>>();
+    let mut unwound_records = 0;
+    for field in &plan.unwinds {
+        records = unwind_records(records, field, &mut unwound_records)?;
+    }
+    execute_materialized(records.iter(), &plan)
+}
+
+fn execute_materialized<'a>(
+    records: impl IntoIterator<Item = &'a DbfRecord>,
+    plan: &aggregation_plan::AggregationPlan,
+) -> Result<Vec<Value>, QueryError> {
+    let records = records.into_iter();
     if let Some(field) = &plan.count {
-        let count = u64::try_from(records.len())
+        let count = u64::try_from(records.count())
             .map_err(|_| QueryError::Invalid("aggregate count does not fit u64".into()))?;
         let mut output = Map::new();
         output.insert(field.clone(), Value::Number(count.into()));
@@ -129,6 +148,41 @@ pub(super) fn execute(
         output.truncate(limit.try_into().unwrap_or(usize::MAX));
     }
     Ok(output)
+}
+
+fn unwind_records(
+    records: Vec<DbfRecord>,
+    field: &str,
+    unwound_records: &mut usize,
+) -> Result<Vec<DbfRecord>, QueryError> {
+    let mut expanded = Vec::new();
+    for record in records {
+        let Some(value) = record.values.get(field).cloned() else {
+            continue;
+        };
+        match value {
+            Value::Array(values) => {
+                for value in values {
+                    if *unwound_records >= MAX_UNWOUND_RECORDS {
+                        return Err(QueryError::Invalid(format!(
+                            "aggregate unwound record count exceeds {MAX_UNWOUND_RECORDS}"
+                        )));
+                    }
+                    let mut record = record.clone();
+                    record.values.insert(field.to_owned(), value);
+                    expanded.push(record);
+                    *unwound_records += 1;
+                }
+            }
+            Value::Null => {}
+            _ => {
+                return Err(QueryError::Invalid(format!(
+                    "aggregate $unwind field {field} must be an array"
+                )));
+            }
+        }
+    }
+    Ok(expanded)
 }
 
 fn compare_output_values(left: &Value, right: &Value, sort: &IndexMap<String, i8>) -> Ordering {

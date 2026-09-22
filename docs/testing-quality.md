@@ -153,6 +153,12 @@ A delta with the wrong base must be rejected.
 
 `src/query/aggregation_tests/accumulator_tests.rs::groups_comparable_extremes_and_returns_null_for_missing_values` covers `$min` and `$max`.
 
+`src/query/aggregation_tests/pipeline_tests.rs::unwinds_array_values_before_grouping` covers array expansion, empty arrays, missing fields, and explicit `null` values.
+
+`src/query/aggregation_tests/pipeline_tests.rs::preserves_unwind_order_for_array_accumulators` covers input and array order across `$unwind`.
+
+`src/query/aggregation_tests/pipeline_tests.rs::rejects_non_array_unwind_values` and `bounds_unwound_records` cover strict scalar rejection and the 10,000-record expansion bound.
+
 `src/query/join_strategy.rs::chooses_nested_loop_for_small_join_inputs`, `chooses_hash_for_large_unindexed_inputs`, `chooses_index_nested_loop_when_the_outer_side_is_small`, `chooses_hash_when_index_fanout_is_expensive`, and `chooses_merge_for_large_dual_indexed_inputs` cover the bounded equality-join cost choices.
 
 `src/query/join_merge.rs::scans_equal_key_runs_and_maps_them_to_outer_positions` covers the linear ordered-key merge scan.
