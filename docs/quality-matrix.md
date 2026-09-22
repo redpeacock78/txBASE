@@ -21,12 +21,13 @@ The authoritative CI command is:
 bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
+cargo check --lib --target wasm32-unknown-unknown
 cargo build --bin txbase
 bash tests/e2e/cli_lifecycle.sh
 cargo test --all-targets --all-features
 ```
 
-The workflow runs that gate on Ubuntu, macOS, and Windows.
+The native workflow runs that gate on Ubuntu, macOS, and Windows, and a separate Ubuntu job compiles the library for `wasm32-unknown-unknown`.
 
 ## Current contracts
 
@@ -49,6 +50,7 @@ The workflow runs that gate on Ubuntu, macOS, and Windows.
 | MVCC-004 | Table MVCC stores row changes in the same durable prepare/commit records, exposes retained row history and committed-snapshot row reads, separates physical record identities with epochs after layout changes, and rebuilds a row-history baseline during full-image GC. | `src/dbf/mvcc.rs`; `src/dbf/row_mvcc.rs`; `src/dbf/types.rs`; `src/dbf/persistence.rs`; `src/dbf/maintenance.rs`; `src/dbf/wal.rs`; `src/cli/commands/mvcc.rs`; `tests/e2e/cli_lifecycle.sh`; `docs/mvcc.md`; `docs/dbf-compatibility.md` | `row_mvcc_tracks_changes_reads_deleted_versions_and_compacts_with_gc`; `row_mvcc_separates_physical_record_ids_after_pack`; `bash tests/e2e/cli_lifecycle.sh` | Boundary |
 | EDGE-001 | The local XBF object-store boundary writes immutable snapshots and pending WAL objects, publishes one versioned manifest through compare-and-swap, rejects mixed generations, recovers interrupted publication, supports idempotent retry, persists through a filesystem backend, and removes stale unreferenced objects without requiring a cloud service. | `src/edge/object_store.rs`; `src/edge/store.rs`; `src/edge/memory.rs`; `src/edge/filesystem.rs`; `src/xbf/`; `docs/edge-storage.md` | `commits_and_reads_one_consistent_xbf_generation`; `compare_and_swap_rejects_concurrent_writers_and_allows_idempotent_retry`; `rejects_a_manifest_that_points_to_a_different_snapshot_generation`; `recovers_after_snapshot_and_wal_publication_before_manifest_cas`; `filesystem_store_persists_objects_and_rejects_unsafe_keys`; `filesystem_object_table_reopens_and_recovers_an_interrupted_commit` | Boundary |
 | EDGE-002 | The local object-table manifest records committed generation history, `read_at` reads a retained immutable generation without mixing snapshots, and explicit count-based retention atomically compacts the manifest before removing older snapshot objects; cloud-specific retention remains outside the boundary. | `src/edge/object_store.rs`; `src/edge/tests.rs`; `docs/edge-storage.md` | `commits_and_reads_one_consistent_xbf_generation` checks history, historical read, orphan cleanup, and retention; `filesystem_object_table_persists_history_and_retention` checks reopen and retention persistence | Boundary |
+| WASM-001 | The host-independent WASM core opens DBF bytes, executes the shared bounded query contract, applies the shared `POST`, `PUT`, `PATCH`, and `DELETE` operation contract, returns a new DBF snapshot, and exposes the same boundary through `wasm-bindgen`; it does not provide persistence or host scheduling. | `src/wasm.rs`; `src/dbf/parser.rs`; `src/query.rs`; `src/dbf/mutation.rs`; `.github/workflows/ci.yml`; `docs/wasm.md` | `wasm_core_reuses_query_and_mutation_contracts`; `cargo check --lib --target wasm32-unknown-unknown` | Boundary |
 | CLI-001 | Backup and restore validate a DBF source and copy the DBF plus supported sidecars through the sidecar-aware maintenance boundary. | `src/cli.rs`; `src/dbf/maintenance.rs`; `src/dbf/tests/maintenance.rs`; `tests/cli.rs`; `docs/dbf-compatibility.md` | `backup_and_restore_cli_copy_a_dbf`; `copy_table_files_preserves_dbf_and_memo_sidecar`; `copy_table_files_preserves_transaction_state`; `copy_table_files_preserves_a_valid_index_sidecar` | Current |
 | CLI-002 | Schema, verify, pack, and recall commands parse their CLI arguments and operate on a validated DBF through the public binary path; verify also validates any `.txidx` sidecar. | `src/cli.rs`; `src/dbf/parser.rs`; `src/dbf/persistence.rs`; `src/index.rs`; `tests/cli.rs`; `docs/dbf-compatibility.md` | `dbf_maintenance_cli_commands_operate_on_a_dbf`; `verify_cli_rejects_a_stale_index_sidecar` | Current |
 | CLI-003 | XBF import and representability reporting operate through the public binary path; direct export rejects a non-null constraint that DBF cannot preserve, while schema-preserving export retains the active DBF records. | `src/cli.rs`; `src/xbf/`; `src/dbf/schema_export.rs`; `tests/cli.rs`; `docs/xbf.md` | `xbf_cli_import_report_and_export_a_dbf` | Current |
@@ -98,7 +100,7 @@ The following topics have documentation or design notes but do not have a curren
 - a full cost-based planner, full index-aware or cost-based merge join strategies, and aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`;
 - independent row-retention policies, predicate locking, serializable conflict detection, and long-lived snapshot transactions;
 - locale-aware CJK collation and broader upstream CJK fixtures;
-- Strict multi-file reader atomicity for schema-preserving XBF-to-DBF export, cloud object-storage adapters and retention policy, WASM hosting, and distributed replication.
+- Strict multi-file reader atomicity for schema-preserving XBF-to-DBF export, cloud object-storage adapters and retention policy, worker/WASI runtime adapters and asynchronous WASM storage, and distributed replication.
 
 Before one of these becomes current, add its public contract, malformed-input behavior, crash or retry behavior, fixture or deterministic test, and a row here.
 

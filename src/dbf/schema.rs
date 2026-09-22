@@ -1,13 +1,17 @@
-use super::{
-    DbfError, DbfTable, encoding_name, schema_metadata::SchemaMetadata, types::ForeignKey,
-};
+#[cfg(not(target_arch = "wasm32"))]
+use super::schema_metadata::SchemaMetadata;
+#[cfg(not(target_arch = "wasm32"))]
+use super::types::ForeignKey;
+use super::{DbfError, DbfTable, encoding_name};
 use serde_json::{Value, json};
 
 impl DbfTable {
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn effective_encoding_override(&self) -> Option<&str> {
         self.encoding_override.as_deref()
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn foreign_keys(&self) -> Result<Vec<ForeignKey>, DbfError> {
         self.schema
             .as_ref()

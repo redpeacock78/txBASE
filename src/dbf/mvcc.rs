@@ -32,6 +32,7 @@ pub(crate) struct Snapshot {
     pub(crate) row_changes: Option<Vec<RowChange>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) type CatalogSnapshotParts = (Vec<u8>, Option<(u8, Vec<u8>)>, Option<Vec<u8>>);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -204,6 +205,7 @@ impl DbfTable {
         Self::from_mvcc_snapshot(transaction_id, snapshot)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn from_catalog_snapshot(
         dbf: &[u8],
         memo: Option<(u8, Vec<u8>)>,
@@ -268,6 +270,7 @@ impl DbfTable {
         gc(path, keep_last)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn catalog_snapshot_parts(
         &self,
         path: &Path,

@@ -9,10 +9,15 @@ use std::fmt::{self, Display, Formatter};
 
 mod aggregation;
 mod aggregation_plan;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod join;
+#[cfg(not(target_arch = "wasm32"))]
 mod join_index;
+#[cfg(not(target_arch = "wasm32"))]
 mod join_merge;
+#[cfg(not(target_arch = "wasm32"))]
 mod join_nested;
+#[cfg(not(target_arch = "wasm32"))]
 mod join_strategy;
 mod ordering;
 mod pagination;
@@ -229,11 +234,12 @@ mod stream_tests;
 #[cfg(test)]
 mod aggregation_tests;
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod join_tests;
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod join_index_tests;
 
 mod expression;
+#[cfg(not(target_arch = "wasm32"))]
 mod join_pipeline;

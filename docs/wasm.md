@@ -1,8 +1,28 @@
 # WASM and worker host boundary
 
-This document isolates the future WASM and edge-runtime boundary.
+This document isolates the WASM and edge-runtime boundary.
 
-The design is not a current txBASE feature.
+The repository now contains a host-independent DBF core slice. Worker and
+asynchronous-storage adapters remain future work.
+
+## 0. Current implementation slice
+
+`wasm::WasmCore` owns an in-memory `DbfTable` and reuses the native parser,
+query validator, query executor, and mutation methods.
+
+Its versioned boundary currently provides:
+
+- `ABI_VERSION = 1`;
+- `open_dbf` and `snapshot` for byte-in/byte-out DBF state;
+- `query_json` for the existing bounded query document;
+- `apply_operation_json` for the existing `POST`, `PUT`, `PATCH`, and `DELETE`
+  operation IR;
+- a `wasm-bindgen` `WasmDatabase` wrapper on `wasm32` with the same methods;
+- a native contract test and a CI `wasm32-unknown-unknown` library check.
+
+The core does not write files, access a network, schedule tasks, or commit a
+transaction. The host must persist the returned snapshot and provide
+serialization, retry, and concurrency control.
 
 ## 1. Core boundary
 
@@ -75,15 +95,20 @@ The core owns the meaning of a committed database state.
 
 ## 6. Acceptance conditions
 
-An initial WASM slice is complete only when it has:
+The current core slice meets the following initial conditions:
 
-- a versioned host ABI;
+- a versioned host-neutral ABI;
 - one native host fixture;
-- one worker or WASI smoke test;
-- identical query and mutation results across the native and WASM paths;
-- explicit handling for storage, timeout, cancellation, and malformed-input errors.
+- identical query and mutation implementation paths across native and WASM;
+- explicit malformed-input errors at the byte and JSON boundaries.
 
-Until then, WASM hosting remains future work.
+The following conditions remain before calling a worker or WASI host complete:
+
+- one worker or WASI runtime smoke test;
+- explicit storage, timeout, and cancellation error mapping;
+- an asynchronous object-store adapter with conditional publication.
+
+Until then, WASM hosting is a current core boundary with future host adapters.
 
 ## 7. Explicit non-goals
 
@@ -102,4 +127,4 @@ Those would be separate products and would obscure the shared core contract.
 The WebAssembly and WASI specifications define the core module and host-interface vocabulary.
 The Component Model and the Cloudflare Workers and Node.js pages are implementation references for possible hosts, not txBASE compatibility commitments.
 
-There is no implementation or CI path for WASM in the current repository, so this document makes no claim that the native codec, query, mutation, or recovery behavior already runs in a WASM host.
+The repository has a WASM core implementation and target compile check, but it does not claim that a worker or WASI runtime, asynchronous storage, or native recovery path is already supported.

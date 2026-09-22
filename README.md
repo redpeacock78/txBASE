@@ -28,6 +28,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - XBF v1 snapshots and representability-aware DBF export.
 - A deterministic XBF object-store manifest boundary with generation CAS and recovery, backed by memory or a durable filesystem store.
 - Explicit CJK codec selection without changing legacy DBF bytes.
+- A host-independent DBF WASM core with the shared bounded query and mutation contracts.
 
 The detailed compatibility and behavior contracts live in the [documentation index](docs/README.md).
 
@@ -219,6 +220,7 @@ bun run lint:docs
 bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
+cargo check --lib --target wasm32-unknown-unknown
 cargo test --all-targets --all-features
 ```
 
@@ -232,6 +234,7 @@ src/catalog/mvcc.rs Catalog-wide commit-level historical snapshots
 src/index.rs        External scalar and compound-key index sidecar lifecycle
 src/query.rs        JSON query execution and filter evaluation
 src/query/          Planner, ordering, validation, bounded joins, and query tests
+src/wasm.rs         Host-independent DBF WASM boundary and bindings
 src/server.rs       HTTP routing, QUERY validation, and shared responses
 src/server/         Record, catalog, ETag, explain, and transaction routes
 src/transaction/    File or memory WAL and snapshot transactions
@@ -282,6 +285,7 @@ The roadmap still leaves the following areas as future work:
 - Broader upstream CJK fixtures.
 - Strict multi-file reader atomicity for XBF export.
 - Cloud object-storage adapters and retention policy.
+- Worker/WASI runtime adapters and asynchronous WASM storage.
 - Distributed replication.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance conditions and [docs/research.md](docs/research.md) for the source and fixture policy.

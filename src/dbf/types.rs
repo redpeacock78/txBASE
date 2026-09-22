@@ -206,6 +206,7 @@ pub struct DbfTable {
     pub(super) layout_changed: bool,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) struct PreparedSnapshot {
     pub(crate) dbf: Vec<u8>,
     pub(crate) memo: Option<(PathBuf, Vec<u8>)>,

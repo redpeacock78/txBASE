@@ -53,6 +53,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with scalar and compound equality, compound equality-prefix, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on record counts, index traversal, and sort work with non-selective-index table-scan fallback, path-aware planning, and DBF/memo freshness checks.
 - Durable table-local row history stored with MVCC prepare/commit records, epoch-separated physical row IDs, retained row reads, and baseline reconstruction during full-image GC.
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection, index-sidecar recovery, and DBF-read recovery.
+- A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and mutation contracts, a `wasm-bindgen` wrapper, and a `wasm32-unknown-unknown` CI compile check.
 
 The baseline intentionally does not include the following:
 
@@ -268,7 +269,7 @@ The range-oriented local storage abstraction is a useful starting point, but rem
 ### Candidate scope
 
 - A storage-backend redesign for remote object stores.
-- A WASM-compatible core.
+- Worker or WASI host adapters for the current WASM core.
 - An R2 or other cloud object-storage adapter.
 - Immutable pages and page-level manifests.
 - Cloud generation snapshots and retention.
@@ -278,6 +279,9 @@ It defines the manifest schema and committed-generation history, generation comp
 The filesystem backend persists the same contract under one directory with exclusive object creation, a store lock, and synced temporary manifest replacement.
 
 The remaining cloud boundary needs a consistency contract, service-specific retention and orphan-page cleanup policy, retry behavior, and a remote adapter fixture.
+
+The current WASM slice exposes DBF bytes, query execution, and record mutation through the shared implementation.
+It does not yet persist asynchronously, publish object-store generations, or expose a worker or WASI runtime adapter.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 

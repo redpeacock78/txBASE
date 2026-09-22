@@ -11,6 +11,7 @@ impl IndexFile {
         })
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn has_exact_fields(&self, fields: &[&str]) -> bool {
         self.indexes.iter().any(|index| {
             index.definition.fields.len() == fields.len()
@@ -36,6 +37,7 @@ impl IndexFile {
         Some(records / distinct_keys + remainder)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn equality_fanout_estimate(&self, fields: &[&str]) -> Option<usize> {
         let index = self.indexes.iter().find(|index| {
             index.definition.fields.len() == fields.len()
@@ -116,6 +118,7 @@ impl IndexFile {
         )))
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn lookup_eq_for_fields(
         &self,
         fields: &[&str],
@@ -196,6 +199,7 @@ fn exact_equality_value(condition: &Value) -> Option<&Value> {
     object.get("$eq")
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn is_joinable_key(key: &IndexKey) -> bool {
     match key {
         IndexKey::Scalar(Value::Bool(_) | Value::Number(_) | Value::String(_)) => true,

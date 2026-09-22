@@ -73,12 +73,18 @@ use memo::{
     binary_value, empty_memo_value, encode_memo_pointer, find_memo_path, is_sidecar_field,
     memo_index, sidecar_update, storage_value_without_sidecar,
 };
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) use types::PreparedSnapshot;
 pub(super) use types::PreparedStorage;
 pub use types::{DbfError, DbfHeader, DbfRecord, DbfTable, FieldDescriptor, RowId, RowVersion};
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) use types::{
     ForeignKey, ForeignKeyAction, MemoFile, MemoFormat, MemoSnapshot, MemoUpdate, NullFlagBits,
     PersistedState,
+};
+#[cfg(target_arch = "wasm32")]
+pub(crate) use types::{
+    MemoFile, MemoFormat, MemoSnapshot, MemoUpdate, NullFlagBits, PersistedState,
 };
 #[cfg(test)]
 use wal::{

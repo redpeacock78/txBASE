@@ -70,6 +70,7 @@ pub(super) fn next_transaction_id(current: Option<u64>) -> Result<u64, DbfError>
 }
 
 impl DbfTable {
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn prepare_snapshot(&mut self, path: &Path) -> Result<PreparedSnapshot, DbfError> {
         self.bind_schema_if_present(path)?;
         self.ensure_source_current(path)?;
