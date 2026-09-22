@@ -33,6 +33,7 @@ mod mutation_memo;
 #[cfg(test)]
 mod mutation_model_tests;
 mod mvcc;
+mod mvcc_codec;
 #[cfg(test)]
 mod mvcc_tests;
 mod parser;

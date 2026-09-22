@@ -1,3 +1,6 @@
+use super::mvcc::Record;
+use super::mvcc_codec::{decode_record, encode_row_history};
+use super::row_mvcc::RowChange;
 use super::{DbfFieldSpec, DbfTable, RowId};
 use serde_json::json;
 use std::fs;
@@ -296,4 +299,45 @@ fn row_mvcc_separates_physical_record_ids_after_pack() {
         let _ = fs::remove_file(path.with_extension(extension));
     }
     fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn mvcc_row_history_codec_rejects_empty_and_trailing_records() {
+    let change = RowChange {
+        epoch: 1,
+        record_number: 1,
+        deleted: false,
+        values: json!({"ID": 1}).as_object().unwrap().clone(),
+    };
+    let payload = encode_row_history(7, std::slice::from_ref(&change)).unwrap();
+    match decode_record(&payload).unwrap() {
+        Record::RowHistory {
+            transaction_id,
+            changes,
+        } => {
+            assert_eq!(transaction_id, 7);
+            assert_eq!(changes, vec![change]);
+        }
+        record => panic!("expected row history, got {record:?}"),
+    }
+
+    assert!(encode_row_history(7, &[]).is_err());
+
+    let mut empty = payload[..18].to_vec();
+    empty[14..18].copy_from_slice(&0u32.to_le_bytes());
+    let error = decode_record(&empty).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("row-history record must contain a change")
+    );
+
+    let mut trailing = payload;
+    trailing.push(0);
+    let error = decode_record(&trailing).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("row-history record has trailing bytes")
+    );
 }
