@@ -1,4 +1,4 @@
-use super::{DbfError, DbfTable};
+use super::{DbfError, DbfTable, TableLock};
 use crate::query::{self, QueryError, QueryRequest};
 use crate::xbase::OperationIr;
 use serde_json::Value;
@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 pub struct DbfTransaction {
     path: PathBuf,
     table: DbfTable,
+    serializable_lock: Option<TableLock>,
 }
 
 impl DbfTransaction {
@@ -20,7 +21,26 @@ impl DbfTransaction {
     pub fn begin(path: impl AsRef<Path>) -> Result<Self, DbfError> {
         let path = path.as_ref().to_path_buf();
         let table = DbfTable::from_path(&path)?;
-        Ok(Self { path, table })
+        Ok(Self {
+            path,
+            table,
+            serializable_lock: None,
+        })
+    }
+
+    /// Opens a transaction that holds the table's exclusive lock until commit
+    /// or rollback, providing a coarse-grained serializable boundary.
+    pub fn begin_serializable(path: impl AsRef<Path>) -> Result<Self, DbfError> {
+        let path = path.as_ref().to_path_buf();
+        let lock = TableLock::acquire(&path)?;
+        DbfTable::recover_wal_with_encoding(&path, None)?;
+        let _ = super::schema_export::recover_schema_export_locked(&path)?;
+        let table = super::load_path_with_lock_held(&path)?;
+        Ok(Self {
+            path,
+            table,
+            serializable_lock: Some(lock),
+        })
     }
 
     /// Creates a transaction from an already loaded current table.
@@ -29,6 +49,7 @@ impl DbfTransaction {
         Self {
             path: path.as_ref().to_path_buf(),
             table,
+            serializable_lock: None,
         }
     }
 
@@ -44,7 +65,11 @@ impl DbfTransaction {
 
     /// Commits all applied mutations through one WAL-backed table save.
     pub fn commit(mut self) -> Result<DbfTable, DbfError> {
-        self.table.save_with_wal(&self.path)?;
+        if let Some(lock) = self.serializable_lock.take() {
+            self.table.save_with_wal_locked(&self.path, &lock)?;
+        } else {
+            self.table.save_with_wal(&self.path)?;
+        }
         Ok(self.table)
     }
 
@@ -54,7 +79,11 @@ impl DbfTransaction {
     /// Inserts, layout changes, schema changes, and different changes to the
     /// same row remain conflicts; an identical resulting row is a no-op.
     pub fn commit_with_row_merge(mut self) -> Result<DbfTable, DbfError> {
-        self.table.save_with_row_merge(&self.path)?;
+        if let Some(lock) = self.serializable_lock.take() {
+            self.table.save_with_row_merge_locked(&self.path, &lock)?;
+        } else {
+            self.table.save_with_row_merge(&self.path)?;
+        }
         Ok(self.table)
     }
 

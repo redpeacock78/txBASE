@@ -2,8 +2,10 @@ use super::DbfTable;
 use crate::dbf::DbfTransaction;
 use crate::query::QueryExecutor;
 use crate::xbase::{OperationIr, OperationMethod};
+use fs2::FileExt;
 use serde_json::json;
 use std::fs;
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 fn fixture() -> Vec<u8> {
@@ -87,6 +89,51 @@ fn snapshot_transaction_queries_private_changes_and_commits_once() {
     assert_eq!(
         DbfTable::from_path(&destination).unwrap().active_json()[0]["NAME"],
         "committed"
+    );
+    cleanup(&destination);
+}
+
+#[test]
+fn serializable_transaction_holds_and_releases_the_exclusive_table_lock() {
+    let destination = path("serializable-lock");
+    cleanup(&destination);
+    fs::write(&destination, fixture()).unwrap();
+
+    let transaction = DbfTransaction::begin_serializable(&destination).unwrap();
+    let probe = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(destination.with_extension("txbase.lock"))
+        .unwrap();
+    assert!(probe.try_lock_exclusive().is_err());
+    drop(probe);
+
+    transaction.rollback();
+
+    let probe = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(destination.with_extension("txbase.lock"))
+        .unwrap();
+    probe.try_lock_exclusive().unwrap();
+    probe.unlock().unwrap();
+    drop(probe);
+    cleanup(&destination);
+}
+
+#[test]
+fn serializable_transaction_commits_through_the_held_lock() {
+    let destination = path("serializable-commit");
+    cleanup(&destination);
+    fs::write(&destination, fixture()).unwrap();
+
+    let mut transaction = DbfTransaction::begin_serializable(&destination).unwrap();
+    transaction.apply(&patch("serializable")).unwrap();
+    transaction.commit().unwrap();
+
+    assert_eq!(
+        DbfTable::from_path(&destination).unwrap().active_json()[0]["NAME"],
+        "serializable"
     );
     cleanup(&destination);
 }

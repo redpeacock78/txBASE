@@ -14,6 +14,11 @@ This document defines the current API boundary and its deliberate isolation limi
 
 The transaction owns that table copy until it is committed or rolled back.
 
+`DbfTransaction::begin_serializable(path)` selects the coarse-grained serializable boundary.
+It acquires the table's exclusive lock before loading the table and holds that lock until commit, rollback, or drop.
+Other local txBASE DBF readers and writers that honor the same lock wait while the transaction is active.
+The boundary applies to one DBF path and does not lock a catalog or coordinate external writers that bypass txBASE.
+
 ### Apply
 
 `apply(&OperationIr)` accepts the same operation representation used by the HTTP transaction route.
@@ -31,6 +36,8 @@ Uncommitted changes are therefore visible to the transaction caller but not to a
 `commit()` saves the private table through the existing table lock, WAL, MVCC, sidecar, and transaction-state persistence path.
 
 The result is one table commit and the returned `DbfTable` contains its durable transaction ID.
+
+When the transaction was opened with `begin_serializable`, `commit()` reuses the lock already held by the transaction instead of acquiring it again.
 
 If the DBF, memo, schema, or transaction-state source changed after `begin`, the commit is rejected instead of overwriting the newer state.
 
@@ -79,16 +86,19 @@ retained commit.
 
 ## 4. Isolation boundary
 
-The current API provides a private snapshot for one DBF table and optimistic stale-source rejection at commit.
+The default API provides a private snapshot for one DBF table and optimistic stale-source rejection at commit.
+
+`begin_serializable` provides strict serial execution for one table by excluding concurrent txBASE access from begin through commit or rollback.
+This is intentionally a table-wide lock, so it does not provide predicate-level concurrency or a cross-table serializable transaction.
 
 `CatalogReadTransaction` provides a separate in-memory snapshot boundary for cross-table reads and
 bounded joins.
 
-Neither API provides predicate locking or serializable conflict detection.
+The default API does not provide predicate locking or predicate-level serializable conflict detection.
 `commit_with_row_merge()` is limited to explicit physical-row update and delete merging and does not
 provide predicate or serializable semantics.
 
-Predicate locking, serializable conflict detection, independent catalog retention, and long-lived distributed transactions remain future work.
+Predicate-level locking, cross-table serializable validation, independent catalog retention, and long-lived distributed transactions remain future work.
 
 ## 5. Example
 

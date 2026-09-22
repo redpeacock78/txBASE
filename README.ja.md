@@ -24,6 +24,7 @@ txBASEは、元のDBF表現を保ったまま、dBASEとVisual FoxProの一部�
 - メモリ内ストリームアダプター向けに、executorから独立した非同期クエリストリームのポーリング契約。
 - 有界バックプレッシャーと破棄時キャンセルを備えた、ネイティブスレッド非同期クエリストリームアダプター。
 - WAL復旧と検査CLIを備えた、単一テーブルのコミット済み変更データ取得サイドカー。
+- 1つのDBFテーブルに対する、任意選択の粗粒度serializableトランザクション境界。
 
 互換性と動作の詳細は、[ドキュメント一覧](docs/ja/README.md)にまとめています。
 
@@ -117,6 +118,7 @@ JSON PatchはRFC 6901のJSON Pointerパスを使うRFC 6902の`add`、`remove`�
 ローカル形式のJSON文書では、型付きの`$set`、`$unset`、`$inc`演算子も使えます。
 
 単一テーブルの`POST /transaction`は、複数の操作をprivate copyへ適用してから、1つのsnapshot/WAL境界でcommitします。
+Rust APIは、beginからcommitまたはrollbackまで排他テーブルロックを保持する、任意選択の粗粒度serializable境界として`DbfTransaction::begin_serializable`も公開します。
 単一テーブルの更新は、`mvcc` CLIを通してテーブル単位の過去スナップショットを保持します。
 カタログの`POST /transaction`も、検出したすべてのテーブルの完全なイメージによる過去スナップショットを保持します。
 `Catalog::from_path_at`と`mvcc catalog`は、一貫したカタログcommitを読み取ります。
@@ -282,7 +284,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - ワーカーまたはWASI固有の`AsyncQueryStream`タイムアウト、転送、キャンセル、非同期ストレージの動作。
 - 完全なcost-based index／join planner。
 - より広い集約。
-- 行単位のMVCC履歴と保持期間。
+- 述語単位のロックとテーブル横断のserializable競合検出。
 - locale-awareなCJK collation。
 - 追加のupstream CJK fixture。
 - XBF exportにおける厳密な複数ファイルreader atomicity。

@@ -130,6 +130,9 @@ The public [`DbfTransaction`](transactions.md) API provides an optimistic privat
 
 It applies operations and queries against the private copy, then publishes one WAL-backed commit or discards the copy.
 
+`DbfTransaction::begin_serializable` is the optional coarse-grained serializable boundary for one table.
+It holds the exclusive table lock from begin through commit or rollback, so local txBASE readers and writers that use the same lock cannot interleave with the transaction.
+
 ## 2. Commit and recovery
 
 The writer holds the existing per-table lock.
@@ -156,11 +159,12 @@ Catalog history stores a full image of every discovered table per catalog commit
 Table-local row history has baseline retention through full-image MVCC GC and independent per-row retention through `--keep-rows`.
 
 The public table transaction provides optimistic stale-source rejection by default.
+`DbfTransaction::begin_serializable` instead provides strict serial execution for one table through a table-wide lock.
 The explicit `DbfTransaction::commit_with_row_merge` API can merge disjoint physical-row updates or
 deletes under the table lock when schema, layout, and record count are unchanged.
 Inserts and different changes to the same row remain errors; an identical resulting row is a no-op.
-Neither table transaction API provides predicate locking, serializable conflict detection, or a
-long-lived transaction object across CLI calls.
+The default table transaction does not provide predicate locking or predicate-level serializable
+conflict detection, and neither API provides a long-lived transaction object across CLI calls.
 
 The catalog transaction ID identifies one consistent multi-table image and can select that image
 for one catalog HTTP request or identify a `CatalogReadTransaction` capture.
@@ -185,7 +189,8 @@ The current retention boundary is count-based GC for full-image table and catalo
 
 The current row-level boundary is physical-record history with epoch-separated identities, baseline compaction, and optional detached row-history records.
 
-Schema migration history, predicate locking, and serializable conflict detection remain future work.
+Schema migration history, predicate-level locking, cross-table serializable validation, and
+long-lived distributed transactions remain future work.
 
 Distributed snapshots, follower reads, and serializable conflict detection remain later work.
 

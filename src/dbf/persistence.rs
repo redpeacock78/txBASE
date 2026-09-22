@@ -152,6 +152,22 @@ impl DbfTable {
         self.save_with_wal_inner(path.as_ref(), None, false)
     }
 
+    pub(crate) fn save_with_wal_locked(
+        &mut self,
+        path: &Path,
+        _lock: &TableLock,
+    ) -> Result<(), DbfError> {
+        self.save_with_wal_inner_locked(path, None, false)
+    }
+
+    pub(crate) fn save_with_row_merge_locked(
+        &mut self,
+        path: &Path,
+        _lock: &TableLock,
+    ) -> Result<(), DbfError> {
+        self.save_with_wal_inner_locked(path, None, true)
+    }
+
     pub(crate) fn save_with_row_merge(&mut self, path: impl AsRef<Path>) -> Result<(), DbfError> {
         self.save_with_wal_inner(path.as_ref(), None, true)
     }
@@ -171,6 +187,15 @@ impl DbfTable {
         allow_row_merge: bool,
     ) -> Result<(), DbfError> {
         let _lock = TableLock::acquire(path)?;
+        self.save_with_wal_inner_locked(path, operation, allow_row_merge)
+    }
+
+    fn save_with_wal_inner_locked(
+        &mut self,
+        path: &Path,
+        operation: Option<&OperationIr>,
+        allow_row_merge: bool,
+    ) -> Result<(), DbfError> {
         let _ = Self::recover_wal_with_encoding(path, self.encoding_override.as_deref())?;
         let current_transaction_id = read_transaction_state(path)?;
         let before = if path.exists() {

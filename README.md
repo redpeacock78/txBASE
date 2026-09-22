@@ -33,6 +33,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - An executor-neutral asynchronous query-stream polling contract for in-memory stream adapters.
 - A native threaded asynchronous query-stream adapter with bounded backpressure and drop cancellation.
 - A committed single-table change-data-capture sidecar with WAL recovery and an inspection CLI.
+- An opt-in coarse-grained serializable transaction boundary for one DBF table.
 
 The detailed compatibility and behavior contracts live in the [documentation index](docs/README.md).
 
@@ -125,6 +126,7 @@ JSON Patch supports the RFC 6902 `add`, `remove`, `replace`, `test`, `move`, and
 It also accepts typed `$set`, `$unset`, and `$inc` operators in the local JSON document.
 
 Single-table `POST /transaction` applies multiple operations to a private copy and commits one snapshot/WAL boundary.
+The Rust API also exposes `DbfTransaction::begin_serializable` for an opt-in coarse-grained serializable boundary that holds the exclusive table lock from begin through commit or rollback.
 Single-table mutations retain table-scoped historical snapshots through the `mvcc` CLI.
 Catalog `POST /transaction` also retains one full-image historical snapshot for every discovered
 table. `Catalog::from_path_at` and `mvcc catalog` read one consistent catalog commit; the catalog
@@ -291,7 +293,7 @@ The roadmap still leaves the following areas as future work:
 - Worker/WASI-specific `AsyncQueryStream` timeout, transport, cancellation, and asynchronous-storage behavior.
 - Full cost-based index and join planning.
 - Broader aggregation.
-- Predicate locking and serializable MVCC conflict detection.
+- Predicate-level locking and cross-table serializable conflict detection.
 - Locale-aware CJK collation.
 - Broader upstream CJK fixtures.
 - Strict multi-file reader atomicity for XBF export.
