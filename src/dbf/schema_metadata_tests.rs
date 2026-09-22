@@ -500,3 +500,45 @@ fn rejects_a_schema_sidecar_changed_after_load() {
 
     cleanup(&path);
 }
+
+#[test]
+fn applies_valid_schema_metadata_without_rewriting_the_dbf() {
+    let path = temporary_path();
+    let candidate = path.with_extension("candidate.json");
+    cleanup(&path);
+    let _ = fs::remove_file(&candidate);
+    let original = fixture();
+    fs::write(&path, &original).unwrap();
+    fs::write(&candidate, metadata()).unwrap();
+
+    crate::dbf::apply_schema_metadata(&path, &fs::read(&candidate).unwrap()).unwrap();
+
+    assert_eq!(fs::read(&path).unwrap(), original);
+    assert_eq!(
+        fs::read(path.with_extension("txschema.json")).unwrap(),
+        metadata()
+    );
+    assert!(DbfTable::from_path(&path).unwrap().schema_json()["schema_metadata"]["fields"]
+        ["ID"]["primary"]
+        .as_bool()
+        .is_some_and(|value| value));
+    assert!(!path.with_extension("txbase.state").exists());
+
+    let before = fs::read(path.with_extension("txschema.json")).unwrap();
+    let invalid = serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {},
+        "checks": [{"AGE": {"$gte": 30}}]
+    }))
+    .unwrap();
+    let error = crate::dbf::apply_schema_metadata(&path, &invalid).unwrap_err();
+    assert!(error.to_string().contains("schema check"));
+    assert_eq!(
+        fs::read(path.with_extension("txschema.json")).unwrap(),
+        before
+    );
+
+    cleanup(&path);
+    let _ = fs::remove_file(candidate);
+}

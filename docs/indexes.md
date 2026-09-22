@@ -225,3 +225,12 @@ Freshness validation still reads the DBF and memo bytes, and the query executor 
 A full I/O-aware cost model, collation-aware planning, and cross-table index definitions or query planning require separate contracts.
 
 The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs a full I/O-aware model and cross-table index or planning contracts.
+
+## Primary references and scope
+
+- [MongoDB query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
+- [MongoDB compound-index sort order](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
+- [MongoDB equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
+
+These sources provide planner vocabulary and compound-index ordering context only.
+The candidate bounds, local statistics, record-count cost model, and physical-order materialization are txBASE contracts, not MongoDB compatibility claims.

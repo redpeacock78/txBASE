@@ -25,6 +25,26 @@ pub(crate) fn commit_schema_export(
     let _ = DbfTable::recover_wal_with_encoding(path, None)?;
     recover_schema_export_locked(path)?;
 
+    commit_schema_export_locked(path, table, schema_bytes)
+}
+
+pub(crate) fn apply_schema_metadata(path: &Path, schema_bytes: &[u8]) -> Result<(), DbfError> {
+    let _lock = TableLock::acquire(path)?;
+    let _ = DbfTable::recover_wal_with_encoding(path, None)?;
+    recover_schema_export_locked(path)?;
+
+    let table = DbfTable::load_path_with_encoding(path, None)?;
+    let metadata = SchemaMetadata::from_bytes(schema_bytes)?;
+    metadata.validate_fields(&table.fields)?;
+    metadata.validate_records(&table.records)?;
+    write_bytes_atomically(&schema_metadata_path(path), schema_bytes, SCHEMA_TARGET)
+}
+
+fn commit_schema_export_locked(
+    path: &Path,
+    table: &DbfTable,
+    schema_bytes: &[u8],
+) -> Result<(), DbfError> {
     let dbf_bytes = table.to_bytes();
     validate_staged_export(&dbf_bytes, schema_bytes)?;
     let index_path = crate::index::sidecar_path(path);

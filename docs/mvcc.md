@@ -155,4 +155,3 @@ Distributed snapshots, follower reads, and serializable conflict detection remai
 - [PostgreSQL concurrency control](https://www.postgresql.org/docs/current/mvcc.html)
 - [SQLite isolation](https://sqlite.org/isolation.html)
 - [SQLite write-ahead logging](https://sqlite.org/wal.html)
-- [Git command-line interface conventions](https://git-scm.com/docs/gitcli)

@@ -102,3 +102,13 @@ Until then, replication, full MVCC, follower reads, and distributed partitioning
 This document does not promise Raft, multi-region writes, global transactions, or automatic partition balancing.
 
 Those choices require the authority and recovery contracts above.
+
+## Primary references and scope
+
+- [In Search of an Understandable Consensus Algorithm (Raft)](https://raft.github.io/raft.pdf)
+- [Raft consensus algorithm](https://raft.github.io/)
+
+The Raft paper is a candidate protocol reference for the authority step in the progression.
+It does not select Raft for txBASE and does not define the future txBASE log, schema, or recovery format.
+
+The current repository has no replication or distributed execution implementation, so the partition, quorum, follower-read, and distributed-join statements above remain design constraints rather than compatibility claims.

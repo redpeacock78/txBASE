@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fs;
 use std::path::PathBuf;
 
 use txbase::{
@@ -18,6 +19,37 @@ pub(crate) fn inspect(
         args.next()
             .ok_or_else(|| format!("{command} requires a DBF path"))?,
     );
+    inspect_path(command, path, args)
+}
+
+pub(crate) fn schema(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
+    let first = args.next().ok_or("schema requires a DBF path or apply")?;
+    if first == "apply" {
+        let path = PathBuf::from(args.next().ok_or("schema apply requires a DBF path")?);
+        let metadata_path = PathBuf::from(
+            args.next()
+                .ok_or("schema apply requires a schema JSON path")?,
+        );
+        if let Some(extra) = args.next() {
+            return Err(format!("unexpected argument: {extra}").into());
+        }
+        let schema_bytes = fs::read(&metadata_path)?;
+        txbase::dbf::apply_schema_metadata(&path, &schema_bytes)?;
+        println!(
+            "schema apply: {} <- {}",
+            path.display(),
+            metadata_path.display()
+        );
+        return Ok(());
+    }
+    inspect_path("schema", PathBuf::from(first), args)
+}
+
+fn inspect_path(
+    command: &str,
+    path: PathBuf,
+    mut args: impl Iterator<Item = String>,
+) -> Result<(), Box<dyn Error>> {
     let encoding = parse_encoding_option(&mut args)?;
     let table = DbfTable::from_path_with_encoding(&path, encoding.as_deref())?;
     table.verify()?;

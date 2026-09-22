@@ -41,9 +41,34 @@ Implementation behavior is checked against the current source and tests before i
 
 Design notes are labeled future when they are not implemented.
 
-The research pass for this index was refreshed on 2026-09-21.
+The research pass for this index was refreshed on 2026-09-22.
 
 The README organization follows the section shape of [texenv's README](https://github.com/redpeacock78/texenv/blob/master/README.md), while the content is specific to txBASE.
+
+## Primary-source audit
+
+The following audit separates normative sources from product documentation, implementation references, and project-specific design inspiration.
+
+| Source group | Authority | txBASE alignment | Where the material belongs |
+| --- | --- | --- | --- |
+| dBASE and Visual FoxPro format pages | The dBASE page is vendor-owned; the Visual FoxPro pages are archived or mirrored vendor help, not a current standards registry. | The parser, memo reader, code-page handling, and field-width rules implement only the documented subset covered by fixtures. Unsupported formats remain errors; the repository does not claim complete FoxPro compatibility. | Format and compatibility details belong in [DBF compatibility](dbf-compatibility.md). Keep the mirror caveat in this index and require a fixture for each compatibility claim. |
+| MongoDB manual | Official product documentation. | Query, index, aggregation, and join documents borrow vocabulary and selected behavior, then add explicit txBASE bounds. They do not claim MongoDB wire, planner, or pipeline compatibility. | Keep operator meaning and comparison vocabulary in the query, aggregation, join, and index documents. Do not copy unimplemented MongoDB behavior into the current contract. |
+| Firestore and Realtime Database documentation | Official product documentation. | The Firebase document is architecture reference only. txBASE does not implement Firebase transactions, offline queues, security rules, or event synchronization. | Keep these comparisons in [Firebase model](firebase-model.md), not in the DBF, HTTP, or transaction contracts. |
+| SQLite documentation | Official project documentation. | Constraint terminology, WAL and atomic-commit rationale, query-planning vocabulary, and test-quality practices are references. txBASE uses DBF sidecars and its own WAL and does not claim SQLite file, SQL, or durability compatibility. | Keep the rationale in schema, MVCC, query-planning, and testing documents; describe txBASE behavior separately. |
+| Git command-line interface documentation | Official project documentation used as a CLI design reference. | It informs txBASE's explicit subcommand and option shape only. txBASE does not copy Git's command set, repository model, or option semantics. | Keep the design decision in [CLI command design](cli.md), not in MVCC or storage contracts. |
+| RFC 9110, RFC 5789, and RFC 10008 | IETF standards-track specifications. | HTTP method safety, PATCH meaning, and QUERY safety/idempotency inform the HTTP contract. txBASE still defines its own supported media types, response shapes, range limits, and route bounds. | Normative HTTP semantics belong in [HTTP semantics](http-semantics.md); txBASE-specific restrictions belong beside the implementation contract. |
+| POSIX `rename()` and `fsync()` | The Open Group specifications. | Unix code uses rename-based replacement and `sync_all`; Windows has a separate replacement path and must not be described as having identical POSIX directory-durability guarantees. | Keep filesystem durability assumptions in persistence and XBF documents, with the Unix-only qualification. |
+| WebAssembly, WASI, and the Component Model | Standards-track or standards-community specifications; host pages are vendor implementation references. | The WASM document is future-only. The core, WASI, and component references define vocabulary, while Cloudflare Workers and Node.js pages illustrate possible hosts. No native behavior is advertised as WASM-compatible. | Keep core ABI and host-boundary decisions in [WASM](wasm.md). Add a host-specific source only when that host receives an adapter and a smoke test. |
+| Raft consensus | A primary research paper and its project documentation. | Raft is one candidate for a future authority protocol; no replication or distributed execution exists in the current repository. | Keep it in [Distributed evolution](distributed-evolution.md) as a candidate, not as a current implementation dependency. |
+| XBF v1 draft | Repository-owned specification. | The current codec and edge object-store tests are checked against this draft; XBF remains explicitly draft until its external-reader atomicity gate is met. | Keep wire details in [XBF v1 draft](xbf.md), and do not treat the draft as an external interoperability standard. |
+| `encoding_rs` API and the pinned `dbf` compatibility table | Dependency API documentation and a third-party implementation reference, not encoding standards. | They help identify Rust codec behavior and legacy aliases. Pinned byte fixtures, not the third-party table, are the compatibility evidence. | Keep them as implementation aids in [DBF compatibility](dbf-compatibility.md), never as normative format sources. |
+| texenv README | Project-specific style inspiration, not a format or protocol source. | It affects only README organization; no txBASE behavior depends on it. | Keep the attribution in this research index, not in feature contracts. |
+
+The audit found two documentation corrections that are now reflected in the topic documents.
+
+First, `txbase schema apply` is a metadata-only edit command with active-record validation and atomic sidecar replacement; DBF layout migration remains future work.
+
+Second, POSIX durability language is limited to the Unix path; cross-platform replacement behavior is tested separately and is not advertised as identical to POSIX directory durability.
 
 ## Primary source groups
 
@@ -107,11 +132,28 @@ The README organization follows the section shape of [texenv's README](https://g
 - [RFC 5789: PATCH Method](https://www.rfc-editor.org/rfc/rfc5789.html)
 - [RFC 10008: The HTTP QUERY Method](https://www.rfc-editor.org/rfc/rfc10008.html)
 
+### CLI design
+
+- [Git command-line interface conventions](https://git-scm.com/docs/gitcli)
+
 ### File-system commit primitives
 
 - [POSIX `rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)
 - [POSIX `fsync()`](https://pubs.opengroup.org/onlinepubs/009695399/functions/fsync.html)
 - [POSIX file-system cache and directory durability rationale](https://pubs.opengroup.org/onlinepubs/9799919799/xrat/V4_xbd_chap01.html)
+
+### WebAssembly and host boundaries
+
+- [WebAssembly Core Specification](https://webassembly.github.io/spec/core/)
+- [WASI](https://wasi.dev/)
+- [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
+- [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
+- [Node.js WASI](https://nodejs.org/api/wasi.html)
+
+### Distributed systems
+
+- [In Search of an Understandable Consensus Algorithm (Raft)](https://raft.github.io/raft.pdf)
+- [Raft consensus algorithm](https://raft.github.io/)
 
 ## Review rule
 

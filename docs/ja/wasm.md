@@ -90,3 +90,16 @@ WASM境界は、対応する範囲で既存のDBFとXBFのコーデックを再�
 この文書は、JavaScript ORM、ブラウザー専用データベース、またはWASM内部のPOSIXエミュレーション層を約束しません。
 
 これらは別の製品となり、共有コアの契約を不明確にします。
+
+## 一次資料と適用範囲
+
+- [WebAssemblyコア仕様](https://webassembly.github.io/spec/core/)
+- [WASI](https://wasi.dev/)
+- [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
+- [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
+- [Node.js WASI](https://nodejs.org/api/wasi.html)
+
+WebAssemblyとWASIの仕様は、コアモジュールとホストインターフェースの語彙を定義します。
+Component Model、Cloudflare Workers、Node.jsの資料は候補ホストの実装参照であり、txBASEの互換性を約束するものではありません。
+
+現在のリポジトリにはWASMの実装経路もCI経路もないため、ネイティブのコーデック、クエリ、更新、復旧の動作がWASMホスト上ですでに動くとは主張しません。

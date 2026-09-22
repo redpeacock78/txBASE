@@ -126,3 +126,15 @@ These concerns do not belong in `MemoryObjectStore` or in the XBF codec.
 This slice does not promise an R2 adapter, a specific cloud vendor, multi-region consensus, automatic background garbage collection, immutable page splitting, or WASM hosting.
 
 Those features can reuse the manifest and generation contract after their host-specific failure behavior has a deterministic test.
+
+## Primary references and scope
+
+- [POSIX `rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)
+- [POSIX `fsync()`](https://pubs.opengroup.org/onlinepubs/009695399/functions/fsync.html)
+- [XBF v1 format draft](xbf.md)
+
+POSIX `rename()` and `fsync()` are the relevant filesystem references for the local backend's temporary-file replacement and synchronization path.
+The manifest, generation, compare-and-swap, recovery, and retention rules are txBASE-owned contracts, not claims about any cloud provider.
+
+No cloud-provider source belongs in the current implementation contract because no remote adapter has been selected.
+Provider documentation should be added to a provider-specific adapter document when one is implemented.

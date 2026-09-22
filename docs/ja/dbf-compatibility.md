@@ -230,6 +230,7 @@ CLIはローカルデータベースの最初の保守境界を公開します�
 | コマンド | 動作 |
 | --- | --- |
 | `txbase schema FILE` | 解析した DBF ヘッダーメタデータとフィールド記述子を JSON で表示する |
+| `txbase schema apply FILE SCHEMA_JSON` | メタデータ候補を現在の DBF とアクティブレコードに対して検証し、`FILE`のスキーマサイドカーだけを原子的に置き換える |
 | `txbase verify FILE` | DBF をロードし、検出した memo データと`.txidx`サイドカーがあれば検証し、シリアライズ済み DBF を再解析してレコード境界を検査する |
 | `txbase pack FILE` | 論理削除したレコードを取り除き、残りの物理レコードを振り直し、既存 WAL で結果を永続化する |
 | `txbase recall FILE RECORD` | 既存 WAL で一つの論理削除レコードを復元する |

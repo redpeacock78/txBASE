@@ -90,3 +90,16 @@ Until then, WASM hosting remains future work.
 This document does not promise a JavaScript ORM, a browser-only database, or a POSIX emulation layer inside WASM.
 
 Those would be separate products and would obscure the shared core contract.
+
+## Primary references and scope
+
+- [WebAssembly Core Specification](https://webassembly.github.io/spec/core/)
+- [WASI](https://wasi.dev/)
+- [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
+- [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
+- [Node.js WASI](https://nodejs.org/api/wasi.html)
+
+The WebAssembly and WASI specifications define the core module and host-interface vocabulary.
+The Component Model and the Cloudflare Workers and Node.js pages are implementation references for possible hosts, not txBASE compatibility commitments.
+
+There is no implementation or CI path for WASM in the current repository, so this document makes no claim that the native codec, query, mutation, or recovery behavior already runs in a WASM host.

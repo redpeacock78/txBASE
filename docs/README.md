@@ -25,6 +25,10 @@ Research and future work do not imply an implemented feature.
 - [Mutation model](mutation-model.md)
 - [HTTP method semantics and QUERY](http-semantics.md)
 
+## Command-line interface
+
+- [CLI command design](cli.md)
+
 ## Quality and research
 
 - [SQLite testing and quality model](testing-quality.md)

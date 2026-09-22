@@ -167,6 +167,61 @@ fn dbf_maintenance_cli_commands_operate_on_a_dbf() {
 }
 
 #[test]
+fn schema_apply_cli_installs_valid_metadata_without_changing_dbf_bytes() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-cli-schema-apply-{}.dbf",
+        std::process::id()
+    ));
+    let candidate = path.with_extension("candidate.json");
+    for extension in ["txschema.json", "txbase.state", "txbase.wal", "txbase.lock"] {
+        let _ = fs::remove_file(path.with_extension(extension));
+    }
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&candidate);
+
+    let fixture = users_fixture();
+    fs::write(&path, &fixture).unwrap();
+    fs::write(
+        &candidate,
+        serde_json::json!({
+            "format": "txbase-schema",
+            "version": 1,
+            "fields": {"ID": {"primary": true}}
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = run_cli(&[
+        "schema",
+        "apply",
+        path.to_str().unwrap(),
+        candidate.to_str().unwrap(),
+    ]);
+    assert!(
+        output.status.success(),
+        "schema apply failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(fs::read(&path).unwrap(), fixture);
+    assert!(path.with_extension("txschema.json").exists());
+
+    let schema = run_cli(&["schema", path.to_str().unwrap()]);
+    assert!(schema.status.success());
+    let schema_json: serde_json::Value = serde_json::from_slice(&schema.stdout).unwrap();
+    assert_eq!(
+        schema_json["schema_metadata"]["fields"]["ID"]["primary"],
+        true
+    );
+
+    for extension in ["txschema.json", "txbase.state", "txbase.wal", "txbase.lock"] {
+        let _ = fs::remove_file(path.with_extension(extension));
+    }
+    fs::remove_file(path).unwrap();
+    fs::remove_file(candidate).unwrap();
+}
+
+#[test]
 fn init_and_insert_cli_lifecycle_preserves_record_numbers() {
     let path = std::env::temp_dir().join(format!(
         "txbase-cli-init-lifecycle-{}.dbf",

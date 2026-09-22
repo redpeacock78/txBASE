@@ -211,3 +211,10 @@ The local join supports `inner`, `left`, `right`, `full`, `semi`, and `anti` equ
 `cross` join, with a hard result bound.
 It does not provide a full cost-based planner, full index-aware or cost-based merge join strategies,
 runtime-specific async stream traits, row-level MVCC versions, or distributed visibility.
+
+## Primary references and scope
+
+The catalog is a txBASE-owned directory and transaction contract, not an implementation of an external catalog standard.
+Its DBF and sidecar rules defer to [DBF compatibility](dbf-compatibility.md), local join semantics defer to [Join model](joins.md), and field constraints defer to [Schema metadata](schema-metadata.md).
+
+No external catalog source belongs in this document until txBASE selects a distributed catalog or an external compatibility target.

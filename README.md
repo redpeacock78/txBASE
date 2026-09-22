@@ -136,6 +136,7 @@ Read-only schema, catalog, index, XBF, and WAL inspection:
 
 ```bash
 txbase schema path/to/users.dbf
+txbase schema apply path/to/users.dbf path/to/users.txschema.candidate.json
 txbase verify path/to/users.dbf
 txbase catalog path/to/database
 txbase verify-catalog path/to/database

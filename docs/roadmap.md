@@ -177,7 +177,9 @@ Full cost-based choice remains future work.
 The first constraint slice is an optional schema sidecar.
 It enforces one-field `primary`, `unique`, and `not_null` properties, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, plus bounded table-level query-predicate `checks` on active records and mutation candidates without changing legacy DBF bytes.
 Catalog-scoped scalar `references` and composite `constraints.foreign_keys` validation covers non-null child values.
-`restrict`, `cascade`, and `set_null` actions are applied recursively inside one catalog transaction and journal commit; schema migration, deferred checks, and broader cross-table constraints remain future work.
+`restrict`, `cascade`, and `set_null` actions are applied recursively inside one catalog transaction and journal commit.
+The schema sidecar now has a metadata-only edit command with active-record validation and atomic sidecar replacement.
+DBF layout migration, deferred checks, and broader cross-table constraints remain future work.
 
 ## 5. Phase 3: legacy international compatibility
 

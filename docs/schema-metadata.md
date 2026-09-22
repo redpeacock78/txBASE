@@ -19,6 +19,14 @@ Without it, a table keeps the existing DBF-only behavior.
 
 With it, `txbase schema`, `txbase verify`, path-loaded mutations, and backup or restore expose and preserve the metadata.
 
+Use the schema command to validate and install a metadata candidate without changing DBF bytes:
+
+```bash
+txbase schema apply users.dbf users.txschema.candidate.json
+```
+
+The candidate is checked against the current DBF field descriptors and active records before the existing sidecar is atomically replaced.
+
 The current sidecar is versioned independently from DBF:
 
 ```json
@@ -157,18 +165,24 @@ If the sidecar appears, disappears, or changes after a table was loaded, a save 
 
 The sidecar is not rewritten by a record mutation.
 
+`txbase schema apply` acquires the same table lock used by DBF readers and writers, recovers pending local WAL or XBF export work, validates the candidate against the current table, and replaces only the metadata sidecar through a synced temporary file.
+
+The DBF bytes, index sidecar, transaction-state sidecar, and MVCC history are unchanged by this metadata-only operation.
+
+If candidate validation fails, the existing sidecar and DBF remain unchanged.
+
 `backup` and `restore` copy it as `*.txschema.json`, and remove an old destination metadata sidecar when the source has none.
 
 The DBF and metadata files are still separate files.
 
-The current copy and WAL protocols do not claim one atomic multi-file commit for a metadata edit.
+The schema edit is atomic for the metadata sidecar, but it is not a DBF layout migration and does not provide a multi-file transaction for unrelated files.
 
 ## 4. Deliberate non-goals
 
 The sidecar does not yet implement:
 
 - Collations or type declarations independent of DBF field descriptors.
-- A schema migration or metadata-edit command.
+- DBF layout migrations or schema versions beyond the current sidecar format.
 - Automatic selection between a DBF language driver and an override.
 
 Additional cross-table constraint semantics need broader metadata, migration, and recovery rules before they can be added safely.

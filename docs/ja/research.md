@@ -41,9 +41,34 @@
 
 実装していない設計メモはFutureとしてラベル付けします。
 
-このインデックスの調査は2026-09-21に更新しました。
+このインデックスの調査は2026-09-22に更新しました。
 
 READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blob/master/README.md)の節構造に従いますが、内容はtxBASE固有です。
+
+## 一次資料の監査
+
+次の監査では、規範的な資料、製品文書、実装参照、プロジェクト固有の設計上の着想を分けます。
+
+| 資料群 | 権威性 | txBASEとの整合 | 記載すべき場所 |
+| --- | --- | --- | --- |
+| dBASEとVisual FoxProのフォーマット資料 | dBASEのページはベンダー所有です。Visual FoxProのページはベンダーのヘルプを保存またはミラーしたものであり、現在の標準レジストリではありません。 | パーサー、memo読み取り、コードページ処理、フィールド幅規則は、フィクスチャでカバーする文書化済みサブセットだけを実装します。未対応形式はエラーのままであり、FoxPro全体の互換性は主張しません。 | フォーマットと互換性の詳細は[DBF互換性](dbf-compatibility.md)に置きます。ミラー資料の注意書きはこのインデックスに残し、互換性の主張ごとにフィクスチャを要求します。 |
+| MongoDBマニュアル | 公式製品文書です。 | クエリ、インデックス、集約、結合の文書は語彙と一部の動作を借りますが、txBASE固有の有界性を追加します。MongoDBのwire、プランナー、パイプライン互換性は主張しません。 | 演算子の意味と比較語彙は、クエリ、集約、結合、インデックスの文書に残します。未実装のMongoDB動作を現在の契約へ取り込みません。 |
+| FirestoreとRealtime Databaseの文書 | 公式製品文書です。 | Firebase文書はアーキテクチャ参照だけです。txBASEはFirebaseのトランザクション、オフラインキュー、セキュリティルール、イベント同期を実装しません。 | 比較は[Firebaseモデル](firebase-model.md)に残し、DBF、HTTP、トランザクション契約へ持ち込みません。 |
+| SQLite文書 | 公式プロジェクト文書です。 | 制約語彙、WALとアトミックコミットの根拠、クエリ計画語彙、テスト品質の実践を参照します。txBASEはDBFサイドカーと独自WALを使い、SQLiteのファイル、SQL、永続性互換性を主張しません。 | 根拠はスキーマ、MVCC、クエリ計画、テストの文書に置き、txBASEの動作は別に記述します。 |
+| Gitのコマンドラインインターフェース文書 | CLI設計の参照に使う公式プロジェクト文書です。 | txBASEの明示的なサブコマンドとオプションの形だけに影響します。Gitのコマンド群、リポジトリモデル、オプションの意味はコピーしません。 | 設計判断は[CLIコマンド設計](cli.md)に置き、MVCCやストレージの契約には置きません。 |
+| RFC 9110、RFC 5789、RFC 10008 | IETFの標準化過程にある仕様です。 | HTTPメソッドの安全性、PATCHの意味、QUERYの安全性と冪等性をHTTP契約へ反映します。txBASEは対応メディアタイプ、応答形状、範囲上限、ルート上限を別に定義します。 | 規範的なHTTP意味論は[HTTPの意味](http-semantics.md)に置き、txBASE固有の制約は実装契約のそばに置きます。 |
+| POSIXの`rename()`と`fsync()` | The Open Groupの仕様です。 | Unixコードはrenameによる置換と`sync_all`を使います。Windowsには別の置換経路があるため、POSIXのディレクトリ永続性保証と同一とは記述しません。 | ファイルシステムの永続性の前提は永続化とXBFの文書に置き、Unix限定であることを明記します。 |
+| WebAssembly、WASI、Component Model | 標準仕様または標準化中の仕様です。ホスト資料は実装参照です。 | WASMは将来のホスト境界として記述するだけで、現在の実装やCI経路はありません。Cloudflare WorkersとNode.jsの資料は候補ホストであり、互換性の根拠ではありません。 | 語彙と将来の境界は[WASM](wasm.md)に置き、ホスト固有の資料は実装とスモークテストを追加した時点で追記します。 |
+| Raft論文とRaftプロジェクト資料 | 論文とプロジェクトの一次資料です。 | 分散化の進行で候補プロトコルを検討するために使いますが、txBASEがRaftを採用したことやレプリケーションを実装済みであることは意味しません。 | 候補の権威プロトコルは[分散化の進化](distributed-evolution.md)に置き、採用後のログと復旧契約を別途定義します。 |
+| XBF v1形式草案 | このリポジトリが所有する仕様草案です。外部向けの互換性標準ではありません。 | 現在のコーデック、エッジ、世代検査付きWALのテストは草案を実装契約として検査します。外部リーダーでの原子的な公開が証明されるまでは草案のままです。 | バイト形式と受け入れ条件は[XBF v1草案](xbf.md)に置き、外部標準のようには扱いません。 |
+| `encoding_rs` APIと固定した`dbf`互換性表 | 依存ライブラリのAPI文書と第三者実装の参照であり、エンコーディング標準ではありません。 | Rustのコーデック動作とlegacy aliasの特定に使います。互換性の根拠は第三者の表ではなく、固定したバイトフィクスチャです。 | [DBF互換性](dbf-compatibility.md)の実装補助資料として残し、規範的なフォーマット資料にはしません。 |
+| texenv README | プロジェクト固有の文体上の着想であり、フォーマットまたはプロトコル資料ではありません。 | READMEの構成だけに影響し、txBASEの動作は依存しません。 | 帰属はこの調査インデックスに残し、機能契約には持ち込みません。 |
+
+監査の結果、トピック文書へ2つの修正を反映しました。
+
+1つ目は、`txbase schema apply`がアクティブレコード検証と原子的なサイドカー置換を行うメタデータ専用編集コマンドであり、DBFレイアウト移行は今後の作業であることです。
+
+2つ目は、POSIXの永続性に関する記述をUnix経路に限定し、クロスプラットフォームの置換動作は別に検査し、POSIXのディレクトリ永続性と同一とは宣伝しないことです。
 
 ## 主な資料群
 
@@ -107,11 +132,28 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 - [RFC 5789: PATCH Method](https://www.rfc-editor.org/rfc/rfc5789.html)
 - [RFC 10008: The HTTP QUERY Method](https://www.rfc-editor.org/rfc/rfc10008.html)
 
+### CLI設計
+
+- [Gitのコマンドラインインターフェース規約](https://git-scm.com/docs/gitcli)
+
 ### ファイルシステムのコミットプリミティブ
 
 - [POSIX `rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)
 - [POSIX `fsync()`](https://pubs.opengroup.org/onlinepubs/009695399/functions/fsync.html)
 - [POSIX file-system cache and directory durability rationale](https://pubs.opengroup.org/onlinepubs/9799919799/xrat/V4_xbd_chap01.html)
+
+### WebAssemblyとホスト境界
+
+- [WebAssemblyコア仕様](https://webassembly.github.io/spec/core/)
+- [WASI](https://wasi.dev/)
+- [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
+- [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
+- [Node.js WASI](https://nodejs.org/api/wasi.html)
+
+### 分散システム
+
+- [In Search of an Understandable Consensus Algorithm（Raft）](https://raft.github.io/raft.pdf)
+- [Raft consensus algorithm](https://raft.github.io/)
 
 ## レビュー規則
 

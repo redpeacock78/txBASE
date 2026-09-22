@@ -250,3 +250,12 @@ I/Oを考慮した完全なコストモデル、照合対応計画、テーブ�
 順序プレフィックス、複合プレフィックス、非選択的なインデックスのテーブルスキャンフォールバックも、更新、復旧、古いインデックス、再構築、DBFとインデックスのWAL対象動作と一緒にテストします。
 
 より広いインデックス対応には、I/Oを考慮した完全なコストモデルとテーブル間インデックスまたは計画の契約が必要です。
+
+## 主な参照先と適用範囲
+
+- [MongoDBのクエリ最適化](https://www.mongodb.com/docs/manual/core/query-optimization/)
+- [MongoDBの複合インデックスのソート順](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
+- [MongoDBの等値、ソート、範囲の指針](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
+
+これらの資料は、プランナーの語彙と複合インデックスの順序を考える背景だけに使います。
+候補の上限、ローカル統計、レコード数によるコストモデル、物理順での具体化はtxBASEの契約であり、MongoDB互換性の主張ではありません。

@@ -152,4 +152,3 @@ DBF、memo、スキーマ、index、カタログトランザクション状態�
 - [PostgreSQLの並行性制御](https://www.postgresql.org/docs/current/mvcc.html)
 - [SQLiteの分離](https://sqlite.org/isolation.html)
 - [SQLiteのWAL](https://sqlite.org/wal.html)
-- [Gitのコマンドラインインターフェース規約](https://git-scm.com/docs/gitcli)

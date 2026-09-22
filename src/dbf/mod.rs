@@ -91,6 +91,10 @@ pub use maintenance::copy_table_files;
 
 pub(crate) use schema_export::commit_schema_export;
 
+pub fn apply_schema_metadata(path: impl AsRef<Path>, schema_bytes: &[u8]) -> Result<(), DbfError> {
+    schema_export::apply_schema_metadata(path.as_ref(), schema_bytes)
+}
+
 pub(crate) fn memo_sidecar_path(path: &Path) -> Option<PathBuf> {
     find_memo_path(path)
 }

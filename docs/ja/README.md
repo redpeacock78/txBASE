@@ -23,6 +23,10 @@
 - [更新モデル](mutation-model.md)
 - [HTTP メソッドの意味と QUERY](http-semantics.md)
 
+## コマンドラインインターフェース
+
+- [CLIコマンド設計](cli.md)
+
 ## 品質と調査
 
 - [SQLite のテストと品質モデル](testing-quality.md)

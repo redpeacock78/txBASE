@@ -102,3 +102,13 @@ Shard A
 この文書は、Raft、マルチリージョン書き込み、グローバルトランザクション、自動パーティション再配置を約束しません。
 
 これらの選択には、前述の権威と復旧の契約が必要です。
+
+## 一次資料と適用範囲
+
+- [In Search of an Understandable Consensus Algorithm（Raft）](https://raft.github.io/raft.pdf)
+- [Raft consensus algorithm](https://raft.github.io/)
+
+Raft論文は、進行計画における権威プロトコルの候補資料です。
+txBASEでRaftを採用することを決定するものではなく、将来のtxBASEログ、スキーマ、復旧形式も定義しません。
+
+現在のリポジトリにはレプリケーションも分散実行もないため、上記のパーティション、クォーラム、フォロワー読み取り、分散結合に関する記述は、互換性の主張ではなく設計上の制約です。
