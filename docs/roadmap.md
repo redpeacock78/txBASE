@@ -48,7 +48,7 @@ The repository currently provides:
 - A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
 - A bounded thread-backed snapshot stream whose producer applies channel backpressure and stops when its consumer is dropped.
-- A runtime-neutral `AsyncQueryStream` polling boundary for long-lived query streams, with immediate in-memory implementations.
+- A runtime-neutral `AsyncQueryStream` polling boundary for long-lived query streams, immediate in-memory implementations, and a native `ThreadedQueryStream` adapter with bounded backpressure, waker notification, and drop cancellation.
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950, plus the legacy dBASE aliases `0x13`, `0x4d`, `0x4e`, and `0x4f`.
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, bounded table-level `checks` predicates, and catalog-scoped scalar and composite foreign-key validation with restrict, cascade, and set-null actions.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP, with normalized schema output.
@@ -62,7 +62,7 @@ The baseline intentionally does not include the following:
 
 - A full cost-based index or join model.
 - Full index-aware or cost-based merge join strategies.
-- Host-specific async scheduling, timeout and cancellation semantics, and remote object-store adapters.
+- Worker/WASI-specific timeout, transport, cancellation, and asynchronous-storage semantics, and remote object-store adapters.
 - Independent row-retention policies, predicate locking, serializable conflict detection, and cross-table long-lived snapshot transactions.
 - Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - `$project`, final `$sort`, `$skip`, and final `$limit` beyond the bounded aggregation contract.
@@ -80,7 +80,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - Schema introspection.
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
-- Host-specific `AsyncQueryStream` implementations and host-specific asynchronous object-table adapters.
+- Worker/WASI-specific `AsyncQueryStream` implementations and host-specific asynchronous object-table adapters.
 - Catalog-wide MVCC snapshots and independently visible multi-record reads.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
@@ -125,8 +125,10 @@ The HTTP servers expose `/records/stream` and `/{table}/records/stream` as bound
 responses over this stream.
 `query::AsyncQueryStream` now defines the executor-neutral `poll_next` contract, and the borrowed and
 owned in-memory streams implement it with immediate polls.
-Host-specific scheduling, backpressure, timeout, cancellation, and transport behavior remain later
-work, as does the asynchronous object-table adapter for a worker or WASI host.
+The native `query::stream_query_threaded` adapter supplies non-blocking polling, bounded producer
+backpressure, waker notification, and worker cancellation on drop.
+Worker/WASI timeout, transport, cancellation, and asynchronous-storage behavior remain host-specific,
+as does the asynchronous object-table adapter for a worker or WASI host.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 
@@ -290,7 +292,8 @@ The remaining cloud boundary needs a consistency contract, service-specific rete
 
 The current WASM slice exposes DBF bytes, query execution, and record mutation through the shared implementation.
 The current slice also exposes the five object-store primitives and the manifest protocol through runtime-neutral future contracts.
-It does not yet supply host-specific timeout and cancellation mapping, a remote object-store adapter, or a worker or WASI runtime adapter.
+The native `ThreadedQueryStream` adapter is available outside `wasm32` and does not change the WASM ABI.
+The WASM slice does not yet supply host-specific timeout and cancellation mapping, a remote object-store adapter, or a worker or WASI runtime adapter.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 

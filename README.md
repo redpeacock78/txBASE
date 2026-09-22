@@ -31,6 +31,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - A host-independent DBF WASM core with the shared bounded query and mutation contracts.
 - A runtime-neutral asynchronous object-store and manifest contract for future worker and WASI hosts.
 - An executor-neutral asynchronous query-stream polling contract for in-memory stream adapters.
+- A native threaded asynchronous query-stream adapter with bounded backpressure and drop cancellation.
 
 The detailed compatibility and behavior contracts live in the [documentation index](docs/README.md).
 
@@ -281,7 +282,7 @@ The current implementation prioritizes bounded, recoverable local operations ove
 
 The roadmap still leaves the following areas as future work:
 
-- Host-specific `AsyncQueryStream` scheduling, backpressure, timeout, and cancellation.
+- Worker/WASI-specific `AsyncQueryStream` timeout, transport, cancellation, and asynchronous-storage behavior.
 - Full cost-based index and join planning.
 - Broader aggregation.
 - Row-level MVCC history and retention.

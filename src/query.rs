@@ -25,6 +25,8 @@ mod planner;
 mod predicate;
 mod stream;
 mod stream_async;
+#[cfg(not(target_arch = "wasm32"))]
+mod stream_thread;
 mod validation;
 
 #[cfg(test)]
@@ -40,6 +42,8 @@ pub use stream::{
     stream_query_snapshot,
 };
 pub use stream_async::AsyncQueryStream;
+#[cfg(not(target_arch = "wasm32"))]
+pub use stream_thread::{ThreadedQueryStream, stream_query_threaded};
 pub(crate) use validation::validate_filter;
 
 #[cfg(test)]

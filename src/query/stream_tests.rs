@@ -2,6 +2,15 @@ use super::*;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::mpsc::{Receiver, Sender, channel};
+#[cfg(not(target_arch = "wasm32"))]
+use std::task::Wake;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Duration;
+
 fn poll_ready<S>(stream: &mut S, context: &mut Context<'_>) -> Option<Result<Value, QueryError>>
 where
     S: AsyncQueryStream<Item = Result<Value, QueryError>> + Unpin,
@@ -19,6 +28,36 @@ fn table_with_two_active_records() -> DbfTable {
         .collect::<Vec<_>>();
     bytes[179] = b' ';
     DbfTable::from_bytes(&bytes).unwrap()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct SignalWaker(Sender<()>);
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Wake for SignalWaker {
+    fn wake(self: Arc<Self>) {
+        self.wake_by_ref();
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        let _ = self.0.send(());
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn poll_threaded(
+    stream: &mut ThreadedQueryStream,
+    context: &mut Context<'_>,
+    wakes: &Receiver<()>,
+) -> Option<Result<Value, QueryError>> {
+    loop {
+        match AsyncQueryStream::poll_next(Pin::new(stream), context) {
+            Poll::Ready(item) => return item,
+            Poll::Pending => wakes
+                .recv_timeout(Duration::from_secs(1))
+                .expect("threaded stream must wake a pending poll"),
+        }
+    }
 }
 
 #[test]
@@ -134,4 +173,45 @@ fn in_memory_streams_implement_the_runtime_neutral_async_boundary() {
         serde_json::json!({"NAME": "Bob"})
     );
     assert!(poll_ready(&mut snapshot, &mut context).is_none());
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn threaded_stream_polls_without_blocking_and_keeps_a_snapshot() {
+    let mut table = table_with_two_active_records();
+    let request = parse(br#"{"projection":{"NAME":1}}"#).unwrap();
+    let mut stream = stream_query_threaded(&table, &request, 1).unwrap();
+    table
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "Changed"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+
+    let (wake_sender, wake_receiver) = channel();
+    let waker = Waker::from(Arc::new(SignalWaker(wake_sender)));
+    let mut context = Context::from_waker(&waker);
+    let mut records = Vec::new();
+    while let Some(item) = poll_threaded(&mut stream, &mut context, &wake_receiver) {
+        records.push(item.unwrap());
+    }
+
+    assert_eq!(
+        records,
+        vec![
+            serde_json::json!({"NAME": "Alice"}),
+            serde_json::json!({"NAME": "Bob"})
+        ]
+    );
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn threaded_stream_requires_positive_capacity() {
+    let table = table_with_two_active_records();
+    let request = parse(br#"{"projection":{"NAME":1}}"#).unwrap();
+    assert!(stream_query_threaded(&table, &request, 0).is_err());
 }

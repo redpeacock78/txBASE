@@ -36,15 +36,29 @@ Both streams read an in-memory table, so their polls complete immediately with `
 
 It does not implement `AsyncQueryStream` because calling `recv` from `poll_next` would block the host task.
 
+On native targets, `stream_query_threaded` returns `ThreadedQueryStream`.
+
+It clones the table, runs the existing snapshot stream on one worker thread, and exposes the result through a positive-capacity standard-library channel.
+
+Its `poll_next` uses only `try_recv`, registers the caller's waker when the channel is empty, and rechecks the channel after registration to avoid a lost wake-up.
+
+The full channel applies backpressure to the worker.
+
+Dropping the stream sets its cancellation flag, closes the receiver, and joins the worker so native production does not outlive the query owner.
+
+This adapter is not compiled for `wasm32`.
+
 ## 3. Host responsibilities
 
 A host-specific stream implementation owns the behavior that the shared contract cannot decide.
+
+The native threaded adapter currently supplies worker scheduling, bounded backpressure, waker notification, and drop cancellation for in-process queries.
 
 - The runtime schedules polling and supplies the task waker.
 - The producer wakes the task after an asynchronous read or write makes an item available.
 - The producer applies the desired queue or channel bound and defines what happens when the consumer is slow.
 - Dropping the stream releases or cancels host resources.
-- The host maps transport, storage, timeout, and cancellation failures into the stream's item error type.
+- The host maps transport, storage, timeout, and host-specific cancellation failures into the stream's item error type.
 
 The shared query layer owns filtering, projection, skip, limit, and the distinction between an item, end of stream, and pending work.
 
@@ -54,9 +68,11 @@ The synchronous iterator and bounded NDJSON HTTP contracts remain unchanged.
 
 `AsyncQueryStream` is a library boundary for native, worker, WASM, and WASI adapters.
 
+The native threaded adapter is one concrete host implementation.
+
 It does not make the filesystem channel non-blocking, add resume tokens, or define a remote storage protocol.
 
-The host-backed stream, timeout, cancellation, and transport contracts require separate fixtures before a worker or WASI runtime can be called complete.
+Worker and WASI adapters still need their own scheduling, timeout, cancellation, transport, and asynchronous-storage fixtures.
 
 ## Primary references and scope
 

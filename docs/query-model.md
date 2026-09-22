@@ -118,6 +118,12 @@ The producer blocks while the channel is full, and dropping the consumer cancels
 
 It remains an in-process pull consumer.
 
+`query::stream_query_threaded` exposes the same owned snapshot through the runtime-neutral `AsyncQueryStream` contract on native targets.
+
+It uses a non-blocking `try_recv` in `poll_next`, wakes the registered task after each produced item or end of stream, applies the channel capacity as producer backpressure, and joins the producer when the async stream is dropped.
+
+It is a native host adapter; it does not provide worker/WASI timers, transport, or asynchronous-storage behavior.
+
 The single-table server exposes `QUERY /records/stream`, and the catalog server exposes
 `QUERY /{table}/records/stream`.
 
@@ -148,7 +154,9 @@ whole query.
 
 `BoundedQueryStream` remains a blocking iterator because polling a standard-library `recv` call would block the host task.
 
-Host-specific scheduling, backpressure, timeout, cancellation, and transport behavior remain outside the shared query contract.
+The native threaded adapter supplies scheduling, bounded backpressure, waker notification, and drop cancellation.
+
+Worker/WASI scheduling, timeout, cancellation, transport, and asynchronous-storage behavior remain host-specific.
 
 The complete boundary is documented in [asynchronous query streaming](async-streaming.md).
 

@@ -67,6 +67,10 @@ The runtime-neutral `AsyncQueryStream` contract provides the same query stream i
 
 Its in-memory implementations complete immediately; a worker or WASI host must still provide scheduling, wake-up, backpressure, timeout, cancellation, and transport behavior.
 
+The native `ThreadedQueryStream` adapter supplies bounded scheduling, wake-up, backpressure, and drop cancellation outside `wasm32`.
+
+It is a native host implementation of the shared contract and does not change the WASM ABI or provide worker/WASI host services.
+
 The object-store contract belongs below the shared table and transaction interfaces.
 The runtime-neutral `AsyncObjectStore` contract is implemented for the five primitive object operations.
 `AsyncObjectTable` reuses the manifest, generation, recovery, retention, and conditional-publication contract through those operations.

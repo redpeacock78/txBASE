@@ -94,7 +94,7 @@ pub fn stream_query_bounded(
     Ok(BoundedQueryStream { receiver })
 }
 
-fn validate_stream_request(request: &QueryRequest) -> Result<(), QueryError> {
+pub(crate) fn validate_stream_request(request: &QueryRequest) -> Result<(), QueryError> {
     super::validation::validate(request)?;
     if !request.sort.is_empty()
         || request.aggregate.is_some()
