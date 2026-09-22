@@ -173,6 +173,99 @@ fn catalog_server_reads_named_tables_through_record_routes() {
 }
 
 #[test]
+fn catalog_named_table_routes_preserve_etag_preconditions() {
+    let root = temporary_catalog();
+    fs::write(root.join("left.dbf"), fixture()).unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+
+    let get = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/left/records/1")
+        .into();
+    let response = super::catalog::table_response(&get, "/left/records/1", &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let tag = response
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv("ETag"))
+        .map(|header| header.value.as_str().to_owned())
+        .expect("named-table ETag");
+
+    let conditional_get = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/left/records/1")
+        .with_header(header("If-None-Match", &tag))
+        .into();
+    let response = super::catalog::table_response(&conditional_get, "/left/records/1", &catalog);
+    assert_eq!(response.status_code(), StatusCode(304));
+    assert!(response.into_reader().into_inner().is_empty());
+
+    let conditional_head = TestRequest::new()
+        .with_method(Method::Head)
+        .with_path("/left/records/1")
+        .with_header(header("If-None-Match", &tag))
+        .into();
+    let response = super::catalog::table_response(&conditional_head, "/left/records/1", &catalog);
+    assert_eq!(response.status_code(), StatusCode(304));
+    assert!(response.into_reader().into_inner().is_empty());
+
+    let before = fs::read(root.join("left.dbf")).unwrap();
+    let body = r#"{"$inc":{"AGE":1}}"#;
+    let mut stale_match: Request = TestRequest::new()
+        .with_method(Method::Patch)
+        .with_path("/left/records/1")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-Match", "\"stale\""))
+        .with_body(body)
+        .into();
+    let response =
+        super::catalog::table_mutation_response(&mut stale_match, "/left/records/1", &catalog);
+    assert_eq!(response.status_code(), StatusCode(412));
+    assert_eq!(fs::read(root.join("left.dbf")).unwrap(), before);
+
+    let mut matching_none: Request = TestRequest::new()
+        .with_method(Method::Patch)
+        .with_path("/left/records/1")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-None-Match", &tag))
+        .with_body(body)
+        .into();
+    let response =
+        super::catalog::table_mutation_response(&mut matching_none, "/left/records/1", &catalog);
+    assert_eq!(response.status_code(), StatusCode(412));
+    assert_eq!(fs::read(root.join("left.dbf")).unwrap(), before);
+
+    let mut mutation: Request = TestRequest::new()
+        .with_method(Method::Patch)
+        .with_path("/left/records/1")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-None-Match", "\"stale\""))
+        .with_body(body)
+        .into();
+    let response =
+        super::catalog::table_mutation_response(&mut mutation, "/left/records/1", &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let next_tag = response
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv("ETag"))
+        .map(|header| header.value.as_str().to_owned())
+        .expect("updated named-table ETag");
+    assert_ne!(next_tag, tag);
+    assert_eq!(
+        catalog
+            .open_table("left")
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["AGE"],
+        30
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn catalog_server_mutates_named_tables_with_single_table_semantics() {
     let root = temporary_catalog();
     fs::write(root.join("left.dbf"), fixture()).unwrap();
