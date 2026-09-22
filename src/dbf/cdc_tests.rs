@@ -112,6 +112,24 @@ fn cdc_records_committed_row_diffs_in_transaction_order() {
             .collect::<Vec<_>>(),
         vec![2, 3]
     );
+    let (page, next_after) = DbfTable::cdc_events_page(&path, None, 2).unwrap();
+    assert_eq!(
+        page.iter()
+            .map(|event| event.transaction_id)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    assert_eq!(next_after, Some(2));
+    let (page, next_after) = DbfTable::cdc_events_page(&path, next_after, 2).unwrap();
+    assert_eq!(
+        page.iter()
+            .map(|event| event.transaction_id)
+            .collect::<Vec<_>>(),
+        vec![3]
+    );
+    assert_eq!(next_after, None);
+    assert!(DbfTable::cdc_events_page(&path, None, 0).is_err());
+    assert!(DbfTable::cdc_events_page(&path, None, 1_001).is_err());
 
     cleanup(&path);
 }

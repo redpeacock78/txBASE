@@ -49,8 +49,10 @@ The response does not authorize a method on a resource that its route rules woul
 | `HEAD /records` and `HEAD /records/{id}` | Same target selection as `GET` | Same status and representation headers without response content |
 | `QUERY /records` | `Content-Type: application/json` and a query document | Filtered JSON result with `Accept-Query`; paged queries return `records` and `cursor` |
 | `QUERY /records/stream` | `Content-Type: application/json` and a stream-compatible query document | Chunked `application/x-ndjson`, one record per line |
+| `GET /cdc` and `HEAD /cdc` | Optional `after` and `limit` query parameters | Bounded committed `TXCD` event page with `next_after` |
 | `QUERY /explain` | `Content-Type: application/json` and a query document | Selected table-scan or index plan with `Accept-Query` |
 | `GET /catalog` and `HEAD /catalog` (catalog server) | No JSON body | Discovered table schemas with a strong catalog `ETag`; conditional requests may return `304` |
+| `GET /cdc` and `HEAD /cdc` (catalog server) | Optional `after` and `limit` query parameters | Bounded committed `TXCC` event page with `next_after` |
 | `GET`/`HEAD /{table}/records[/{id}]` (catalog server) | No JSON body | Named-table records |
 | `QUERY /{table}/records` (catalog server) | `Content-Type: application/json` and a query document | Filtered named-table records with `Accept-Query` |
 | `QUERY /{table}/records/stream` (catalog server) | `Content-Type: application/json` and a stream-compatible query document | Chunked `application/x-ndjson`, one named-table record per line |
@@ -208,7 +210,31 @@ The stream has no ETag, byte-range, or resume-token contract.
 If evaluation fails after the response headers are sent, the connection terminates and the client
 must retry the complete query.
 
-## 5. Persistence and retries
+## 5. CDC read routes
+
+`GET /cdc` reads committed change events without changing the table or catalog.
+
+The single-table server returns `TXCD` events from the table sidecar.
+
+The catalog server returns `TXCC` events from the catalog sidecar so one page preserves the atomic multi-table transaction boundary.
+
+Both routes accept an optional exclusive `after` transaction-ID cursor and a `limit` from 1 through 1,000.
+
+The default limit is 100.
+
+The response is `{"events": [...], "next_after": 12}`.
+
+`next_after` is `null` when no later event exists, and the client can pass that value as the next `after` cursor.
+
+The route returns `400` for a zero or non-numeric cursor, an invalid limit, a repeated parameter, or an unknown parameter.
+
+The cursor is not an acknowledgement, lease, or persisted consumer position.
+
+`HEAD /cdc` has the same status and representation headers as `GET /cdc` without response content.
+
+The routes do not expose independent named-table `TXCD` events through the catalog server because those events are not one catalog transaction.
+
+## 6. Persistence and retries
 
 HTTP idempotence does not make the DBF write path crash-safe.
 

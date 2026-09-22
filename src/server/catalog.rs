@@ -26,9 +26,12 @@ pub(super) fn serve(root: impl AsRef<Path>, bind: &str) -> Result<(), String> {
 }
 
 fn handle_request(mut request: Request, catalog: &Catalog) {
-    let path = request.url().split('?').next().unwrap_or("/").to_owned();
+    let url = request.url().to_owned();
+    let path = url.split('?').next().unwrap_or("/").to_owned();
     let response = if request.method().as_str() == "OPTIONS" {
         options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY")
+    } else if matches!(request.method(), Method::Get | Method::Head) && path == "/cdc" {
+        super::cdc::catalog_response(&url, catalog)
     } else if matches!(request.method(), Method::Get | Method::Head) && path == "/catalog" {
         schema_response(&request, catalog)
     } else if matches!(request.method(), Method::Get | Method::Head)

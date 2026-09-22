@@ -185,6 +185,22 @@ impl Catalog {
         cdc::read(root, after)
     }
 
+    pub fn cdc_events_page(
+        path: impl AsRef<Path>,
+        after: Option<u64>,
+        limit: usize,
+    ) -> Result<(Vec<CatalogChangeEvent>, Option<u64>), CatalogError> {
+        let root = path.as_ref();
+        if !fs::metadata(root)?.is_dir() {
+            return Err(CatalogError::Invalid(format!(
+                "catalog path is not a directory: {}",
+                root.display()
+            )));
+        }
+        let _lock = transaction::write_lock(root)?;
+        cdc::read_page(root, after, limit)
+    }
+
     pub fn mvcc_versions(path: impl AsRef<Path>) -> Result<Vec<u64>, CatalogError> {
         let root = path.as_ref();
         let _lock = transaction::read_lock(root)?;

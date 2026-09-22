@@ -8,6 +8,7 @@ use tiny_http::{Method, Request, Response, Server};
 mod body;
 mod catalog;
 mod catalog_transaction;
+mod cdc;
 mod etag;
 mod explain;
 mod json_patch;
@@ -83,12 +84,17 @@ pub fn serve_catalog(root: impl AsRef<Path>, bind: &str) -> Result<(), String> {
 }
 
 fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
-    let path = request.url().split('?').next().unwrap_or("/").to_owned();
+    let url = request.url().to_owned();
+    let path = url.split('?').next().unwrap_or("/").to_owned();
     let is_query = request.method().as_str() == "QUERY";
     let response = if request.method().as_str() == "OPTIONS" {
         options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY")
     } else if matches!(request.method(), Method::Get | Method::Head) {
-        get_response(&request, &path, table)
+        if path == "/cdc" {
+            cdc::table_response(&url, dbf_path)
+        } else {
+            get_response(&request, &path, table)
+        }
     } else if is_query {
         if path == "/explain" {
             explain::response(&mut request, dbf_path)

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 const MAGIC: &[u8; 4] = b"TXCD";
 const VERSION: u8 = 1;
 const HEADER_SIZE: usize = MAGIC.len() + 1 + 4;
+pub const MAX_CDC_PAGE_SIZE: usize = 1_000;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -181,12 +182,33 @@ pub(super) fn append(path: &Path, event: &ChangeEvent) -> Result<(), DbfError> {
 }
 
 pub(super) fn read(path: &Path, after: Option<u64>) -> Result<Vec<ChangeEvent>, DbfError> {
+    read_page_internal(path, after, None).map(|(events, _)| events)
+}
+
+pub(super) fn read_page(
+    path: &Path,
+    after: Option<u64>,
+    limit: usize,
+) -> Result<(Vec<ChangeEvent>, Option<u64>), DbfError> {
+    if !(1..=MAX_CDC_PAGE_SIZE).contains(&limit) {
+        return Err(DbfError::Invalid(format!(
+            "CDC page size must be between 1 and {MAX_CDC_PAGE_SIZE}"
+        )));
+    }
+    read_page_internal(path, after, Some(limit))
+}
+
+fn read_page_internal(
+    path: &Path,
+    after: Option<u64>,
+    limit: Option<usize>,
+) -> Result<(Vec<ChangeEvent>, Option<u64>), DbfError> {
     let cdc_path = path_for(path);
     if !cdc_path.exists() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), None));
     }
     let wal = FileWal::open(&cdc_path).map_err(super::transaction_error)?;
-    let mut events = Vec::new();
+    let mut events = Vec::with_capacity(limit.map_or(0, |value| value + 1));
     let mut last_transaction_id = None;
     for (_, record) in wal.records() {
         let Some(event) = decode_payload(record)? else {
@@ -200,11 +222,19 @@ pub(super) fn read(path: &Path, after: Option<u64>) -> Result<Vec<ChangeEvent>, 
             ));
         }
         last_transaction_id = Some(event.transaction_id);
-        if after.is_none_or(|transaction_id| event.transaction_id > transaction_id) {
+        if after.is_none_or(|transaction_id| event.transaction_id > transaction_id)
+            && limit.is_none_or(|page_size| events.len() <= page_size)
+        {
             events.push(event);
         }
     }
-    Ok(events)
+    let next_after = limit.and_then(|page_size| {
+        (events.len() > page_size).then(|| events[page_size - 1].transaction_id)
+    });
+    if let Some(page_size) = limit {
+        events.truncate(page_size);
+    }
+    Ok((events, next_after))
 }
 
 impl DbfTable {
@@ -217,6 +247,18 @@ impl DbfTable {
         Self::recover_wal_with_encoding(path, None)?;
         let _ = super::schema_export::recover_schema_export_locked(path)?;
         read(path, after)
+    }
+
+    pub fn cdc_events_page(
+        path: impl AsRef<Path>,
+        after: Option<u64>,
+        limit: usize,
+    ) -> Result<(Vec<ChangeEvent>, Option<u64>), DbfError> {
+        let path = path.as_ref();
+        let _lock = TableLock::acquire(path)?;
+        Self::recover_wal_with_encoding(path, None)?;
+        let _ = super::schema_export::recover_schema_export_locked(path)?;
+        read_page(path, after, limit)
     }
 }
 

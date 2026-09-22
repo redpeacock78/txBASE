@@ -21,7 +21,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | Bounded local join contract | [Join model](joins.md) and [Catalog](catalog.md) | Current boundary |
 | MongoDB predicates and query planning | [Query planning](query-planning.md) | Current subset plus reference |
 | Mutation operators and atomicity | [Mutation model](mutation-model.md) | Current subset plus future boundary |
-| Local change data capture | [Change data capture](change-data-capture.md) | Current single-table and explicit multi-table catalog committed-event boundaries plus future transport work |
+| Local change data capture | [Change data capture](change-data-capture.md) | Current single-table and explicit multi-table catalog committed-event boundaries plus bounded read-only HTTP transport; delivery and replay remain future work |
 | Single-table snapshot transactions and isolation | [Snapshot transactions](transactions.md) and [MVCC](mvcc.md) | Current optimistic boundary plus future serializable work |
 | Firestore and Realtime Database design | [Firebase model](firebase-model.md) | Reference |
 | SQLite test breadth and quality | [Testing and quality](testing-quality.md) | Current test map plus reference |

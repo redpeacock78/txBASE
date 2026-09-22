@@ -1,5 +1,5 @@
 use super::CatalogError;
-use crate::dbf::{ChangeRecord, DbfTable};
+use crate::dbf::{ChangeRecord, DbfTable, MAX_CDC_PAGE_SIZE};
 use crate::transaction::{FileWal, MAX_WAL_RECORD_SIZE, encode_records};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -121,12 +121,33 @@ pub(crate) fn read(
     root: &Path,
     after: Option<u64>,
 ) -> Result<Vec<CatalogChangeEvent>, CatalogError> {
+    read_page_internal(root, after, None).map(|(events, _)| events)
+}
+
+pub(crate) fn read_page(
+    root: &Path,
+    after: Option<u64>,
+    limit: usize,
+) -> Result<(Vec<CatalogChangeEvent>, Option<u64>), CatalogError> {
+    if !(1..=MAX_CDC_PAGE_SIZE).contains(&limit) {
+        return Err(CatalogError::Invalid(format!(
+            "catalog CDC page size must be between 1 and {MAX_CDC_PAGE_SIZE}"
+        )));
+    }
+    read_page_internal(root, after, Some(limit))
+}
+
+fn read_page_internal(
+    root: &Path,
+    after: Option<u64>,
+    limit: Option<usize>,
+) -> Result<(Vec<CatalogChangeEvent>, Option<u64>), CatalogError> {
     let path = path_for(root);
     if !path.exists() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), None));
     }
     let wal = FileWal::open(path).map_err(transaction_error)?;
-    let mut events = Vec::new();
+    let mut events = Vec::with_capacity(limit.map_or(0, |value| value + 1));
     let mut last_transaction_id = None;
     for (_, record) in wal.records() {
         let Some(event) = decode_payload(record)? else {
@@ -140,11 +161,19 @@ pub(crate) fn read(
             ));
         }
         last_transaction_id = Some(event.transaction_id);
-        if after.is_none_or(|transaction_id| event.transaction_id > transaction_id) {
+        if after.is_none_or(|transaction_id| event.transaction_id > transaction_id)
+            && limit.is_none_or(|page_size| events.len() <= page_size)
+        {
             events.push(event);
         }
     }
-    Ok(events)
+    let next_after = limit.and_then(|page_size| {
+        (events.len() > page_size).then(|| events[page_size - 1].transaction_id)
+    });
+    if let Some(page_size) = limit {
+        events.truncate(page_size);
+    }
+    Ok((events, next_after))
 }
 
 fn payload(event: &CatalogChangeEvent) -> Result<Vec<u8>, CatalogError> {

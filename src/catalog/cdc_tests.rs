@@ -58,6 +58,13 @@ fn catalog_cdc_staging_is_idempotent_and_rejects_conflicting_or_old_events() {
     let second_bytes = cdc::staged_bytes(&path, &event(2, 2)).unwrap();
     fs::write(&path, second_bytes).unwrap();
     assert!(cdc::staged_bytes(&path, &event(1, 3)).is_err());
+    let (page, next_after) = cdc::read_page(&root, None, 1).unwrap();
+    assert_eq!(page, vec![first]);
+    assert_eq!(next_after, Some(1));
+    let (page, next_after) = cdc::read_page(&root, next_after, 1).unwrap();
+    assert_eq!(page, vec![event(2, 2)]);
+    assert_eq!(next_after, None);
+    assert!(cdc::read_page(&root, None, 0).is_err());
 
     fs::remove_dir_all(root).unwrap();
 }

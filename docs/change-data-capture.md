@@ -152,7 +152,40 @@ CDC retention is explicit file maintenance and is not performed automatically.
 
 `backup` and `restore` validate and copy the CDC sidecar together with the DBF and other supported sidecars.
 
-## 5. Scope and future work
+## 5. HTTP read transport
+
+The single-table server exposes committed table events at `GET /cdc` and `HEAD /cdc`.
+
+The catalog server exposes committed multi-table events at `GET /cdc` and `HEAD /cdc`.
+
+The catalog route returns `TXCC` events from the catalog sidecar.
+
+It does not merge independent named-table `TXCD` events because those events do not represent one catalog transaction.
+
+Both routes accept an optional exclusive `after` transaction-ID cursor and a `limit` query parameter.
+
+The default page size is 100 events, and the maximum is 1,000 events.
+
+The response is a bounded JSON object:
+
+```json
+{
+  "events": [],
+  "next_after": 12
+}
+```
+
+`next_after` is `null` when the page reaches the end of the sidecar.
+
+The client can pass `after=next_after` to request the next page.
+
+An absent sidecar returns an empty `events` array and a `null` cursor.
+
+Zero, non-numeric, repeated, or unknown query parameters are rejected with `400`.
+
+`GET` and `HEAD` are read-only and do not acknowledge or retain a consumer position.
+
+## 6. Scope and future work
 
 The event records state differences for one DBF commit or one catalog commit and preserve commit order.
 

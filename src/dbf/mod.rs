@@ -99,7 +99,7 @@ use wal::{
 };
 use wal::{delta_payload, memo_snapshot_payload, operation_payload, snapshot_payload};
 
-pub use cdc::{ChangeEvent, ChangeRecord, ChangeState};
+pub use cdc::{ChangeEvent, ChangeRecord, ChangeState, MAX_CDC_PAGE_SIZE};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn cdc_event_for_tables(

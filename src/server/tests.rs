@@ -49,5 +49,6 @@ fn ranged_query_request(body: &'static str, range: &'static str) -> Request {
         .into()
 }
 
+mod cdc_tests;
 mod mutation_tests;
 mod query_tests;

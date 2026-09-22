@@ -49,8 +49,10 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 | `HEAD /records`と`HEAD /records/{id}` | `GET`と同じ対象選択 | 本文なしで同じステータスと表現ヘッダー |
 | `QUERY /records` | `Content-Type: application/json`とクエリ文書 | `Accept-Query`付きのフィルター済み JSON。ページング時は`records`と`cursor` |
 | `QUERY /records/stream` | `Content-Type: application/json`とストリーム対応クエリ文書 | 一行一レコードの chunked `application/x-ndjson` |
+| `GET /cdc`と`HEAD /cdc` | 任意の`after`と`limit`クエリパラメーター | `next_after`を伴う有界なコミット済み`TXCD`イベントページ |
 | `QUERY /explain` | `Content-Type: application/json`とクエリ文書 | `Accept-Query`付きのテーブルスキャンまたはインデックス計画 |
 | `GET /catalog`と`HEAD /catalog`（カタログサーバー） | JSON 本文なし | 強いカタログ`ETag`付きの検出したテーブルスキーマ。条件付きリクエストは`304`を返すことがある |
+| `GET /cdc`と`HEAD /cdc`（カタログサーバー） | 任意の`after`と`limit`クエリパラメーター | `next_after`を伴う有界なコミット済み`TXCC`イベントページ |
 | `GET`、`HEAD /{table}/records[/{id}]`（カタログサーバー） | JSON 本文なし | 名前付きテーブルのレコード |
 | `QUERY /{table}/records`（カタログサーバー） | `Content-Type: application/json`とクエリ文書 | `Accept-Query`付きの名前付きテーブルのレコード |
 | `QUERY /{table}/records/stream`（カタログサーバー） | `Content-Type: application/json`とストリーム対応クエリ文書 | 一行一レコードの chunked `application/x-ndjson` |
@@ -220,7 +222,32 @@ txBASEは`Accept-Query: "application/json"`を通知し、JSONクエリ文書だ
 
 応答ヘッダー送信後の評価に失敗した場合は接続を終了し、クライアントはクエリ全体を再試行しなければなりません。
 
-## 5. 永続化と再試行
+## 5. CDC読み取りルート
+
+`GET /cdc`は、テーブルまたはカタログを変更せずにコミット済みの変更イベントを読み取ります。
+
+単一テーブルサーバーは、テーブルサイドカーにある`TXCD`イベントを返します。
+
+カタログサーバーは、1ページの中で複数テーブルトランザクションの原子性を保つため、カタログサイドカーにある`TXCC`イベントを返します。
+
+両方のルートは、任意の排他的なトランザクションIDカーソル`after`と、1から1,000までの`limit`を受け付けます。
+
+既定のlimitは100です。
+
+応答は`{"events": [...], "next_after": 12}`です。
+
+後続イベントがなければ`next_after`は`null`になり、クライアントはその値を次の`after`カーソルとして渡せます。
+
+値が0または数値でないカーソル、不正なlimit、重複したパラメーター、未知のパラメーターには`400`を返します。
+
+このカーソルは確認応答、リース、永続的な利用者位置ではありません。
+
+`HEAD /cdc`は、本文を返さず、`GET /cdc`と同じステータスと表現ヘッダーを返します。
+
+カタログサーバーは、独立した名前付きテーブルの`TXCD`イベントをこのルートで公開しません。
+これらのイベントは1つのカタログトランザクションを表さないためです。
+
+## 6. 永続化と再試行
 
 HTTPの冪等性はDBFの書き込み経路をクラッシュ安全にはしません。
 
