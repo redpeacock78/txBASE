@@ -33,6 +33,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - An executor-neutral asynchronous query-stream polling contract for in-memory stream adapters.
 - A native threaded asynchronous query-stream adapter with bounded backpressure and drop cancellation.
 - A committed single-table change-data-capture sidecar with WAL recovery and an inspection CLI.
+- A committed catalog change-data-capture sidecar with atomic multi-table events and an inspection CLI.
 - An opt-in coarse-grained serializable transaction boundary for one DBF table.
 - An opt-in coarse-grained serializable transaction boundary for a catalog's discovered tables.
 
@@ -162,9 +163,14 @@ txbase mvcc catalog gc path/to/database --keep 5
 txbase index verify path/to/users.dbf
 txbase xbf report path/to/users.xbf
 txbase wal inspect path/to/users.txbase.wal
+txbase cdc path/to/users.dbf
+txbase cdc path/to/users.dbf --after 10
+txbase cdc catalog path/to/database --after 10
 ```
 
 `wal inspect` never creates or truncates the WAL. It reports the file size, valid byte boundary, complete record LSN and payload length, and whether the final record is torn.
+
+`cdc` prints committed table or atomic catalog change events as JSON. `--after` is an exclusive transaction-ID cursor and does not acknowledge or retain consumer state.
 
 `mvcc gc` and `mvcc catalog gc` retain the newest positive count of full-image snapshots and
 rewrite only their MVCC history sidecar through a synced temporary file. `mvcc gc --keep-rows COUNT`

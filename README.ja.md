@@ -24,6 +24,7 @@ txBASEは、元のDBF表現を保ったまま、dBASEとVisual FoxProの一部�
 - メモリ内ストリームアダプター向けに、executorから独立した非同期クエリストリームのポーリング契約。
 - 有界バックプレッシャーと破棄時キャンセルを備えた、ネイティブスレッド非同期クエリストリームアダプター。
 - WAL復旧と検査CLIを備えた、単一テーブルのコミット済み変更データ取得サイドカー。
+- アトミックな複数テーブルイベントと検査CLIを備えた、コミット済みカタログ変更データ取得サイドカー。
 - 1つのDBFテーブルに対する、任意選択の粗粒度serializableトランザクション境界。
 - 検出したテーブル全体に対する、任意選択の粗粒度serializableトランザクション境界。
 
@@ -152,10 +153,16 @@ txbase mvcc catalog gc path/to/database --keep 5
 txbase index verify path/to/users.dbf
 txbase xbf report path/to/users.xbf
 txbase wal inspect path/to/users.txbase.wal
+txbase cdc path/to/users.dbf
+txbase cdc path/to/users.dbf --after 10
+txbase cdc catalog path/to/database --after 10
 ```
 
 `wal inspect`はWALを作成せず、切り詰めずに読み取ります。
 ファイルサイズ、有効なバイト境界、完全なレコードのLSNとペイロード長、最後のレコードが切断されているかどうかを表示します。
+
+`cdc`は、コミット済みのテーブルイベントまたはアトミックなカタログイベントをJSONで表示します。
+`--after`は排他的なトランザクションIDカーソルであり、利用者の状態を確認応答も保持もしません。
 
 `mvcc gc`と`mvcc catalog gc`は、完全イメージのうち新しいものを指定した正の件数だけ保持し、同期済み一時ファイルを通してMVCC履歴サイドカーだけを書き替えます。
 
