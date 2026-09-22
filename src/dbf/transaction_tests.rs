@@ -128,12 +128,12 @@ fn serializable_transaction_commits_through_the_held_lock() {
     fs::write(&destination, fixture()).unwrap();
 
     let mut transaction = DbfTransaction::begin_serializable(&destination).unwrap();
-    transaction.apply(&patch("serializable")).unwrap();
+    transaction.apply(&patch("serial")).unwrap();
     transaction.commit().unwrap();
 
     assert_eq!(
         DbfTable::from_path(&destination).unwrap().active_json()[0]["NAME"],
-        "serializable"
+        "serial"
     );
     cleanup(&destination);
 }
