@@ -96,8 +96,10 @@ rollback, or drop.
 `CatalogTransaction::apply` changes private table copies, and `commit` validates cross-table
 constraints and publishes one catalog journal transaction.
 `open_table` exposes a read-only copy of the private image.
-This boundary is catalog-wide for the discovered table set, but it does not provide
-predicate-level concurrency, dynamic table membership, or distributed coordination.
+This boundary is catalog-wide for the discovered table set.
+The table set is captured when the transaction begins, and commit rejects a changed DBF name or
+file name instead of silently omitting or including a table.
+It does not provide predicate-level concurrency or distributed coordination.
 
 This in-memory transaction is not a durable history pin and does not extend MVCC retention.
 Use `Catalog::from_path_at` when a retained commit must be reopened after the process exits.
@@ -246,8 +248,8 @@ serializable conflict detection.
 
 `Catalog::begin_serializable` provides coarse-grained serial execution across the discovered table
 set.
-It does not provide predicate-level locking, dynamic table-set validation, or distributed
-serializable coordination.
+It validates that the discovered DBF name and file-name set is unchanged at commit.
+It does not provide predicate-level locking or distributed serializable coordination.
 
 The Rust `CatalogReadTransaction` provides a nonblocking, stable cross-table read image after its
 capture completes, but it does not provide predicate locking, serializable conflict detection, or

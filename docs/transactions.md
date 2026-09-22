@@ -102,14 +102,16 @@ bounded joins.
 
 `Catalog::begin_serializable` provides strict serial execution for the catalog's discovered table
 set by holding the catalog write lock and all table locks through commit, rollback, or drop.
-It is intentionally coarse-grained and does not provide predicate-level concurrency, dynamic
-table membership, or distributed coordination.
+The transaction captures the DBF name and file-name set at begin and rejects a changed set at
+commit.
+It is intentionally coarse-grained and does not provide predicate-level concurrency or
+distributed coordination.
 
 The default API does not provide predicate locking or predicate-level serializable conflict detection.
 `commit_with_row_merge()` is limited to explicit physical-row update and delete merging and does not
 provide predicate or serializable semantics.
 
-Predicate-level locking, dynamic table-set validation, independent catalog retention, and long-lived distributed transactions remain future work.
+Predicate-level locking, independent catalog retention, and long-lived distributed transactions remain future work.
 
 ## 5. Example
 

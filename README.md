@@ -129,6 +129,7 @@ It also accepts typed `$set`, `$unset`, and `$inc` operators in the local JSON d
 Single-table `POST /transaction` applies multiple operations to a private copy and commits one snapshot/WAL boundary.
 The Rust API also exposes `DbfTransaction::begin_serializable` for an opt-in coarse-grained serializable boundary that holds the exclusive table lock from begin through commit or rollback.
 `Catalog::begin_serializable` provides the corresponding catalog-wide Rust boundary: it holds the catalog write lock and every discovered table lock, applies named operations to private copies, and commits them through one catalog journal.
+It captures the DBF name and file-name set at begin and rejects a changed set at commit.
 Single-table mutations retain table-scoped historical snapshots through the `mvcc` CLI.
 Catalog `POST /transaction` also retains one full-image historical snapshot for every discovered
 table. `Catalog::from_path_at` and `mvcc catalog` read one consistent catalog commit; the catalog
@@ -295,7 +296,7 @@ The roadmap still leaves the following areas as future work:
 - Worker/WASI-specific `AsyncQueryStream` timeout, transport, cancellation, and asynchronous-storage behavior.
 - Full cost-based index and join planning.
 - Broader aggregation.
-- Predicate-level locking, dynamic table-set serializable validation, and distributed serializable coordination.
+- Predicate-level locking and distributed serializable coordination.
 - Locale-aware CJK collation.
 - Broader upstream CJK fixtures.
 - Strict multi-file reader atomicity for XBF export.

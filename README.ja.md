@@ -121,6 +121,7 @@ JSON PatchはRFC 6901のJSON Pointerパスを使うRFC 6902の`add`、`remove`�
 単一テーブルの`POST /transaction`は、複数の操作をprivate copyへ適用してから、1つのsnapshot/WAL境界でcommitします。
 Rust APIは、beginからcommitまたはrollbackまで排他テーブルロックを保持する、任意選択の粗粒度serializable境界として`DbfTransaction::begin_serializable`も公開します。
 `Catalog::begin_serializable`は、カタログwrite lockと検出したすべてのテーブルロックを保持し、非公開コピーへ名前付き操作を適用して1つのカタログjournalでcommitする、カタログ全体のRust境界を提供します。
+開始時にDBFの名前とファイル名の集合を取得し、commit時に集合が変わっていれば拒否します。
 単一テーブルの更新は、`mvcc` CLIを通してテーブル単位の過去スナップショットを保持します。
 カタログの`POST /transaction`も、検出したすべてのテーブルの完全なイメージによる過去スナップショットを保持します。
 `Catalog::from_path_at`と`mvcc catalog`は、一貫したカタログcommitを読み取ります。
@@ -286,7 +287,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - ワーカーまたはWASI固有の`AsyncQueryStream`タイムアウト、転送、キャンセル、非同期ストレージの動作。
 - 完全なcost-based index／join planner。
 - より広い集約。
-- 述語単位のロック、動的なテーブル集合のserializable検証、分散serializable調整。
+- 述語単位のロックと分散serializable調整。
 - locale-awareなCJK collation。
 - 追加のupstream CJK fixture。
 - XBF exportにおける厳密な複数ファイルreader atomicity。

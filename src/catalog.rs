@@ -23,6 +23,8 @@ pub use serializable::CatalogTransaction;
 #[cfg(test)]
 mod cdc_tests;
 #[cfg(test)]
+mod serializable_tests;
+#[cfg(test)]
 mod tests;
 
 #[derive(Debug)]
@@ -62,6 +64,7 @@ impl From<std::io::Error> for CatalogError {
 pub enum CatalogTransactionError {
     Invalid(String),
     PreconditionFailed { tag: String },
+    TableSetChanged,
     Catalog(CatalogError),
 }
 
@@ -72,6 +75,12 @@ impl Display for CatalogTransactionError {
             Self::PreconditionFailed { .. } => {
                 write!(formatter, "catalog transaction precondition failed")
             }
+            Self::TableSetChanged => {
+                write!(
+                    formatter,
+                    "catalog table set changed during serializable transaction"
+                )
+            }
             Self::Catalog(error) => write!(formatter, "catalog transaction error: {error}"),
         }
     }
@@ -80,7 +89,7 @@ impl Display for CatalogTransactionError {
 impl Error for CatalogTransactionError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Invalid(_) | Self::PreconditionFailed { .. } => None,
+            Self::Invalid(_) | Self::PreconditionFailed { .. } | Self::TableSetChanged => None,
             Self::Catalog(error) => Some(error),
         }
     }

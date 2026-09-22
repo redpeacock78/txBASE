@@ -173,8 +173,8 @@ conflict detection, and neither API provides a long-lived transaction object acr
 
 `Catalog::begin_serializable` provides coarse-grained serial execution across the discovered table
 set.
-It does not provide predicate-level locking, dynamic table-set validation, or distributed
-coordination.
+It captures the DBF name and file-name set at begin and rejects a changed set at commit.
+It does not provide predicate-level locking or distributed coordination.
 
 The catalog transaction ID identifies one consistent multi-table image and can select that image
 for one catalog HTTP request or identify a `CatalogReadTransaction` capture.
@@ -199,8 +199,8 @@ The current retention boundary is count-based GC for full-image table and catalo
 
 The current row-level boundary is physical-record history with epoch-separated identities, baseline compaction, and optional detached row-history records.
 
-Schema migration history, predicate-level locking, dynamic table-set validation, and
-long-lived distributed transactions remain future work.
+Schema migration history, predicate-level locking, and long-lived distributed transactions remain
+future work.
 
 Distributed snapshots, follower reads, and distributed serializable coordination remain later work.
 

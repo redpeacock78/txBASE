@@ -3,16 +3,18 @@ use crate::dbf::{DbfTable, TableLock};
 use crate::xbase::OperationIr;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// A coarse-grained serializable transaction over every table in a catalog.
+/// A coarse-grained serializable transaction over the catalog table set.
 ///
 /// The catalog write lock and every discovered table lock remain held until
 /// `commit`, `rollback`, or drop. Mutations are applied to private copies and
-/// committed as one catalog journal transaction.
+/// committed as one catalog journal transaction. A table-set change observed at
+/// commit is rejected instead of being mixed into the transaction.
 pub struct CatalogTransaction {
     catalog: Catalog,
     before: BTreeMap<String, DbfTable>,
     tables: BTreeMap<String, DbfTable>,
     touched: BTreeSet<String>,
+    expected_table_set: BTreeSet<(String, String)>,
     catalog_lock: super::transaction::CatalogWriteLock,
     table_locks: Vec<TableLock>,
 }
@@ -27,7 +29,10 @@ impl Catalog {
         }
 
         let catalog_lock = super::transaction::write_lock(&self.root)?;
-        let entries = self.tables.values().cloned().collect::<Vec<_>>();
+        let mut catalog = self.clone();
+        catalog.tables = super::discovery::discover_tables(&self.root)?;
+        let expected_table_set = table_set(&catalog.tables);
+        let entries = catalog.tables.values().cloned().collect::<Vec<_>>();
         let mut table_locks = Vec::with_capacity(entries.len());
         for entry in &entries {
             table_locks.push(TableLock::acquire(entry.path())?);
@@ -51,10 +56,11 @@ impl Catalog {
         }
 
         Ok(CatalogTransaction {
-            catalog: self.clone(),
+            catalog,
             tables: before.clone(),
             before,
             touched: BTreeSet::new(),
+            expected_table_set,
             catalog_lock,
             table_locks,
         })
@@ -95,14 +101,28 @@ impl CatalogTransaction {
             before,
             tables,
             touched,
+            expected_table_set,
             catalog_lock,
             table_locks,
         } = self;
         let _catalog_lock = catalog_lock;
         let _table_locks = table_locks;
+        let current_table_set = super::discovery::discover_tables(&catalog.root)
+            .map(|tables| table_set(&tables))
+            .map_err(CatalogTransactionError::Catalog)?;
+        if current_table_set != expected_table_set {
+            return Err(CatalogTransactionError::TableSetChanged);
+        }
         catalog.commit_loaded_tables_locked(before, tables, touched, true)
     }
 
     /// Discards the private image and releases all held locks.
     pub fn rollback(self) {}
+}
+
+fn table_set(tables: &BTreeMap<String, super::CatalogTable>) -> BTreeSet<(String, String)> {
+    tables
+        .values()
+        .map(|table| (table.name().to_owned(), table.file_name().to_owned()))
+        .collect()
 }
