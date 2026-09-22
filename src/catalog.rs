@@ -13,10 +13,12 @@ mod discovery;
 mod journal;
 mod mvcc;
 mod read_transaction;
+mod serializable;
 mod transaction;
 
 pub use cdc::{CatalogChangeEvent, CatalogTableChange};
 pub use read_transaction::CatalogReadTransaction;
+pub use serializable::CatalogTransaction;
 
 #[cfg(test)]
 mod cdc_tests;
@@ -57,7 +59,7 @@ impl From<std::io::Error> for CatalogError {
 }
 
 #[derive(Debug)]
-pub(crate) enum CatalogTransactionError {
+pub enum CatalogTransactionError {
     Invalid(String),
     PreconditionFailed { tag: String },
     Catalog(CatalogError),

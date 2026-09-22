@@ -17,10 +17,12 @@ pub(crate) fn validate_replacements(
         };
         tables.insert(entry.name().to_owned(), table);
     }
-    validate_foreign_keys(&tables)
+    validate_loaded_tables(&tables)
 }
 
-fn validate_foreign_keys(tables: &BTreeMap<String, DbfTable>) -> Result<(), CatalogError> {
+pub(super) fn validate_loaded_tables(
+    tables: &BTreeMap<String, DbfTable>,
+) -> Result<(), CatalogError> {
     for (child_name, child) in tables {
         let foreign_keys = child.foreign_keys().map_err(|source| CatalogError::Table {
             name: child_name.clone(),

@@ -75,6 +75,12 @@ The single-table HTTP `POST /transaction` route reuses this apply-and-commit bou
 
 The catalog `POST /transaction` route remains a separate cross-table journal boundary because it coordinates DBF and sidecar images under the catalog lock.
 
+For a Rust caller that must hold a cross-table write boundary from begin through commit or
+rollback, `Catalog::begin_serializable` returns a `CatalogTransaction`.
+It holds the catalog write lock and every discovered table's exclusive lock, applies named record
+operations to private copies, validates cross-table constraints, and commits through one catalog
+journal.
+
 The `src/transaction/` engine remains a lower-level WAL transaction primitive and does not provide DBF visibility or this table API.
 
 Historical table and catalog snapshots remain read-only MVCC views.
@@ -88,17 +94,22 @@ retained commit.
 
 The default API provides a private snapshot for one DBF table and optimistic stale-source rejection at commit.
 
-`begin_serializable` provides strict serial execution for one table by excluding concurrent txBASE access from begin through commit or rollback.
+`DbfTransaction::begin_serializable` provides strict serial execution for one table by excluding concurrent txBASE access from begin through commit or rollback.
 This is intentionally a table-wide lock, so it does not provide predicate-level concurrency or a cross-table serializable transaction.
 
 `CatalogReadTransaction` provides a separate in-memory snapshot boundary for cross-table reads and
 bounded joins.
 
+`Catalog::begin_serializable` provides strict serial execution for the catalog's discovered table
+set by holding the catalog write lock and all table locks through commit, rollback, or drop.
+It is intentionally coarse-grained and does not provide predicate-level concurrency, dynamic
+table membership, or distributed coordination.
+
 The default API does not provide predicate locking or predicate-level serializable conflict detection.
 `commit_with_row_merge()` is limited to explicit physical-row update and delete merging and does not
 provide predicate or serializable semantics.
 
-Predicate-level locking, cross-table serializable validation, independent catalog retention, and long-lived distributed transactions remain future work.
+Predicate-level locking, dynamic table-set validation, independent catalog retention, and long-lived distributed transactions remain future work.
 
 ## 5. Example
 
@@ -113,6 +124,17 @@ let committed_table = transaction.commit()?;
 ```
 
 Use `commit_with_row_merge()` only when that narrower physical-row conflict contract is sufficient.
+
+For a coarse-grained cross-table serializable boundary:
+
+```rust
+use txbase::catalog::Catalog;
+
+let catalog = Catalog::from_path("database")?;
+let mut transaction = catalog.begin_serializable()?;
+transaction.apply(&operation)?;
+let transaction_id = transaction.commit()?;
+```
 
 The HTTP route and this Rust API share the same table mutation and persistence path, so a behavior change must update both the API tests and the HTTP contract tests.
 

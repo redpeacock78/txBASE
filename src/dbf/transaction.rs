@@ -33,8 +33,7 @@ impl DbfTransaction {
     pub fn begin_serializable(path: impl AsRef<Path>) -> Result<Self, DbfError> {
         let path = path.as_ref().to_path_buf();
         let lock = TableLock::acquire(&path)?;
-        DbfTable::recover_wal_with_encoding(&path, None)?;
-        let _ = super::schema_export::recover_schema_export_locked(&path)?;
+        super::recover_path_with_lock_held(&path)?;
         let table = super::load_path_with_lock_held(&path)?;
         Ok(Self {
             path,

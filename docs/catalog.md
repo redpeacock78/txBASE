@@ -56,6 +56,9 @@ let old_users = historical.open_table("users")?;
 let read = catalog.begin_read()?;
 let stable_users = read.open_table("users")?;
 let stable_rows = read.execute_join(&join_request)?;
+let mut transaction = catalog.begin_serializable()?;
+transaction.apply(&operation)?;
+let transaction_id = transaction.commit()?;
 ```
 
 `open_table` loads one DBF through the existing recovery and memo-sidecar path.
@@ -85,6 +88,16 @@ or `None` when no catalog-journal commit exists yet.
 bounded join contract, including chained stages, against the captured tables.
 The captured join cannot use live index sidecars; it retains the same result and stage bounds and
 uses the scan/hash execution paths.
+
+`Catalog::begin_serializable` opens an opt-in coarse-grained serializable transaction over every
+discovered table.
+It holds the catalog write lock and all per-table exclusive locks from begin through commit,
+rollback, or drop.
+`CatalogTransaction::apply` changes private table copies, and `commit` validates cross-table
+constraints and publishes one catalog journal transaction.
+`open_table` exposes a read-only copy of the private image.
+This boundary is catalog-wide for the discovered table set, but it does not provide
+predicate-level concurrency, dynamic table membership, or distributed coordination.
 
 This in-memory transaction is not a durable history pin and does not extend MVCC retention.
 Use `Catalog::from_path_at` when a retained commit must be reopened after the process exits.
@@ -207,6 +220,9 @@ input boundary used by the bounded local join, an optional HTTP surface for inde
 named-table reads and mutations, and read-only catalog-wide historical snapshots.
 
 It provides a cross-table atomic transaction boundary for named record mutations.
+`Catalog::begin_serializable` additionally provides an opt-in coarse-grained serializable Rust
+transaction that holds the catalog write lock and every discovered table lock for its lifetime,
+then commits private table copies through the same catalog journal.
 
 It exposes those multi-table commits through `Catalog::cdc_events` and `txbase cdc catalog DIRECTORY`.
 The catalog CDC stream is limited to the explicit multi-table transaction boundary; independent named-table routes keep their table-scoped CDC events.
@@ -225,8 +241,13 @@ IDs.
 It does not expose table-local row history for a historical catalog snapshot; direct table MVCC
 exposes that history separately.
 
-The catalog does not provide independent row retention, distributed snapshots, or serializable
-conflict detection.
+The catalog does not provide independent row retention, distributed snapshots, or predicate-level
+serializable conflict detection.
+
+`Catalog::begin_serializable` provides coarse-grained serial execution across the discovered table
+set.
+It does not provide predicate-level locking, dynamic table-set validation, or distributed
+serializable coordination.
 
 The Rust `CatalogReadTransaction` provides a nonblocking, stable cross-table read image after its
 capture completes, but it does not provide predicate locking, serializable conflict detection, or

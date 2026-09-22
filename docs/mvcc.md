@@ -133,6 +133,11 @@ It applies operations and queries against the private copy, then publishes one W
 `DbfTransaction::begin_serializable` is the optional coarse-grained serializable boundary for one table.
 It holds the exclusive table lock from begin through commit or rollback, so local txBASE readers and writers that use the same lock cannot interleave with the transaction.
 
+`Catalog::begin_serializable` is the optional coarse-grained serializable boundary for a catalog.
+It holds the catalog write lock and every discovered table's exclusive lock from begin through
+commit, rollback, or drop, applies operations to private table copies, and commits through one
+catalog journal.
+
 ## 2. Commit and recovery
 
 The writer holds the existing per-table lock.
@@ -166,6 +171,11 @@ Inserts and different changes to the same row remain errors; an identical result
 The default table transaction does not provide predicate locking or predicate-level serializable
 conflict detection, and neither API provides a long-lived transaction object across CLI calls.
 
+`Catalog::begin_serializable` provides coarse-grained serial execution across the discovered table
+set.
+It does not provide predicate-level locking, dynamic table-set validation, or distributed
+coordination.
+
 The catalog transaction ID identifies one consistent multi-table image and can select that image
 for one catalog HTTP request or identify a `CatalogReadTransaction` capture.
 
@@ -189,10 +199,10 @@ The current retention boundary is count-based GC for full-image table and catalo
 
 The current row-level boundary is physical-record history with epoch-separated identities, baseline compaction, and optional detached row-history records.
 
-Schema migration history, predicate-level locking, cross-table serializable validation, and
+Schema migration history, predicate-level locking, dynamic table-set validation, and
 long-lived distributed transactions remain future work.
 
-Distributed snapshots, follower reads, and serializable conflict detection remain later work.
+Distributed snapshots, follower reads, and distributed serializable coordination remain later work.
 
 ## Primary references
 

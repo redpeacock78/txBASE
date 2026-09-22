@@ -49,53 +49,87 @@ impl Catalog {
         let mut tables = before.clone();
         let mut touched = BTreeSet::new();
         for operation in operations {
-            let Some((name, local_path)) = transaction_operation_path(&operation.path) else {
-                return Err(CatalogTransactionError::Invalid(format!(
-                    "operation path is not a named record route: {}",
-                    operation.path
-                )));
-            };
-            if !matches!(
-                operation.method,
-                OperationMethod::Post
-                    | OperationMethod::Put
-                    | OperationMethod::Patch
-                    | OperationMethod::Delete
-            ) {
-                return Err(CatalogTransactionError::Invalid(format!(
-                    "operation method {} is not a mutation",
-                    operation.method.as_str()
-                )));
-            }
-            if self.table_path(name).is_none() {
-                return Err(CatalogTransactionError::Invalid(format!(
-                    "table not found: {name}"
-                )));
-            }
-            let table = tables
-                .get_mut(name)
-                .expect("catalog transaction table was inserted");
-            touched.insert(name.to_owned());
-            table
-                .apply_operation(&OperationIr {
-                    method: operation.method,
-                    path: local_path,
-                    body: operation.body.clone(),
-                })
-                .map_err(|error| {
-                    CatalogTransactionError::Invalid(format!("table {name}: {error}"))
-                })?;
+            apply_operation_to_tables(self, &mut tables, &mut touched, operation)?;
+        }
+        self.commit_loaded_tables_locked(before, tables, touched, false)
+    }
+}
+
+pub(super) fn apply_operation_to_tables(
+    catalog: &Catalog,
+    tables: &mut BTreeMap<String, DbfTable>,
+    touched: &mut BTreeSet<String>,
+    operation: &OperationIr,
+) -> Result<(), CatalogTransactionError> {
+    let Some((name, local_path)) = transaction_operation_path(&operation.path) else {
+        return Err(CatalogTransactionError::Invalid(format!(
+            "operation path is not a named record route: {}",
+            operation.path
+        )));
+    };
+    if !matches!(
+        operation.method,
+        OperationMethod::Post
+            | OperationMethod::Put
+            | OperationMethod::Patch
+            | OperationMethod::Delete
+    ) {
+        return Err(CatalogTransactionError::Invalid(format!(
+            "operation method {} is not a mutation",
+            operation.method.as_str()
+        )));
+    }
+    if catalog.table_path(name).is_none() {
+        return Err(CatalogTransactionError::Invalid(format!(
+            "table not found: {name}"
+        )));
+    }
+    let table = tables
+        .get_mut(name)
+        .expect("catalog transaction table was inserted");
+    touched.insert(name.to_owned());
+    table
+        .apply_operation(&OperationIr {
+            method: operation.method,
+            path: local_path,
+            body: operation.body.clone(),
+        })
+        .map_err(|error| CatalogTransactionError::Invalid(format!("table {name}: {error}")))
+}
+
+impl Catalog {
+    pub(super) fn commit_loaded_tables_locked(
+        &self,
+        before: BTreeMap<String, DbfTable>,
+        mut tables: BTreeMap<String, DbfTable>,
+        mut touched: BTreeSet<String>,
+        reuse_loaded_tables: bool,
+    ) -> Result<u64, CatalogTransactionError> {
+        if touched.is_empty() {
+            return super::journal::read_transaction_id_locked(&self.root)
+                .map(|transaction_id| transaction_id.unwrap_or(0))
+                .map_err(CatalogTransactionError::Catalog);
         }
         touched.extend(
             super::constraint_actions::apply_actions(&before, &mut tables)
                 .map_err(CatalogTransactionError::Catalog)?,
         );
+        if reuse_loaded_tables {
+            super::constraints::validate_loaded_tables(&tables)
+                .map_err(CatalogTransactionError::Catalog)?;
+        } else {
+            let validation_replacements = tables
+                .iter()
+                .filter(|(name, _)| touched.contains(*name))
+                .map(|(name, table)| (name.clone(), table.clone()))
+                .collect::<BTreeMap<_, _>>();
+            self.validate_replacements(&validation_replacements)
+                .map_err(CatalogTransactionError::Catalog)?;
+        }
         let mut replacements = tables
             .into_iter()
             .filter(|(name, _)| touched.contains(name))
             .collect::<BTreeMap<_, _>>();
-        self.validate_replacements(&replacements)
-            .map_err(CatalogTransactionError::Catalog)?;
 
         let transaction_id =
             next_transaction_id_locked(&self.root).map_err(CatalogTransactionError::Catalog)?;
@@ -150,6 +184,10 @@ impl Catalog {
         for entry in self.tables() {
             let table = match replacements.get(entry.name()) {
                 Some(table) => table.clone(),
+                None if reuse_loaded_tables => before
+                    .get(entry.name())
+                    .cloned()
+                    .expect("catalog transaction table was loaded before commit"),
                 None => self
                     .open_table_unlocked(entry.name())
                     .map_err(CatalogTransactionError::Catalog)?,

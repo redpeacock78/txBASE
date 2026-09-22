@@ -43,6 +43,7 @@ The repository currently provides:
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - A public `DbfTransaction` API that exposes the same optimistic single-table snapshot, query, stale-source check, commit, and rollback boundary used by the HTTP transaction route.
 - An opt-in coarse-grained serializable `DbfTransaction::begin_serializable` boundary that holds the exclusive table lock from begin through commit or rollback.
+- An opt-in coarse-grained serializable `Catalog::begin_serializable` boundary that holds the catalog write lock and every discovered table lock from begin through commit, rollback, or drop, then publishes private table copies through one catalog journal.
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
 - A bounded aggregation pipeline with zero or more `$match` stages before one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, numeric field-reference or literal `$sum`, numeric `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, followed by bounded group-output `$match` stages, one optional `$project`, and final `$sort`, `$skip`, and `$limit` stages.
 - A bounded local `inner`, `left`, `right`, `full`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
@@ -68,7 +69,7 @@ The baseline intentionally does not include the following:
 - A full cost-based index or join model.
 - Full index-aware or cost-based merge join strategies.
 - Worker/WASI-specific timeout, transport, cancellation, and asynchronous-storage semantics, and remote object-store adapters.
-- Predicate-level locking and cross-table serializable conflict detection.
+- Predicate-level locking, dynamic table-set serializable validation, and distributed serializable coordination.
 - Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export.
@@ -153,9 +154,13 @@ and record count are unchanged; inserts and different changes to the same row re
 An identical resulting row is a no-op. Table MVCC also supports optional independent per-row
 retention with `mvcc gc --keep-rows`. `DbfTransaction::begin_serializable` provides a
 coarse-grained serializable one-table boundary by holding the exclusive table lock for the
-transaction lifetime; predicate-level and cross-table serializable conflict detection remain
-future work. The current full-image table and catalog histories have an explicit count-based GC
-boundary.
+transaction lifetime.
+`Catalog::begin_serializable` provides a coarse-grained catalog-wide boundary by holding the
+catalog write lock and every discovered table lock for the transaction lifetime, applying
+operations to private copies, and publishing one catalog journal commit.
+Predicate-level locking, dynamic table-set validation, and distributed serializable coordination
+remain future work.
+The current full-image table and catalog histories have an explicit count-based GC boundary.
 
 The single-table transaction slice covers one DBF table through one snapshot/WAL persistence path and retains committed table snapshots in a `*.txbase.mvcc` sidecar.
 The catalog transaction slice prepares named operations across multiple DBFs under a catalog
@@ -365,6 +370,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Full cost-based planners, joins, aggregation, predicate-level or cross-table serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
+- Full cost-based planners, joins, aggregation, predicate-level or dynamic-table-set serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, and bounded cost choice based on record counts, index traversal, and sort work are implemented, while a full I/O-aware model and cross-table index definitions or index-aware planning remain future work.

@@ -56,6 +56,9 @@ let old_users = historical.open_table("users")?;
 let read = catalog.begin_read()?;
 let stable_users = read.open_table("users")?;
 let stable_rows = read.execute_join(&join_request)?;
+let mut transaction = catalog.begin_serializable()?;
+transaction.apply(&operation)?;
+let transaction_id = transaction.commit()?;
 ```
 
 `open_table`は既存の復旧およびmemoサイドカー経路を通して1つのDBFをロードします。
@@ -93,6 +96,16 @@ let stable_rows = read.execute_join(&join_request)?;
 取得した結合はライブのインデックスサイドカーを使いません。
 
 結果数とステージ数の上限は維持し、スキャンまたはハッシュの実行経路を使います。
+
+`Catalog::begin_serializable`は、検出したすべてのテーブルを対象にする、任意選択の粗粒度serializableトランザクションを開きます。
+
+beginからcommit、rollback、またはdropまで、カタログwrite lockとすべてのテーブル排他ロックを保持します。
+
+`CatalogTransaction::apply`は非公開のテーブルコピーだけを変更し、`commit`はテーブル間制約を検証して1つのカタログjournalトランザクションを公開します。
+
+`open_table`は非公開イメージの読み取り専用コピーを返します。
+
+この境界は検出済みテーブル集合をカタログ全体で直列化しますが、述語単位の並行性、動的なテーブル構成、分散調整は提供しません。
 
 このメモリ内トランザクションは永続的な履歴のピン留めではなく、MVCCの保持期間も延長しません。
 
@@ -236,6 +249,8 @@ txbase cdc catalog path/to/database --after 10
 
 名前付きレコードの更新を横断するアトミックなトランザクション境界も提供します。
 
+`Catalog::begin_serializable`は、カタログwrite lockと検出したすべてのテーブルロックをトランザクション中は保持し、非公開テーブルコピーを同じカタログjournalでcommitする、任意選択の粗粒度serializable Rustトランザクションも提供します。
+
 この複数テーブルcommitは`Catalog::cdc_events`と`txbase cdc catalog DIRECTORY`で公開します。
 カタログCDCストリームは明示的な複数テーブルトランザクションの境界に限られ、独立した名前付きテーブル経路はテーブル単位のCDCイベントを保持します。
 
@@ -253,7 +268,11 @@ GCで削除したIDは読み取れず、次のカタログcommitは保持され�
 
 過去のカタログスナップショットに対するテーブル単位の行履歴は公開せず、その履歴は直接のテーブルMVCCが別に公開します。
 
-独立した行保持、分散スナップショット、serializableな競合検出、行単位の書き込み競合マージは提供しません。
+独立した行保持、分散スナップショット、述語単位のserializable競合検出、行単位の書き込み競合マージは提供しません。
+
+`Catalog::begin_serializable`は、検出済みテーブル集合に対する粗粒度の直列実行を提供します。
+
+述語単位のロック、動的なテーブル集合の検証、分散serializable調整は提供しません。
 
 フィールドサイドカーが`references: "TABLE.FIELD"`を宣言すると、カタログの名前付き更新とカタログトランザクションは、非nullの子値が参照テーブルのアクティブ行に存在するか検証します。
 

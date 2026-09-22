@@ -1,6 +1,8 @@
 use super::*;
 use crate::xbase::{OperationIr, OperationMethod};
+use fs2::FileExt;
 use std::fs;
+use std::fs::OpenOptions;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT_CATALOG_ID: AtomicUsize = AtomicUsize::new(0);
@@ -203,6 +205,99 @@ fn commits_named_operations_across_tables() {
         30
     );
     assert!(!root.join(".txbase.catalog.txn").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn serializable_catalog_transaction_holds_all_locks_and_commits_once() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.dbf"), fixture()).unwrap();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut transaction = catalog.begin_serializable().unwrap();
+
+    let catalog_probe = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(root.join(".txbase.catalog.lock"))
+        .unwrap();
+    assert!(catalog_probe.try_lock_exclusive().is_err());
+    drop(catalog_probe);
+    for table in ["users", "posts"] {
+        let table_probe = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join(format!("{table}.txbase.lock")))
+            .unwrap();
+        assert!(table_probe.try_lock_exclusive().is_err());
+        drop(table_probe);
+    }
+
+    for table in ["users", "posts"] {
+        transaction
+            .apply(&OperationIr {
+                method: OperationMethod::Patch,
+                path: format!("/{table}/records/1"),
+                body: Some(json!({"NAME": "serial"})),
+            })
+            .unwrap();
+    }
+    assert_eq!(transaction.table_names(), vec!["posts", "users"]);
+    assert_eq!(
+        transaction
+            .open_table("users")
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["NAME"],
+        "serial"
+    );
+
+    assert_eq!(transaction.commit().unwrap(), 1);
+    let reloaded = Catalog::from_path(&root).unwrap();
+    assert_eq!(reloaded.transaction_id().unwrap(), Some(1));
+    for table in ["users", "posts"] {
+        assert_eq!(
+            reloaded
+                .open_table(table)
+                .unwrap()
+                .active_record(1)
+                .unwrap()
+                .values["NAME"],
+            "serial"
+        );
+    }
+    assert_eq!(Catalog::cdc_events(&root, None).unwrap().len(), 1);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn serializable_catalog_transaction_rollback_releases_all_locks() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.dbf"), fixture()).unwrap();
+    let catalog = Catalog::from_path(&root).unwrap();
+    let transaction = catalog.begin_serializable().unwrap();
+    transaction.rollback();
+
+    let catalog_probe = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(root.join(".txbase.catalog.lock"))
+        .unwrap();
+    catalog_probe.try_lock_exclusive().unwrap();
+    catalog_probe.unlock().unwrap();
+    drop(catalog_probe);
+    for table in ["users", "posts"] {
+        let table_probe = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join(format!("{table}.txbase.lock")))
+            .unwrap();
+        table_probe.try_lock_exclusive().unwrap();
+        table_probe.unlock().unwrap();
+        drop(table_probe);
+    }
     fs::remove_dir_all(root).unwrap();
 }
 

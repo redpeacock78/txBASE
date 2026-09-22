@@ -34,6 +34,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - A native threaded asynchronous query-stream adapter with bounded backpressure and drop cancellation.
 - A committed single-table change-data-capture sidecar with WAL recovery and an inspection CLI.
 - An opt-in coarse-grained serializable transaction boundary for one DBF table.
+- An opt-in coarse-grained serializable transaction boundary for a catalog's discovered tables.
 
 The detailed compatibility and behavior contracts live in the [documentation index](docs/README.md).
 
@@ -127,6 +128,7 @@ It also accepts typed `$set`, `$unset`, and `$inc` operators in the local JSON d
 
 Single-table `POST /transaction` applies multiple operations to a private copy and commits one snapshot/WAL boundary.
 The Rust API also exposes `DbfTransaction::begin_serializable` for an opt-in coarse-grained serializable boundary that holds the exclusive table lock from begin through commit or rollback.
+`Catalog::begin_serializable` provides the corresponding catalog-wide Rust boundary: it holds the catalog write lock and every discovered table lock, applies named operations to private copies, and commits them through one catalog journal.
 Single-table mutations retain table-scoped historical snapshots through the `mvcc` CLI.
 Catalog `POST /transaction` also retains one full-image historical snapshot for every discovered
 table. `Catalog::from_path_at` and `mvcc catalog` read one consistent catalog commit; the catalog
@@ -293,7 +295,7 @@ The roadmap still leaves the following areas as future work:
 - Worker/WASI-specific `AsyncQueryStream` timeout, transport, cancellation, and asynchronous-storage behavior.
 - Full cost-based index and join planning.
 - Broader aggregation.
-- Predicate-level locking and cross-table serializable conflict detection.
+- Predicate-level locking, dynamic table-set serializable validation, and distributed serializable coordination.
 - Locale-aware CJK collation.
 - Broader upstream CJK fixtures.
 - Strict multi-file reader atomicity for XBF export.

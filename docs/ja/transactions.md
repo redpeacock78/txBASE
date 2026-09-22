@@ -75,6 +75,10 @@ APIはマージ方針を自動選択せず、ネットワーク応答を失っ�
 
 カタログの`POST /transaction`経路は、カタログロックの下でDBFとサイドカーのイメージを調整するため、テーブル間ジャーナルの別境界として残ります。
 
+テーブル横断の書き込み境界をbeginからcommitまたはrollbackまで保持する必要があるRustの呼び出し元には、`Catalog::begin_serializable`が`CatalogTransaction`を返します。
+
+これはカタログwrite lockと検出したすべてのテーブルの排他ロックを保持し、名前付きレコード操作を非公開コピーへ適用し、テーブル間制約を検証して1つのカタログjournalへcommitします。
+
 `src/transaction/`エンジンは低レベルのWALトランザクションプリミティブとして残り、DBFの可視性やこのテーブルAPIは提供しません。
 
 テーブルとカタログの過去スナップショットは、引き続き読み取り専用のMVCCビューです。
@@ -94,10 +98,14 @@ APIはマージ方針を自動選択せず、ネットワーク応答を失っ�
 
 `CatalogReadTransaction`は、テーブル横断の読み取りと有界結合に対する別のメモリ内スナップショット境界を提供します。
 
+`Catalog::begin_serializable`は、カタログの検出済みテーブル集合に対して、commit、rollback、またはdropまでカタログwrite lockとすべてのテーブルロックを保持する、厳密な直列実行を提供します。
+
+これは意図的に粗粒度であり、述語単位の並行性、動的なテーブル構成、分散調整は提供しません。
+
 既定のAPIは、述語ロックまたは述語単位のserializable競合検出を提供しません。
 `commit_with_row_merge()`は、明示的な物理レコードの更新および削除のマージに限られ、述語またはserializableの意味論は提供しません。
 
-述語単位のロック、テーブル横断のserializable検証、カタログの独立した保持、長寿命の分散トランザクションは、将来の作業です。
+述語単位のロック、動的なテーブル集合の検証、カタログの独立した保持、長寿命の分散トランザクションは、将来の作業です。
 
 ## 5. 例
 
@@ -112,6 +120,17 @@ let committed_table = transaction.commit()?;
 ```
 
 この狭い物理レコード競合の契約で十分な場合だけ、`commit_with_row_merge()`を使います。
+
+粗粒度のテーブル横断serializable境界には、次のAPIを使います。
+
+```rust
+use txbase::catalog::Catalog;
+
+let catalog = Catalog::from_path("database")?;
+let mut transaction = catalog.begin_serializable()?;
+transaction.apply(&operation)?;
+let transaction_id = transaction.commit()?;
+```
 
 HTTP経路とこのRust APIは、同じテーブル更新および永続化経路を共有するため、動作を変更するときはAPIテストとHTTP契約テストの両方を更新しなければなりません。
 
