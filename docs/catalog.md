@@ -53,6 +53,9 @@ catalog.verify()?;
 let versions = Catalog::mvcc_versions("database")?;
 let historical = Catalog::from_path_at("database", 1)?;
 let old_users = historical.open_table("users")?;
+let read = catalog.begin_read()?;
+let stable_users = read.open_table("users")?;
+let stable_rows = read.execute_join(&join_request)?;
 ```
 
 `open_table` loads one DBF through the existing recovery and memo-sidecar path.
@@ -70,6 +73,21 @@ read-only image. Every table opened from that value belongs to the same catalog 
 
 Historical tables use their retained DBF, memo, and schema images and do not reuse current index
 sidecars.
+
+`Catalog::begin_read` captures every discovered current table as one in-memory, read-only image.
+It first recovers pending catalog and table state, then takes the catalog read lock and all table
+read locks in deterministic table order while loading DBF, memo, and schema bytes.
+The locks are released after capture, so the read object does not block later writers.
+
+`CatalogReadTransaction::transaction_id` reports the catalog commit ID observed at capture time,
+or `None` when no catalog-journal commit exists yet.
+`open_table` returns an independent read-only table copy, and `execute_join` runs the existing
+bounded join contract, including chained stages, against the captured tables.
+The captured join cannot use live index sidecars; it retains the same result and stage bounds and
+uses the scan/hash execution paths.
+
+This in-memory transaction is not a durable history pin and does not extend MVCC retention.
+Use `Catalog::from_path_at` when a retained commit must be reopened after the process exits.
 
 The ID advances only through the multi-table `POST /transaction` journal boundary. Independent
 named-table mutations retain their per-table DBF transaction IDs and do not create a new catalog
@@ -209,6 +227,10 @@ exposes that history separately.
 
 The catalog does not provide independent row retention, distributed snapshots, or serializable
 conflict detection.
+
+The Rust `CatalogReadTransaction` provides a nonblocking, stable cross-table read image after its
+capture completes, but it does not provide predicate locking, serializable conflict detection, or
+row-level write-write merging.
 
 When a field sidecar declares `references: "TABLE.FIELD"`, catalog named-table mutations and
 catalog transactions validate non-null child values against active rows in the referenced table.

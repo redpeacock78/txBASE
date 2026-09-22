@@ -74,7 +74,7 @@ use codec::{
 #[cfg(test)]
 use codec::{decode_field, encode_field, text};
 pub use initializer::DbfFieldSpec;
-use lock::TableLock;
+pub(crate) use lock::{TableLock, TableReadLock};
 use memo::{
     binary_value, empty_memo_value, encode_memo_pointer, find_memo_path, is_sidecar_field,
     memo_index, sidecar_update, storage_value_without_sidecar,
@@ -114,6 +114,10 @@ pub use maintenance::copy_table_files;
 pub use transaction::DbfTransaction;
 
 pub(crate) use schema_export::commit_schema_export;
+
+pub(crate) fn load_path_with_lock_held(path: &Path) -> Result<DbfTable, DbfError> {
+    DbfTable::load_path_with_encoding(path, None)
+}
 
 pub fn apply_schema_metadata(path: impl AsRef<Path>, schema_bytes: &[u8]) -> Result<(), DbfError> {
     schema_export::apply_schema_metadata(path.as_ref(), schema_bytes)

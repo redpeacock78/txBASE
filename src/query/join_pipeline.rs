@@ -1,6 +1,6 @@
+use super::join::JoinSource;
 use super::join::{JoinError, JoinRequest, JoinSpec, JoinType, MAX_JOIN_ROWS};
 use super::matches_filter;
-use crate::catalog::Catalog;
 use crate::query_path::{field_value, project_values};
 use serde_json::{Map, Value};
 
@@ -28,13 +28,15 @@ pub(super) fn validate(request: &JoinRequest) -> Result<(), JoinError> {
     Ok(())
 }
 
-pub(super) fn execute(catalog: &Catalog, request: &JoinRequest) -> Result<Vec<Value>, JoinError> {
+pub(super) fn execute(
+    source: &dyn JoinSource,
+    request: &JoinRequest,
+) -> Result<Vec<Value>, JoinError> {
     validate(request)?;
-    let _lock = catalog.acquire_read_lock()?;
-    let mut rows = load_rows(catalog, &request.from)?.values;
+    let mut rows = load_rows(source, &request.from)?.values;
     for spec in std::iter::once(&request.join).chain(request.joins.iter()) {
-        let right = load_rows(catalog, &spec.table)?;
-        rows = stages::apply(catalog, rows, &right.values, &right.numbers, spec)?;
+        let right = load_rows(source, &spec.table)?;
+        rows = stages::apply(source, rows, &right.values, &right.numbers, spec)?;
     }
 
     let mut output = Vec::new();
@@ -81,8 +83,8 @@ fn validate_spec(spec: &JoinSpec, available: &[&str]) -> Result<(), JoinError> {
     Ok(())
 }
 
-fn load_rows(catalog: &Catalog, table_name: &str) -> Result<LoadedRows, JoinError> {
-    let table = catalog.open_table_unlocked(table_name)?;
+fn load_rows(source: &dyn JoinSource, table_name: &str) -> Result<LoadedRows, JoinError> {
+    let table = source.open_table(table_name)?;
     let mut values = Vec::new();
     let mut numbers = Vec::new();
     for record in table.active_records() {

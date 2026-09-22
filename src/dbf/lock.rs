@@ -6,16 +6,24 @@ use std::io;
 use std::path::Path;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(super) struct TableLock {
+pub(crate) struct TableLock {
     _file: File,
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(super) struct TableLock;
+pub(crate) struct TableLock;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) struct TableReadLock {
+    _file: File,
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) struct TableReadLock;
 
 impl TableLock {
     #[cfg(not(target_arch = "wasm32"))]
-    pub(super) fn acquire(path: &Path) -> io::Result<Self> {
+    pub(crate) fn acquire(path: &Path) -> io::Result<Self> {
         let lock_path = path.with_extension("txbase.lock");
         let file = OpenOptions::new()
             .create(true)
@@ -23,15 +31,35 @@ impl TableLock {
             .read(true)
             .write(true)
             .open(lock_path)?;
-        file.lock_exclusive()?;
+        FileExt::lock_exclusive(&file)?;
         Ok(Self { _file: file })
     }
 }
 
 #[cfg(target_arch = "wasm32")]
 impl TableLock {
-    pub(super) fn acquire(_path: &Path) -> io::Result<Self> {
+    pub(crate) fn acquire(_path: &Path) -> io::Result<Self> {
         // WASM has no shared POSIX file namespace. The host owns serialization.
+        Ok(Self)
+    }
+}
+
+impl TableReadLock {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn acquire(path: &Path) -> io::Result<Self> {
+        let lock_path = path.with_extension("txbase.lock");
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(lock_path)?;
+        FileExt::lock_shared(&file)?;
+        Ok(Self { _file: file })
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn acquire(_path: &Path) -> io::Result<Self> {
         Ok(Self)
     }
 }

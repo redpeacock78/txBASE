@@ -74,6 +74,13 @@ One request reads one exact catalog image.
 Historical HTTP queries and joins do not reuse current index sidecars, and catalog mutations with
 `at` are rejected.
 
+The Rust `Catalog::begin_read` API captures every discovered current table into one in-memory,
+read-only image before releasing the catalog and table read locks.
+Its `CatalogReadTransaction` keeps the captured catalog commit ID and supports table reads and the
+bounded join contract without reading later filesystem changes.
+It is a process-local read view, not a durable retention pin; `Catalog::from_path_at` remains the
+API for reopening a retained catalog commit.
+
 ### Row-level history
 
 The table MVCC sidecar also stores row changes inside the same prepare and commit records.
@@ -140,9 +147,11 @@ Table-local row history now has count-based retention through the existing full-
 The public table transaction provides optimistic stale-source rejection at commit, but it does not provide predicate locking, serializable conflict detection, row-level write-write merging, or a long-lived transaction object across CLI calls.
 
 The catalog transaction ID identifies one consistent multi-table image and can select that image
-for one catalog HTTP request.
+for one catalog HTTP request or identify a `CatalogReadTransaction` capture.
 
 The HTTP selector does not create a long-lived transaction object.
+The Rust read transaction is stable after capture, but it does not provide predicate locking,
+serializable conflict detection, or row-level write-write merging.
 
 `Catalog::gc_mvcc` and the catalog GC command retain the newest positive `keep_last` count of
 catalog images.
@@ -160,7 +169,7 @@ The current retention boundary is count-based GC for full-image table and catalo
 
 The current row-level boundary is physical-record history with epoch-separated identities and count-based compaction.
 
-An independent row-retention policy, schema migration history, predicate locking, serializable conflict detection, and cross-table long-lived snapshot transactions remain future work.
+An independent row-retention policy, schema migration history, predicate locking, serializable conflict detection, and row-level write-write merging remain future work.
 
 Distributed snapshots, follower reads, and serializable conflict detection remain later work.
 

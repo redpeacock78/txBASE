@@ -39,6 +39,7 @@ The repository currently provides:
 - Persistent table-scoped MVCC snapshots for single-table mutations, with `mvcc list`, `mvcc read`, `mvcc row`, and `mvcc row-at` CLI commands.
 - Catalog-wide commit-level MVCC snapshots for all discovered tables, with `Catalog::from_path_at` and `mvcc catalog` CLI commands.
 - Catalog HTTP schema, named-table, query, stream, explain, and join reads can select one retained catalog image with `?at=<transaction ID>`; historical execution does not reuse current index sidecars and catalog mutations remain rejected.
+- A `CatalogReadTransaction` API that captures all discovered tables into one process-local, read-only cross-table image, releases its locks after capture, and executes the existing bounded join contract without live index sidecars.
 - A single-table transaction endpoint that applies multiple record operations through one snapshot/WAL commit.
 - A public `DbfTransaction` API that exposes the same optimistic single-table snapshot, query, stale-source check, commit, and rollback boundary used by the HTTP transaction route.
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
@@ -66,7 +67,7 @@ The baseline intentionally does not include the following:
 - A full cost-based index or join model.
 - Full index-aware or cost-based merge join strategies.
 - Worker/WASI-specific timeout, transport, cancellation, and asynchronous-storage semantics, and remote object-store adapters.
-- Independent row-retention policies, predicate locking, serializable conflict detection, and cross-table long-lived snapshot transactions.
+- Independent row-retention policies, predicate locking, serializable conflict detection, and row-level write-write merging.
 - Aggregation stages or accumulators beyond bounded input and group-output `$match`, `$count`, `$distinct`, and `$group` with `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export.
@@ -142,10 +143,11 @@ An index is not complete for the broader roadmap until insert, update, logical d
 A catalog-wide commit-level snapshot is implemented with commit, rollback, crash recovery, and
 visibility rules in the shared catalog journal boundary. Table-local row history is implemented
 inside the table MVCC prepare/commit records, with epoch-separated physical row IDs and baseline
-reconstruction during full-image GC. Independent row retention and serializable transactions
-remain future work. The public `DbfTransaction` API provides an optimistic private snapshot for
-one DBF table, and the HTTP transaction route reuses that boundary; it does not provide predicate
-locking, serializable conflict detection, or cross-table transaction state.
+reconstruction during full-image GC. The public `DbfTransaction` API provides an optimistic private
+snapshot for one DBF table, and the HTTP transaction route reuses that boundary. The public
+`CatalogReadTransaction` API captures all discovered tables into one process-local read image and
+supports stable table reads and bounded joins after capture. Independent row retention, predicate
+locking, serializable conflict detection, and row-level write-write merging remain future work.
 The current full-image table and catalog histories have an explicit count-based GC boundary.
 
 The single-table transaction slice covers one DBF table through one snapshot/WAL persistence path and retains committed table snapshots in a `*.txbase.mvcc` sidecar.

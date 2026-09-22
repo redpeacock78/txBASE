@@ -62,11 +62,19 @@ The `src/transaction/` engine remains a lower-level WAL transaction primitive an
 
 Historical table and catalog snapshots remain read-only MVCC views.
 
+For a stable cross-table read image, `Catalog::begin_read` returns a
+`CatalogReadTransaction` that captures all discovered tables before releasing its locks.
+That API is read-only and non-durable; the catalog MVCC API remains the boundary for reopening a
+retained commit.
+
 ## 4. Isolation boundary
 
 The current API provides a private snapshot for one DBF table and optimistic stale-source rejection at commit.
 
-It does not provide predicate locking, serializable conflict detection, row-level write-write merging, or a cross-table transaction object.
+`CatalogReadTransaction` provides a separate in-memory snapshot boundary for cross-table reads and
+bounded joins.
+
+Neither API provides predicate locking, serializable conflict detection, or row-level write-write merging.
 
 Independent row-retention policies and long-lived distributed transactions remain future work.
 

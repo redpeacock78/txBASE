@@ -1,11 +1,11 @@
+use super::super::join::JoinSource;
 use super::super::join::{JoinError, JoinSpec, JoinType, MAX_JOIN_ROWS};
 use super::{encoded_key, push_combined, stage_fields, unqualified_field};
-use crate::catalog::Catalog;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
 pub(super) fn apply(
-    catalog: &Catalog,
+    source: &dyn JoinSource,
     left: Vec<Map<String, Value>>,
     right: &[Map<String, Value>],
     right_numbers: &[usize],
@@ -38,7 +38,7 @@ pub(super) fn apply(
         .iter()
         .map(|field| unqualified_field(field, &spec.table).map(str::to_owned))
         .collect::<Option<Vec<_>>>();
-    let right_index = if !catalog.is_historical() {
+    let right_index = if !source.is_historical() {
         if let Some(index_fields) = index_fields.as_deref() {
             let should_try = if matches!(&spec.kind, JoinType::Right) {
                 local_fields.len() == index_fields.len()
@@ -48,8 +48,13 @@ pub(super) fn apply(
                     super::super::join_strategy::JoinStrategy::Hash
                 )
             };
-            should_try
-                .then(|| super::super::join_index::load_fields(catalog, &spec.table, index_fields))
+            source
+                .catalog()
+                .and_then(|catalog| {
+                    should_try.then(|| {
+                        super::super::join_index::load_fields(catalog, &spec.table, index_fields)
+                    })
+                })
                 .flatten()
         } else {
             None

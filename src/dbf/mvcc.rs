@@ -196,6 +196,11 @@ pub(super) fn snapshot_at(path: &Path, transaction_id: u64) -> Result<Snapshot, 
 }
 
 impl DbfTable {
+    pub(crate) fn mark_read_only(&mut self) {
+        self.historical_snapshot = true;
+        self.source = None;
+    }
+
     pub fn from_path_at(path: impl AsRef<Path>, transaction_id: u64) -> Result<Self, DbfError> {
         let path = path.as_ref();
         let _lock = TableLock::acquire(path)?;

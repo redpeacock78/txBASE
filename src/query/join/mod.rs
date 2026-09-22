@@ -9,6 +9,7 @@ use std::fmt::{self, Display, Formatter};
 mod execute;
 
 pub use execute::execute;
+pub(crate) use execute::{JoinSource, execute_read_transaction};
 pub(super) use execute::{emit, encoded_key};
 
 pub const MAX_JOIN_ROWS: usize = 100_000;

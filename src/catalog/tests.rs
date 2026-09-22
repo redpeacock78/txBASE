@@ -387,6 +387,90 @@ fn catalog_mvcc_preserves_consistent_cross_table_snapshots() {
 }
 
 #[test]
+fn catalog_read_transaction_keeps_a_read_only_cross_table_image() {
+    let root = temporary_catalog();
+    let users = root.join("users.dbf");
+    let posts = root.join("posts.dbf");
+    fs::write(&users, fixture()).unwrap();
+    fs::write(&posts, fixture()).unwrap();
+    let catalog = Catalog::from_path(&root).unwrap();
+
+    assert_eq!(
+        catalog
+            .commit_operations_with_preconditions(
+                &[OperationIr {
+                    method: OperationMethod::Patch,
+                    path: "/posts/records/1".into(),
+                    body: Some(json!({"NAME": "Snapshot"})),
+                }],
+                None,
+                None,
+            )
+            .unwrap(),
+        1
+    );
+    let snapshot = catalog.begin_read().unwrap();
+    assert_eq!(snapshot.transaction_id(), Some(1));
+    assert_eq!(snapshot.table_names(), vec!["posts", "users"]);
+    assert_eq!(snapshot.schema_json()["transaction_id"], 1);
+
+    assert_eq!(
+        catalog
+            .commit_operations_with_preconditions(
+                &[OperationIr {
+                    method: OperationMethod::Patch,
+                    path: "/users/records/1".into(),
+                    body: Some(json!({"NAME": "Current"})),
+                }],
+                None,
+                None,
+            )
+            .unwrap(),
+        2
+    );
+
+    let request = crate::query::join::parse(
+        br#"{
+            "from":"users",
+            "join":{
+                "type":"inner",
+                "table":"posts",
+                "on":{"users.ID":{"$eq":{"$field":"posts.ID"}}}
+            },
+            "projection":{"users.NAME":1,"posts.NAME":1}
+        }"#,
+    )
+    .unwrap();
+    let snapshot_rows = snapshot.execute_join(&request).unwrap();
+    let current_rows = crate::query::join::execute(&catalog, &request).unwrap();
+    assert_eq!(snapshot_rows[0]["users.NAME"], "Alice");
+    assert_eq!(snapshot_rows[0]["posts.NAME"], "Snapshot");
+    assert_eq!(current_rows[0]["users.NAME"], "Current");
+    assert_eq!(current_rows[0]["posts.NAME"], "Snapshot");
+
+    let mut read_only = snapshot.open_table("users").unwrap();
+    read_only
+        .patch_record(1, json!({"NAME": "blocked"}).as_object().unwrap().clone())
+        .unwrap();
+    let error = read_only.save_with_wal(&users).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("historical MVCC snapshots are read-only")
+    );
+    assert_eq!(
+        DbfTable::from_path(&users)
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["NAME"],
+        "Current"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn catalog_mvcc_gc_retains_latest_commits_and_allows_future_appends() {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();

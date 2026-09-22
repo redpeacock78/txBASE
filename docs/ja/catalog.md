@@ -53,6 +53,9 @@ catalog.verify()?;
 let versions = Catalog::mvcc_versions("database")?;
 let historical = Catalog::from_path_at("database", 1)?;
 let old_users = historical.open_table("users")?;
+let read = catalog.begin_read()?;
+let stable_users = read.open_table("users")?;
+let stable_rows = read.execute_join(&join_request)?;
 ```
 
 `open_table`は既存の復旧およびmemoサイドカー経路を通して1つのDBFをロードします。
@@ -72,6 +75,28 @@ let old_users = historical.open_table("users")?;
 その値から開いたすべてのテーブルは、同じカタログcommitに属します。
 
 過去テーブルは保持したDBF、memo、スキーマのイメージを使い、現在のインデックスサイドカーを再利用しません。
+
+`Catalog::begin_read`は、検出したすべての現在テーブルを1つのプロセス内読み取り専用イメージとして取得します。
+
+最初に保留中のカタログ状態とテーブル状態を復旧します。
+
+次にカタログ読み取りロックと、テーブル名順に取得したすべてのテーブル読み取りロックの下で、DBF、memo、スキーマのバイト列を読み込みます。
+
+取得後にロックを解放するため、読み取りオブジェクトを保持しても後続の更新をブロックしません。
+
+`CatalogReadTransaction::transaction_id`は、取得時に観測したカタログcommit IDを返します。
+
+カタログジャーナルのcommitがまだ存在しない場合は`None`です。
+
+`open_table`は独立した読み取り専用テーブルコピーを返し、`execute_join`は連鎖ステージを含む既存の有界結合契約を取得したテーブルに対して実行します。
+
+取得した結合はライブのインデックスサイドカーを使いません。
+
+結果数とステージ数の上限は維持し、スキャンまたはハッシュの実行経路を使います。
+
+このメモリ内トランザクションは永続的な履歴のピン留めではなく、MVCCの保持期間も延長しません。
+
+プロセス終了後に保持されたcommitを再び開く場合は`Catalog::from_path_at`を使います。
 
 IDが進むのは複数テーブルの`POST /transaction`ジャーナル境界だけです。
 
@@ -207,6 +232,8 @@ txbase cdc catalog path/to/database --after 10
 
 カタログは現在、検出、検索、スキーマの内省、検証、有界ローカル結合が使う入力境界、名前付きテーブルを独立して読み書きする任意のHTTP境界、読み取り専用のカタログ全体の過去スナップショットを提供します。
 
+`CatalogReadTransaction`は、取得後に更新をブロックしない、テーブル横断の安定した読み取りイメージも提供します。
+
 名前付きレコードの更新を横断するアトミックなトランザクション境界も提供します。
 
 この複数テーブルcommitは`Catalog::cdc_events`と`txbase cdc catalog DIRECTORY`で公開します。
@@ -226,7 +253,7 @@ GCで削除したIDは読み取れず、次のカタログcommitは保持され�
 
 過去のカタログスナップショットに対するテーブル単位の行履歴は公開せず、その履歴は直接のテーブルMVCCが別に公開します。
 
-独立した行保持、分散スナップショット、serializableな競合検出は提供しません。
+独立した行保持、分散スナップショット、serializableな競合検出、行単位の書き込み競合マージは提供しません。
 
 フィールドサイドカーが`references: "TABLE.FIELD"`を宣言すると、カタログの名前付き更新とカタログトランザクションは、非nullの子値が参照テーブルのアクティブ行に存在するか検証します。
 

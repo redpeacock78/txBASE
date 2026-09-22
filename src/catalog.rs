@@ -12,9 +12,11 @@ mod constraints;
 mod discovery;
 mod journal;
 mod mvcc;
+mod read_transaction;
 mod transaction;
 
 pub use cdc::{CatalogChangeEvent, CatalogTableChange};
+pub use read_transaction::CatalogReadTransaction;
 
 #[cfg(test)]
 mod cdc_tests;
@@ -329,18 +331,6 @@ impl Catalog {
 
     pub(crate) fn acquire_write_lock(&self) -> Result<transaction::CatalogWriteLock, CatalogError> {
         transaction::write_lock(&self.root)
-    }
-
-    pub(crate) fn open_tables(
-        &self,
-        left: &str,
-        right: &str,
-    ) -> Result<(DbfTable, DbfTable), CatalogError> {
-        let _lock = transaction::read_lock(&self.root)?;
-        Ok((
-            self.open_table_unlocked(left)?,
-            self.open_table_unlocked(right)?,
-        ))
     }
 
     pub(crate) fn validate_replacements(
