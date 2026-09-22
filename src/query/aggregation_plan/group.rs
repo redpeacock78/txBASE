@@ -1,4 +1,5 @@
-use super::{AccumulatorKind, AccumulatorSpec, GroupSpec, QueryError, SumOperand, field_reference};
+use super::{AccumulatorKind, AccumulatorSpec, GroupSpec, QueryError, field_reference};
+use crate::query::expression::parse_numeric_operand;
 use serde_json::Value;
 
 pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
@@ -41,15 +42,14 @@ pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
             "$count" if operand.as_object().is_some_and(|object| object.is_empty()) => {
                 AccumulatorKind::Count
             }
-            "$avg" => AccumulatorKind::Average(field_reference(
-                operand.as_str().ok_or_else(|| {
-                    QueryError::Invalid(format!("$group.{name}.$avg must be a field reference"))
-                })?,
+            "$avg" => AccumulatorKind::Average(parse_numeric_operand(
+                operand,
                 &format!("$group.{name}.$avg"),
             )?),
-            "$sum" => {
-                AccumulatorKind::Sum(parse_sum_operand(operand, &format!("$group.{name}.$sum"))?)
-            }
+            "$sum" => AccumulatorKind::Sum(parse_numeric_operand(
+                operand,
+                &format!("$group.{name}.$sum"),
+            )?),
             "$min" | "$max" | "$first" | "$last" | "$push" | "$addToSet" => {
                 let field = field_reference(
                     operand.as_str().ok_or_else(|| {
@@ -84,14 +84,4 @@ pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
         key_field,
         accumulators,
     })
-}
-
-fn parse_sum_operand(value: &Value, path: &str) -> Result<SumOperand, QueryError> {
-    match value {
-        Value::String(value) => Ok(SumOperand::Field(field_reference(value, path)?)),
-        Value::Number(value) => Ok(SumOperand::Literal(value.clone())),
-        _ => Err(QueryError::Invalid(format!(
-            "{path} must be a field reference or numeric literal"
-        ))),
-    }
 }

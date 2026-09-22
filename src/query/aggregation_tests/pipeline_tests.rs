@@ -172,6 +172,8 @@ fn rejects_unsupported_aggregation_combinations() {
         br#"{"aggregate":[{"$distinct":"$ACTIVE"},{"$distinct":"$AGE"}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":"AGE"}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":true}}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":{"$add":["$AGE",true]}}}}]}"#
+            .as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"average":{"$avg":"AGE"}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$project":{"_id":1}},{"$match":{}}]}"#
             .as_slice(),

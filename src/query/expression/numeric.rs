@@ -2,17 +2,54 @@ use super::super::QueryError;
 use crate::query_path::field_value;
 use serde_json::{Map, Value};
 
-pub(super) fn validate_operand(operand: &Value, path: &str) -> Result<(), QueryError> {
+#[derive(Debug, Clone)]
+pub enum NumericExpression {
+    Field(String),
+    Literal(serde_json::Number),
+    Absolute(Box<NumericExpression>),
+    Binary {
+        operator: NumericOperator,
+        left: Box<NumericExpression>,
+        right: Box<NumericExpression>,
+    },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum NumericOperator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulo,
+}
+
+impl NumericOperator {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Add => "$add",
+            Self::Subtract => "$subtract",
+            Self::Multiply => "$multiply",
+            Self::Divide => "$divide",
+            Self::Modulo => "$mod",
+        }
+    }
+}
+
+pub fn validate_operand(operand: &Value, path: &str) -> Result<(), QueryError> {
+    parse_numeric_operand(operand, path).map(|_| ())
+}
+
+pub fn parse_numeric_operand(operand: &Value, path: &str) -> Result<NumericExpression, QueryError> {
     if let Some(reference) = operand.as_str().and_then(|value| value.strip_prefix('$')) {
         if reference.is_empty() {
             return Err(QueryError::Invalid(format!(
                 "{path} has an empty field reference"
             )));
         }
-        return Ok(());
+        return Ok(NumericExpression::Field(reference.to_owned()));
     }
-    if operand.is_number() {
-        return Ok(());
+    if let Some(number) = operand.as_number() {
+        return Ok(NumericExpression::Literal(number.clone()));
     }
     let Some(expression) = operand.as_object() else {
         return Err(QueryError::Invalid(format!(
@@ -22,89 +59,96 @@ pub(super) fn validate_operand(operand: &Value, path: &str) -> Result<(), QueryE
     let Some((operator, operands)) = expression.iter().next() else {
         return Err(QueryError::Invalid(format!("{path} cannot be empty")));
     };
-    if expression.len() != 1
-        || !matches!(
-            operator.as_str(),
-            "$abs" | "$add" | "$subtract" | "$multiply" | "$divide" | "$mod"
-        )
-    {
+    if expression.len() != 1 {
         return Err(QueryError::Invalid(format!(
             "{path} supports only $abs, $add, $subtract, $multiply, $divide, and $mod"
         )));
     }
     if operator == "$abs" {
-        validate_operand(operands, &format!("{path}.$abs"))?;
-        return Ok(());
-    }
-    let operands = operands
-        .as_array()
-        .ok_or_else(|| QueryError::Invalid(format!("{path}.{operator} must be an array")))?;
-    if operands.len() != 2 {
-        return Err(QueryError::Invalid(format!(
-            "{path}.{operator} requires two operands"
+        return Ok(NumericExpression::Absolute(Box::new(
+            parse_numeric_operand(operands, &format!("{path}.$abs"))?,
         )));
     }
-    for (index, operand) in operands.iter().enumerate() {
-        validate_operand(operand, &format!("{path}.{operator}[{index}]"))?;
-    }
-    Ok(())
+    let operator = match operator.as_str() {
+        "$add" => NumericOperator::Add,
+        "$subtract" => NumericOperator::Subtract,
+        "$multiply" => NumericOperator::Multiply,
+        "$divide" => NumericOperator::Divide,
+        "$mod" => NumericOperator::Modulo,
+        _ => {
+            return Err(QueryError::Invalid(format!(
+                "{path} supports only $abs, $add, $subtract, $multiply, $divide, and $mod"
+            )));
+        }
+    };
+    let operands = operands.as_array().ok_or_else(|| {
+        QueryError::Invalid(format!("{path}.{} must be an array", operator.as_str()))
+    })?;
+    let [left, right] = operands.as_slice() else {
+        return Err(QueryError::Invalid(format!(
+            "{path}.{} requires two operands",
+            operator.as_str()
+        )));
+    };
+    Ok(NumericExpression::Binary {
+        operator,
+        left: Box::new(parse_numeric_operand(
+            left,
+            &format!("{path}.{}[0]", operator.as_str()),
+        )?),
+        right: Box::new(parse_numeric_operand(
+            right,
+            &format!("{path}.{}[1]", operator.as_str()),
+        )?),
+    })
 }
 
-pub(super) fn resolve_operand(
+pub fn resolve_operand(
     values: &Map<String, Value>,
     operand: &Value,
 ) -> Result<Option<Value>, QueryError> {
     let Some(reference) = operand.as_str().and_then(|value| value.strip_prefix('$')) else {
-        return resolve_numeric_expression(values, operand);
+        if operand.is_object() {
+            let expression = parse_numeric_operand(operand, "filter.$expr")?;
+            return evaluate_numeric(values, &expression, "filter.$expr");
+        }
+        return Ok(Some(operand.clone()));
     };
     Ok((!reference.is_empty())
         .then(|| field_value(values, reference))
         .flatten())
 }
 
-fn resolve_numeric_expression(
+pub fn evaluate_numeric(
     values: &Map<String, Value>,
-    operand: &Value,
+    expression: &NumericExpression,
+    path: &str,
 ) -> Result<Option<Value>, QueryError> {
-    let Some(expression) = operand.as_object() else {
-        return Ok(Some(operand.clone()));
-    };
-    let Some((operator, operands)) = expression.iter().next() else {
-        return Err(QueryError::Invalid(
-            "filter.$expr numeric expression cannot be empty".into(),
-        ));
-    };
-    if expression.len() != 1
-        || !matches!(
-            operator.as_str(),
-            "$abs" | "$add" | "$subtract" | "$multiply" | "$divide" | "$mod"
-        )
-    {
-        return Err(QueryError::Invalid(format!(
-            "unsupported numeric expression operator {operator}"
-        )));
+    match expression {
+        NumericExpression::Field(field) => Ok(field_value(values, field)),
+        NumericExpression::Literal(number) => Ok(Some(Value::Number(number.clone()))),
+        NumericExpression::Absolute(operand) => {
+            let Some(value) = evaluate_numeric(values, operand, &format!("{path}.$abs"))? else {
+                return Ok(None);
+            };
+            apply_absolute_expression(&value, &format!("{path}.$abs"))
+        }
+        NumericExpression::Binary {
+            operator,
+            left,
+            right,
+        } => {
+            let operator_name = operator.as_str();
+            let expression_path = format!("{path}.{operator_name}");
+            let (Some(left), Some(right)) = (
+                evaluate_numeric(values, left, &format!("{expression_path}[0]"))?,
+                evaluate_numeric(values, right, &format!("{expression_path}[1]"))?,
+            ) else {
+                return Ok(None);
+            };
+            apply_numeric_expression(*operator, &left, &right, &expression_path)
+        }
     }
-    if operator == "$abs" {
-        let Some(value) = resolve_operand(values, operands)? else {
-            return Ok(None);
-        };
-        return apply_absolute_expression(&value);
-    }
-    let operands = operands
-        .as_array()
-        .ok_or_else(|| QueryError::Invalid(format!("filter.$expr.{operator} must be an array")))?;
-    let [left, right] = operands.as_slice() else {
-        return Err(QueryError::Invalid(format!(
-            "filter.$expr.{operator} requires two operands"
-        )));
-    };
-    let (Some(left), Some(right)) = (
-        resolve_operand(values, left)?,
-        resolve_operand(values, right)?,
-    ) else {
-        return Ok(None);
-    };
-    apply_numeric_expression(operator, &left, &right)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -114,78 +158,75 @@ enum NumericValue {
 }
 
 fn apply_numeric_expression(
-    operator: &str,
+    operator: NumericOperator,
     left: &Value,
     right: &Value,
+    path: &str,
 ) -> Result<Option<Value>, QueryError> {
     let (Some(left), Some(right)) = (as_numeric(left), as_numeric(right)) else {
         return Ok(None);
     };
-    if matches!(operator, "$divide" | "$mod") && is_zero(right) {
-        let message = if operator == "$divide" {
-            format!("filter.$expr.{operator} cannot divide by zero")
+    if matches!(operator, NumericOperator::Divide | NumericOperator::Modulo) && is_zero(right) {
+        let message = if matches!(operator, NumericOperator::Divide) {
+            format!("{path} cannot divide by zero")
         } else {
-            format!("filter.$expr.{operator} cannot use zero as the divisor")
+            format!("{path} cannot use zero as the divisor")
         };
         return Err(QueryError::Invalid(message));
     }
     match (left, right) {
         (NumericValue::Integer(left), NumericValue::Integer(right)) => {
-            if operator == "$divide" && left % right != 0 {
+            if matches!(operator, NumericOperator::Divide) && left % right != 0 {
                 return finite_json_number(
-                    operator,
+                    path,
                     numeric_as_f64(NumericValue::Integer(left))
                         / numeric_as_f64(NumericValue::Integer(right)),
                 );
             }
             let value = match operator {
-                "$add" => left.checked_add(right),
-                "$subtract" => left.checked_sub(right),
-                "$multiply" => left.checked_mul(right),
-                "$divide" => left.checked_div(right),
-                "$mod" => left.checked_rem(right),
-                _ => unreachable!("validated numeric expression operator"),
+                NumericOperator::Add => left.checked_add(right),
+                NumericOperator::Subtract => left.checked_sub(right),
+                NumericOperator::Multiply => left.checked_mul(right),
+                NumericOperator::Divide => left.checked_div(right),
+                NumericOperator::Modulo => left.checked_rem(right),
             }
-            .ok_or_else(|| {
-                QueryError::Invalid(format!("filter.$expr.{operator} integer result overflows"))
-            })?;
-            Ok(Some(Value::Number(number_from_i128(value)?)))
+            .ok_or_else(|| QueryError::Invalid(format!("{path} integer result overflows")))?;
+            Ok(Some(Value::Number(number_from_i128(value, path)?)))
         }
         (left, right) => {
             let left = numeric_as_f64(left);
             let right = numeric_as_f64(right);
             let value = match operator {
-                "$add" => left + right,
-                "$subtract" => left - right,
-                "$multiply" => left * right,
-                "$divide" => left / right,
-                "$mod" => left % right,
-                _ => unreachable!("validated numeric expression operator"),
+                NumericOperator::Add => left + right,
+                NumericOperator::Subtract => left - right,
+                NumericOperator::Multiply => left * right,
+                NumericOperator::Divide => left / right,
+                NumericOperator::Modulo => left % right,
             };
-            finite_json_number(operator, value)
+            finite_json_number(path, value)
         }
     }
 }
 
-fn apply_absolute_expression(value: &Value) -> Result<Option<Value>, QueryError> {
+fn apply_absolute_expression(value: &Value, path: &str) -> Result<Option<Value>, QueryError> {
     let Some(value) = as_numeric(value) else {
         return Ok(None);
     };
     match value {
         NumericValue::Integer(value) => {
-            let value = value.checked_abs().ok_or_else(|| {
-                QueryError::Invalid("filter.$expr.$abs integer result overflows".into())
-            })?;
-            Ok(Some(Value::Number(number_from_i128(value)?)))
+            let value = value
+                .checked_abs()
+                .ok_or_else(|| QueryError::Invalid(format!("{path} integer result overflows")))?;
+            Ok(Some(Value::Number(number_from_i128(value, path)?)))
         }
-        NumericValue::Float(value) => finite_json_number("$abs", value.abs()),
+        NumericValue::Float(value) => finite_json_number(path, value.abs()),
     }
 }
 
-fn finite_json_number(operator: &str, value: f64) -> Result<Option<Value>, QueryError> {
+fn finite_json_number(path: &str, value: f64) -> Result<Option<Value>, QueryError> {
     if !value.is_finite() {
         return Err(QueryError::Invalid(format!(
-            "filter.$expr.{operator} result is not a finite JSON number"
+            "{path} result is not a finite JSON number"
         )));
     }
     Ok(serde_json::Number::from_f64(value).map(Value::Number))
@@ -215,18 +256,14 @@ fn numeric_as_f64(value: NumericValue) -> f64 {
     }
 }
 
-fn number_from_i128(value: i128) -> Result<serde_json::Number, QueryError> {
+fn number_from_i128(value: i128, path: &str) -> Result<serde_json::Number, QueryError> {
     if value >= 0 {
         u64::try_from(value)
             .map(serde_json::Number::from)
-            .map_err(|_| {
-                QueryError::Invalid("filter.$expr numeric result does not fit JSON".into())
-            })
+            .map_err(|_| QueryError::Invalid(format!("{path} numeric result does not fit JSON")))
     } else {
         i64::try_from(value)
             .map(serde_json::Number::from)
-            .map_err(|_| {
-                QueryError::Invalid("filter.$expr numeric result does not fit JSON".into())
-            })
+            .map_err(|_| QueryError::Invalid(format!("{path} numeric result does not fit JSON")))
     }
 }

@@ -44,7 +44,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - beginからcommit、rollback、またはdropまでカタログwrite lockと検出したすべてのテーブルロックを保持し、1つのカタログjournalで非公開テーブルコピーを公開する、任意選択の粗粒度serializable `Catalog::begin_serializable`境界。
 - 成功した読み取りの強いテーブルおよびカタログ表現ETag、GETとHEADのIf-None-Match検証、単一テーブル、名前付きテーブル、カタログ全体のトランザクション経路に対する更新側If-None-Match検証、単一テーブル更新、名前付きテーブル更新、カタログ全体のトランザクションの任意のIf-Match保護。
 - 0個以上の入力`$match`とトップレベル配列に対する`$unwind`、入力用の`$sort`、`$skip`、`$limit`をそれぞれ最大1つ、終端`$count`または`$distinct`を1つ、または`$group`を1つ受け付ける有界集約パイプライン。
-  別の形として、`$count`、数値のフィールド参照・リテラルによる`$sum`、数値`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を使う`$group`を1つ置く。
+  別の形として、`$count`、有界な数値式による`$sum`と`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を使う`$group`を1つ置く。
   その後にグループ出力用の有界な`$match`、任意の`$project`1つ、最後の`$sort`、`$skip`、`$limit`を適用する。
   入力ステージは記載順に実行する。`$unwind`は入力順と配列順を保ち、欠損、null、空配列のフィールドを破棄し、配列以外の値を拒否し、展開後のレコード数を10,000件までに制限する。
 - 修飾付きフィルターとプロジェクションを備えた1つ以上のカタログテーブルに対する、有界な`inner`、`left`、`right`、`full`、`semi`、`anti`等値結合と有界な`cross`結合。
@@ -73,7 +73,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - 完全なインデックス対応またはコストベースのマージ結合戦略。
 - ワーカーまたはWASI固有のタイムアウト、転送、キャンセル、非同期ストレージの意味論と、リモートオブジェクトストレージアダプター。
 - 述語単位のロックと分散serializable調整。
-- 有界な入力`$match`、`$unwind`、`$sort`、`$skip`、`$limit`、グループ出力の`$match`、`$count`、`$distinct`、`$sum`、`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を使う`$group`を超える集約ステージまたはアキュムレータ。
+- 有界な入力`$match`、`$unwind`、`$sort`、`$skip`、`$limit`、グループ出力の`$match`、`$count`、`$distinct`、有界な数値式による`$sum`と`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を使う`$group`を超える集約ステージまたはアキュムレータ。
 - カタログスコープのスカラーおよび複合外部キーとローカル連鎖動作を超える、遅延およびカタログ間の制約意味論。
 - XBF出力の厳密な複数ファイル読み取りアトミック性。
 - クラウドオブジェクトストレージアダプターと保持方針。
@@ -210,7 +210,7 @@ Rustの`Catalog::begin_serializable`は、同じカタログjournal経路を使�
 
 現在の集約スライスは、0個以上の入力`$match`とトップレベル配列に対する`$unwind`、入力用の`$sort`、`$skip`、`$limit`をそれぞれ最大1つ受け付けます。
 
-その後に、終端`$count`または`$distinct`を1つ、または`$count`、フィールド参照またはリテラルによる`$sum`、`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`、グループ出力に対する有界な`$match`と`$project`、最後のsort、skip、limitを備えた`$group`を1つ許可します。
+その後に、終端`$count`または`$distinct`を1つ、または`$count`、有界な数値式による`$sum`と`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`、グループ出力に対する有界な`$match`と`$project`、最後のsort、skip、limitを備えた`$group`を1つ許可します。
 入力ステージは記載順に実行します。`$unwind`は入力順と配列順を保ち、欠損、null、空配列のフィールドを破棄し、配列以外の値を拒否し、展開後のレコード数を10,000件までに制限します。
 
 既存の包含と除外のプロジェクション契約を再利用します。

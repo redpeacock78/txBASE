@@ -87,6 +87,47 @@ fn sums_numeric_literals_for_each_input_record() {
 }
 
 #[test]
+fn evaluates_bounded_numeric_accumulator_expressions() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"AGE": 10, "DELTA": -2}).as_object().unwrap().clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"AGE": 20, "DELTA": 4}).as_object().unwrap().clone(),
+    };
+    let third = DbfRecord {
+        number: 3,
+        deleted: false,
+        values: json!({"AGE": "not-a-number", "DELTA": null})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let records = [&first, &second, &third];
+    let stages = vec![
+        json!({
+            "$group": {
+                "_id": null,
+                "total": {"$sum": {"$add": ["$AGE", 1]}},
+                "average_delta": {"$avg": {"$abs": "$DELTA"}},
+                "doubled": {"$sum": {"$multiply": ["$AGE", 2]}}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({"_id": null, "total": 32, "average_delta": 3.0, "doubled": 60})]
+    );
+}
+
+#[test]
 fn counts_filtered_records_with_a_count_stage() {
     let table = table_with_two_active_records();
     let request = crate::query::parse(

@@ -2,6 +2,7 @@ use super::{QueryError, ordering::compare_values};
 use serde_json::{Map, Value};
 
 mod numeric;
+pub(super) use numeric::{NumericExpression, evaluate_numeric, parse_numeric_operand};
 
 pub(super) fn validate(expression: &Value, path: &str) -> Result<(), QueryError> {
     let expression = expression

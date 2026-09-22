@@ -2,6 +2,8 @@ use indexmap::IndexMap;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
+use super::super::expression::NumericExpression;
+
 #[derive(Debug, Clone)]
 pub struct GroupSpec {
     pub key_field: Option<String>,
@@ -39,18 +41,12 @@ pub struct AccumulatorSpec {
 #[derive(Debug, Clone)]
 pub enum AccumulatorKind {
     Count,
-    Average(String),
-    Sum(SumOperand),
+    Average(NumericExpression),
+    Sum(NumericExpression),
     Min(String),
     Max(String),
     First(String),
     Last(String),
     Push(String),
     AddToSet(String),
-}
-
-#[derive(Debug, Clone)]
-pub enum SumOperand {
-    Field(String),
-    Literal(serde_json::Number),
 }

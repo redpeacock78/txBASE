@@ -182,6 +182,8 @@ DBF、memo、WAL、JSON入力について決定的なコーパスを保ちます
 
 `src/query/field_expression_tests.rs`は、ドット区切りフィールド参照、欠損または非数値オペランド、有界な数値`$abs`、`$add`/`$subtract`/`$multiply`/`$divide`/`$mod`、0による除算と剰余、壊れたまたは未サポートの`$expr`文書を検査します。
 
+`src/query/aggregation_tests/accumulator_tests.rs::evaluates_bounded_numeric_accumulator_expressions`は、欠損値と非数値を含む、`$sum`と`$avg`で共有する有界な数値式を検査します。
+
 ### 互換性テスト
 
 可能な場合は独立した読み書き実装からフィクスチャを取得します。

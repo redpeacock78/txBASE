@@ -51,7 +51,11 @@ Group output may have zero or more `$match` stages, followed by one optional `$p
 
 `_id` is either `null` or one dotted field reference.
 
-Supported accumulators are `$count: {}`, numeric `$sum: "$FIELD"` or a numeric literal, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, `$last: "$FIELD"`, `$push: "$FIELD"`, and `$addToSet: "$FIELD"`, plus `$avg: "$FIELD"` for finite JSON numbers.
+Supported accumulators are `$count: {}`, numeric `$sum`, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, `$last: "$FIELD"`, `$push: "$FIELD"`, and `$addToSet: "$FIELD"`, plus numeric `$avg` for finite JSON numbers.
+
+Numeric `$sum` and `$avg` operands accept a field reference, numeric literal, unary `$abs`, or binary `$add`, `$subtract`, `$multiply`, `$divide`, or `$mod` expression.
+
+The bounded numeric expression evaluator is shared with `$expr`; missing or nonnumeric resolved values are ignored by `$sum` and `$avg`.
 
 The filter runs before grouping.
 
@@ -133,7 +137,7 @@ Additional grouping, count, or distinct stages remain unsupported.
 
 After `$group`, stages after the group-output `$limit` remain unsupported.
 
-`$expr` operands are supported only in the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` forms described in the query model.
+`$expr`, `$sum`, and `$avg` operands are supported only in the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` forms described in the query model.
 
 Broader expression evaluation remains unsupported.
 
@@ -150,5 +154,7 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 ## Primary references
 
 - [MongoDB `$group` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
+- [MongoDB `$sum` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sum/)
+- [MongoDB `$avg` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB `$unwind` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

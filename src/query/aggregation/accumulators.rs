@@ -71,18 +71,20 @@ pub(super) fn accumulate_record(
             }
             (
                 AccumulatorState::Average { total, count },
-                aggregation_plan::AccumulatorKind::Average(field),
+                aggregation_plan::AccumulatorKind::Average(expression),
             ) => {
-                let Some(value) = field_value(&record.values, field) else {
+                let path = format!("$group.{}.$avg", accumulator.name);
+                let Some(number) = resolve_numeric_number(record, expression, &path)? else {
                     continue;
                 };
-                let Some(number) = value.as_number().and_then(serde_json::Number::as_f64) else {
+                let Some(number) = number.as_f64() else {
                     continue;
                 };
                 let next_total = *total + number;
                 if !next_total.is_finite() {
                     return Err(QueryError::Invalid(format!(
-                        "aggregate $avg field {field} exceeds finite JSON number range"
+                        "aggregate {} exceeds finite JSON number range",
+                        accumulator.name
                     )));
                 }
                 *total = next_total;
@@ -92,23 +94,13 @@ pub(super) fn accumulate_record(
             }
             (
                 AccumulatorState::Sum { integer, floating },
-                aggregation_plan::AccumulatorKind::Sum(operand),
+                aggregation_plan::AccumulatorKind::Sum(expression),
             ) => {
-                let (number, operand_name) = match operand {
-                    aggregation_plan::SumOperand::Field(field) => {
-                        let Some(value) = field_value(&record.values, field) else {
-                            continue;
-                        };
-                        if value.is_null() {
-                            continue;
-                        }
-                        let Some(number) = value.as_number() else {
-                            continue;
-                        };
-                        (number.clone(), field.as_str())
-                    }
-                    aggregation_plan::SumOperand::Literal(number) => (number.clone(), "literal"),
+                let path = format!("$group.{}.$sum", accumulator.name);
+                let Some(number) = resolve_numeric_number(record, expression, &path)? else {
+                    continue;
                 };
+                let operand_name = accumulator.name.as_str();
                 if let Some(value) = number
                     .as_i64()
                     .map(i128::from)
@@ -169,6 +161,15 @@ pub(super) fn accumulate_record(
         }
     }
     Ok(())
+}
+
+fn resolve_numeric_number(
+    record: &DbfRecord,
+    expression: &crate::query::expression::NumericExpression,
+    path: &str,
+) -> Result<Option<serde_json::Number>, QueryError> {
+    let value = crate::query::expression::evaluate_numeric(&record.values, expression, path)?;
+    Ok(value.and_then(|value| value.as_number().cloned()))
 }
 
 pub(super) fn finish_group(

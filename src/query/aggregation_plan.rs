@@ -7,9 +7,7 @@ mod group;
 mod types;
 
 use group::parse_group;
-pub(super) use types::{
-    AccumulatorKind, AccumulatorSpec, AggregationPlan, GroupSpec, InputStage, SumOperand,
-};
+pub(super) use types::{AccumulatorKind, AccumulatorSpec, AggregationPlan, GroupSpec, InputStage};
 
 pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
     let Some(stages) = request.aggregate.as_ref() else {

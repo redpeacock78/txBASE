@@ -52,7 +52,11 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 `_id`は`null`または1つのドット区切りフィールド参照です。
 
-サポートするアキュムレータは`$count: {}`、数値の`$sum: "$FIELD"`または数値リテラル、`$min: "$FIELD"`、`$max: "$FIELD"`、`$first: "$FIELD"`、`$last: "$FIELD"`、`$push: "$FIELD"`、`$addToSet: "$FIELD"`、および有限なJSON数値に対する`$avg: "$FIELD"`です。
+サポートするアキュムレータは`$count: {}`、数値の`$sum`、`$min: "$FIELD"`、`$max: "$FIELD"`、`$first: "$FIELD"`、`$last: "$FIELD"`、`$push: "$FIELD"`、`$addToSet: "$FIELD"`、および有限なJSON数値に対する数値の`$avg`です。
+
+数値の`$sum`と`$avg`のオペランドは、フィールド参照、数値リテラル、単項の`$abs`、または二項の`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`式を受け付けます。
+
+有界な数値式の評価器は`$expr`と共有し、解決した値が欠損または数値以外の場合は`$sum`と`$avg`で無視します。
 
 フィルターはグループ化より前に実行します。
 
@@ -134,7 +138,7 @@ distinct出力は10,000値までです。
 
 `$group`の後では、グループ出力用の`$limit`より後のステージは未サポートです。
 
-`$expr`のオペランドは、クエリモデルで説明する有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`の形式だけをサポートします。
+`$expr`、`$sum`、`$avg`のオペランドは、クエリモデルで説明する有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`の形式だけをサポートします。
 
 より広い式評価は未サポートです。
 
@@ -151,5 +155,7 @@ txBASEはMongoDBの完全なパイプライン互換性を主張せず、その�
 ## 主な参照先
 
 - [MongoDB の`$group`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
+- [MongoDB の`$sum`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sum/)
+- [MongoDB の`$avg`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
 - [MongoDB の`$count`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB の`$unwind`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

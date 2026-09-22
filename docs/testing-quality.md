@@ -179,6 +179,8 @@ The compound-key branch in the same test covers the direct compound ordered-inde
 
 `src/query/field_expression_tests.rs` covers dotted field references, missing or nonnumeric operands, bounded numeric `$abs`, `$add`/`$subtract`/`$multiply`/`$divide`/`$mod`, zero divisors, and malformed or unsupported `$expr` documents.
 
+`src/query/aggregation_tests/accumulator_tests.rs::evaluates_bounded_numeric_accumulator_expressions` covers the shared bounded numeric expressions in `$sum` and `$avg`, including missing and nonnumeric values.
+
 ### Compatibility tests
 
 Fixtures should come from independent readers or writers when possible.
