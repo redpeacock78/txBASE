@@ -132,7 +132,7 @@ fn serializable_catalog_transaction_rejects_table_set_change() {
         .apply(&OperationIr {
             method: OperationMethod::Patch,
             path: "/users/records/1".into(),
-            body: Some(json!({"NAME": "not committed"})),
+            body: Some(json!({"NAME": "pending"})),
         })
         .unwrap();
 
