@@ -168,7 +168,14 @@ impl DbfTable {
         let _lock = TableLock::acquire(path)?;
         let _ = Self::recover_wal_with_encoding(path, self.encoding_override.as_deref())?;
         let current_transaction_id = read_transaction_state(path)?;
-        let before = Self::load_path_with_encoding(path, self.encoding_override.as_deref())?;
+        let before = if path.exists() {
+            Self::load_path_with_encoding(path, self.encoding_override.as_deref())?
+        } else {
+            let mut before = self.clone();
+            before.records.clear();
+            before.stored_values.clear();
+            before
+        };
         self.bind_schema_if_present(path)?;
         self.ensure_source_current(path)?;
         let transaction_id = next_transaction_id(current_transaction_id)?;

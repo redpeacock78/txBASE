@@ -36,6 +36,27 @@ fn empty_table(path: &Path) {
 }
 
 #[test]
+fn cdc_records_initial_rows_when_wal_creates_a_new_path() {
+    let path = path("initial");
+    cleanup(&path);
+    let mut table = DbfTable::empty(&[DbfFieldSpec::new("ID", b'N', 4, 0)]).unwrap();
+    table
+        .insert_record(json!({"ID": 1}).as_object().unwrap().clone())
+        .unwrap();
+    table.save_with_wal(&path).unwrap();
+
+    let events = DbfTable::cdc_events(&path, None).unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].changes[0].before, None);
+    assert_eq!(
+        events[0].changes[0].after.as_ref().unwrap().values["ID"],
+        json!(1)
+    );
+
+    cleanup(&path);
+}
+
+#[test]
 fn cdc_records_committed_row_diffs_in_transaction_order() {
     let path = path("ordered");
     empty_table(&path);
