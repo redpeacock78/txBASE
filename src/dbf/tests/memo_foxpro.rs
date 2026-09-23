@@ -141,9 +141,11 @@ fn pack_compacts_foxpro_binary_memo_blocks_and_updates_pointers() {
     let mut memo = vec![0; DBT_BLOCK_SIZE * 3];
     memo[6..8].copy_from_slice(&(DBT_BLOCK_SIZE as u16).to_be_bytes());
     memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + 4].copy_from_slice(&0u32.to_be_bytes());
-    memo[DBT_BLOCK_SIZE + 4..DBT_BLOCK_SIZE + 7].copy_from_slice(&[0xde, 0xad, 0x01]);
+    memo[DBT_BLOCK_SIZE + 4..DBT_BLOCK_SIZE + 8].copy_from_slice(&3u32.to_be_bytes());
+    memo[DBT_BLOCK_SIZE + 8..DBT_BLOCK_SIZE + 11].copy_from_slice(&[0xde, 0xad, 0x01]);
     memo[DBT_BLOCK_SIZE * 2..DBT_BLOCK_SIZE * 2 + 4].copy_from_slice(&0u32.to_be_bytes());
-    memo[DBT_BLOCK_SIZE * 2 + 4..DBT_BLOCK_SIZE * 2 + 7].copy_from_slice(&[0xca, 0xfe, 0x02]);
+    memo[DBT_BLOCK_SIZE * 2 + 4..DBT_BLOCK_SIZE * 2 + 8].copy_from_slice(&3u32.to_be_bytes());
+    memo[DBT_BLOCK_SIZE * 2 + 8..DBT_BLOCK_SIZE * 2 + 11].copy_from_slice(&[0xca, 0xfe, 0x02]);
     fs::write(&memo_path, memo).unwrap();
 
     let mut table = DbfTable::from_path(&path).unwrap();
