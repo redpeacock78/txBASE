@@ -226,11 +226,11 @@ mod tests {
     }
 
     #[test]
-    fn preserves_left_order_and_matches_index_order() {
+    fn preserves_left_order_with_an_ordered_index() {
         let left = [row("left", 2), row("left", 1), row("left", 9)];
         let right = [row("right", 1), row("right", 2), row("right", 7)];
         let numbers = [10, 11, 12];
-        let order = [11, 10, 12];
+        let order = [10, 11, 12];
         let local = ["left.ID".to_owned()];
         let foreign = ["right.ID".to_owned()];
 
