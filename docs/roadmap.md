@@ -47,6 +47,7 @@ The repository currently provides:
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
 - A bounded aggregation pipeline with zero or more input `$match` and top-level-array `$unwind` stages, at most one input `$set` or `$addFields` stage in total, at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each, and one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, bounded numeric-expression `$sum` and `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, followed by bounded group-output `$match` stages, one optional `$project`, and final `$sort`, `$skip`, and `$limit` stages. Input stages execute in listed order. Input `$set` and `$addFields` preserve existing fields and compute top-level fields from bounded field, literal, null-coalescing, and numeric expressions against the stage-input snapshot. Input `$project` reuses the 0/1 query projection contract and materializes fields before later stages. `$unwind` supports the top-level document options `includeArrayIndex` and `preserveNullAndEmptyArrays`, preserves input and array order, rejects non-array values, and caps all emitted records at 10,000.
 - A bounded local `inner`, `left`, `right`, `full`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
+- A direct equality-join cost model that compares hash, index-nested-loop, and ordered-merge paths with exact pre-filter key-cardinality estimates, projection-based materialization work, logical DBF page reads, and logical index-sidecar page reads.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
@@ -66,7 +67,6 @@ The repository currently provides:
 
 The baseline intentionally does not include the following:
 
-- A full join cost model that includes cardinality, materialization, and physical I/O behavior.
 - Filesystem- and cache-aware merge join costing.
 - Worker/WASI-specific timeout, transport, cancellation, and asynchronous-storage semantics, and remote object-store adapters.
 - Predicate-level locking and distributed serializable coordination.
@@ -189,11 +189,12 @@ The current record scan remains the reference execution path while the query mod
 The first join slice is local and bounded.
 
 It also supports a `full` equality join through a bounded hash fallback or a compatible ordered-index merge path, and emits unmatched rows from both sides.
-It implements one or more equality conditions, compares bounded hash, index-probe, and merge costs after the small nested-loop boundary, includes logical index-sidecar and conservative DBF record-page terms for indexed paths, uses a fresh single-field index when that estimate wins, uses an exact field-order compound index for direct or chained probes, and uses a compatible ordered-index merge path for large direct joins when that estimate wins.
+It implements one or more equality conditions, compares bounded hash, index-probe, and merge costs after the small nested-loop boundary, includes exact pre-filter key-cardinality estimates, projection-based materialization work, logical DBF page terms, and logical index-sidecar page terms, uses a fresh single-field index when that estimate wins, uses an exact field-order compound index for direct or chained probes, and uses a compatible ordered-index merge path for large direct joins when that estimate wins.
 Additional stages may reference earlier joined tables and keep one catalog read lock across the
-pipeline, but full cardinality and materialization costing, filesystem- and cache-aware merge
-planning, streaming, and broader null or
-missing field semantics before adding broader query surfaces.
+pipeline, but the complete cardinality and materialization inputs are not yet propagated through
+every intermediate stage.
+Filesystem- and cache-aware merge planning, streaming, and broader null or missing field semantics
+remain future work before adding broader query surfaces.
 
 Distributed joins and distributed transactions remain later features.
 
@@ -216,7 +217,7 @@ All expressions in one stage read the stage-input snapshot, and missing or nonnu
 The planner explanation boundary is implemented by `explain_query_at`, `explain_query_details_at`, and `QUERY /explain`.
 The public explanation exposes deterministic row-equivalent scan and candidate-work costs when a valid index sidecar is available.
 The explanation includes the logical 4 KiB index and DBF page estimates used by the local planner.
-Full cardinality, materialization, and physical I/O join costing remains future work.
+Direct join execution separately uses deterministic key-cardinality, materialization, and logical DBF-page inputs; those join costs are not part of the single-table explanation object.
 
 The first constraint slice is an optional schema sidecar.
 It enforces one-field `primary`, `unique`, and `not_null` properties, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, plus bounded table-level query-predicate `checks` on active records and mutation candidates without changing legacy DBF bytes.
@@ -382,6 +383,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Full cardinality- and physical-I/O-aware joins, aggregation, predicate-level serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
+- Chained cardinality- and materialization-aware joins, filesystem- and cache-aware merge planning, aggregation, predicate-level serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
 
-The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and filesystem- or cache-aware join planning remain future work.
+The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and filesystem- or cache-aware merge planning remain future work.

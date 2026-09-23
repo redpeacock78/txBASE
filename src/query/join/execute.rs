@@ -2,7 +2,7 @@ use super::super::matches_filter;
 use super::super::{join_index, join_merge, join_nested, join_pipeline, join_strategy};
 use super::{JoinError, JoinRequest, JoinType, MAX_JOIN_ROWS};
 use crate::catalog::{Catalog, CatalogReadTransaction};
-use crate::dbf::DbfRecord;
+use crate::dbf::{DbfRecord, DbfTable};
 use crate::query_path::{field_value, project_values};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
@@ -96,12 +96,32 @@ fn execute_with_source<S: JoinSource>(
     }
 
     let current_catalog = source.catalog();
+    let left_page_reads = logical_page_reads(&left);
+    let right_page_reads = logical_page_reads(&right);
+    let estimated_output_rows = estimate_join_rows(
+        &left_records,
+        &right_records,
+        &local_fields,
+        &foreign_fields,
+        &request.join.kind,
+    )?;
+    let output_columns = request.projection.len().max(1);
+    let left_cost_input = join_strategy::JoinCostInput {
+        outer_page_reads: left_page_reads,
+        inner_page_reads: right_page_reads,
+        output_rows: estimated_output_rows,
+        output_columns,
+    };
+    let right_cost_input = join_strategy::JoinCostInput {
+        outer_page_reads: right_page_reads,
+        inner_page_reads: left_page_reads,
+        output_rows: estimated_output_rows,
+        output_columns,
+    };
     let large_join = current_catalog.is_some()
         && !source.is_historical()
-        && matches!(
-            join_strategy::choose(left_records.len(), right_records.len(), false),
-            join_strategy::JoinStrategy::Hash
-        );
+        && left_records.len().saturating_mul(right_records.len())
+            > join_strategy::NESTED_LOOP_PAIR_LIMIT;
     let left_ordered = if large_join {
         current_catalog
             .and_then(|catalog| join_index::load_ordered(catalog, &request.from, &local_fields))
@@ -122,11 +142,12 @@ fn execute_with_source<S: JoinSource>(
 
     if let JoinType::Right = &request.join.kind {
         if matches!(
-            join_strategy::choose_with_merge_page_cost(
+            join_strategy::choose_with_costs(
                 right_records.len(),
                 left_records.len(),
                 None,
                 merge_page_reads,
+                right_cost_input,
             ),
             join_strategy::JoinStrategy::Merge
         ) {
@@ -151,12 +172,14 @@ fn execute_with_source<S: JoinSource>(
             None
         };
         if matches!(
-            join_strategy::choose_with_probe_cost(
+            join_strategy::choose_with_costs(
                 right_records.len(),
                 left_records.len(),
                 left_index.as_ref().and_then(|index| {
                     join_index::equality_probe_cost(index, left_records.len(), &local_fields)
                 }),
+                None,
+                right_cost_input,
             ),
             join_strategy::JoinStrategy::IndexNestedLoop
         ) {
@@ -209,11 +232,12 @@ fn execute_with_source<S: JoinSource>(
     }
 
     if matches!(
-        join_strategy::choose_with_merge_page_cost(
+        join_strategy::choose_with_costs(
             left_records.len(),
             right_records.len(),
             None,
             merge_page_reads,
+            left_cost_input,
         ),
         join_strategy::JoinStrategy::Merge
     ) {
@@ -250,12 +274,14 @@ fn execute_with_source<S: JoinSource>(
         None
     };
     if matches!(
-        join_strategy::choose_with_probe_cost(
+        join_strategy::choose_with_costs(
             left_records.len(),
             right_records.len(),
             right_index.as_ref().and_then(|index| {
                 join_index::equality_probe_cost(index, right_records.len(), &foreign_fields)
             }),
+            None,
+            left_cost_input,
         ),
         join_strategy::JoinStrategy::IndexNestedLoop
     ) {
@@ -347,6 +373,71 @@ pub(crate) fn encoded_key(
         .map_err(|error| JoinError::Invalid(format!("join key encoding failed: {error}")))
 }
 
+fn logical_page_reads(table: &DbfTable) -> usize {
+    table
+        .byte_len()
+        .div_ceil(crate::index::COST_PAGE_SIZE)
+        .max(1)
+}
+
+fn estimate_join_rows(
+    left_records: &[&DbfRecord],
+    right_records: &[&DbfRecord],
+    local_fields: &[String],
+    foreign_fields: &[String],
+    join_type: &JoinType,
+) -> Result<usize, JoinError> {
+    if matches!(join_type, JoinType::Cross) {
+        return Err(JoinError::Invalid(
+            "cross joins do not use equality cardinality estimation".into(),
+        ));
+    }
+
+    let mut left_counts = BTreeMap::<String, usize>::new();
+    for record in left_records {
+        if let Some(key) = encoded_key(&record.values, local_fields)? {
+            let count = left_counts.entry(key).or_default();
+            *count = count.saturating_add(1);
+        }
+    }
+    let mut right_counts = BTreeMap::<String, usize>::new();
+    for record in right_records {
+        if let Some(key) = encoded_key(&record.values, foreign_fields)? {
+            let count = right_counts.entry(key).or_default();
+            *count = count.saturating_add(1);
+        }
+    }
+
+    let mut matched_pairs = 0usize;
+    let mut left_matched = 0usize;
+    for (key, left_count) in &left_counts {
+        if let Some(right_count) = right_counts.get(key) {
+            matched_pairs = matched_pairs.saturating_add(left_count.saturating_mul(*right_count));
+            left_matched = left_matched.saturating_add(*left_count);
+        }
+    }
+    let mut right_matched = 0usize;
+    for (key, right_count) in &right_counts {
+        if left_counts.contains_key(key) {
+            right_matched = right_matched.saturating_add(*right_count);
+        }
+    }
+    let left_unmatched = left_records.len().saturating_sub(left_matched);
+    let right_unmatched = right_records.len().saturating_sub(right_matched);
+
+    Ok(match join_type {
+        JoinType::Inner => matched_pairs,
+        JoinType::Left => matched_pairs.saturating_add(left_unmatched),
+        JoinType::Right => matched_pairs.saturating_add(right_unmatched),
+        JoinType::Full => matched_pairs
+            .saturating_add(left_unmatched)
+            .saturating_add(right_unmatched),
+        JoinType::Semi => left_matched,
+        JoinType::Anti => left_unmatched,
+        JoinType::Cross => unreachable!("cross join handled before cardinality estimation"),
+    })
+}
+
 pub(crate) fn emit(
     output: &mut Vec<Value>,
     request: &JoinRequest,
@@ -375,5 +466,64 @@ pub(crate) fn emit(
 fn add_qualified_values(output: &mut Map<String, Value>, table: &str, values: &Map<String, Value>) {
     for (field, value) in values {
         output.insert(format!("{table}.{field}"), value.clone());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{JoinType, estimate_join_rows};
+    use crate::dbf::DbfRecord;
+    use serde_json::{Map, json};
+
+    fn record(number: usize, key: Option<i64>) -> DbfRecord {
+        let mut values = Map::new();
+        if let Some(key) = key {
+            values.insert("ID".into(), json!(key));
+        }
+        DbfRecord {
+            number,
+            deleted: false,
+            values,
+        }
+    }
+
+    #[test]
+    fn estimates_each_equality_join_shape() {
+        let left = [
+            record(1, Some(1)),
+            record(2, Some(1)),
+            record(3, Some(2)),
+            record(4, None),
+        ];
+        let right = [record(1, Some(1)), record(2, Some(3))];
+        let left = left.iter().collect::<Vec<_>>();
+        let right = right.iter().collect::<Vec<_>>();
+        let fields = vec!["ID".to_owned()];
+
+        for (join_type, expected) in [
+            (JoinType::Inner, 2),
+            (JoinType::Left, 4),
+            (JoinType::Right, 3),
+            (JoinType::Full, 5),
+            (JoinType::Semi, 2),
+            (JoinType::Anti, 2),
+        ] {
+            assert_eq!(
+                estimate_join_rows(&left, &right, &fields, &fields, &join_type).unwrap(),
+                expected,
+                "unexpected estimate for {join_type:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_cross_join_cardinality_estimation() {
+        let records = [record(1, Some(1))];
+        let records = records.iter().collect::<Vec<_>>();
+        let fields = vec!["ID".to_owned()];
+
+        assert!(
+            estimate_join_rows(&records, &records, &fields, &fields, &JoinType::Cross).is_err()
+        );
     }
 }

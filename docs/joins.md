@@ -62,13 +62,17 @@ Missing and explicit `null` join keys do not match.
 
 The equality-join planner selects `NestedLoop` when the left and right active-row counts have at most 64 candidate pairs.
 
-For larger inputs, it compares bounded costs for the available strategies.
+For larger direct equality joins, it compares bounded costs for the available strategies.
 
-`Hash` costs one pass over both inputs plus the bounded work of building an equality map for the inner side.
+`Hash` costs one pass over both inputs, the logical DBF pages needed for those inputs, and the bounded work of building an equality map for the inner side.
 
-`IndexNestedLoop` costs the outer-row count multiplied by the inner-side logarithmic probe estimate plus its average equality fanout, then adds a one-time logical page estimate for the index sidecar and a conservative logical DBF record-page estimate for each probe.
+`IndexNestedLoop` costs the outer-row count multiplied by the inner-side logarithmic probe estimate plus its average equality fanout, then adds the outer logical DBF pages, a one-time logical page estimate for the index sidecar, and a conservative logical DBF record-page estimate for each probe.
 
-`Merge` costs one pass over both inputs plus the logical page estimates for the two ordered index sidecars when compatible ordered indexes are fresh on both sides.
+`Merge` costs one pass over both inputs, the logical DBF pages needed for those inputs, and the logical page estimates for the two ordered index sidecars when compatible ordered indexes are fresh on both sides.
+
+Each direct candidate also includes deterministic materialization work based on the estimated pre-filter join-candidate rows and the requested projection width.
+
+The direct equality-key multiplicities give an exact pre-filter candidate-row count for the loaded tables, including unmatched rows for outer joins and one row per matching left record for `semi` or `anti`; filters can reduce the emitted count afterward.
 
 The strategy with the lower estimate wins, with `Merge` preferred over `IndexNestedLoop`, and `IndexNestedLoop` preferred over `Hash` for an exact tie.
 
@@ -98,9 +102,11 @@ Table names cannot repeat, and the total stage count is capped at eight.
 
 Every intermediate result is capped at 100,000 rows.
 
-This is a bounded row-work and logical-page cost model with a compatible-index merge path.
+This is a bounded row-work, logical-page, pre-filter-cardinality, and output-materialization cost model with a compatible-index merge path.
 
-It does not measure filesystem latency or cache state, and it does not estimate full join cardinality, output materialization, or page reuse, so it is not a full physical cost-based planner or streaming executor.
+It does not measure filesystem latency, cache state, or page reuse.
+
+The chained pipeline still uses its bounded row-count strategy selector and does not yet pass the direct join's cardinality, materialization, or DBF-page inputs through every intermediate stage.
 
 The single-table HTTP server does not expose joins.
 

@@ -238,6 +238,10 @@ impl DbfTable {
         self.bytes.clone()
     }
 
+    pub(crate) fn byte_len(&self) -> usize {
+        self.bytes.len()
+    }
+
     pub fn transaction_id(&self) -> Option<u64> {
         self.transaction_id
     }
