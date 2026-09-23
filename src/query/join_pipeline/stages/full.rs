@@ -38,3 +38,28 @@ pub(super) fn execute(
     }
     Ok(output)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::execute;
+    use serde_json::{Map, json};
+
+    fn row(table: &str, key: i64) -> Map<String, serde_json::Value> {
+        Map::from_iter([(format!("{table}.ID"), json!(key))])
+    }
+
+    #[test]
+    fn retains_unmatched_rows_from_both_sides() {
+        let left = [row("left", 1), row("left", 2)];
+        let right = [row("right", 1), row("right", 3)];
+        let local_fields = ["left.ID".to_owned()];
+        let foreign_fields = ["right.ID".to_owned()];
+
+        assert_eq!(
+            execute(left.to_vec(), &right, &local_fields, &foreign_fields)
+                .unwrap()
+                .len(),
+            3
+        );
+    }
+}

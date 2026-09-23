@@ -83,3 +83,103 @@ pub(super) fn execute_left(
     }
     Ok(output)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{execute_left, execute_right};
+    use crate::query::join::{JoinSpec, JoinType};
+    use serde_json::{Map, json};
+    use std::collections::BTreeMap;
+
+    fn row(table: &str, key: Option<i64>) -> Map<String, serde_json::Value> {
+        let mut values = Map::new();
+        if let Some(key) = key {
+            values.insert(format!("{table}.ID"), json!(key));
+        }
+        values
+    }
+
+    fn spec(kind: JoinType) -> JoinSpec {
+        JoinSpec {
+            kind,
+            table: "right".to_owned(),
+            on: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn executes_left_hash_variants() {
+        let left = [
+            row("left", Some(1)),
+            row("left", Some(2)),
+            row("left", None),
+        ];
+        let right = [row("right", Some(1)), row("right", Some(3))];
+        let local_fields = ["left.ID".to_owned()];
+        let foreign_fields = ["right.ID".to_owned()];
+
+        assert_eq!(
+            execute_left(
+                &left,
+                &right,
+                &spec(JoinType::Inner),
+                &local_fields,
+                &foreign_fields,
+            )
+            .unwrap()
+            .len(),
+            1
+        );
+        assert_eq!(
+            execute_left(
+                &left,
+                &right,
+                &spec(JoinType::Left),
+                &local_fields,
+                &foreign_fields,
+            )
+            .unwrap()
+            .len(),
+            3
+        );
+        assert_eq!(
+            execute_left(
+                &left,
+                &right,
+                &spec(JoinType::Semi),
+                &local_fields,
+                &foreign_fields,
+            )
+            .unwrap()
+            .len(),
+            1
+        );
+        assert_eq!(
+            execute_left(
+                &left,
+                &right,
+                &spec(JoinType::Anti),
+                &local_fields,
+                &foreign_fields,
+            )
+            .unwrap()
+            .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn executes_right_hash_with_unmatched_rows() {
+        let left = [row("left", Some(1))];
+        let right = [row("right", Some(1)), row("right", Some(3))];
+        let local_fields = ["left.ID".to_owned()];
+        let foreign_fields = ["right.ID".to_owned()];
+
+        assert_eq!(
+            execute_right(&left, &right, &local_fields, &foreign_fields)
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+}

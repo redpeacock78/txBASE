@@ -23,3 +23,21 @@ pub(super) fn execute(
     }
     Ok(output)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::execute;
+    use serde_json::{Map, json};
+
+    fn row(table: &str, key: i64) -> Map<String, serde_json::Value> {
+        Map::from_iter([(format!("{table}.ID"), json!(key))])
+    }
+
+    #[test]
+    fn emits_the_bounded_cartesian_product() {
+        let left = [row("left", 1), row("left", 2)];
+        let right = [row("right", 1), row("right", 2)];
+
+        assert_eq!(execute(&left, &right).unwrap().len(), 4);
+    }
+}
