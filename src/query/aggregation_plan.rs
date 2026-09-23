@@ -1,5 +1,6 @@
 use super::{QueryError, QueryRequest};
 
+mod bucket;
 mod group;
 mod parse;
 mod set;
@@ -8,9 +9,11 @@ mod types;
 
 pub(super) use parse::parse;
 pub(super) use types::{
-    AccumulatorKind, AccumulatorSpec, AggregationPlan, GroupSpec, InputStage, SetExpression,
-    UnwindSpec,
+    AccumulatorKind, AccumulatorSpec, AggregationPlan, BucketSpec, GroupSpec, InputStage,
+    SetExpression, UnwindSpec,
 };
+
+pub(super) const MAX_BUCKETS: usize = 10_000;
 
 pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
     let Some(stages) = request.aggregate.as_ref() else {

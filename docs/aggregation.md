@@ -6,7 +6,7 @@ The aggregation boundary is separate from ordinary cursor pagination and from th
 
 ## 1. Bounded aggregation
 
-The query document can contain one terminal `$count` or `$distinct` stage, or one blocking `$group` stage after `filter` and zero or more preceding `$match` stages:
+The query document can contain one terminal `$count` or `$distinct` stage, one blocking `$group` stage, or one blocking `$bucket` stage after `filter` and zero or more preceding `$match` stages:
 
 ```json
 {
@@ -23,7 +23,7 @@ The query document can contain one terminal `$count` or `$distinct` stage, or on
 }
 ```
 
-The input portion accepts zero or more `$match` and `$unwind` stages, at most one input `$set` or `$addFields` stage in total, and at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each before one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
+The input portion accepts zero or more `$match` and `$unwind` stages, at most one input `$set` or `$addFields` stage in total, and at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each before one terminal `$count`, one terminal `$distinct`, one `$group` stage, or one `$bucket` stage.
 
 Input stages execute in the order listed in the pipeline.
 
@@ -55,7 +55,7 @@ An input `$project` reuses the query projection rules and may appear once in the
 
 The input form accepts only `0` and `1` inclusion or exclusion values; computed projection expressions, an empty specification, and mixed inclusion and exclusion are unsupported.
 
-The projection is materialized before the next stage, so subsequent `$match`, `$group`, `$count`, or `$distinct` stages see only the projected fields.
+The projection is materialized before the next stage, so subsequent `$match`, `$group`, `$bucket`, `$count`, or `$distinct` stages see only the projected fields.
 
 For an array field, `$unwind` emits one copy of the input record for each element in input array order and replaces the field with that element.
 
@@ -65,11 +65,40 @@ With `preserveNullAndEmptyArrays: true`, each of those inputs emits one record; 
 
 A non-null, non-array field rejects the aggregate instead of being coerced to a one-element array.
 
-The total number of records emitted by all `$unwind` stages, including preserved records, is capped at 10,000 before `$count`, `$distinct`, or `$group` runs.
+The total number of records emitted by all `$unwind` stages, including preserved records, is capped at 10,000 before `$count`, `$distinct`, `$group`, or `$bucket` runs.
 
 Dotted field paths, an `includeArrayIndex` name equal to `path`, and other extended `$unwind` forms remain unsupported.
 
-Group output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, at most one `$skip`, and at most one final `$limit` stage.
+`$bucket` groups records into numeric ranges using `groupBy`, `boundaries`, and an optional `default` value:
+
+```json
+{
+  "$bucket": {
+    "groupBy": "$AGE",
+    "boundaries": [0, 20, 40],
+    "default": "other",
+    "output": {"count": {"$count": {}}}
+  }
+}
+```
+
+`groupBy` must be one field reference, and `boundaries` must contain at least two finite JSON numbers in strictly ascending order.
+
+Each range includes its lower boundary and excludes its upper boundary.
+
+A missing, null, nonnumeric, or out-of-range `groupBy` value uses `default` when it is present; otherwise the aggregate is rejected.
+
+Each non-empty range produces one document whose `_id` is the range lower boundary, and a populated default bucket uses the default value as `_id`.
+
+Empty buckets are omitted, and the default bucket is emitted after the range buckets.
+
+When `output` is omitted, `$bucket` emits a `count` accumulator.
+
+When `output` is present, it uses the same bounded accumulator forms as `$group` except that `_id` is assigned by the bucket stage.
+
+The stage supports at most 10,000 ranges, does not spill to disk, and shares the 10,000-value materialization bound with `$push` and `$addToSet`.
+
+Group or bucket output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, at most one `$skip`, and at most one final `$limit` stage.
 
 `_id` is either `null` or one dotted field reference.
 
@@ -79,13 +108,13 @@ Numeric `$sum` and `$avg` operands accept a field reference, numeric literal, un
 
 The bounded numeric expression evaluator is shared with `$expr`; missing or nonnumeric resolved values are ignored by `$sum` and `$avg`.
 
-The filter runs before grouping.
+The filter runs before grouping or bucketing.
 
-The result is a JSON array of documents containing `_id` and the named accumulator fields.
+The result is a JSON array of documents containing `_id` and the named accumulator fields for `$group` or `$bucket`.
 
 `$project` reuses the query projection rules for group-output fields.
 
-It must appear after `$group` and before `$sort`, `$skip`, or `$limit`.
+It must appear after `$group` or `$bucket` and before `$sort`, `$skip`, or `$limit`.
 
 Inclusion and exclusion cannot be mixed.
 
@@ -139,9 +168,9 @@ Missing fields are appended as `null` by both accumulators.
 
 The combined materialized value count for all `$push` and `$addToSet` accumulators is capped at 10,000.
 
-The executor rejects more than 10,000 groups and rejects aggregation combined with top-level sort, projection, skip, limit, or cursor pagination.
+The executor rejects more than 10,000 groups or bucket ranges and rejects aggregation combined with top-level sort, projection, skip, limit, or cursor pagination.
 
-Without `$sort`, group output order is not part of the contract, although the current implementation emits deterministic key order.
+Without `$sort`, group or bucket output order is not part of the contract, although the current implementation emits deterministic key or boundary order.
 
 `$sort` uses the existing JSON sort ordering and stable ties.
 
@@ -149,13 +178,13 @@ Without `$sort`, group output order is not part of the contract, although the cu
 
 `$skip` accepts a non-negative integer and discards that many materialized group results after sorting and before `$limit`.
 
-`$skip` must appear after `$group` and any optional `$project` or `$sort`, and before `$limit`.
+`$skip` must appear after `$group` or `$bucket` and any optional `$project` or `$sort`, and before `$limit`.
 
 `$match` stages use the same predicate rules as top-level `filter`.
 
-Input `$match` stages must precede `$group`, `$count`, or `$distinct`.
+Input `$match` stages must precede `$group`, `$bucket`, `$count`, or `$distinct`.
 
-Group-output `$match` stages must follow `$group` and precede `$project`, `$sort`, `$skip`, or `$limit`.
+Group-output `$match` stages must follow `$group` or `$bucket` and precede `$project`, `$sort`, `$skip`, or `$limit`.
 
 `$count` emits one document containing the named non-negative integer field, including zero when no records match.
 
@@ -167,9 +196,9 @@ Both stages are terminal and cannot be combined with group-output stages.
 
 Distinct output is capped at 10,000 values.
 
-Additional grouping, count, or distinct stages remain unsupported.
+Additional grouping, bucket, count, or distinct stages remain unsupported.
 
-After `$group`, stages after the group-output `$limit` remain unsupported.
+After `$group` or `$bucket`, stages after the group-output `$limit` remain unsupported.
 
 `$expr`, `$sum`, and `$avg` operands are supported only in the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` forms described in the query model.
 
@@ -193,6 +222,7 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 - [MongoDB `$stdDevPop` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevpop/)
 - [MongoDB `$stdDevSamp` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
+- [MongoDB `$bucket` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucket/)
 - [MongoDB `$project` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB `$set` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)
 - [MongoDB `$addFields` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)

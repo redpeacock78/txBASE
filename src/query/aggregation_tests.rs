@@ -10,5 +10,6 @@ fn table_with_two_active_records() -> DbfTable {
 }
 
 mod accumulator_tests;
+mod bucket_tests;
 mod input_stage_tests;
 mod pipeline_tests;

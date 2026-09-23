@@ -206,7 +206,7 @@ The roadmap keeps index design separate from query syntax so a query document do
 The following require separate public contracts:
 
 1. Full expression evaluation and more precise cost-based index choice with explicit missing, null, collation, and compound-range selectivity rules.
-2. Additional aggregation stages and accumulators beyond the current bounded aggregation contract, including its bounded numeric `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp` expressions, with bounded memory behavior.
+2. Additional aggregation stages and accumulators beyond the current bounded aggregation contract, including extensions to `$group` and `$bucket` and bounded-memory handling for their numeric expressions.
 3. Filesystem- and cache-aware merge planning, streaming join execution, and broader join semantics.
 4. Host-specific scheduling, backpressure, timeout, cancellation, and transport implementations for `AsyncQueryStream`.
 5. Differential tests against a small reference evaluator.

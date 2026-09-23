@@ -1,6 +1,6 @@
 use super::{AccumulatorKind, AccumulatorSpec, GroupSpec, QueryError, field_reference};
 use crate::query::expression::parse_numeric_operand;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
     let definition = definition
@@ -19,6 +19,16 @@ pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
         }
     };
 
+    Ok(GroupSpec {
+        key_field,
+        accumulators: parse_accumulators(definition, "$group")?,
+    })
+}
+
+pub(super) fn parse_accumulators(
+    definition: &Map<String, Value>,
+    prefix: &str,
+) -> Result<Vec<AccumulatorSpec>, QueryError> {
     let mut accumulators = Vec::new();
     for (name, value) in definition {
         if name == "_id" {
@@ -26,46 +36,35 @@ pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
         }
         if name.is_empty() || name.starts_with('$') || name.contains('.') {
             return Err(QueryError::Invalid(format!(
-                "$group output field {name} is invalid"
+                "{prefix} output field {name} is invalid"
             )));
         }
         let operators = value
             .as_object()
-            .ok_or_else(|| QueryError::Invalid(format!("$group.{name} must be an object")))?;
+            .ok_or_else(|| QueryError::Invalid(format!("{prefix}.{name} must be an object")))?;
         if operators.len() != 1 {
             return Err(QueryError::Invalid(format!(
-                "$group.{name} must contain one accumulator"
+                "{prefix}.{name} must contain one accumulator"
             )));
         }
         let (operator, operand) = operators.iter().next().expect("one accumulator");
+        let path = format!("{prefix}.{name}.{operator}");
         let kind = match operator.as_str() {
             "$count" if operand.as_object().is_some_and(|object| object.is_empty()) => {
                 AccumulatorKind::Count
             }
-            "$avg" => AccumulatorKind::Average(parse_numeric_operand(
-                operand,
-                &format!("$group.{name}.$avg"),
-            )?),
-            "$stdDevPop" => AccumulatorKind::StdDevPop(parse_numeric_operand(
-                operand,
-                &format!("$group.{name}.$stdDevPop"),
-            )?),
-            "$stdDevSamp" => AccumulatorKind::StdDevSamp(parse_numeric_operand(
-                operand,
-                &format!("$group.{name}.$stdDevSamp"),
-            )?),
-            "$sum" => AccumulatorKind::Sum(parse_numeric_operand(
-                operand,
-                &format!("$group.{name}.$sum"),
-            )?),
+            "$avg" => AccumulatorKind::Average(parse_numeric_operand(operand, &path)?),
+            "$stdDevPop" => AccumulatorKind::StdDevPop(parse_numeric_operand(operand, &path)?),
+            "$stdDevSamp" => AccumulatorKind::StdDevSamp(parse_numeric_operand(operand, &path)?),
+            "$sum" => AccumulatorKind::Sum(parse_numeric_operand(operand, &path)?),
             "$min" | "$max" | "$first" | "$last" | "$push" | "$addToSet" => {
                 let field = field_reference(
                     operand.as_str().ok_or_else(|| {
                         QueryError::Invalid(format!(
-                            "$group.{name}.{operator} must be a field reference"
+                            "{prefix}.{name}.{operator} must be a field reference"
                         ))
                     })?,
-                    &format!("$group.{name}.{operator}"),
+                    &path,
                 )?;
                 match operator.as_str() {
                     "$min" => AccumulatorKind::Min(field),
@@ -79,7 +78,7 @@ pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
             }
             _ => {
                 return Err(QueryError::Invalid(format!(
-                    "unsupported aggregate accumulator {operator}"
+                    "unsupported aggregate accumulator {operator} at {prefix}"
                 )));
             }
         };
@@ -88,8 +87,5 @@ pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
             kind,
         });
     }
-    Ok(GroupSpec {
-        key_field,
-        accumulators,
-    })
+    Ok(accumulators)
 }

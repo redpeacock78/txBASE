@@ -15,12 +15,21 @@ pub struct AggregationPlan {
     pub input: Vec<InputStage>,
     pub group_matches: Vec<Map<String, Value>>,
     pub group: Option<GroupSpec>,
+    pub bucket: Option<BucketSpec>,
     pub count: Option<String>,
     pub distinct: Option<String>,
     pub projection: Option<BTreeMap<String, i8>>,
     pub sort: Option<IndexMap<String, i8>>,
     pub skip: Option<u64>,
     pub limit: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BucketSpec {
+    pub group_by: String,
+    pub boundaries: Vec<Value>,
+    pub default: Option<Value>,
+    pub output: GroupSpec,
 }
 
 #[derive(Debug, Clone)]

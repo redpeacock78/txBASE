@@ -6,7 +6,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 ## 1. 有界集約
 
-クエリ文書には、`filter`と0個以上の先行`$match`ステージの後に、終端`$count`、終端`$distinct`、またはブロッキングな`$group`を1つ置けます。
+クエリ文書には、`filter`と0個以上の先行`$match`ステージの後に、終端`$count`、終端`$distinct`、ブロッキングな`$group`、またはブロッキングな`$bucket`を1つ置けます。
 
 ```json
 {
@@ -23,7 +23,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 }
 ```
 
-入力部分は、0個以上の`$match`と`$unwind`、合計で最大1つの入力用`$set`または`$addFields`、入力用の`$project`、`$sort`、`$skip`、`$limit`をそれぞれ最大1つ受け付け、その後に終端`$count`、終端`$distinct`、または`$group`を1つ受け付けます。
+入力部分は、0個以上の`$match`と`$unwind`、合計で最大1つの入力用`$set`または`$addFields`、入力用の`$project`、`$sort`、`$skip`、`$limit`をそれぞれ最大1つ受け付け、その後に終端`$count`、終端`$distinct`、`$group`、または`$bucket`を1つ受け付けます。
 
 入力ステージはパイプラインに記載した順序で実行します。
 
@@ -57,7 +57,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 入力形式が受け付ける包含または除外の値は`0`と`1`だけであり、計算プロジェクション式、空の指定、包含と除外の混在は未サポートです。
 
-プロジェクションは次のステージの前に具体化されるため、後続の`$match`、`$group`、`$count`、`$distinct`はプロジェクション後のフィールドだけを参照します。
+プロジェクションは次のステージの前に具体化されるため、後続の`$match`、`$group`、`$bucket`、`$count`、`$distinct`はプロジェクション後のフィールドだけを参照します。
 
 配列フィールドに対する`$unwind`は、入力配列の順序で要素ごとに入力レコードのコピーを1つ出力し、対象フィールドを要素で置き換えます。
 
@@ -68,11 +68,42 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 `null`でない配列以外のフィールドは、1要素配列へ変換せず集約を拒否します。
 
-保持されたレコードを含むすべての`$unwind`出力レコード数の合計は、`$count`、`$distinct`、または`$group`の前に10,000件までに制限します。
+保持されたレコードを含むすべての`$unwind`出力レコード数の合計は、`$count`、`$distinct`、`$group`、または`$bucket`の前に10,000件までに制限します。
 
 ドット区切りのフィールドパス、`path`と同じ`includeArrayIndex`名、その他の拡張された`$unwind`形式は未サポートです。
 
-グループ出力には0個以上の`$match`を置けます。
+`$bucket`は`groupBy`、`boundaries`、任意の`default`値を使って、レコードを数値範囲へ分類します。
+
+```json
+{
+  "$bucket": {
+    "groupBy": "$AGE",
+    "boundaries": [0, 20, 40],
+    "default": "other",
+    "output": {"count": {"$count": {}}}
+  }
+}
+```
+
+`groupBy`は1つのフィールド参照でなければならず、`boundaries`は2つ以上の有限なJSON数値を昇順で重複なく含まなければなりません。
+
+各範囲は下端を含み、上端を含みません。
+
+`groupBy`の値が欠損、null、数値以外、または範囲外の場合、`default`があればその値へ分類し、なければ集約を拒否します。
+
+空でない範囲ごとに1つの文書を出力し、`_id`には範囲の下端を設定します。
+
+値が存在するdefaultバケットも1つの文書を出力し、`_id`には`default`の値を設定します。
+
+空バケットは出力せず、defaultバケットは範囲バケットの後に出力します。
+
+`output`を省略すると、`$bucket`は`count`アキュムレータを出力します。
+
+`output`を指定した場合は、`_id`をバケットステージが設定する点を除き、`$group`と同じ有界なアキュムレータ形式を使います。
+
+範囲は10,000個までであり、ディスクへ退避せず、`$push`と`$addToSet`に対する10,000値の具体化上限を共有します。
+
+グループまたはバケット出力には0個以上の`$match`を置けます。
 その後に任意の`$project`を1つ、最後の`$sort`、`$skip`、`$limit`をそれぞれ最大1つ置けます。
 
 `_id`は`null`または1つのドット区切りフィールド参照です。
@@ -83,13 +114,13 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 有界な数値式の評価器は`$expr`と共有し、解決した値が欠損または数値以外の場合は`$sum`と`$avg`で無視します。
 
-フィルターはグループ化より前に実行します。
+フィルターはグループ化またはバケット化より前に実行します。
 
-結果は`_id`と名前付きアキュムレータフィールドを持つJSONオブジェクトの配列です。
+結果は`$group`または`$bucket`が生成した`_id`と名前付きアキュムレータフィールドを持つJSONオブジェクトの配列です。
 
-`$project`はクエリのプロジェクション規則を再利用してグループ出力のフィールドを包含または除外します。
+`$project`はクエリのプロジェクション規則を再利用してグループまたはバケット出力のフィールドを包含または除外します。
 
-`$project`は`$group`の後、`$sort`、`$skip`、または`$limit`の前に置く必要があります。
+`$project`は`$group`または`$bucket`の後、`$sort`、`$skip`、または`$limit`の前に置く必要があります。
 
 包含と除外は混在できません。
 
@@ -143,9 +174,9 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 すべての`$push`と`$addToSet`がマテリアライズする値の合計は10,000件に制限されます。
 
-10,000を超えるグループは拒否し、集約とトップレベルの`sort`、`projection`、`skip`、`limit`、cursorページングの併用も拒否します。
+10,000を超えるグループまたはバケット範囲は拒否し、集約とトップレベルの`sort`、`projection`、`skip`、`limit`、cursorページングの併用も拒否します。
 
-`$sort`がない場合のグループ出力順は契約に含めませんが、現在の実装は決定的なキー順で出力します。
+`$sort`がない場合のグループまたはバケット出力順は契約に含めませんが、現在の実装は決定的なキー順または境界順で出力します。
 
 `$sort`は既存のJSONソート順と安定した同値順を使います。
 
@@ -153,13 +184,13 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 `$skip`は0以上の整数を受け付け、ソート後かつ`$limit`の前に、具体化されたグループ結果を指定件数だけ破棄します。
 
-`$skip`は`$group`の後、任意の`$project`または`$sort`の後、`$limit`の前に置く必要があります。
+`$skip`は`$group`または`$bucket`の後、任意の`$project`または`$sort`の後、`$limit`の前に置く必要があります。
 
 `$match`ステージはトップレベルの`filter`と同じ述語規則を使います。
 
-入力に対する`$match`ステージは`$group`、`$count`、`$distinct`より前に置く必要があります。
+入力に対する`$match`ステージは`$group`、`$bucket`、`$count`、`$distinct`より前に置く必要があります。
 
-グループ出力に対する`$match`ステージは`$group`の後、`$project`、`$sort`、`$skip`、`$limit`より前に置く必要があります。
+グループまたはバケット出力に対する`$match`ステージは`$group`または`$bucket`の後、`$project`、`$sort`、`$skip`、`$limit`より前に置く必要があります。
 
 `$count`は名前付きの0以上の整数フィールドを1つ持つ文書を返し、一致するレコードがない場合も0を返します。
 
@@ -171,9 +202,9 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 distinct出力は10,000値までです。
 
-追加のgroup、count、distinctステージは未サポートです。
+追加のgroup、bucket、count、distinctステージは未サポートです。
 
-`$group`の後では、グループ出力用の`$limit`より後のステージは未サポートです。
+`$group`または`$bucket`の後では、グループ出力用の`$limit`より後のステージは未サポートです。
 
 `$expr`、`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`のオペランドは、クエリモデルで説明する有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`の形式だけをサポートします。
 
@@ -197,6 +228,7 @@ txBASEはMongoDBの完全なパイプライン互換性を主張せず、その�
 - [MongoDB の`$stdDevPop`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevpop/)
 - [MongoDB の`$stdDevSamp`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB の`$count`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
+- [MongoDB の`$bucket`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucket/)
 - [MongoDB の`$project`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB の`$set`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)
 - [MongoDB の`$addFields`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)

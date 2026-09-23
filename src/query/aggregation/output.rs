@@ -41,10 +41,14 @@ pub(super) fn execute_materialized<'a>(
         return Ok(values.into_values().collect());
     }
 
+    if let Some(bucket) = &plan.bucket {
+        return execute_bucket(records, bucket, plan);
+    }
+
     let spec = plan
         .group
         .as_ref()
-        .expect("validated aggregation has a group or count stage");
+        .expect("validated aggregation has a group, bucket, or count stage");
     let mut groups = BTreeMap::<String, accumulators::GroupState>::new();
     let mut collected_values = 0;
     if spec.key_field.is_none() {
@@ -78,10 +82,82 @@ pub(super) fn execute_materialized<'a>(
         accumulators::accumulate_record(group, record, spec, &mut collected_values)?;
     }
 
-    let mut output = groups
+    let output = groups
         .into_values()
         .map(|group| accumulators::finish_group(group, spec))
         .collect::<Result<Vec<_>, _>>()?;
+    finish_group_output(output, plan)
+}
+
+fn execute_bucket<'a>(
+    records: impl Iterator<Item = &'a DbfRecord>,
+    bucket: &aggregation_plan::BucketSpec,
+    plan: &aggregation_plan::AggregationPlan,
+) -> Result<Vec<Value>, QueryError> {
+    let range_count = bucket.boundaries.len() - 1;
+    let group_count = range_count + usize::from(bucket.default.is_some());
+    let mut groups = std::iter::repeat_with(|| None)
+        .take(group_count)
+        .collect::<Vec<Option<accumulators::GroupState>>>();
+    let mut collected_values = 0;
+    for record in records {
+        let (group_index, key) = bucket_assignment(record, bucket)?;
+        if groups[group_index].is_none() {
+            groups[group_index] = Some(accumulators::new_group(key, &bucket.output));
+        }
+        let group = groups[group_index]
+            .as_mut()
+            .expect("bucket group was inserted or already present");
+        accumulators::accumulate_record(group, record, &bucket.output, &mut collected_values)?;
+    }
+
+    let output = groups
+        .into_iter()
+        .flatten()
+        .map(|group| accumulators::finish_group(group, &bucket.output))
+        .collect::<Result<Vec<_>, _>>()?;
+    finish_group_output(output, plan)
+}
+
+fn bucket_assignment(
+    record: &DbfRecord,
+    bucket: &aggregation_plan::BucketSpec,
+) -> Result<(usize, Value), QueryError> {
+    let value = crate::query_path::field_value(&record.values, &bucket.group_by);
+    let number = value
+        .as_ref()
+        .and_then(Value::as_number)
+        .and_then(|number| number.as_f64())
+        .filter(|number| number.is_finite());
+    if let Some(number) = number {
+        for (index, boundaries) in bucket.boundaries.windows(2).enumerate() {
+            let lower = boundaries[0]
+                .as_number()
+                .and_then(|number| number.as_f64())
+                .expect("bucket boundaries are validated finite numbers");
+            let upper = boundaries[1]
+                .as_number()
+                .and_then(|number| number.as_f64())
+                .expect("bucket boundaries are validated finite numbers");
+            if lower <= number && number < upper {
+                return Ok((index, boundaries[0].clone()));
+            }
+        }
+    }
+
+    let Some(default) = &bucket.default else {
+        return Err(QueryError::Invalid(format!(
+            "aggregate $bucket groupBy field {} is missing, non-numeric, or outside boundaries",
+            bucket.group_by
+        )));
+    };
+    Ok((bucket.boundaries.len() - 1, default.clone()))
+}
+
+fn finish_group_output(
+    mut output: Vec<Value>,
+    plan: &aggregation_plan::AggregationPlan,
+) -> Result<Vec<Value>, QueryError> {
     for filter in &plan.group_matches {
         let mut filtered = Vec::with_capacity(output.len());
         for value in output {
