@@ -163,43 +163,119 @@ fn rejects_header_and_section_corruption() {
 }
 
 #[test]
-fn enforces_explicit_size_limits_before_decoding() {
-    let bytes = encode(&fixture()).unwrap();
-    let limits = [
+fn enforces_explicit_size_limits_for_encoding_and_decoding() {
+    let table = fixture();
+    let bytes = encode(&table).unwrap();
+    let mut two_records = table.clone();
+    two_records.records.push(table.records[0].clone());
+    let two_record_bytes = encode(&two_records).unwrap();
+    let cases = [
+        (
+            XbfLimits {
+                max_file_size: bytes.len() - 1,
+                ..XbfLimits::default()
+            },
+            &bytes,
+            &table,
+        ),
+        (
+            XbfLimits {
+                max_section_size: 1,
+                ..XbfLimits::default()
+            },
+            &bytes,
+            &table,
+        ),
+        (
+            XbfLimits {
+                max_record_size: 1,
+                ..XbfLimits::default()
+            },
+            &bytes,
+            &table,
+        ),
+        (
+            XbfLimits {
+                max_value_size: 1,
+                ..XbfLimits::default()
+            },
+            &bytes,
+            &table,
+        ),
+        (
+            XbfLimits {
+                max_field_name: 1,
+                ..XbfLimits::default()
+            },
+            &bytes,
+            &table,
+        ),
+        (
+            XbfLimits {
+                max_fields: 1,
+                ..XbfLimits::default()
+            },
+            &bytes,
+            &table,
+        ),
+        (
+            XbfLimits {
+                max_records: 1,
+                ..XbfLimits::default()
+            },
+            &two_record_bytes,
+            &two_records,
+        ),
+    ];
+    for (limits, bytes, table) in cases {
+        assert!(
+            decode_with_limits(bytes, &limits).is_err(),
+            "decoder accepted bytes over an explicit limit"
+        );
+        assert!(
+            encode_with_limits(table, &limits).is_err(),
+            "encoder accepted a table over an explicit limit"
+        );
+    }
+}
+
+#[test]
+fn rejects_invalid_limits_before_reading_or_writing() {
+    let default = XbfLimits::default();
+    let cases = [
         XbfLimits {
-            max_file_size: bytes.len() - 1,
-            ..XbfLimits::default()
+            max_file_size: super::HEADER_SIZE - 1,
+            ..default
         },
         XbfLimits {
-            max_section_size: 1,
-            ..XbfLimits::default()
+            max_section_size: 0,
+            ..default
         },
         XbfLimits {
-            max_record_size: 1,
-            ..XbfLimits::default()
+            max_record_size: 0,
+            ..default
         },
         XbfLimits {
-            max_value_size: 1,
-            ..XbfLimits::default()
+            max_value_size: 0,
+            ..default
         },
         XbfLimits {
-            max_field_name: 1,
-            ..XbfLimits::default()
+            max_field_name: 0,
+            ..default
         },
         XbfLimits {
-            max_fields: 1,
-            ..XbfLimits::default()
+            max_fields: 0,
+            ..default
         },
         XbfLimits {
             max_records: 0,
-            ..XbfLimits::default()
+            ..default
         },
     ];
-    for limits in limits {
-        assert!(decode_with_limits(&bytes, &limits).is_err());
+    for limits in cases {
+        assert!(decode_with_limits(&[], &limits).is_err());
+        assert!(encode_with_limits(&fixture(), &limits).is_err());
     }
-    assert!(encode_with_limits(&fixture(), &limits[5]).is_err());
-    assert!(encode_with_limits(&fixture(), &limits[6]).is_err());
 }
 
 #[test]
