@@ -45,7 +45,7 @@ The repository currently provides:
 - An opt-in coarse-grained serializable `DbfTransaction::begin_serializable` boundary that holds the exclusive table lock from begin through commit or rollback.
 - An opt-in coarse-grained serializable `Catalog::begin_serializable` boundary that holds the catalog write lock and every discovered table lock from begin through commit, rollback, or drop, then publishes private table copies through one catalog journal.
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
-- A bounded aggregation pipeline with zero or more input `$match` and top-level-array `$unwind` stages, at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each, and one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, bounded numeric-expression `$sum` and `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, followed by bounded group-output `$match` stages, one optional `$project`, and final `$sort`, `$skip`, and `$limit` stages. Input stages execute in listed order. Input `$project` reuses the 0/1 query projection contract and materializes fields before later stages. `$unwind` preserves input and array order, drops missing, null, or empty-array fields, rejects non-array values, and caps total expansion at 10,000 records.
+- A bounded aggregation pipeline with zero or more input `$match` and top-level-array `$unwind` stages, at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each, and one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, bounded numeric-expression `$sum` and `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, followed by bounded group-output `$match` stages, one optional `$project`, and final `$sort`, `$skip`, and `$limit` stages. Input stages execute in listed order. Input `$project` reuses the 0/1 query projection contract and materializes fields before later stages. `$unwind` supports the top-level document options `includeArrayIndex` and `preserveNullAndEmptyArrays`, preserves input and array order, rejects non-array values, and caps all emitted records at 10,000.
 - A bounded local `inner`, `left`, `right`, `full`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
@@ -70,7 +70,7 @@ The baseline intentionally does not include the following:
 - Full index-aware or cost-based merge join strategies.
 - Worker/WASI-specific timeout, transport, cancellation, and asynchronous-storage semantics, and remote object-store adapters.
 - Predicate-level locking and distributed serializable coordination.
-- Aggregation stages or accumulators beyond bounded input `$match`, `$unwind`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, and `$group` with bounded numeric-expression `$sum` and `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
+- Aggregation stages or accumulators beyond bounded input `$match`, `$unwind` with its documented top-level options, `$project`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, and `$group` with bounded numeric-expression `$sum` and `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export.
 - Cloud object-storage adapters and retention policy.
@@ -180,7 +180,7 @@ The current record scan remains the reference execution path while the query mod
 
 ### Candidate scope
 
-- Additional aggregation stages and accumulator expressions beyond the current bounded input `$match`, `$unwind`, `$sort`, `$skip`, and `$limit` stages and the documented group stages and accumulators.
+- Additional aggregation stages and accumulator expressions beyond the current bounded input `$match`, `$unwind` option form, `$project`, `$sort`, `$skip`, and `$limit` stages and the documented group stages and accumulators.
 - Full expression evaluation beyond the bounded `$expr` boolean-tree form and its numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` operands.
 - Joins.
 - Constraints.
@@ -200,9 +200,11 @@ The aggregation boundary defines missing, null, numeric overflow, and memory-lim
 
 The current aggregation slice permits zero or more input `$match` and top-level-array `$unwind` stages, and at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each.
 
+The input `$unwind` document form supports `includeArrayIndex` and `preserveNullAndEmptyArrays` for top-level fields while retaining strict rejection of non-array non-null values.
+
 It then permits one terminal `$count` or `$distinct` stage, or one `$group` with `$count`, bounded numeric-expression `$sum` and `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, bounded group-output `$match` stages, and a bounded `$project` before the final sort, skip, and limit.
 
-Input stages execute in listed order. `$unwind` preserves input and array order, drops missing, null, or empty-array fields, rejects non-array values, and caps total expansion at 10,000 records.
+Input stages execute in listed order. `$unwind` preserves input and array order, drops missing, null, or empty-array fields by default, preserves one record for each of them when requested, rejects non-array values, and caps all emitted records at 10,000.
 
 It reuses the existing include/exclude projection contract.
 

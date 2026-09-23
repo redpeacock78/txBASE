@@ -156,6 +156,10 @@ DBF、memo、WAL、JSON入力について決定的なコーパスを保ちます
 
 `src/query/aggregation_tests/input_stage_tests.rs::unwinds_array_values_before_grouping`は、配列展開、空配列、欠損フィールド、明示的な`null`を検査します。
 
+`src/query/aggregation_tests/input_stage_tests.rs::includes_unwind_array_indexes`は、ドキュメント形式の`$unwind`と0から始まる配列インデックスを検査します。
+
+`src/query/aggregation_tests/input_stage_tests.rs::preserves_null_and_empty_unwind_inputs_with_null_indexes`は、保持した欠損、null、空配列の入力とnullインデックスを検査します。
+
 `src/query/aggregation_tests/input_stage_tests.rs::preserves_unwind_order_for_array_accumulators`は、`$unwind`後の入力順と配列順を検査します。
 
 `src/query/aggregation_tests/input_stage_tests.rs::applies_input_stages_in_listed_order`は、グループ化前に入力用の`$limit`、`$sort`、`$skip`を記載順で実行することを検査します。

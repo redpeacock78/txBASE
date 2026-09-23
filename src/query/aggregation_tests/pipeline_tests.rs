@@ -200,6 +200,12 @@ fn rejects_unsupported_aggregation_combinations() {
             .as_slice(),
         br#"{"aggregate":[{"$unwind":"TAGS"},{"$count":"total"}]}"#.as_slice(),
         br#"{"aggregate":[{"$unwind":"$items.tags"},{"$count":"total"}]}"#.as_slice(),
+        br#"{"aggregate":[{"$unwind":{}},{"$count":"total"}]}"#.as_slice(),
+        br#"{"aggregate":[{"$unwind":{"includeArrayIndex":"INDEX"}},{"$count":"total"}]}"#.as_slice(),
+        br#"{"aggregate":[{"$unwind":{"path":"$TAGS","includeArrayIndex":"TAGS"}},{"$count":"total"}]}"#.as_slice(),
+        br#"{"aggregate":[{"$unwind":{"path":"$TAGS","includeArrayIndex":"$INDEX"}},{"$count":"total"}]}"#.as_slice(),
+        br#"{"aggregate":[{"$unwind":{"path":"$TAGS","preserveNullAndEmptyArrays":1}},{"$count":"total"}]}"#.as_slice(),
+        br#"{"aggregate":[{"$unwind":{"path":"$TAGS","unknown":true}},{"$count":"total"}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$unwind":"$TAGS"}]}"#.as_slice(),
     ] {
         assert!(

@@ -197,6 +197,100 @@ fn unwinds_array_values_before_grouping() {
 }
 
 #[test]
+fn includes_unwind_array_indexes() {
+    let record = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"TAGS": ["a", "b"]}).as_object().unwrap().clone(),
+    };
+    let records = [&record];
+    let stages = vec![
+        json!({
+            "$unwind": {
+                "path": "$TAGS",
+                "includeArrayIndex": "TAG_INDEX"
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+        json!({
+            "$group": {
+                "_id": null,
+                "tags": {"$push": "$TAGS"},
+                "indexes": {"$push": "$TAG_INDEX"}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({"_id": null, "tags": ["a", "b"], "indexes": [0, 1]})]
+    );
+}
+
+#[test]
+fn preserves_null_and_empty_unwind_inputs_with_null_indexes() {
+    let array = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"TAGS": ["a", "b"]}).as_object().unwrap().clone(),
+    };
+    let empty = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"TAGS": []}).as_object().unwrap().clone(),
+    };
+    let null = DbfRecord {
+        number: 3,
+        deleted: false,
+        values: json!({"TAGS": null}).as_object().unwrap().clone(),
+    };
+    let missing = DbfRecord {
+        number: 4,
+        deleted: false,
+        values: json!({"NAME": "missing"}).as_object().unwrap().clone(),
+    };
+    let records = [&array, &empty, &null, &missing];
+    let stages = vec![
+        json!({
+            "$unwind": {
+                "path": "$TAGS",
+                "includeArrayIndex": "TAG_INDEX",
+                "preserveNullAndEmptyArrays": true
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+        json!({
+            "$group": {
+                "_id": null,
+                "count": {"$count": {}},
+                "tags": {"$push": "$TAGS"},
+                "indexes": {"$push": "$TAG_INDEX"}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({
+            "_id": null,
+            "count": 5,
+            "tags": ["a", "b", null, null, null],
+            "indexes": [0, 1, null, null, null]
+        })]
+    );
+}
+
+#[test]
 fn preserves_unwind_order_for_array_accumulators() {
     let first = DbfRecord {
         number: 1,

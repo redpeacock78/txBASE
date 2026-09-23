@@ -27,7 +27,11 @@ The input portion accepts zero or more `$match` and `$unwind` stages, at most on
 
 Input stages execute in the order listed in the pipeline.
 
-`$unwind` uses the form `{"$unwind": "$FIELD"}` and accepts only a top-level field reference.
+`$unwind` accepts a top-level field reference such as `{"$unwind": "$FIELD"}` or a document with `path`, `includeArrayIndex`, and `preserveNullAndEmptyArrays` options.
+
+The document form requires `path` and accepts an optional top-level `includeArrayIndex` field name and an optional boolean `preserveNullAndEmptyArrays` flag.
+
+`includeArrayIndex` writes a zero-based integer for each array element and `null` for a preserved missing, null, or empty-array input.
 
 Multiple `$unwind` stages apply sequentially in their listed order.
 
@@ -45,13 +49,15 @@ The projection is materialized before the next stage, so subsequent `$match`, `$
 
 For an array field, `$unwind` emits one copy of the input record for each element in input array order and replaces the field with that element.
 
-Missing fields, explicit `null`, and empty arrays emit no records.
+By default, missing fields, explicit `null`, and empty arrays emit no records.
+
+With `preserveNullAndEmptyArrays: true`, each of those inputs emits one record; an empty-array field is removed from that record, an explicit `null` remains `null`, and a missing field remains absent.
 
 A non-null, non-array field rejects the aggregate instead of being coerced to a one-element array.
 
-The total number of records emitted by all `$unwind` stages is capped at 10,000 before `$count`, `$distinct`, or `$group` runs.
+The total number of records emitted by all `$unwind` stages, including preserved records, is capped at 10,000 before `$count`, `$distinct`, or `$group` runs.
 
-Dotted field paths, `preserveNullAndEmptyArrays`, `includeArrayIndex`, and other extended `$unwind` forms remain unsupported.
+Dotted field paths, an `includeArrayIndex` name equal to `path`, and other extended `$unwind` forms remain unsupported.
 
 Group output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, at most one `$skip`, and at most one final `$limit` stage.
 

@@ -50,14 +50,14 @@ fn apply_input_stage<'a>(
             }
             InputRecords::Owned(records) => Ok(InputRecords::Owned(filter_owned(records, filter)?)),
         },
-        aggregation_plan::InputStage::Unwind(field) => {
+        aggregation_plan::InputStage::Unwind(spec) => {
             let records = match records {
                 InputRecords::Borrowed(records) => records.into_iter().cloned().collect(),
                 InputRecords::Owned(records) => records,
             };
             Ok(InputRecords::Owned(unwind_records(
                 records,
-                field,
+                spec,
                 unwound_records,
             )?))
         }
@@ -259,37 +259,69 @@ fn execute_materialized<'a>(
 
 fn unwind_records(
     records: Vec<DbfRecord>,
-    field: &str,
+    spec: &aggregation_plan::UnwindSpec,
     unwound_records: &mut usize,
 ) -> Result<Vec<DbfRecord>, QueryError> {
     let mut expanded = Vec::new();
     for record in records {
-        let Some(value) = record.values.get(field).cloned() else {
-            continue;
-        };
+        let value = record.values.get(&spec.field).cloned();
         match value {
-            Value::Array(values) => {
-                for value in values {
-                    if *unwound_records >= MAX_UNWOUND_RECORDS {
-                        return Err(QueryError::Invalid(format!(
-                            "aggregate unwound record count exceeds {MAX_UNWOUND_RECORDS}"
-                        )));
+            Some(Value::Array(values)) => {
+                if values.is_empty() {
+                    if spec.preserve_null_and_empty {
+                        let mut record = record.clone();
+                        record.values.remove(&spec.field);
+                        if let Some(index_field) = &spec.include_array_index {
+                            record.values.insert(index_field.clone(), Value::Null);
+                        }
+                        push_unwound_record(&mut expanded, record, unwound_records)?;
                     }
-                    let mut record = record.clone();
-                    record.values.insert(field.to_owned(), value);
-                    expanded.push(record);
-                    *unwound_records += 1;
+                } else {
+                    for (index, value) in values.into_iter().enumerate() {
+                        let mut record = record.clone();
+                        record.values.insert(spec.field.clone(), value);
+                        if let Some(index_field) = &spec.include_array_index {
+                            record
+                                .values
+                                .insert(index_field.clone(), Value::Number((index as u64).into()));
+                        }
+                        push_unwound_record(&mut expanded, record, unwound_records)?;
+                    }
                 }
             }
-            Value::Null => {}
-            _ => {
+            Some(Value::Null) | None => {
+                if spec.preserve_null_and_empty {
+                    let mut record = record.clone();
+                    if let Some(index_field) = &spec.include_array_index {
+                        record.values.insert(index_field.clone(), Value::Null);
+                    }
+                    push_unwound_record(&mut expanded, record, unwound_records)?;
+                }
+            }
+            Some(_) => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate $unwind field {field} must be an array"
+                    "aggregate $unwind field {} must be an array",
+                    spec.field
                 )));
             }
         }
     }
     Ok(expanded)
+}
+
+fn push_unwound_record(
+    expanded: &mut Vec<DbfRecord>,
+    record: DbfRecord,
+    unwound_records: &mut usize,
+) -> Result<(), QueryError> {
+    if *unwound_records >= MAX_UNWOUND_RECORDS {
+        return Err(QueryError::Invalid(format!(
+            "aggregate unwound record count exceeds {MAX_UNWOUND_RECORDS}"
+        )));
+    }
+    expanded.push(record);
+    *unwound_records += 1;
+    Ok(())
 }
 
 fn compare_output_values(left: &Value, right: &Value, sort: &IndexMap<String, i8>) -> Ordering {

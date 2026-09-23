@@ -27,7 +27,11 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 入力ステージはパイプラインに記載した順序で実行します。
 
-`$unwind`は`{"$unwind": "$FIELD"}`の形式を使い、トップレベルのフィールド参照だけを受け付けます。
+`$unwind`は`{"$unwind": "$FIELD"}`のようなトップレベルのフィールド参照、または`path`、`includeArrayIndex`、`preserveNullAndEmptyArrays`を持つドキュメントを受け付けます。
+
+ドキュメント形式では`path`が必須であり、トップレベルの`includeArrayIndex`フィールド名と、任意の真偽値`preserveNullAndEmptyArrays`を指定できます。
+
+`includeArrayIndex`は各配列要素に0から始まる整数を、保持された欠損、null、空配列の入力に`null`を書き込みます。
 
 複数の`$unwind`は記載順で順番に適用します。
 
@@ -45,13 +49,16 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 配列フィールドに対する`$unwind`は、入力配列の順序で要素ごとに入力レコードのコピーを1つ出力し、対象フィールドを要素で置き換えます。
 
-存在しないフィールド、明示的な`null`、空配列はレコードを出力しません。
+デフォルトでは、存在しないフィールド、明示的な`null`、空配列はレコードを出力しません。
+
+`preserveNullAndEmptyArrays: true`を指定すると、これらの入力はそれぞれ1レコードを出力します。
+空配列のフィールドはそのレコードから削除し、明示的な`null`は`null`のまま、存在しないフィールドは存在しないままにします。
 
 `null`でない配列以外のフィールドは、1要素配列へ変換せず集約を拒否します。
 
-すべての`$unwind`が出力するレコード数の合計は、`$count`、`$distinct`、または`$group`の前に10,000件までに制限します。
+保持されたレコードを含むすべての`$unwind`出力レコード数の合計は、`$count`、`$distinct`、または`$group`の前に10,000件までに制限します。
 
-ドット区切りのフィールドパス、`preserveNullAndEmptyArrays`、`includeArrayIndex`、その他の拡張された`$unwind`形式は未サポートです。
+ドット区切りのフィールドパス、`path`と同じ`includeArrayIndex`名、その他の拡張された`$unwind`形式は未サポートです。
 
 グループ出力には0個以上の`$match`を置けます。
 その後に任意の`$project`を1つ、最後の`$sort`、`$skip`、`$limit`をそれぞれ最大1つ置けます。

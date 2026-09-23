@@ -7,7 +7,9 @@ mod group;
 mod types;
 
 use group::parse_group;
-pub(super) use types::{AccumulatorKind, AccumulatorSpec, AggregationPlan, GroupSpec, InputStage};
+pub(super) use types::{
+    AccumulatorKind, AccumulatorSpec, AggregationPlan, GroupSpec, InputStage, UnwindSpec,
+};
 
 pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
     let Some(stages) = request.aggregate.as_ref() else {
@@ -203,19 +205,84 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
     })
 }
 
-fn parse_unwind(value: &Value, index: usize) -> Result<String, QueryError> {
-    let Some(value) = value.as_str() else {
-        return Err(QueryError::Invalid(format!(
-            "aggregate stage {index}.$unwind must be a field reference"
-        )));
+fn parse_unwind(value: &Value, index: usize) -> Result<UnwindSpec, QueryError> {
+    let (path, include_array_index, preserve_null_and_empty) = match value {
+        Value::String(path) => (path.clone(), None, false),
+        Value::Object(object) => {
+            for option in object.keys() {
+                if !matches!(
+                    option.as_str(),
+                    "path" | "includeArrayIndex" | "preserveNullAndEmptyArrays"
+                ) {
+                    return Err(QueryError::Invalid(format!(
+                        "aggregate stage {index}.$unwind has an unsupported option {option}"
+                    )));
+                }
+            }
+            let path = object
+                .get("path")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    QueryError::Invalid(format!(
+                        "aggregate stage {index}.$unwind.path must be a field reference"
+                    ))
+                })?
+                .to_owned();
+            let include_array_index = match object.get("includeArrayIndex") {
+                None => None,
+                Some(value) => Some(
+                    value
+                        .as_str()
+                        .ok_or_else(|| {
+                            QueryError::Invalid(format!(
+                                "aggregate stage {index}.$unwind.includeArrayIndex must be a field name"
+                            ))
+                        })?
+                        .to_owned(),
+                ),
+            };
+            let preserve_null_and_empty = match object.get("preserveNullAndEmptyArrays") {
+                None => false,
+                Some(value) => value.as_bool().ok_or_else(|| {
+                    QueryError::Invalid(format!(
+                        "aggregate stage {index}.$unwind.preserveNullAndEmptyArrays must be a boolean"
+                    ))
+                })?,
+            };
+            (path, include_array_index, preserve_null_and_empty)
+        }
+        _ => {
+            return Err(QueryError::Invalid(format!(
+                "aggregate stage {index}.$unwind must be a field reference or option object"
+            )));
+        }
     };
-    let field = field_reference(value, &format!("aggregate stage {index}.$unwind"))?;
+    let field = field_reference(&path, &format!("aggregate stage {index}.$unwind.path"))?;
     if field.contains('.') {
         return Err(QueryError::Invalid(format!(
             "aggregate stage {index}.$unwind must reference a top-level field"
         )));
     }
-    Ok(field)
+    if let Some(include_array_index) = &include_array_index {
+        if include_array_index.is_empty()
+            || include_array_index.starts_with('$')
+            || include_array_index.contains('.')
+        {
+            return Err(QueryError::Invalid(format!(
+                "aggregate stage {index}.$unwind.includeArrayIndex must be a top-level field name"
+            )));
+        }
+        if include_array_index == &field {
+            return Err(QueryError::Invalid(format!(
+                "aggregate stage {index}.$unwind.includeArrayIndex must differ from path"
+            )));
+        }
+    }
+    Ok(UnwindSpec {
+        field,
+        include_array_index,
+        preserve_null_and_empty,
+    })
 }
 
 fn parse_count(value: &Value, index: usize) -> Result<String, QueryError> {

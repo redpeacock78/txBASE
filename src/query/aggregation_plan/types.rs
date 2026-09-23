@@ -24,9 +24,16 @@ pub struct AggregationPlan {
 }
 
 #[derive(Debug, Clone)]
+pub struct UnwindSpec {
+    pub field: String,
+    pub include_array_index: Option<String>,
+    pub preserve_null_and_empty: bool,
+}
+
+#[derive(Debug, Clone)]
 pub enum InputStage {
     Match(Map<String, Value>),
-    Unwind(String),
+    Unwind(UnwindSpec),
     Project(BTreeMap<String, i8>),
     Sort(IndexMap<String, i8>),
     Skip(u64),

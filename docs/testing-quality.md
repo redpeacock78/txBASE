@@ -155,6 +155,10 @@ A delta with the wrong base must be rejected.
 
 `src/query/aggregation_tests/input_stage_tests.rs::unwinds_array_values_before_grouping` covers array expansion, empty arrays, missing fields, and explicit `null` values.
 
+`src/query/aggregation_tests/input_stage_tests.rs::includes_unwind_array_indexes` covers document-form `$unwind` and zero-based array indexes.
+
+`src/query/aggregation_tests/input_stage_tests.rs::preserves_null_and_empty_unwind_inputs_with_null_indexes` covers preserved missing, null, and empty-array inputs and their null indexes.
+
 `src/query/aggregation_tests/input_stage_tests.rs::preserves_unwind_order_for_array_accumulators` covers input and array order across `$unwind`.
 
 `src/query/aggregation_tests/input_stage_tests.rs::applies_input_stages_in_listed_order` covers input `$limit`, `$sort`, and `$skip` execution order before grouping.
