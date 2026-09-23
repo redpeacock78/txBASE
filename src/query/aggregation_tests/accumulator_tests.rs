@@ -1,6 +1,6 @@
 use super::table_with_two_active_records;
 use crate::dbf::DbfRecord;
-use serde_json::json;
+use serde_json::{Value, json};
 
 #[test]
 fn groups_filtered_records_with_count_and_integer_sum() {
@@ -366,6 +366,97 @@ fn groups_pushed_values_and_deduplicates_set_values() {
             "unique_values": ["first", null]
         })]
     );
+}
+
+#[test]
+fn groups_population_and_sample_standard_deviation() {
+    let records = [
+        DbfRecord {
+            number: 1,
+            deleted: false,
+            values: json!({"GROUP": "all", "VALUE": 1})
+                .as_object()
+                .unwrap()
+                .clone(),
+        },
+        DbfRecord {
+            number: 2,
+            deleted: false,
+            values: json!({"GROUP": "all", "VALUE": 2})
+                .as_object()
+                .unwrap()
+                .clone(),
+        },
+        DbfRecord {
+            number: 3,
+            deleted: false,
+            values: json!({"GROUP": "all", "VALUE": 3})
+                .as_object()
+                .unwrap()
+                .clone(),
+        },
+        DbfRecord {
+            number: 4,
+            deleted: false,
+            values: json!({"GROUP": "all", "VALUE": "ignored"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        },
+        DbfRecord {
+            number: 5,
+            deleted: false,
+            values: json!({"GROUP": "single", "VALUE": 5})
+                .as_object()
+                .unwrap()
+                .clone(),
+        },
+        DbfRecord {
+            number: 6,
+            deleted: false,
+            values: json!({"GROUP": "none", "VALUE": "ignored"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        },
+    ];
+    let references = records.iter().collect::<Vec<_>>();
+    let stages = vec![
+        json!({
+            "$group": {
+                "_id": "$GROUP",
+                "population": {"$stdDevPop": "$VALUE"},
+                "sample": {"$stdDevSamp": "$VALUE"},
+                "population_expression": {"$stdDevPop": {"$add": ["$VALUE", 1]}}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    let output = crate::query::aggregation::execute(&references, &stages).unwrap();
+    let all = output
+        .iter()
+        .find(|value| value.get("_id") == Some(&json!("all")))
+        .unwrap();
+    assert!((all["population"].as_f64().unwrap() - (2.0_f64 / 3.0).sqrt()).abs() < 1e-12);
+    assert_eq!(all["sample"], json!(1.0));
+    assert_eq!(all["population_expression"], all["population"]);
+
+    let single = output
+        .iter()
+        .find(|value| value.get("_id") == Some(&json!("single")))
+        .unwrap();
+    assert_eq!(single["population"], json!(0.0));
+    assert_eq!(single["sample"], Value::Null);
+
+    let none = output
+        .iter()
+        .find(|value| value.get("_id") == Some(&json!("none")))
+        .unwrap();
+    assert_eq!(none["population"], Value::Null);
+    assert_eq!(none["sample"], Value::Null);
 }
 
 #[test]

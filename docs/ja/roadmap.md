@@ -44,7 +44,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - beginからcommit、rollback、またはdropまでカタログwrite lockと検出したすべてのテーブルロックを保持し、1つのカタログjournalで非公開テーブルコピーを公開する、任意選択の粗粒度serializable `Catalog::begin_serializable`境界。
 - 成功した読み取りの強いテーブルおよびカタログ表現ETag、GETとHEADのIf-None-Match検証、単一テーブル、名前付きテーブル、カタログ全体のトランザクション経路に対する更新側If-None-Match検証、単一テーブル更新、名前付きテーブル更新、カタログ全体のトランザクションの任意のIf-Match保護。
 - 0個以上の入力`$match`とトップレベル配列に対する`$unwind`、合計で最大1つの入力用`$set`または`$addFields`、入力用の`$project`、`$sort`、`$skip`、`$limit`をそれぞれ最大1つ、終端`$count`または`$distinct`を1つ、または`$group`を1つ受け付ける有界集約パイプライン。
-  別の形として、`$count`、有界な数値式による`$sum`と`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を使う`$group`を1つ置く。
+  別の形として、`$count`、有界な数値式による`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を使う`$group`を1つ置く。
   その後にグループ出力用の有界な`$match`、任意の`$project`1つ、最後の`$sort`、`$skip`、`$limit`を適用する。
   入力ステージは記載順に実行する。`$set`と`$addFields`は既存フィールドを保ったまま、ステージ入力時点の値から有界なフィールド参照、リテラル、null合体、数値式でトップレベルフィールドを計算する。`$unwind`はトップレベルの`includeArrayIndex`と`preserveNullAndEmptyArrays`を受け付け、入力順と配列順を保ち、配列以外の値を拒否し、出力レコード数を10,000件までに制限する。
 - 修飾付きフィルターとプロジェクションを備えた1つ以上のカタログテーブルに対する、有界な`inner`、`left`、`right`、`full`、`semi`、`anti`等値結合と有界な`cross`結合。
@@ -75,7 +75,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - ワーカーまたはWASI固有のタイムアウト、転送、キャンセル、非同期ストレージの意味論と、リモートオブジェクトストレージアダプター。
 - 述語単位のロックと分散serializable調整。
 - 入力の有界`$match`、文書形式のオプションを持つ`$unwind`、文書化した式サブセットを持つ`$set`/`$addFields`、`$project`、`$sort`、`$skip`、`$limit`を超える集約ステージは未実装である。
-- グループ出力の`$match`、`$count`、`$distinct`、有界な数値式による`$sum`と`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を使う`$group`を超える集約ステージまたはアキュムレータも未実装である。
+- グループ出力の`$match`、`$count`、`$distinct`、有界な数値式による`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を使う`$group`を超える集約ステージまたはアキュムレータも未実装である。
 - カタログスコープのスカラーおよび複合外部キーとローカル連鎖動作を超える、遅延およびカタログ間の制約意味論。
 - XBF出力の厳密な複数ファイル読み取りアトミック性。
 - クラウドオブジェクトストレージアダプターと保持方針。
@@ -192,7 +192,7 @@ Rustの`Catalog::begin_serializable`は、同じカタログjournal経路を使�
 
 ### 候補範囲
 
-- 現在の有界な入力`$match`、オプション形式の`$unwind`、`$set`/`$addFields`の式サブセット、`$project`、`$sort`、`$skip`、`$limit`の各ステージと、文書化したgroupステージおよびアキュムレータ式を超える追加の集約ステージとアキュムレータ式。
+- 入力`$match`、オプション形式の`$unwind`、`$set`/`$addFields`の式サブセット、`$project`、`$sort`、`$skip`、`$limit`の各ステージと、`$group`ステージおよび`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`アキュムレータ式を超える追加の集約ステージとアキュムレータ式。
 - 有界`$expr`論理木と数値`$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod`オペランドを超える完全な式評価。
 - 結合。
 - 制約。
@@ -223,7 +223,7 @@ Rustの`Catalog::begin_serializable`は、同じカタログjournal経路を使�
 
 入力用`$unwind`のドキュメント形式は、トップレベルフィールドに対する`includeArrayIndex`と`preserveNullAndEmptyArrays`をサポートし、非nullかつ配列ではない値は引き続き厳格に拒否します。
 
-その後に、終端`$count`または`$distinct`を1つ、または`$count`、有界な数値式による`$sum`と`$avg`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`、グループ出力に対する有界な`$match`と`$project`、最後のsort、skip、limitを備えた`$group`を1つ許可します。
+その後に、終端`$count`または`$distinct`を1つ、または`$count`、有界な数値式による`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`、グループ出力に対する有界な`$match`と`$project`、最後のsort、skip、limitを備えた`$group`を1つ許可します。
 入力ステージは記載順に実行します。`$unwind`は入力順と配列順を保ち、デフォルトでは欠損、null、空配列のフィールドを破棄し、指定時はそれぞれ1レコードを保持し、配列以外の値を拒否し、出力レコード数を10,000件までに制限します。
 
 既存の包含と除外のプロジェクション契約を再利用します。

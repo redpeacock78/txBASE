@@ -73,7 +73,7 @@ Group output may have zero or more `$match` stages, followed by one optional `$p
 
 `_id` is either `null` or one dotted field reference.
 
-Supported accumulators are `$count: {}`, numeric `$sum`, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, `$last: "$FIELD"`, `$push: "$FIELD"`, and `$addToSet: "$FIELD"`, plus numeric `$avg` for finite JSON numbers.
+Supported accumulators are `$count: {}`, numeric `$sum`, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, `$last: "$FIELD"`, `$push: "$FIELD"`, and `$addToSet: "$FIELD"`, plus numeric `$avg`, `$stdDevPop`, and `$stdDevSamp` for finite JSON numbers.
 
 Numeric `$sum` and `$avg` operands accept a field reference, numeric literal, unary `$abs`, or binary `$add`, `$subtract`, `$multiply`, `$divide`, or `$mod` expression.
 
@@ -108,6 +108,18 @@ An accumulated `$sum` that is not finite or cannot be represented as JSON is rej
 Missing, `null`, and nonnumeric `$avg` inputs are ignored.
 
 An all-missing or all-nonnumeric group returns `null`, and a non-finite accumulated result is rejected.
+
+`$stdDevPop` returns the population standard deviation, and `$stdDevSamp` returns the sample standard deviation.
+
+Both standard-deviation accumulators accept the same bounded numeric expressions as `$sum` and `$avg`.
+
+Missing, `null`, and nonnumeric standard-deviation inputs are ignored.
+
+An all-missing or all-nonnumeric group returns `null` for either accumulator.
+
+`$stdDevPop` returns `0` for one numeric input, while `$stdDevSamp` returns `null` until two numeric inputs exist.
+
+Both accumulators use constant memory per group, return finite JSON floating-point values, and reject a non-finite intermediate or result.
 
 Missing and `null` `$min` and `$max` inputs are ignored.
 
@@ -178,6 +190,8 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 - [MongoDB `$group` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
 - [MongoDB `$sum` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sum/)
 - [MongoDB `$avg` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
+- [MongoDB `$stdDevPop` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevpop/)
+- [MongoDB `$stdDevSamp` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB `$project` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB `$set` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)

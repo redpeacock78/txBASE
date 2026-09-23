@@ -59,6 +59,8 @@ pub struct AccumulatorSpec {
 pub enum AccumulatorKind {
     Count,
     Average(NumericExpression),
+    StdDevPop(NumericExpression),
+    StdDevSamp(NumericExpression),
     Sum(NumericExpression),
     Min(String),
     Max(String),

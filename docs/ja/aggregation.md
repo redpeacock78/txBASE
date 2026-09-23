@@ -77,7 +77,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 `_id`は`null`または1つのドット区切りフィールド参照です。
 
-サポートするアキュムレータは`$count: {}`、数値の`$sum`、`$min: "$FIELD"`、`$max: "$FIELD"`、`$first: "$FIELD"`、`$last: "$FIELD"`、`$push: "$FIELD"`、`$addToSet: "$FIELD"`、および有限なJSON数値に対する数値の`$avg`です。
+サポートするアキュムレータは`$count: {}`、数値の`$sum`、`$min: "$FIELD"`、`$max: "$FIELD"`、`$first: "$FIELD"`、`$last: "$FIELD"`、`$push: "$FIELD"`、`$addToSet: "$FIELD"`、および有限なJSON数値に対する数値の`$avg`、`$stdDevPop`、`$stdDevSamp`です。
 
 数値の`$sum`と`$avg`のオペランドは、フィールド参照、数値リテラル、単項の`$abs`、または二項の`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`式を受け付けます。
 
@@ -112,6 +112,18 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 欠損、`null`、数値以外の`$avg`入力は無視します。
 
 すべてが欠損または数値以外のグループは`null`を返し、非有限の累積結果は拒否します。
+
+`$stdDevPop`は母標準偏差を返し、`$stdDevSamp`は標本標準偏差を返します。
+
+どちらの標準偏差アキュムレータも、`$sum`および`$avg`と同じ有界な数値式を受け付けます。
+
+標準偏差に対する欠損、`null`、数値以外の入力は無視します。
+
+すべてが欠損または数値以外のグループでは、どちらのアキュムレータも`null`を返します。
+
+数値入力が1つの場合、`$stdDevPop`は`0`を返し、`$stdDevSamp`は数値入力が2つになるまで`null`を返します。
+
+どちらのアキュムレータもグループごとに一定量のメモリだけを使い、有限なJSON浮動小数点数を返し、中間値または結果が非有限の場合は拒否します。
 
 欠損と`null`の`$min`および`$max`入力は無視します。
 
@@ -163,7 +175,7 @@ distinct出力は10,000値までです。
 
 `$group`の後では、グループ出力用の`$limit`より後のステージは未サポートです。
 
-`$expr`、`$sum`、`$avg`のオペランドは、クエリモデルで説明する有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`の形式だけをサポートします。
+`$expr`、`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`のオペランドは、クエリモデルで説明する有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`の形式だけをサポートします。
 
 より広い式評価は未サポートです。
 
@@ -182,6 +194,8 @@ txBASEはMongoDBの完全なパイプライン互換性を主張せず、その�
 - [MongoDB の`$group`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
 - [MongoDB の`$sum`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sum/)
 - [MongoDB の`$avg`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
+- [MongoDB の`$stdDevPop`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevpop/)
+- [MongoDB の`$stdDevSamp`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB の`$count`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB の`$project`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB の`$set`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)

@@ -46,6 +46,14 @@ pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
                 operand,
                 &format!("$group.{name}.$avg"),
             )?),
+            "$stdDevPop" => AccumulatorKind::StdDevPop(parse_numeric_operand(
+                operand,
+                &format!("$group.{name}.$stdDevPop"),
+            )?),
+            "$stdDevSamp" => AccumulatorKind::StdDevSamp(parse_numeric_operand(
+                operand,
+                &format!("$group.{name}.$stdDevSamp"),
+            )?),
             "$sum" => AccumulatorKind::Sum(parse_numeric_operand(
                 operand,
                 &format!("$group.{name}.$sum"),

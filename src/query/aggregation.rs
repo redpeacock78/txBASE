@@ -5,6 +5,7 @@ use serde_json::{Map, Value};
 mod accumulators;
 mod input;
 mod output;
+mod standard_deviation;
 
 pub(super) const MAX_GROUPS: usize = 10_000;
 // ponytail: bound expanded input rows at the existing query scale; add streaming or spill-to-disk only if larger reports become required.

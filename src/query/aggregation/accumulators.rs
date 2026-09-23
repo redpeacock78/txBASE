@@ -1,4 +1,5 @@
 use super::super::{QueryError, aggregation_plan};
+use super::standard_deviation;
 use crate::dbf::DbfRecord;
 use crate::query_path::field_value;
 use serde_json::Value;
@@ -10,6 +11,7 @@ enum AccumulatorState {
         total: f64,
         count: u64,
     },
+    StandardDeviation(standard_deviation::State),
     Sum {
         integer: i128,
         floating: Option<f64>,
@@ -39,6 +41,10 @@ pub(super) fn new_group(key: Value, spec: &aggregation_plan::GroupSpec) -> Group
                     total: 0.0,
                     count: 0,
                 },
+                aggregation_plan::AccumulatorKind::StdDevPop(_)
+                | aggregation_plan::AccumulatorKind::StdDevSamp(_) => {
+                    AccumulatorState::StandardDeviation(standard_deviation::State::default())
+                }
                 aggregation_plan::AccumulatorKind::Sum(_) => AccumulatorState::Sum {
                     integer: 0,
                     floating: None,
@@ -91,6 +97,31 @@ pub(super) fn accumulate_record(
                 *count = count.checked_add(1).ok_or_else(|| {
                     QueryError::Invalid("aggregate average count overflows u64".into())
                 })?;
+            }
+            (
+                AccumulatorState::StandardDeviation(state),
+                kind @ (aggregation_plan::AccumulatorKind::StdDevPop(_)
+                | aggregation_plan::AccumulatorKind::StdDevSamp(_)),
+            ) => {
+                let (operator, expression) = match kind {
+                    aggregation_plan::AccumulatorKind::StdDevPop(expression) => {
+                        ("$stdDevPop", expression)
+                    }
+                    aggregation_plan::AccumulatorKind::StdDevSamp(expression) => {
+                        ("$stdDevSamp", expression)
+                    }
+                    _ => unreachable!("matched standard-deviation accumulator"),
+                };
+                let path = format!("$group.{}.{}", accumulator.name, operator);
+                if !standard_deviation::accumulate(
+                    state,
+                    record,
+                    expression,
+                    &path,
+                    &accumulator.name,
+                )? {
+                    continue;
+                }
             }
             (
                 AccumulatorState::Sum { integer, floating },
@@ -195,6 +226,13 @@ pub(super) fn finish_group(
                             ))
                         })?
                 }
+            }
+            AccumulatorState::StandardDeviation(state) => {
+                let sample = matches!(
+                    &accumulator.kind,
+                    aggregation_plan::AccumulatorKind::StdDevSamp(_)
+                );
+                standard_deviation::finish(state, sample, &accumulator.name)?
             }
             AccumulatorState::Sum { integer, floating } => match floating {
                 Some(total) => serde_json::Number::from_f64(total)
