@@ -89,7 +89,7 @@ When a valid index sidecar is available, the response also includes a `cost` obj
 
 `explain_query_details_at` and the `cost` object expose deterministic row-equivalent work for the selected access path.
 
-The planner chooses among bounded candidate-count, index-traversal, logical-page, and remaining-sort costs; the additional fields make record reads and filter evaluations observable without changing the established candidate-selection rule for index intersections.
+The planner uses bounded candidate-count, index-traversal, and remaining-sort work as the primary ordering, then uses logical-page work as a deterministic tie-break; the additional fields make record reads and filter evaluations observable without changing the established candidate-selection rule for index intersections.
 
 `candidate_rows` is the exact candidate count after the selected access path.
 

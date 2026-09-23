@@ -49,13 +49,14 @@ pub(super) fn selection_cost(
     index_file: &IndexFile,
     active_record_count: usize,
     request: &QueryRequest,
-) -> usize {
+) -> (usize, usize) {
     let cost = estimated_cost(access, index_file, active_record_count, request);
-    cost.candidate_rows
-        .saturating_add(cost.index_traversal)
-        .saturating_add(cost.index_page_reads)
-        .saturating_add(cost.record_page_reads)
-        .saturating_add(cost.sort_work)
+    (
+        cost.candidate_rows
+            .saturating_add(cost.index_traversal)
+            .saturating_add(cost.sort_work),
+        cost.index_page_reads.saturating_add(cost.record_page_reads),
+    )
 }
 
 fn estimated_record_reads(
