@@ -197,7 +197,7 @@ The following require separate public contracts:
 
 1. Full expression evaluation and more precise cost-based index choice with explicit missing, null, collation, and compound-range selectivity rules.
 2. Additional aggregation stages and accumulators beyond the current bounded aggregation contract, including its bounded numeric `$sum` and `$avg` expressions, with bounded memory behavior.
-3. Full index-aware and cost-based merge join strategies with broader join semantics.
+3. Full cardinality- and materialization-aware join costing, filesystem- and cache-aware merge planning, and broader join semantics.
 4. Host-specific scheduling, backpressure, timeout, cancellation, and transport implementations for `AsyncQueryStream`.
 5. Differential tests against a small reference evaluator.
 

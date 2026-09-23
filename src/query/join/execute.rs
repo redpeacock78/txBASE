@@ -103,28 +103,30 @@ fn execute_with_source<S: JoinSource>(
             join_strategy::JoinStrategy::Hash
         );
     let left_ordered = if large_join {
-        current_catalog.and_then(|catalog| {
-            join_index::load_ordered_fields(catalog, &request.from, &local_fields)
-        })
+        current_catalog
+            .and_then(|catalog| join_index::load_ordered(catalog, &request.from, &local_fields))
     } else {
         None
     };
     let right_ordered = if large_join {
         current_catalog.and_then(|catalog| {
-            join_index::load_ordered_fields(catalog, &request.join.table, &foreign_fields)
+            join_index::load_ordered(catalog, &request.join.table, &foreign_fields)
         })
     } else {
         None
     };
-    let merge_available = left_ordered.is_some() && right_ordered.is_some();
+    let merge_page_reads = left_ordered
+        .as_ref()
+        .zip(right_ordered.as_ref())
+        .map(|(left, right)| left.page_reads.saturating_add(right.page_reads));
 
     if let JoinType::Right = &request.join.kind {
         if matches!(
-            join_strategy::choose_with_merge(
-                left_records.len(),
+            join_strategy::choose_with_merge_page_cost(
                 right_records.len(),
-                false,
-                merge_available,
+                left_records.len(),
+                None,
+                merge_page_reads,
             ),
             join_strategy::JoinStrategy::Merge
         ) {
@@ -134,8 +136,8 @@ fn execute_with_source<S: JoinSource>(
                 return join_merge::execute(
                     &left_records,
                     &right_records,
-                    left_order,
-                    right_order,
+                    &left_order.records,
+                    &right_order.records,
                     request,
                     &local_fields,
                     &foreign_fields,
@@ -207,11 +209,11 @@ fn execute_with_source<S: JoinSource>(
     }
 
     if matches!(
-        join_strategy::choose_with_merge(
+        join_strategy::choose_with_merge_page_cost(
             left_records.len(),
             right_records.len(),
-            false,
-            merge_available,
+            None,
+            merge_page_reads,
         ),
         join_strategy::JoinStrategy::Merge
     ) {
@@ -221,8 +223,8 @@ fn execute_with_source<S: JoinSource>(
             return join_merge::execute(
                 &left_records,
                 &right_records,
-                left_order,
-                right_order,
+                &left_order.records,
+                &right_order.records,
                 request,
                 &local_fields,
                 &foreign_fields,

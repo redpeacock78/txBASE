@@ -66,8 +66,8 @@ The repository currently provides:
 
 The baseline intentionally does not include the following:
 
-- A full cost-based join model.
-- Full index-aware or cost-based merge join strategies.
+- A full join cost model that includes cardinality, materialization, and physical I/O behavior.
+- Filesystem- and cache-aware merge join costing.
 - Worker/WASI-specific timeout, transport, cancellation, and asynchronous-storage semantics, and remote object-store adapters.
 - Predicate-level locking and distributed serializable coordination.
 - Aggregation stages or accumulators beyond bounded input `$match`, `$unwind` with its documented top-level options, `$set`/`$addFields` with its documented expression subset, `$project`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, and `$group` with bounded numeric-expression `$sum` and `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
@@ -189,9 +189,10 @@ The current record scan remains the reference execution path while the query mod
 The first join slice is local and bounded.
 
 It also supports a `full` equality join through a bounded hash fallback or a compatible ordered-index merge path, and emits unmatched rows from both sides.
-It implements one or more equality conditions, compares bounded hash, index-probe, and merge costs after the small nested-loop boundary, uses a fresh single-field index when that estimate wins, uses an exact field-order compound index for direct or chained probes, and uses a compatible ordered-index merge path for large direct joins when that estimate wins.
+It implements one or more equality conditions, compares bounded hash, index-probe, and merge costs after the small nested-loop boundary, includes logical index-sidecar and conservative DBF record-page terms for indexed paths, uses a fresh single-field index when that estimate wins, uses an exact field-order compound index for direct or chained probes, and uses a compatible ordered-index merge path for large direct joins when that estimate wins.
 Additional stages may reference earlier joined tables and keep one catalog read lock across the
-pipeline, but full index-aware and cost-based merge planning, streaming, and broader null or
+pipeline, but full cardinality and materialization costing, filesystem- and cache-aware merge
+planning, streaming, and broader null or
 missing field semantics before adding broader query surfaces.
 
 Distributed joins and distributed transactions remain later features.
@@ -215,7 +216,7 @@ All expressions in one stage read the stage-input snapshot, and missing or nonnu
 The planner explanation boundary is implemented by `explain_query_at`, `explain_query_details_at`, and `QUERY /explain`.
 The public explanation exposes deterministic row-equivalent scan and candidate-work costs when a valid index sidecar is available.
 The explanation includes the logical 4 KiB index and DBF page estimates used by the local planner.
-Full cost-based join choice remains future work.
+Full cardinality, materialization, and physical I/O join costing remains future work.
 
 The first constraint slice is an optional schema sidecar.
 It enforces one-field `primary`, `unique`, and `not_null` properties, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, plus bounded table-level query-predicate `checks` on active records and mutation candidates without changing legacy DBF bytes.
@@ -381,6 +382,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Full cost-based joins, aggregation, predicate-level serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
+- Full cardinality- and physical-I/O-aware joins, aggregation, predicate-level serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
 
-The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and index-aware planning remain future work.
+The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and filesystem- or cache-aware join planning remain future work.

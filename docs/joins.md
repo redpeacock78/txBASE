@@ -64,11 +64,11 @@ The equality-join planner selects `NestedLoop` when the left and right active-ro
 
 For larger inputs, it compares bounded costs for the available strategies.
 
-`Hash` costs one pass over both inputs.
+`Hash` costs one pass over both inputs plus the bounded work of building an equality map for the inner side.
 
-`IndexNestedLoop` costs the outer-row count multiplied by the inner-side logarithmic probe estimate plus its average equality fanout.
+`IndexNestedLoop` costs the outer-row count multiplied by the inner-side logarithmic probe estimate plus its average equality fanout, then adds a one-time logical page estimate for the index sidecar and a conservative logical DBF record-page estimate for each probe.
 
-`Merge` costs one pass over both inputs when compatible ordered indexes are fresh on both sides.
+`Merge` costs one pass over both inputs plus the logical page estimates for the two ordered index sidecars when compatible ordered indexes are fresh on both sides.
 
 The strategy with the lower estimate wins, with `Merge` preferred over `IndexNestedLoop`, and `IndexNestedLoop` preferred over `Hash` for an exact tie.
 
@@ -98,9 +98,9 @@ Table names cannot repeat, and the total stage count is capped at eight.
 
 Every intermediate result is capped at 100,000 rows.
 
-This is a bounded cardinality cost model with a compatible-index merge path.
+This is a bounded row-work and logical-page cost model with a compatible-index merge path.
 
-It does not estimate index I/O, cache state, duplicate-key fanout, or output materialization, so it is not a full cost-based planner, full index-aware join planner, or streaming executor.
+It does not measure filesystem latency or cache state, and it does not estimate full join cardinality, output materialization, or page reuse, so it is not a full physical cost-based planner or streaming executor.
 
 The single-table HTTP server does not expose joins.
 

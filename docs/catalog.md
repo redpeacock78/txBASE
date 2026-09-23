@@ -276,7 +276,7 @@ It does not infer relationships from field names.
 
 The local join supports `inner`, `left`, `right`, `full`, `semi`, and `anti` equality joins plus a bounded
 `cross` join, with a hard result bound.
-It does not provide a full cost-based planner, full index-aware or cost-based merge join strategies,
+It does not provide full cardinality- and materialization-aware join costing or filesystem- and cache-aware merge planning,
 host-specific `AsyncQueryStream` scheduling, row-level MVCC versions, or distributed visibility.
 
 ## Primary references and scope

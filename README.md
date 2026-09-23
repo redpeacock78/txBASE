@@ -301,7 +301,7 @@ The current implementation prioritizes bounded, recoverable local operations ove
 The roadmap still leaves the following areas as future work:
 
 - Worker/WASI-specific `AsyncQueryStream` timeout, transport, cancellation, and asynchronous-storage behavior.
-- Full cost-based join planning.
+- Full cardinality-, materialization-, and physical-I/O-aware join planning.
 - Broader aggregation.
 - Predicate-level locking and distributed serializable coordination.
 - Locale-aware CJK collation.
