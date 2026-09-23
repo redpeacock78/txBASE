@@ -40,6 +40,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
     let mut input_sort_seen = false;
     let mut input_skip_seen = false;
     let mut input_limit_seen = false;
+    let mut input_projection_seen = false;
     let mut group_matches = Vec::new();
     let mut group = None;
     let mut count = None;
@@ -65,6 +66,15 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
             }
             "$unwind" if group.is_none() && count.is_none() && distinct.is_none() => {
                 input.push(InputStage::Unwind(parse_unwind(value, index)?));
+            }
+            "$project"
+                if group.is_none()
+                    && count.is_none()
+                    && distinct.is_none()
+                    && !input_projection_seen =>
+            {
+                input.push(InputStage::Project(parse_projection(value, index)?));
+                input_projection_seen = true;
             }
             "$sort"
                 if group.is_none() && count.is_none() && distinct.is_none() && !input_sort_seen =>
@@ -139,7 +149,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
             }
             "$project" => {
                 return Err(QueryError::Invalid(format!(
-                    "aggregate stage {index}.$project must follow $group, precede $sort/$skip/$limit, and appear once"
+                    "aggregate stage {index}.$project must be an input or group-output stage and appear once in its phase"
                 )));
             }
             "$sort" => {
@@ -237,6 +247,11 @@ fn parse_projection(value: &Value, index: usize) -> Result<BTreeMap<String, i8>,
             "aggregate stage {index}.$project must be an object"
         ))
     })?;
+    if object.is_empty() {
+        return Err(QueryError::Invalid(format!(
+            "aggregate stage {index}.$project cannot be empty"
+        )));
+    }
     let mut projection = BTreeMap::new();
     for (field, inclusion) in object {
         if field.is_empty() {

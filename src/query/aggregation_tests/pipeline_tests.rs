@@ -191,7 +191,8 @@ fn rejects_unsupported_aggregation_combinations() {
         br#"{"aggregate":[{"$group":{"_id":null}},{"$skip":-1}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$skip":1},{"$skip":1}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$limit":1},{"$skip":1}]}"#.as_slice(),
-        br#"{"aggregate":[{"$project":{"_id":1}},{"$group":{"_id":null}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$project":{}},{"$group":{"_id":null}}]}"#.as_slice(),
+        br#"{"aggregate":[{"$project":{"AGE":1}},{"$project":{"COUNTRY":1}},{"$group":{"_id":null}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$project":{"_id":1,"count":0}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$sort":{"_id":1}},{"$project":{"_id":1}}]}"#
             .as_slice(),

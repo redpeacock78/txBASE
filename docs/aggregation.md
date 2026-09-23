@@ -23,7 +23,7 @@ The query document can contain one terminal `$count` or `$distinct` stage, or on
 }
 ```
 
-The input portion accepts zero or more `$match` and `$unwind` stages, and at most one input `$sort`, `$skip`, and `$limit` stage each before one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
+The input portion accepts zero or more `$match` and `$unwind` stages, at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each before one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
 
 Input stages execute in the order listed in the pipeline.
 
@@ -36,6 +36,12 @@ An input `$match` after `$unwind` filters the expanded records.
 An input `$sort` uses the existing JSON sort order and stable physical-record ties before the terminal stage.
 
 Input `$skip` and `$limit` discard or truncate records before the terminal stage.
+
+An input `$project` reuses the query projection rules and may appear once in the input phase, in the listed order with the other input stages.
+
+The input form accepts only `0` and `1` inclusion or exclusion values; computed projection expressions, an empty specification, and mixed inclusion and exclusion are unsupported.
+
+The projection is materialized before the next stage, so subsequent `$match`, `$group`, `$count`, or `$distinct` stages see only the projected fields.
 
 For an array field, `$unwind` emits one copy of the input record for each element in input array order and replaces the field with that element.
 
@@ -157,4 +163,5 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 - [MongoDB `$sum` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sum/)
 - [MongoDB `$avg` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
+- [MongoDB `$project` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB `$unwind` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

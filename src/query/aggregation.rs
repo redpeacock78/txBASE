@@ -61,6 +61,19 @@ fn apply_input_stage<'a>(
                 unwound_records,
             )?))
         }
+        aggregation_plan::InputStage::Project(projection) => {
+            let records = match records {
+                InputRecords::Borrowed(records) => records
+                    .into_iter()
+                    .map(|record| project_record(record.clone(), projection))
+                    .collect(),
+                InputRecords::Owned(records) => records
+                    .into_iter()
+                    .map(|record| project_record(record, projection))
+                    .collect(),
+            };
+            Ok(InputRecords::Owned(records))
+        }
         aggregation_plan::InputStage::Sort(sort) => match records {
             InputRecords::Borrowed(mut records) => {
                 records.sort_by(|left, right| {
@@ -122,6 +135,16 @@ fn filter_owned(
         }
     }
     Ok(filtered)
+}
+
+fn project_record(mut record: DbfRecord, projection: &BTreeMap<String, i8>) -> DbfRecord {
+    record.values = match crate::query_path::project_values(&record.values, projection) {
+        Value::Object(values) => values,
+        Value::Array(_) | Value::String(_) | Value::Number(_) | Value::Bool(_) | Value::Null => {
+            unreachable!("record projection always returns an object")
+        }
+    };
+    record
 }
 
 fn skip_records<T>(records: &mut Vec<T>, skip: u64) {

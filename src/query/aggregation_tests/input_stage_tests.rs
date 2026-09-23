@@ -68,6 +68,85 @@ fn applies_input_stages_in_listed_order() {
 }
 
 #[test]
+fn projects_input_records_before_matching_and_grouping() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"COUNTRY": "JP", "AGE": 29, "SECRET": "hidden"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"COUNTRY": "JP", "AGE": 7, "SECRET": "hidden"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let records = [&first, &second];
+    let stages = vec![
+        json!({"$project": {"COUNTRY": 1, "AGE": 1}})
+            .as_object()
+            .unwrap()
+            .clone(),
+        json!({"$match": {"AGE": {"$gte": 20}}})
+            .as_object()
+            .unwrap()
+            .clone(),
+        json!({
+            "$group": {
+                "_id": "$COUNTRY",
+                "total_age": {"$sum": "$AGE"},
+                "secret": {"$first": "$SECRET"}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({"_id": "JP", "total_age": 29, "secret": null})]
+    );
+}
+
+#[test]
+fn projects_input_fields_before_distinct() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"COUNTRY": "JP", "SECRET": "one"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"COUNTRY": "US", "SECRET": "two"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let records = [&first, &second];
+    let stages = vec![
+        json!({"$project": {"SECRET": 0}})
+            .as_object()
+            .unwrap()
+            .clone(),
+        json!({"$distinct": "$SECRET"}).as_object().unwrap().clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!(null)]
+    );
+}
+
+#[test]
 fn unwinds_array_values_before_grouping() {
     let first = DbfRecord {
         number: 1,

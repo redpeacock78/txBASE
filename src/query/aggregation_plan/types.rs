@@ -27,6 +27,7 @@ pub struct AggregationPlan {
 pub enum InputStage {
     Match(Map<String, Value>),
     Unwind(String),
+    Project(BTreeMap<String, i8>),
     Sort(IndexMap<String, i8>),
     Skip(u64),
     Limit(u64),

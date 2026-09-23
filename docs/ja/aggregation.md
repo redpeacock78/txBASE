@@ -23,7 +23,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 }
 ```
 
-入力部分は、0個以上の`$match`と`$unwind`、入力用の`$sort`、`$skip`、`$limit`をそれぞれ最大1つ受け付け、その後に終端`$count`、終端`$distinct`、または`$group`を1つ受け付けます。
+入力部分は、0個以上の`$match`と`$unwind`、入力用の`$project`、`$sort`、`$skip`、`$limit`をそれぞれ最大1つ受け付け、その後に終端`$count`、終端`$distinct`、または`$group`を1つ受け付けます。
 
 入力ステージはパイプラインに記載した順序で実行します。
 
@@ -36,6 +36,12 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 入力用の`$sort`は、終端ステージの前に既存のJSONソート順と物理レコード順による安定した同値順を適用します。
 
 入力用の`$skip`と`$limit`は、終端ステージの前にレコードを破棄または切り詰めます。
+
+入力用の`$project`はクエリのプロジェクション規則を再利用し、入力フェーズで1回だけ、他の入力ステージと記載順に組み合わせて置けます。
+
+入力形式が受け付ける包含または除外の値は`0`と`1`だけであり、計算プロジェクション式、空の指定、包含と除外の混在は未サポートです。
+
+プロジェクションは次のステージの前に具体化されるため、後続の`$match`、`$group`、`$count`、`$distinct`はプロジェクション後のフィールドだけを参照します。
 
 配列フィールドに対する`$unwind`は、入力配列の順序で要素ごとに入力レコードのコピーを1つ出力し、対象フィールドを要素で置き換えます。
 
@@ -158,4 +164,5 @@ txBASEはMongoDBの完全なパイプライン互換性を主張せず、その�
 - [MongoDB の`$sum`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sum/)
 - [MongoDB の`$avg`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
 - [MongoDB の`$count`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
+- [MongoDB の`$project`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB の`$unwind`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

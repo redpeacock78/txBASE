@@ -160,6 +160,8 @@ DBF、memo、WAL、JSON入力について決定的なコーパスを保ちます
 
 `src/query/aggregation_tests/input_stage_tests.rs::applies_input_stages_in_listed_order`は、グループ化前に入力用の`$limit`、`$sort`、`$skip`を記載順で実行することを検査します。
 
+`src/query/aggregation_tests/input_stage_tests.rs::projects_input_records_before_matching_and_grouping`は、入力用`$project`の具体化、ステージ順序、グループ化前にプロジェクションで除外したフィールドを検査します。
+
 `src/query/aggregation_tests/input_stage_tests.rs::filters_unwound_records_before_grouping`は、`$unwind`後の入力用`$match`で展開済みレコードをフィルターすることを検査します。
 
 `src/query/aggregation_tests/input_stage_tests.rs::rejects_non_array_unwind_values`と`bounds_unwound_records`は、スカラー値の拒否と10,000件の展開上限を検査します。

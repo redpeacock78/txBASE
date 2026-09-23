@@ -159,6 +159,8 @@ A delta with the wrong base must be rejected.
 
 `src/query/aggregation_tests/input_stage_tests.rs::applies_input_stages_in_listed_order` covers input `$limit`, `$sort`, and `$skip` execution order before grouping.
 
+`src/query/aggregation_tests/input_stage_tests.rs::projects_input_records_before_matching_and_grouping` covers input `$project` materialization, stage ordering, and projected-away fields before grouping.
+
 `src/query/aggregation_tests/input_stage_tests.rs::filters_unwound_records_before_grouping` covers filtering expanded records with an input `$match` after `$unwind`.
 
 `src/query/aggregation_tests/input_stage_tests.rs::rejects_non_array_unwind_values` and `bounds_unwound_records` cover strict scalar rejection and the 10,000-record expansion bound.
