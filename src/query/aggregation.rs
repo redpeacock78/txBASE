@@ -1,5 +1,6 @@
 use super::{QueryError, aggregation_plan, matches_filter};
 use crate::dbf::DbfRecord;
+use crate::query::expression::evaluate_numeric;
 use crate::query_path::field_value;
 use indexmap::IndexMap;
 use serde_json::{Map, Value};
@@ -60,6 +61,19 @@ fn apply_input_stage<'a>(
                 spec,
                 unwound_records,
             )?))
+        }
+        aggregation_plan::InputStage::Set(expressions) => {
+            let records = match records {
+                InputRecords::Borrowed(records) => records
+                    .into_iter()
+                    .map(|record| set_record(record.clone(), expressions))
+                    .collect::<Result<Vec<_>, _>>()?,
+                InputRecords::Owned(records) => records
+                    .into_iter()
+                    .map(|record| set_record(record, expressions))
+                    .collect::<Result<Vec<_>, _>>()?,
+            };
+            Ok(InputRecords::Owned(records))
         }
         aggregation_plan::InputStage::Project(projection) => {
             let records = match records {
@@ -145,6 +159,43 @@ fn project_record(mut record: DbfRecord, projection: &BTreeMap<String, i8>) -> D
         }
     };
     record
+}
+
+fn set_record(
+    mut record: DbfRecord,
+    expressions: &BTreeMap<String, aggregation_plan::SetExpression>,
+) -> Result<DbfRecord, QueryError> {
+    let source = record.values.clone();
+    for (field, expression) in expressions {
+        let value =
+            evaluate_set_expression(&source, expression, &format!("aggregate.$set.{field}"))?;
+        record.values.insert(field.clone(), value);
+    }
+    Ok(record)
+}
+
+fn evaluate_set_expression(
+    values: &Map<String, Value>,
+    expression: &aggregation_plan::SetExpression,
+    path: &str,
+) -> Result<Value, QueryError> {
+    match expression {
+        aggregation_plan::SetExpression::Field(field) => {
+            Ok(field_value(values, field).unwrap_or(Value::Null))
+        }
+        aggregation_plan::SetExpression::Literal(value) => Ok(value.clone()),
+        aggregation_plan::SetExpression::Numeric(expression) => {
+            Ok(evaluate_numeric(values, expression, path)?.unwrap_or(Value::Null))
+        }
+        aggregation_plan::SetExpression::IfNull(first, fallback) => {
+            let value = evaluate_set_expression(values, first, &format!("{path}.$ifNull[0]"))?;
+            if value.is_null() {
+                evaluate_set_expression(values, fallback, &format!("{path}.$ifNull[1]"))
+            } else {
+                Ok(value)
+            }
+        }
+    }
 }
 
 fn skip_records<T>(records: &mut Vec<T>, skip: u64) {

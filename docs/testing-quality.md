@@ -165,6 +165,10 @@ A delta with the wrong base must be rejected.
 
 `src/query/aggregation_tests/input_stage_tests.rs::projects_input_records_before_matching_and_grouping` covers input `$project` materialization, stage ordering, and projected-away fields before grouping.
 
+`src/query/aggregation_tests/input_stage_tests.rs::sets_computed_fields_before_matching_and_grouping` covers input `$set` expression evaluation, `$ifNull`, `$literal`, stage-input snapshot semantics, and computed fields before matching and grouping.
+
+`src/query/aggregation_tests/input_stage_tests.rs::add_fields_alias_sets_input_fields` covers the `$addFields` alias.
+
 `src/query/aggregation_tests/input_stage_tests.rs::filters_unwound_records_before_grouping` covers filtering expanded records with an input `$match` after `$unwind`.
 
 `src/query/aggregation_tests/input_stage_tests.rs::rejects_non_array_unwind_values` and `bounds_unwound_records` cover strict scalar rejection and the 10,000-record expansion bound.

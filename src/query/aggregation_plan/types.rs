@@ -31,9 +31,18 @@ pub struct UnwindSpec {
 }
 
 #[derive(Debug, Clone)]
+pub enum SetExpression {
+    Field(String),
+    Literal(Value),
+    Numeric(NumericExpression),
+    IfNull(Box<SetExpression>, Box<SetExpression>),
+}
+
+#[derive(Debug, Clone)]
 pub enum InputStage {
     Match(Map<String, Value>),
     Unwind(UnwindSpec),
+    Set(BTreeMap<String, SetExpression>),
     Project(BTreeMap<String, i8>),
     Sort(IndexMap<String, i8>),
     Skip(u64),

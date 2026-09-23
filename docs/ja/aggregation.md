@@ -23,7 +23,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 }
 ```
 
-入力部分は、0個以上の`$match`と`$unwind`、入力用の`$project`、`$sort`、`$skip`、`$limit`をそれぞれ最大1つ受け付け、その後に終端`$count`、終端`$distinct`、または`$group`を1つ受け付けます。
+入力部分は、0個以上の`$match`と`$unwind`、合計で最大1つの入力用`$set`または`$addFields`、入力用の`$project`、`$sort`、`$skip`、`$limit`をそれぞれ最大1つ受け付け、その後に終端`$count`、終端`$distinct`、または`$group`を1つ受け付けます。
 
 入力ステージはパイプラインに記載した順序で実行します。
 
@@ -40,6 +40,18 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 入力用の`$sort`は、終端ステージの前に既存のJSONソート順と物理レコード順による安定した同値順を適用します。
 
 入力用の`$skip`と`$limit`は、終端ステージの前にレコードを破棄または切り詰めます。
+
+`$set`と`$addFields`は同じ意味を持つ別名であり、既存フィールドを保ったまま、後続ステージの前に名前付きトップレベルフィールドを計算する有界な入力ステージです。
+
+計算フィールドは、スカラーリテラル、ドット区切りを含むフィールド参照、`$literal`、オペランドをちょうど2つ持つ`$ifNull`、または有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`式を受け付けます。
+
+同じステージのすべての式はステージ入力時点のレコードを参照するため、同じステージで計算したフィールドを別の計算フィールドから参照することはできません。
+
+欠損フィールド参照と、欠損または数値以外になった数値式の結果は`null`になります。
+
+`$ifNull`は欠損と明示的な`null`をnullとして扱い、その場合にフォールバックを評価します。
+
+既存のトップレベルフィールドは上書きしますが、ドット区切りの出力フィールド名と`$literal`の外側にある配列リテラルは未サポートです。
 
 入力用の`$project`はクエリのプロジェクション規則を再利用し、入力フェーズで1回だけ、他の入力ステージと記載順に組み合わせて置けます。
 
@@ -172,4 +184,8 @@ txBASEはMongoDBの完全なパイプライン互換性を主張せず、その�
 - [MongoDB の`$avg`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
 - [MongoDB の`$count`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB の`$project`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
+- [MongoDB の`$set`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)
+- [MongoDB の`$addFields`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)
+- [MongoDB の`$ifNull`式演算子](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ifnull/)
+- [MongoDB の`$literal`式演算子](https://www.mongodb.com/docs/manual/reference/operator/aggregation/literal/)
 - [MongoDB の`$unwind`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

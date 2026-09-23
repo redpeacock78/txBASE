@@ -23,7 +23,7 @@ The query document can contain one terminal `$count` or `$distinct` stage, or on
 }
 ```
 
-The input portion accepts zero or more `$match` and `$unwind` stages, at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each before one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
+The input portion accepts zero or more `$match` and `$unwind` stages, at most one input `$set` or `$addFields` stage in total, and at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each before one terminal `$count`, one terminal `$distinct`, or one `$group` stage.
 
 Input stages execute in the order listed in the pipeline.
 
@@ -40,6 +40,16 @@ An input `$match` after `$unwind` filters the expanded records.
 An input `$sort` uses the existing JSON sort order and stable physical-record ties before the terminal stage.
 
 Input `$skip` and `$limit` discard or truncate records before the terminal stage.
+
+`$set` and `$addFields` are aliases for one bounded input stage that preserves existing fields and computes named top-level fields before later stages.
+
+Each computed field accepts a scalar literal, a field reference including a dotted path, `$literal`, `$ifNull` with exactly two operands, or the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions.
+
+All expressions in one stage read the record as it entered that stage, so one computed field cannot depend on another field computed in the same stage.
+
+Missing field references and missing or nonnumeric numeric results become `null`; `$ifNull` treats missing and explicit `null` as null and evaluates its fallback in that case.
+
+An existing top-level field is overwritten, while dotted output field names and array literals outside `$literal` remain unsupported.
 
 An input `$project` reuses the query projection rules and may appear once in the input phase, in the listed order with the other input stages.
 
@@ -170,4 +180,8 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 - [MongoDB `$avg` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB `$project` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
+- [MongoDB `$set` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)
+- [MongoDB `$addFields` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)
+- [MongoDB `$ifNull` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ifnull/)
+- [MongoDB `$literal` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/literal/)
 - [MongoDB `$unwind` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

@@ -114,6 +114,98 @@ fn projects_input_records_before_matching_and_grouping() {
 }
 
 #[test]
+fn sets_computed_fields_before_matching_and_grouping() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"PRICE": 5, "QUANTITY": 3, "EXPLICIT_NULL": null})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"PRICE": 2, "QUANTITY": 4, "LABEL": "sale"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let records = [&first, &second];
+    let stages = vec![
+        json!({
+            "$set": {
+                "TOTAL": {"$multiply": ["$PRICE", "$QUANTITY"]},
+                "LABEL": {"$ifNull": ["$LABEL", "unknown"]},
+                "EXPLICIT": {"$ifNull": ["$EXPLICIT_NULL", "fallback"]},
+                "REFERENCE": "$PRICE",
+                "DOLLAR": {"$literal": "$PRICE"},
+                "SAME_STAGE": "$TOTAL"
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+        json!({"$match": {"TOTAL": {"$gte": 10}}})
+            .as_object()
+            .unwrap()
+            .clone(),
+        json!({
+            "$group": {
+                "_id": null,
+                "total": {"$sum": "$TOTAL"},
+                "label": {"$first": "$LABEL"},
+                "explicit": {"$first": "$EXPLICIT"},
+                "reference": {"$first": "$REFERENCE"},
+                "dollar": {"$first": "$DOLLAR"},
+                "same_stage": {"$first": "$SAME_STAGE"}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({
+            "_id": null,
+            "total": 15,
+            "label": "unknown",
+            "explicit": "fallback",
+            "reference": 5,
+            "dollar": "$PRICE",
+            "same_stage": null
+        })]
+    );
+}
+
+#[test]
+fn add_fields_alias_sets_input_fields() {
+    let record = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"NAME": "Alice"}).as_object().unwrap().clone(),
+    };
+    let records = [&record];
+    let stages = vec![
+        json!({"$addFields": {"COPY": "$NAME"}})
+            .as_object()
+            .unwrap()
+            .clone(),
+        json!({"$group": {"_id": null, "name": {"$first": "$COPY"}}})
+            .as_object()
+            .unwrap()
+            .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({"_id": null, "name": "Alice"})]
+    );
+}
+
+#[test]
 fn projects_input_fields_before_distinct() {
     let first = DbfRecord {
         number: 1,

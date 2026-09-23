@@ -4,11 +4,14 @@ use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
 mod group;
+mod set;
 mod types;
 
 use group::parse_group;
+use set::parse_set;
 pub(super) use types::{
-    AccumulatorKind, AccumulatorSpec, AggregationPlan, GroupSpec, InputStage, UnwindSpec,
+    AccumulatorKind, AccumulatorSpec, AggregationPlan, GroupSpec, InputStage, SetExpression,
+    UnwindSpec,
 };
 
 pub(super) fn validate(request: &QueryRequest) -> Result<(), QueryError> {
@@ -43,6 +46,7 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
     let mut input_skip_seen = false;
     let mut input_limit_seen = false;
     let mut input_projection_seen = false;
+    let mut input_set_seen = false;
     let mut group_matches = Vec::new();
     let mut group = None;
     let mut count = None;
@@ -68,6 +72,12 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
             }
             "$unwind" if group.is_none() && count.is_none() && distinct.is_none() => {
                 input.push(InputStage::Unwind(parse_unwind(value, index)?));
+            }
+            "$set" | "$addFields"
+                if group.is_none() && count.is_none() && distinct.is_none() && !input_set_seen =>
+            {
+                input.push(InputStage::Set(parse_set(value, index, operator)?));
+                input_set_seen = true;
             }
             "$project"
                 if group.is_none()
@@ -177,6 +187,11 @@ pub(super) fn parse(stages: &[Map<String, Value>]) -> Result<AggregationPlan, Qu
             "$unwind" => {
                 return Err(QueryError::Invalid(format!(
                     "aggregate stage {index}.$unwind must precede $group, $count, or $distinct"
+                )));
+            }
+            "$set" | "$addFields" => {
+                return Err(QueryError::Invalid(format!(
+                    "aggregate stage {index}.{operator} must be an input stage and appear once"
                 )));
             }
             _ => {
