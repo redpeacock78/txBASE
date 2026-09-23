@@ -110,7 +110,9 @@ fn explain_endpoint_reports_scan_and_index_plans() {
     let _ = fs::remove_file(&sidecar);
     let _ = fs::remove_file(&lock);
     let _ = fs::remove_file(&wal);
-    fs::write(&path, fixture()).unwrap();
+    let mut bytes = fixture();
+    bytes[179] = b' ';
+    fs::write(&path, bytes).unwrap();
 
     let mut scan_request = TestRequest::new()
         .with_method("QUERY".parse().unwrap())
