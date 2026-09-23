@@ -126,6 +126,7 @@ fn explain_endpoint_reports_scan_and_index_plans() {
         .read_to_string(&mut scan_body)
         .unwrap();
     assert!(scan_body.contains(r#""kind":"table_scan""#));
+    assert!(!scan_body.contains(r#""cost""#));
 
     IndexFile::build(&path, vec![IndexDefinition::named("by_name", "NAME")])
         .unwrap()
@@ -146,6 +147,12 @@ fn explain_endpoint_reports_scan_and_index_plans() {
         .unwrap();
     assert!(index_body.contains(r#""kind":"equality_index""#));
     assert!(index_body.contains("by_name"));
+    assert!(index_body.contains(r#""candidate_rows":1"#));
+    assert!(index_body.contains(r#""index_traversal""#));
+    assert!(index_body.contains(r#""record_reads":1"#));
+    assert!(index_body.contains(r#""filter_evaluations":1"#));
+    assert!(index_body.contains(r#""sort_work":0"#));
+    assert!(index_body.contains(r#""total""#));
 
     let _ = fs::remove_file(path);
     let _ = fs::remove_file(sidecar);

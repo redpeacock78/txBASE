@@ -85,8 +85,25 @@ The planner reports `TableScan`, `EqualityIndex`, `CompoundEqualityIndex`, `Comp
 The single-table HTTP server exposes the same explanation as `QUERY /explain`.
 
 Its response is `{"plan": {"kind": "table_scan"}}` or a tagged index-plan object with the selected name, fields, and directions.
+When a valid index sidecar is available, the response also includes a `cost` object.
 
-The explanation is descriptive and does not promise a speedup.
+`explain_query_details_at` and the `cost` object expose the row-equivalent work used for access-path selection.
+
+`candidate_rows` is the exact candidate count after the selected access path.
+
+`index_traversal` is the bounded logarithmic search work for the selected sidecar or sidecars.
+
+`record_reads` estimates the candidate records read from the DBF; an equality intersection includes the estimated lists read before their record-number intersection.
+
+`filter_evaluations` is the number of candidate records passed through the normal filter pipeline.
+
+`sort_work` is the estimated in-memory comparison work left after any ordered index prefix.
+
+`total` is the saturating sum of those terms.
+
+The values are deterministic row-equivalent estimates, not wall-clock measurements.
+
+When the sidecar is missing, stale, malformed, or semantically unsupported, the planner falls back to `TableScan` and omits the cost because no sidecar statistics are available.
 
 Missing, stale, malformed, and semantically unsupported sidecars fall back to `TableScan` because the sidecar is optional acceleration state.
 
@@ -112,9 +129,9 @@ A compound index can supply range candidates when every preceding indexed field 
 
 The compound candidate path filters the indexed range component and returns physical record order before the normal query filter pipeline runs.
 
-These statistics feed a bounded integer cost estimate.
+These statistics feed a deterministic row-equivalent cost estimate.
 
-The planner compares the active-record count for a table scan with the exact candidate count for an index path, adds a bounded logarithmic traversal term derived from the selected sidecar's entry count, and adds estimated in-memory sort work when the path does not provide the complete requested order.
+The planner compares the active-record count for a table scan with the exact candidate count for an index path, adds a bounded logarithmic traversal term derived from the selected sidecar's entry count, counts candidate record reads and filter evaluations, and adds estimated in-memory sort work when the path does not provide the complete requested order.
 
 Access-path candidate construction remains in `src/query/planner.rs`, while the bounded cost calculation lives in `src/query/planner_cost.rs`.
 
@@ -146,7 +163,7 @@ Compound definitions use their shortest definition and stable name tie-breakers 
 
 An exact cost tie preserves the table scan and established access paths before a compound equality-prefix prefilter.
 
-This bounded model estimates in-memory index traversal but does not estimate physical index I/O, memory, cache state, collation, or compound-range selectivity.
+This model estimates deterministic candidate work but does not estimate physical index I/O, memory, cache state, collation, or compound-range selectivity.
 
 MongoDB's current guidance recommends a compound index for queries that repeatedly search multiple fields.
 
@@ -156,7 +173,7 @@ It does not claim MongoDB planner compatibility or replace a future compound-ind
 
 MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a full compound-index planner must define index field order.
 
-txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, compound equality-prefix and compound equality-prefix range candidates, per-field direction metadata for compound definitions, and a bounded cost estimate for scan, index traversal, and remaining sort work.
+txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, compound equality-prefix and compound equality-prefix range candidates, per-field direction metadata for compound definitions, and an explainable cost estimate for scan, index traversal, candidate record reads, filter evaluations, and remaining sort work.
 
 It does not have a full I/O-aware cost model.
 

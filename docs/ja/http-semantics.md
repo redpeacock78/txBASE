@@ -50,7 +50,7 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 | `QUERY /records` | `Content-Type: application/json`とクエリ文書 | `Accept-Query`付きのフィルター済み JSON。ページング時は`records`と`cursor` |
 | `QUERY /records/stream` | `Content-Type: application/json`とストリーム対応クエリ文書 | 一行一レコードの chunked `application/x-ndjson` |
 | `GET /cdc`と`HEAD /cdc` | 任意の`after`と`limit`クエリパラメーター | `next_after`を伴う有界なコミット済み`TXCD`イベントページ |
-| `QUERY /explain` | `Content-Type: application/json`とクエリ文書 | `Accept-Query`付きのテーブルスキャンまたはインデックス計画 |
+| `QUERY /explain` | `Content-Type: application/json`とクエリ文書 | `Accept-Query`付きのテーブルスキャンまたはインデックス計画。有効なインデックスサイドカーがある場合は決定的な行相当コスト項目も追加する |
 | `GET /catalog`と`HEAD /catalog`（カタログサーバー） | JSON 本文なし | 強いカタログ`ETag`付きの検出したテーブルスキーマ。条件付きリクエストは`304`を返すことがある |
 | `GET /cdc`と`HEAD /cdc`（カタログサーバー） | 任意の`after`と`limit`クエリパラメーター | `next_after`を伴う有界なコミット済み`TXCC`イベントページ |
 | `GET`、`HEAD /{table}/records[/{id}]`（カタログサーバー） | JSON 本文なし | 名前付きテーブルのレコード |

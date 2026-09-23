@@ -54,6 +54,15 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
             fields: vec!["AGE".into(), "NAME".into()],
         }
     );
+    let intersection_explanation = explain_query_details_at(&path, &intersection_request).unwrap();
+    let intersection_cost = intersection_explanation.cost.unwrap();
+    assert_eq!(intersection_cost.candidate_rows, 1);
+    assert!(intersection_cost.record_reads > intersection_cost.candidate_rows);
+    assert_eq!(
+        intersection_cost.filter_evaluations,
+        intersection_cost.candidate_rows
+    );
+    assert!(intersection_cost.total >= intersection_cost.record_reads);
     assert_eq!(
         execute_query_at(&table, &path, &intersection_request).unwrap(),
         execute_query(&table, &intersection_request).unwrap()
@@ -134,6 +143,9 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
         explain_query_at(&path, &request).unwrap(),
         QueryPlan::TableScan
     );
+    let explanation = explain_query_details_at(&path, &request).unwrap();
+    assert_eq!(explanation.plan, QueryPlan::TableScan);
+    assert!(explanation.cost.is_none());
     assert_eq!(
         execute_query_at(&table, &path, &request).unwrap(),
         execute_query(&table, &request).unwrap()

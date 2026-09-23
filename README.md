@@ -83,7 +83,7 @@ Sorted cursors use the declared sort and a physical-record tie-breaker.
 New cursors are bound to the current table representation, while legacy unbound cursor formats remain accepted for compatibility.
 
 `QUERY /records/stream` returns filter/projection/skip/limit results as chunked `application/x-ndjson`.
-`QUERY /explain` reports the selected table-scan or index plan.
+`QUERY /explain` reports the selected table-scan or index plan and, when a valid index sidecar is available, its deterministic row-equivalent cost breakdown.
 The library exposes the corresponding borrowed, snapshot, and bounded streaming iterators.
 
 The catalog server adds `GET /catalog`, named-table read and mutation routes, `QUERY /{table}/records`, `QUERY /{table}/explain`, `QUERY /{table}/records/stream`, and the bounded local join at `QUERY /join`.
@@ -301,7 +301,7 @@ The current implementation prioritizes bounded, recoverable local operations ove
 The roadmap still leaves the following areas as future work:
 
 - Worker/WASI-specific `AsyncQueryStream` timeout, transport, cancellation, and asynchronous-storage behavior.
-- Full cost-based index and join planning.
+- Physical-I/O-aware index costing and full cost-based join planning.
 - Broader aggregation.
 - Predicate-level locking and distributed serializable coordination.
 - Locale-aware CJK collation.

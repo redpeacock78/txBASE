@@ -51,6 +51,23 @@ pub enum QueryPlan {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct QueryCost {
+    pub candidate_rows: usize,
+    pub index_traversal: usize,
+    pub record_reads: usize,
+    pub filter_evaluations: usize,
+    pub sort_work: usize,
+    pub total: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct QueryExplanation {
+    pub plan: QueryPlan,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<QueryCost>,
+}
+
 pub(super) struct PlannedAccess {
     pub(super) plan: QueryPlan,
     pub(super) records: Option<Vec<usize>>,
@@ -82,9 +99,25 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
             let cost = cost::estimated_cost(access, &index_file, active_record_count, request);
             let is_equality_prefix =
                 matches!(&access.plan, QueryPlan::CompoundEqualityPrefixIndex { .. });
-            (cost, is_equality_prefix)
+            (cost.total, is_equality_prefix)
         })
         .unwrap_or_else(table_scan)
+}
+
+pub(super) fn explain(dbf_path: &Path, request: &QueryRequest) -> QueryExplanation {
+    let access = choose(dbf_path, request);
+    let cost = IndexFile::load(dbf_path).ok().map(|index_file| {
+        cost::estimated_cost(
+            &access,
+            &index_file,
+            index_file.active_record_count(),
+            request,
+        )
+    });
+    QueryExplanation {
+        plan: access.plan,
+        cost,
+    }
 }
 
 fn choose_equality(index_file: &IndexFile, request: &QueryRequest) -> Vec<PlannedAccess> {
@@ -237,9 +270,9 @@ fn choose_range(
             });
         }
     }
-    candidates
-        .into_iter()
-        .min_by_key(|access| cost::estimated_cost(access, index_file, active_record_count, request))
+    candidates.into_iter().min_by_key(|access| {
+        cost::estimated_cost(access, index_file, active_record_count, request).total
+    })
 }
 
 fn choose_ordered(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {

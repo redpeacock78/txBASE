@@ -1,4 +1,4 @@
-use super::{PlannedAccess, QueryPlan, QueryRequest};
+use super::{PlannedAccess, QueryCost, QueryPlan, QueryRequest};
 use crate::index::IndexFile;
 
 pub(super) fn estimated_cost(
@@ -6,20 +6,49 @@ pub(super) fn estimated_cost(
     index_file: &IndexFile,
     active_record_count: usize,
     request: &QueryRequest,
-) -> usize {
+) -> QueryCost {
     let record_count = access
         .records
         .as_ref()
         .map_or(active_record_count, Vec::len);
+    let record_reads = estimated_record_reads(access, index_file, record_count);
     let remaining_sort = request.sort.len() > access.ordered_prefix;
     let sort_cost = if remaining_sort {
         estimated_sort_cost(record_count, access.ordered_prefix)
     } else {
         0
     };
-    record_count
-        .saturating_add(index_traversal_cost(access, index_file))
-        .saturating_add(sort_cost)
+    let index_traversal = index_traversal_cost(access, index_file);
+    let total = record_reads
+        .saturating_add(record_count)
+        .saturating_add(index_traversal)
+        .saturating_add(sort_cost);
+    QueryCost {
+        candidate_rows: record_count,
+        index_traversal,
+        record_reads,
+        filter_evaluations: record_count,
+        sort_work: sort_cost,
+        total,
+    }
+}
+
+fn estimated_record_reads(
+    access: &PlannedAccess,
+    index_file: &IndexFile,
+    candidate_rows: usize,
+) -> usize {
+    match &access.plan {
+        QueryPlan::IndexIntersection { fields, .. } => fields
+            .iter()
+            .map(|field| {
+                index_file
+                    .equality_selectivity_estimate(field)
+                    .unwrap_or(candidate_rows)
+            })
+            .fold(candidate_rows, usize::saturating_add),
+        _ => candidate_rows,
+    }
 }
 
 fn index_traversal_cost(access: &PlannedAccess, index_file: &IndexFile) -> usize {

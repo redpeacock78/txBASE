@@ -34,7 +34,7 @@ mod validation;
 use ordering::compare_records;
 use ordering::{compare_records_with_collation, sort_ordered_prefix};
 pub use pagination::QueryPage;
-pub use planner::QueryPlan;
+pub use planner::{QueryCost, QueryExplanation, QueryPlan};
 #[cfg(test)]
 pub(crate) use predicate::matches_condition;
 pub(crate) use predicate::matches_filter;
@@ -162,6 +162,20 @@ pub fn explain_query_at(
         return Ok(QueryPlan::TableScan);
     }
     Ok(planner::choose(dbf_path.as_ref(), request).plan)
+}
+
+pub fn explain_query_details_at(
+    dbf_path: impl AsRef<std::path::Path>,
+    request: &QueryRequest,
+) -> Result<QueryExplanation, QueryError> {
+    validation::validate(request)?;
+    if pagination::is_physical_page(request) {
+        return Ok(QueryExplanation {
+            plan: QueryPlan::TableScan,
+            cost: None,
+        });
+    }
+    Ok(planner::explain(dbf_path.as_ref(), request))
 }
 
 fn execute_query_with_records(

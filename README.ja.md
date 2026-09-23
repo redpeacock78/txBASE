@@ -75,7 +75,7 @@ curl -i -X QUERY \
 新しく発行するcursorは現在のテーブル表現に束縛されますが、互換性のため、旧形式の束縛されていないcursorも受け付けます。
 
 `QUERY /records/stream`は、filter、projection、skip、limitの結果をchunkedな`application/x-ndjson`で返します。
-`QUERY /explain`は、選択されたテーブルスキャンまたはインデックス計画を返します。
+`QUERY /explain`は、選択されたテーブルスキャンまたはインデックス計画を返し、有効なインデックスサイドカーがある場合は決定的な行相当コストの内訳も返します。
 ライブラリには、対応するborrowed、snapshot、boundedのストリームiteratorもあります。
 
 カタログサーバーは、`GET /catalog`、名前付きテーブルの読み書き、`QUERY /{table}/records`、`QUERY /{table}/explain`、`QUERY /{table}/records/stream`、有界なローカル結合`QUERY /join`を提供します。
@@ -293,7 +293,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 次の領域は引き続き将来の作業です。
 
 - ワーカーまたはWASI固有の`AsyncQueryStream`タイムアウト、転送、キャンセル、非同期ストレージの動作。
-- 完全なcost-based index／join planner。
+- 物理I/Oを考慮したインデックスコストと完全なcost-based join planner。
 - より広い集約。
 - 述語単位のロックと分散serializable調整。
 - locale-awareなCJK collation。

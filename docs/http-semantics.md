@@ -50,7 +50,7 @@ The response does not authorize a method on a resource that its route rules woul
 | `QUERY /records` | `Content-Type: application/json` and a query document | Filtered JSON result with `Accept-Query`; paged queries return `records` and `cursor` |
 | `QUERY /records/stream` | `Content-Type: application/json` and a stream-compatible query document | Chunked `application/x-ndjson`, one record per line |
 | `GET /cdc` and `HEAD /cdc` | Optional `after` and `limit` query parameters | Bounded committed `TXCD` event page with `next_after` |
-| `QUERY /explain` | `Content-Type: application/json` and a query document | Selected table-scan or index plan with `Accept-Query` |
+| `QUERY /explain` | `Content-Type: application/json` and a query document | Selected table-scan or index plan with `Accept-Query`; a valid index sidecar also adds deterministic row-equivalent cost fields |
 | `GET /catalog` and `HEAD /catalog` (catalog server) | No JSON body | Discovered table schemas with a strong catalog `ETag`; conditional requests may return `304` |
 | `GET /cdc` and `HEAD /cdc` (catalog server) | Optional `after` and `limit` query parameters | Bounded committed `TXCC` event page with `next_after` |
 | `GET`/`HEAD /{table}/records[/{id}]` (catalog server) | No JSON body | Named-table records |

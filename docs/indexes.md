@@ -189,20 +189,24 @@ The compound range lookup first narrows the sidecar to the contiguous equality-p
 The candidate path keeps the range comparison in the normal executor, so index direction changes traversal order but not range semantics.
 
 The planner compares the table scan and each valid equality, range, or compatible ordered path
-with a bounded integer cost. A table scan costs the active-record count plus remaining sort work.
-An index path costs its exact candidate count plus a bounded logarithmic traversal term derived
-from the sidecar entry count, plus remaining sort work. An index intersection adds one traversal
-term per selected sidecar. An ordered path that supplies the complete requested order has no sort
-term. Equal costs preserve the table scan and established access paths before a compound equality-prefix prefilter.
+with a deterministic row-equivalent cost. A table scan counts the active-record count as both
+record reads and filter evaluations, plus remaining sort work. An index path counts its exact
+candidate rows as record reads and filter evaluations, adds a bounded logarithmic traversal term
+derived from the sidecar entry count, and adds remaining sort work. An index intersection also
+estimates the single-index lists read before the record-number intersection. An ordered path that
+supplies the complete requested order has no sort term. Equal costs preserve the table scan and
+established access paths before a compound equality-prefix prefilter.
 
-This is a local cardinality, traversal, and sort model, not a full physical I/O, memory, or cache
+The same breakdown is exposed by `QUERY /explain` as `candidate_rows`, `index_traversal`,
+`record_reads`, `filter_evaluations`, `sort_work`, and `total` when a valid sidecar is available.
+It is a local cardinality, traversal, and sort model, not a full physical I/O, memory, or cache
 cost model.
 
 The planner now records the active-record count and derives each single-field index's distinct-key count from its entries.
 
 It estimates an equality candidate count by assuming a uniform distribution, orders the candidate indexes by that estimate, and uses exact record lists to build the intersection candidate.
 
-The equality estimate is a local statistic and one input to the bounded cost model.
+The equality estimate is a local statistic and one input to the deterministic row-equivalent cost model.
 
 For multiple range predicates, the planner uses overlapping histogram buckets to order candidate construction, then selects the lowest bounded cost from the exact range candidates.
 

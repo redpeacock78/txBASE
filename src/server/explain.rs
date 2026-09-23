@@ -22,12 +22,15 @@ fn response_with_path(request: &mut Request, dbf_path: Option<&Path>) -> HttpRes
             return json_response(422, error("invalid_query", &query_error.to_string()), true);
         }
     };
-    let plan = match dbf_path {
-        Some(dbf_path) => query::explain_query_at(dbf_path, &query),
-        None => Ok(query::QueryPlan::TableScan),
+    let explanation = match dbf_path {
+        Some(dbf_path) => query::explain_query_details_at(dbf_path, &query),
+        None => Ok(query::QueryExplanation {
+            plan: query::QueryPlan::TableScan,
+            cost: None,
+        }),
     };
-    match plan {
-        Ok(plan) => json_response(200, serde_json::json!({"plan": plan}), true),
+    match explanation {
+        Ok(explanation) => json_response(200, serde_json::json!(explanation), true),
         Err(query_error) => {
             json_response(422, error("invalid_query", &query_error.to_string()), true)
         }
