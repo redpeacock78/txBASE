@@ -47,7 +47,7 @@ The repository currently provides:
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
 - A bounded aggregation pipeline with zero or more input `$match` and top-level-array `$unwind` stages, at most one input `$set` or `$addFields` stage in total, at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each, and one terminal `$count` or `$distinct` stage, or one `$group` stage using `$count`, bounded numeric-expression `$sum` and `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, followed by bounded group-output `$match` stages, one optional `$project`, and final `$sort`, `$skip`, and `$limit` stages. Input stages execute in listed order. Input `$set` and `$addFields` preserve existing fields and compute top-level fields from bounded field, literal, null-coalescing, and numeric expressions against the stage-input snapshot. Input `$project` reuses the 0/1 query projection contract and materializes fields before later stages. `$unwind` supports the top-level document options `includeArrayIndex` and `preserveNullAndEmptyArrays`, preserves input and array order, rejects non-array values, and caps all emitted records at 10,000.
 - A bounded local `inner`, `left`, `right`, `full`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
-- A direct equality-join cost model that compares hash, index-nested-loop, and ordered-merge paths with exact pre-filter key-cardinality estimates, projection-based materialization work, logical DBF page reads, and logical index-sidecar page reads.
+- Direct and chained equality-join cost models that compare hash and index-nested-loop paths with exact pre-filter key-cardinality estimates, materialized row-width work, logical input page reads, and logical index-sidecar page reads, plus an ordered-merge path for direct joins.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
@@ -189,10 +189,10 @@ The current record scan remains the reference execution path while the query mod
 The first join slice is local and bounded.
 
 It also supports a `full` equality join through a bounded hash fallback or a compatible ordered-index merge path, and emits unmatched rows from both sides.
-It implements one or more equality conditions, compares bounded hash, index-probe, and merge costs after the small nested-loop boundary, includes exact pre-filter key-cardinality estimates, projection-based materialization work, logical DBF page terms, and logical index-sidecar page terms, uses a fresh single-field index when that estimate wins, uses an exact field-order compound index for direct or chained probes, and uses a compatible ordered-index merge path for large direct joins when that estimate wins.
+It implements one or more equality conditions, compares bounded hash, index-probe, and merge costs after the small nested-loop boundary, includes exact pre-filter key-cardinality estimates, materialized row-width work, logical input page terms, and logical index-sidecar page terms, uses a fresh single-field index when that estimate wins, uses an exact field-order compound index for direct or chained probes, propagates the cost inputs through chained stages, and uses a compatible ordered-index merge path for large direct joins when that estimate wins.
 Additional stages may reference earlier joined tables and keep one catalog read lock across the
-pipeline, but the complete cardinality and materialization inputs are not yet propagated through
-every intermediate stage.
+pipeline.
+Chained `full` stages use the bounded hash fallback rather than the direct ordered merge path.
 Filesystem- and cache-aware merge planning, streaming, and broader null or missing field semantics
 remain future work before adding broader query surfaces.
 
@@ -383,6 +383,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Chained cardinality- and materialization-aware joins, filesystem- and cache-aware merge planning, aggregation, predicate-level serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
+- Filesystem- and cache-aware merge planning, streaming join execution, aggregation, predicate-level serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and filesystem- or cache-aware merge planning remain future work.

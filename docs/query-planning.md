@@ -191,9 +191,11 @@ The equality intersection is a bounded candidate prefilter, not a covered query 
 
 Direct equality joins use a separate deterministic cost model that keeps the 64-candidate-pair nested-loop boundary, estimates pre-filter join cardinality from equality-key multiplicities, counts logical DBF pages from the loaded byte lengths, and includes output materialization work from the estimated candidate rows and projection width.
 
-The direct join model is not part of the single-table `QUERY /explain` cost object.
+The direct and chained join models are not part of the single-table `QUERY /explain` cost object.
 
-Chained join stages retain their bounded row-count strategy selection until cardinality and materialization inputs can flow through every intermediate stage.
+Chained join stages propagate estimated cardinality, materialized row width, and logical page inputs through each intermediate stage for hash and index-probe selection.
+
+An ordered-merge path remains limited to direct joins, and filesystem- and cache-aware merge behavior remains outside the contract.
 
 The roadmap keeps index design separate from query syntax so a query document does not imply an implementation strategy.
 
@@ -203,7 +205,7 @@ The following require separate public contracts:
 
 1. Full expression evaluation and more precise cost-based index choice with explicit missing, null, collation, and compound-range selectivity rules.
 2. Additional aggregation stages and accumulators beyond the current bounded aggregation contract, including its bounded numeric `$sum` and `$avg` expressions, with bounded memory behavior.
-3. Cardinality- and materialization-aware costing for chained joins, filesystem- and cache-aware merge planning, and broader join semantics.
+3. Filesystem- and cache-aware merge planning, streaming join execution, and broader join semantics.
 4. Host-specific scheduling, backpressure, timeout, cancellation, and transport implementations for `AsyncQueryStream`.
 5. Differential tests against a small reference evaluator.
 

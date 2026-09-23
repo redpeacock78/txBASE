@@ -1,5 +1,6 @@
 use super::super::join::JoinSource;
 use super::super::join::{JoinError, JoinSpec, JoinType, MAX_JOIN_ROWS};
+use super::super::join_strategy::JoinCostInput;
 use super::{encoded_key, push_combined, stage_fields, unqualified_field};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
@@ -10,6 +11,7 @@ pub(super) fn apply(
     right: &[Map<String, Value>],
     right_numbers: &[usize],
     spec: &JoinSpec,
+    cost_input: JoinCostInput,
 ) -> Result<Vec<Map<String, Value>>, JoinError> {
     let (local_fields, foreign_fields) = stage_fields(spec);
     if matches!(&spec.kind, JoinType::Cross) {
@@ -44,7 +46,13 @@ pub(super) fn apply(
                 local_fields.len() == index_fields.len()
             } else {
                 matches!(
-                    super::super::join_strategy::choose(left.len(), right.len(), false),
+                    super::super::join_strategy::choose_with_costs(
+                        left.len(),
+                        right.len(),
+                        None,
+                        None,
+                        cost_input,
+                    ),
                     super::super::join_strategy::JoinStrategy::Hash
                 )
             };
@@ -63,7 +71,7 @@ pub(super) fn apply(
         None
     };
     if matches!(
-        super::super::join_strategy::choose_with_probe_cost(
+        super::super::join_strategy::choose_with_costs(
             left.len(),
             right.len(),
             right_index.as_ref().and_then(|index| {
@@ -71,6 +79,8 @@ pub(super) fn apply(
                     super::super::join_index::equality_probe_cost(index, right.len(), fields)
                 })
             }),
+            None,
+            cost_input,
         ),
         super::super::join_strategy::JoinStrategy::IndexNestedLoop
     ) {
@@ -110,7 +120,13 @@ pub(super) fn apply(
 
     if matches!(&spec.kind, JoinType::Right) {
         if matches!(
-            super::super::join_strategy::choose(left.len(), right.len(), false),
+            super::super::join_strategy::choose_with_costs(
+                left.len(),
+                right.len(),
+                None,
+                None,
+                cost_input,
+            ),
             super::super::join_strategy::JoinStrategy::NestedLoop
         ) {
             return super::super::join_nested::execute_right_stage(
@@ -145,7 +161,13 @@ pub(super) fn apply(
     }
 
     if matches!(
-        super::super::join_strategy::choose(left.len(), right.len(), false),
+        super::super::join_strategy::choose_with_costs(
+            left.len(),
+            right.len(),
+            None,
+            None,
+            cost_input,
+        ),
         super::super::join_strategy::JoinStrategy::NestedLoop
     ) {
         return super::super::join_nested::execute_stage(

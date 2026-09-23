@@ -62,7 +62,7 @@ Missing and explicit `null` join keys do not match.
 
 The equality-join planner selects `NestedLoop` when the left and right active-row counts have at most 64 candidate pairs.
 
-For larger direct equality joins, it compares bounded costs for the available strategies.
+For larger equality stages, it compares bounded costs for the available strategies.
 
 `Hash` costs one pass over both inputs, the logical DBF pages needed for those inputs, and the bounded work of building an equality map for the inner side.
 
@@ -70,9 +70,9 @@ For larger direct equality joins, it compares bounded costs for the available st
 
 `Merge` costs one pass over both inputs, the logical DBF pages needed for those inputs, and the logical page estimates for the two ordered index sidecars when compatible ordered indexes are fresh on both sides.
 
-Each direct candidate also includes deterministic materialization work based on the estimated pre-filter join-candidate rows and the requested projection width.
+Each direct or chained candidate also includes deterministic materialization work based on the estimated pre-filter join-candidate rows and the materialized row width.
 
-The direct equality-key multiplicities give an exact pre-filter candidate-row count for the loaded tables, including unmatched rows for outer joins and one row per matching left record for `semi` or `anti`; filters can reduce the emitted count afterward.
+Equality-key multiplicities give an exact pre-filter candidate-row count for each loaded stage, including unmatched rows for outer joins and one row per matching left record for `semi` or `anti`; the final filter can reduce the emitted count afterward.
 
 The strategy with the lower estimate wins, with `Merge` preferred over `IndexNestedLoop`, and `IndexNestedLoop` preferred over `Hash` for an exact tie.
 
@@ -86,7 +86,9 @@ For a large direct equality join with compatible fresh ordered indexes on both i
 
 When an index is unavailable, stale, malformed, or more expensive than the hash estimate, larger inputs select `Hash` and build one in-memory equality map for the right table, or the left table for a `right` join.
 
-A `full` join uses the compatible ordered-index merge path when both sides are fresh and that bounded merge cost wins; otherwise it uses the bounded hash fallback.
+A direct `full` join uses the compatible ordered-index merge path when both sides are fresh and that bounded merge cost wins; otherwise it uses the bounded hash fallback.
+
+Chained `full` stages use the bounded hash fallback and do not use the direct ordered-index merge path.
 
 It does not use an index-nested-loop strategy.
 
@@ -106,7 +108,9 @@ This is a bounded row-work, logical-page, pre-filter-cardinality, and output-mat
 
 It does not measure filesystem latency, cache state, or page reuse.
 
-The chained pipeline still uses its bounded row-count strategy selector and does not yet pass the direct join's cardinality, materialization, or DBF-page inputs through every intermediate stage.
+Chained stages propagate their estimated cardinality, materialized row width, and logical page inputs into the hash or index-probe choice for the next stage.
+
+The model does not yet provide an ordered-merge path for chained stages or filesystem- and cache-aware merge planning.
 
 The single-table HTTP server does not expose joins.
 
