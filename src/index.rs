@@ -98,12 +98,20 @@ impl IndexFile {
     pub fn load(dbf_path: impl AsRef<Path>) -> Result<Self, IndexError> {
         let dbf_path = dbf_path.as_ref();
         let table = DbfTable::from_path(dbf_path)?;
+        Self::load_with_table(dbf_path, &table)
+    }
+
+    pub(crate) fn load_with_table(
+        dbf_path: impl AsRef<Path>,
+        table: &DbfTable,
+    ) -> Result<Self, IndexError> {
+        let dbf_path = dbf_path.as_ref();
         let index_path = sidecar_path(dbf_path);
         let index = storage::read_sidecar(&index_path)?;
         if index.source != storage::source_fingerprint(dbf_path)? {
             return Err(IndexError::Stale { path: index_path });
         }
-        validation::validate_for_table(&index, &table)?;
+        validation::validate_for_table(&index, table)?;
         Ok(index)
     }
 

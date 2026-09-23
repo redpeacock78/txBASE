@@ -49,7 +49,7 @@ pub fn copy_table_files(
     let source_index = sidecar_path(source);
     let index_bytes = match fs::read(&source_index) {
         Ok(bytes) => {
-            IndexFile::load(source).map_err(|error| {
+            IndexFile::load_with_table(source, &table).map_err(|error| {
                 DbfError::Invalid(format!("cannot validate source index sidecar: {error}"))
             })?;
             Some(bytes)
