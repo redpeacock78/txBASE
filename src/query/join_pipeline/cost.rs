@@ -117,7 +117,8 @@ pub(super) fn estimate_join_rows(
 #[cfg(test)]
 mod tests {
     use super::super::super::join::JoinType;
-    use super::{estimate_join_rows, output_columns};
+    use super::{estimate_join_rows, materialized_page_reads, output_columns};
+    use crate::index::COST_PAGE_SIZE;
     use serde_json::{Map, json};
 
     fn row(table: &str, key: Option<i64>) -> Map<String, serde_json::Value> {
@@ -136,23 +137,48 @@ mod tests {
             row("left", Some(2)),
             row("left", None),
         ];
-        let right = [row("right", Some(1)), row("right", Some(3))];
+        let mut null = Map::new();
+        null.insert("right.ID".to_owned(), serde_json::Value::Null);
+        let right = [row("right", Some(1)), row("right", Some(3)), null];
         let local_fields = vec!["left.ID".to_owned()];
         let foreign_fields = vec!["right.ID".to_owned()];
 
-        assert_eq!(
-            estimate_join_rows(
-                &left,
-                &right,
-                &local_fields,
-                &foreign_fields,
-                &JoinType::Left,
-            )
-            .unwrap(),
-            4
-        );
+        for (join_type, expected) in [
+            (JoinType::Inner, 2),
+            (JoinType::Left, 4),
+            (JoinType::Right, 4),
+            (JoinType::Full, 6),
+            (JoinType::Semi, 2),
+            (JoinType::Anti, 2),
+        ] {
+            assert_eq!(
+                estimate_join_rows(&left, &right, &local_fields, &foreign_fields, &join_type,)
+                    .unwrap(),
+                expected
+            );
+        }
+
         assert_eq!(output_columns(&left, &right, &JoinType::Inner), 2);
         assert_eq!(output_columns(&left, &right, &JoinType::Semi), 1);
+    }
+
+    #[test]
+    fn keeps_cost_boundaries_nonzero_for_empty_inputs() {
+        let empty: [Map<String, serde_json::Value>; 0] = [];
+
+        assert_eq!(output_columns(&empty, &empty, &JoinType::Inner), 1);
+        assert_eq!(output_columns(&empty, &empty, &JoinType::Semi), 1);
+        assert_eq!(materialized_page_reads(&empty), 1);
+    }
+
+    #[test]
+    fn rounds_materialized_rows_up_to_the_next_page() {
+        let large = json!({"payload": "x".repeat(COST_PAGE_SIZE)})
+            .as_object()
+            .expect("object fixture")
+            .clone();
+
+        assert_eq!(materialized_page_reads(std::slice::from_ref(&large)), 2);
     }
 
     #[test]
