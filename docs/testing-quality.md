@@ -153,6 +153,8 @@ A delta with the wrong base must be rejected.
 
 `src/query/aggregation_tests/accumulator_tests.rs::groups_comparable_extremes_and_returns_null_for_missing_values` covers `$min` and `$max`.
 
+`src/query/aggregation_tests/accumulator_tests.rs::groups_by_a_dotted_field_reference` covers dotted group keys, and `rejects_incomparable_extreme_values` covers strict `$min`/`$max` type rejection.
+
 `src/query/aggregation_tests/input_stage_tests.rs::unwinds_array_values_before_grouping` covers array expansion, empty arrays, missing fields, and explicit `null` values.
 
 `src/query/aggregation_tests/input_stage_tests.rs::includes_unwind_array_indexes` covers document-form `$unwind` and zero-based array indexes.
@@ -184,6 +186,8 @@ A delta with the wrong base must be rejected.
 The compound-key branch in the same test covers the direct compound ordered-index path.
 
 `src/query/join_index_tests.rs::chained_single_key_join_uses_a_fresh_foreign_index`, `chained_right_single_key_join_uses_a_fresh_foreign_index`, `chained_compound_join_uses_a_fresh_foreign_index`, and `chained_right_compound_join_uses_a_fresh_foreign_index` cover indexed paths in chained stages.
+
+`src/query/join_index_tests.rs::chained_join_uses_ordered_merge_for_a_small_intermediate_input` and the unit tests in `src/query/join_pipeline/stages/merge.rs` cover chained ordered-merge selection, input-order preservation, and right-major output.
 
 `src/query/join_tests.rs` covers output order and chained-stage semantics.
 

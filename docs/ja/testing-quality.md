@@ -154,6 +154,8 @@ DBF、memo、WAL、JSON入力について決定的なコーパスを保ちます
 
 `src/query/aggregation_tests/accumulator_tests.rs::groups_comparable_extremes_and_returns_null_for_missing_values`は`$min`と`$max`を検査します。
 
+`src/query/aggregation_tests/accumulator_tests.rs::groups_by_a_dotted_field_reference`はドット区切りのグループキーを、`rejects_incomparable_extreme_values`は`$min`と`$max`の型不一致を厳密に拒否することを検査します。
+
 `src/query/aggregation_tests/input_stage_tests.rs::unwinds_array_values_before_grouping`は、配列展開、空配列、欠損フィールド、明示的な`null`を検査します。
 
 `src/query/aggregation_tests/input_stage_tests.rs::includes_unwind_array_indexes`は、ドキュメント形式の`$unwind`と0から始まる配列インデックスを検査します。
@@ -187,6 +189,8 @@ DBF、memo、WAL、JSON入力について決定的なコーパスを保ちます
 
 `src/query/join_index_tests.rs::chained_single_key_join_uses_a_fresh_foreign_index`と`chained_right_single_key_join_uses_a_fresh_foreign_index`は、多段ステージにおける単一キーのインデックス経路を検査します。
 `chained_compound_join_uses_a_fresh_foreign_index`と`chained_right_compound_join_uses_a_fresh_foreign_index`は、複合キーのインデックス経路を検査します。
+
+`src/query/join_index_tests.rs::chained_join_uses_ordered_merge_for_a_small_intermediate_input`と`src/query/join_pipeline/stages/merge.rs`のunit testは、多段ordered mergeの選択、入力順の保持、右主体の出力順を検査します。
 
 `src/query/join_tests.rs`は、出力順と連鎖ステージの意味論を検査します。
 

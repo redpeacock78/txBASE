@@ -195,7 +195,9 @@ The direct and chained join models are not part of the single-table `QUERY /expl
 
 Chained join stages propagate estimated cardinality, materialized row width, and logical page inputs through each intermediate stage for hash and index-probe selection.
 
-An ordered-merge path remains limited to direct joins, and filesystem- and cache-aware merge behavior remains outside the contract.
+Eligible chained non-`full` equality stages may also compare an ordered-merge path that sorts the materialized intermediate rows, consumes the loaded new-table rows through a fresh exact ordered index, and includes the bounded sort work in its estimate.
+
+The join model remains logical-page and in-memory-work based; filesystem latency, cache state, and page reuse remain outside the contract.
 
 The roadmap keeps index design separate from query syntax so a query document does not imply an implementation strategy.
 

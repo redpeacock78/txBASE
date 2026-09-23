@@ -221,6 +221,75 @@ fn groups_comparable_extremes_and_returns_null_for_missing_values() {
 }
 
 #[test]
+fn groups_by_a_dotted_field_reference() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"PROFILE": {"COUNTRY": "JP"}})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"PROFILE": {"COUNTRY": "US"}})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let records = [&first, &second];
+    let stages = vec![
+        json!({
+            "$group": {
+                "_id": "$PROFILE.COUNTRY",
+                "count": {"$count": {}}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![
+            json!({"_id": "JP", "count": 1}),
+            json!({"_id": "US", "count": 1})
+        ]
+    );
+}
+
+#[test]
+fn rejects_incomparable_extreme_values() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"VALUE": 1}).as_object().unwrap().clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"VALUE": "one"}).as_object().unwrap().clone(),
+    };
+    let records = [&first, &second];
+    let stages = vec![
+        json!({
+            "$group": {
+                "_id": null,
+                "minimum": {"$min": "$VALUE"}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    let error = crate::query::aggregation::execute(&records, &stages).unwrap_err();
+    assert!(error.to_string().contains("incomparable values"));
+}
+
+#[test]
 fn groups_first_and_last_values_in_physical_order() {
     let first = DbfRecord {
         number: 1,

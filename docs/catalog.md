@@ -277,8 +277,9 @@ It does not infer relationships from field names.
 The local join supports `inner`, `left`, `right`, `full`, `semi`, and `anti` equality joins plus a bounded
 `cross` join, with a hard result bound.
 Direct equality joins include deterministic pre-filter cardinality, output-materialization, and logical DBF-page inputs in strategy selection.
-Chained equality stages also propagate those inputs, while the catalog does not provide filesystem- and cache-aware merge planning,
-host-specific `AsyncQueryStream` scheduling, row-level MVCC versions, or distributed visibility.
+Chained equality stages also propagate those inputs, and eligible non-`full` stages may use the ordered-merge path described in [Join model](joins.md).
+The catalog does not provide filesystem- and cache-aware merge planning, host-specific `AsyncQueryStream` scheduling,
+row-level MVCC versions, or distributed visibility.
 
 ## Primary references and scope
 
