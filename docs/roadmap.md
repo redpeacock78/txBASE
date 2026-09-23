@@ -56,7 +56,7 @@ The repository currently provides:
 - Declared Visual FoxPro CJK driver support for Windows-31J/CP932, GBK/CP936, EUC-KR/CP949, and Big5/CP950, plus the legacy dBASE aliases `0x13`, `0x4d`, `0x4e`, and `0x4f`.
 - An optional `*.txschema.json` sidecar with one-field `primary`, `unique`, and `not_null` enforcement, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, bounded table-level `checks` predicates, and catalog-scoped scalar and composite foreign-key validation with restrict, cascade, and set-null actions.
 - Explicit sidecar and per-invocation overrides for those four CJK codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP, with normalized schema output.
-- A rebuildable external scalar and compound-key index sidecar with scalar and compound equality, compound equality-prefix, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on candidate rows, index traversal, and sort work with non-selective-index table-scan fallback, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, path-aware planning, and DBF/memo freshness checks.
+- A rebuildable external scalar and compound-key index sidecar with scalar and compound equality, compound equality-prefix, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB index and DBF page reads, and sort work with non-selective-index table-scan fallback, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, path-aware planning, and DBF/memo freshness checks.
 - Durable table-local row history stored with MVCC prepare/commit records, epoch-separated physical row IDs, retained row reads, baseline reconstruction during full-image GC, and optional independent per-row retention through `mvcc gc --keep-rows`.
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection, index-sidecar recovery, and DBF-read recovery.
 - A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and single-operation or atomic-batch mutation contracts, a `wasm-bindgen` wrapper, and a `wasm32-unknown-unknown` CI compile check.
@@ -66,7 +66,7 @@ The repository currently provides:
 
 The baseline intentionally does not include the following:
 
-- A physical-I/O-aware index cost model or full cost-based join model.
+- A full cost-based join model.
 - Full index-aware or cost-based merge join strategies.
 - Worker/WASI-specific timeout, transport, cancellation, and asynchronous-storage semantics, and remote object-store adapters.
 - Predicate-level locking and distributed serializable coordination.
@@ -112,9 +112,9 @@ schema, named-table records, query, stream, explain, and join routes.
 The selector does not create a long-lived transaction, and historical execution does not reuse
 current index sidecars.
 
-The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact scalar and compound equality, compound equality-prefix and range candidate lookup, equality-prefix compound range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on candidate rows, index traversal, and sort work with non-selective-index table-scan fallback, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
+The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact scalar and compound equality, compound equality-prefix and range candidate lookup, equality-prefix compound range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB index and DBF page reads, and sort work with non-selective-index table-scan fallback, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support a physical-I/O-aware cost model, collation-aware index keys, or locale-aware CJK collation.
+It does not yet support collation-aware index keys, locale-aware CJK collation, or cross-table index definitions.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
@@ -214,7 +214,8 @@ All expressions in one stage read the stage-input snapshot, and missing or nonnu
 
 The planner explanation boundary is implemented by `explain_query_at`, `explain_query_details_at`, and `QUERY /explain`.
 The public explanation exposes deterministic row-equivalent scan and candidate-work costs when a valid index sidecar is available.
-Physical-I/O-aware index costing and full cost-based join choice remain future work.
+The explanation includes the logical 4 KiB index and DBF page estimates used by the local planner.
+Full cost-based join choice remains future work.
 
 The first constraint slice is an optional schema sidecar.
 It enforces one-field `primary`, `unique`, and `not_null` properties, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, plus bounded table-level query-predicate `checks` on active records and mutation candidates without changing legacy DBF bytes.
@@ -380,6 +381,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Physical-I/O-aware index cost models, full cost-based joins, aggregation, predicate-level serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
+- Full cost-based joins, aggregation, predicate-level serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
 
-The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while a full I/O-aware model and cross-table index definitions or index-aware planning remain future work.
+The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and index-aware planning remain future work.

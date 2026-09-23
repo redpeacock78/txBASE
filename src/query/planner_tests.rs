@@ -57,7 +57,9 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
     let intersection_explanation = explain_query_details_at(&path, &intersection_request).unwrap();
     let intersection_cost = intersection_explanation.cost.unwrap();
     assert_eq!(intersection_cost.candidate_rows, 1);
+    assert!(intersection_cost.index_page_reads > 0);
     assert!(intersection_cost.record_reads > intersection_cost.candidate_rows);
+    assert!(intersection_cost.record_page_reads > 0);
     assert_eq!(
         intersection_cost.filter_evaluations,
         intersection_cost.candidate_rows

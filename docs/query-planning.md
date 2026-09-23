@@ -89,19 +89,23 @@ When a valid index sidecar is available, the response also includes a `cost` obj
 
 `explain_query_details_at` and the `cost` object expose deterministic row-equivalent work for the selected access path.
 
-The planner continues to choose among bounded candidate-count, index-traversal, and remaining-sort costs; the additional fields make record reads and filter evaluations observable.
+The planner chooses among bounded candidate-count, index-traversal, logical-page, and remaining-sort costs; the additional fields make record reads and filter evaluations observable.
 
 `candidate_rows` is the exact candidate count after the selected access path.
 
 `index_traversal` is the bounded logarithmic search work for the selected sidecar or sidecars.
 
+`index_page_reads` estimates the 4 KiB logical pages needed to load the JSON sidecar once; it is zero for a table scan.
+
 `record_reads` estimates the candidate records read from the DBF; an equality intersection includes the estimated lists read before their record-number intersection.
+
+`record_page_reads` estimates the logical DBF pages touched by those records.
 
 `filter_evaluations` is the number of candidate records passed through the normal filter pipeline.
 
 `sort_work` is the estimated in-memory comparison work left after any ordered index prefix.
 
-`total` is the saturating sum of those terms.
+`total` is the saturating sum of all of those terms.
 
 The values are deterministic row-equivalent estimates, not wall-clock measurements.
 
@@ -167,7 +171,9 @@ Compound definitions use their shortest definition and stable name tie-breakers 
 
 An exact cost tie preserves the table scan and established access paths before a compound equality-prefix prefilter.
 
-This model estimates deterministic candidate work but does not estimate physical index I/O, memory, cache state, collation, or compound-range selectivity.
+The planner uses a deterministic 4 KiB logical-page model for the persisted JSON index and DBF bytes.
+Candidate record pages use a bounded worst-case estimate because the planner does not materialize page maps.
+The model does not claim to measure filesystem latency, memory, cache state, collation, or compound-range selectivity.
 
 MongoDB's current guidance recommends a compound index for queries that repeatedly search multiple fields.
 
@@ -177,9 +183,9 @@ It does not claim MongoDB planner compatibility or replace a future compound-ind
 
 MongoDB's [compound-index sort-order guidance](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/) and [equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/) show why a full compound-index planner must define index field order.
 
-txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, compound equality-prefix and compound equality-prefix range candidates, per-field direction metadata for compound definitions, and an explainable cost estimate for scan, index traversal, candidate record reads, filter evaluations, and remaining sort work.
+txBASE currently has an active-record count, a uniform distinct-key estimate for equality, a single-field range histogram, compound equality-prefix and compound equality-prefix range candidates, per-field direction metadata for compound definitions, and an explainable cost estimate for scan, index traversal, logical index pages, candidate record reads, logical record pages, filter evaluations, and remaining sort work.
 
-It does not have a full I/O-aware cost model.
+The cost model is physical-layout aware at the logical 4 KiB page level, while actual filesystem and cache behavior remains outside the contract.
 
 The equality intersection is a bounded candidate prefilter, not a covered query or a claim of end-to-end speedup.
 
@@ -189,7 +195,7 @@ The roadmap keeps index design separate from query syntax so a query document do
 
 The following require separate public contracts:
 
-1. Full expression evaluation and cost-based index choice with explicit missing, null, collation, and compound-range selectivity rules.
+1. Full expression evaluation and more precise cost-based index choice with explicit missing, null, collation, and compound-range selectivity rules.
 2. Additional aggregation stages and accumulators beyond the current bounded aggregation contract, including its bounded numeric `$sum` and `$avg` expressions, with bounded memory behavior.
 3. Full index-aware and cost-based merge join strategies with broader join semantics.
 4. Host-specific scheduling, backpressure, timeout, cancellation, and transport implementations for `AsyncQueryStream`.

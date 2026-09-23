@@ -151,7 +151,9 @@ fn explain_endpoint_reports_scan_and_index_plans() {
     assert!(index_body.contains("by_name"));
     assert!(index_body.contains(r#""candidate_rows":1"#));
     assert!(index_body.contains(r#""index_traversal""#));
+    assert!(index_body.contains("index_page_reads"));
     assert!(index_body.contains(r#""record_reads":1"#));
+    assert!(index_body.contains("record_page_reads"));
     assert!(index_body.contains(r#""filter_evaluations":1"#));
     assert!(index_body.contains(r#""sort_work":0"#));
     assert!(index_body.contains(r#""total""#));

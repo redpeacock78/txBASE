@@ -293,7 +293,7 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 次の領域は引き続き将来の作業です。
 
 - ワーカーまたはWASI固有の`AsyncQueryStream`タイムアウト、転送、キャンセル、非同期ストレージの動作。
-- 物理I/Oを考慮したインデックスコストと完全なcost-based join planner。
+- 完全なcost-based join planner。
 - より広い集約。
 - 述語単位のロックと分散serializable調整。
 - locale-awareなCJK collation。

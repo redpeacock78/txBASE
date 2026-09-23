@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 const INDEX_FORMAT: &str = "txbase-index";
 const INDEX_VERSION: u8 = 3;
 const INDEX_EXTENSION: &str = "txidx";
+pub(crate) const COST_PAGE_SIZE: usize = 4 * 1024;
 
 mod commit;
 mod lookup;
@@ -148,6 +149,18 @@ impl IndexFile {
                     .map(|index| index.entries.iter().map(|entry| entry.records.len()).sum())
                     .unwrap_or_default()
             })
+    }
+
+    pub(crate) fn source_dbf_page_count(&self) -> usize {
+        usize::try_from(self.source.dbf.length)
+            .unwrap_or(usize::MAX)
+            .div_ceil(COST_PAGE_SIZE)
+    }
+
+    pub(crate) fn estimated_page_count(&self) -> usize {
+        serde_json::to_vec_pretty(self)
+            .map(|bytes| bytes.len().div_ceil(COST_PAGE_SIZE).max(1))
+            .unwrap_or(1)
     }
 
     pub fn schema_json(&self) -> Value {

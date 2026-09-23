@@ -116,6 +116,8 @@ fn index_metadata_exposes_bounded_cost_inputs() {
     assert_eq!(loaded.equality_fanout_estimate(&["NAME", "AGE"]), Some(1));
     assert_eq!(loaded.index_traversal_cost("NAME"), Some(0));
     assert_eq!(loaded.index_traversal_cost("missing"), None);
+    assert!(loaded.source_dbf_page_count() > 0);
+    assert!(loaded.estimated_page_count() > 0);
 
     remove_table_files(&path);
 }

@@ -189,7 +189,7 @@ The compound range lookup first narrows the sidecar to the contiguous equality-p
 The candidate path keeps the range comparison in the normal executor, so index direction changes traversal order but not range semantics.
 
 The planner compares the table scan and each valid equality, range, or compatible ordered path
-with a bounded candidate-row, traversal, and sort cost. For the selected path, the explanation
+with a bounded candidate-row, traversal, logical-page, and sort cost. For the selected path, the explanation
 counts the active-record count as both record reads and filter evaluations for a table scan.
 For an index path, it counts exact candidate rows as record reads and filter evaluations, adds a
 bounded logarithmic traversal term derived from the sidecar entry count, and adds remaining sort
@@ -199,9 +199,11 @@ costs preserve the table scan and established access paths before a compound equ
 prefilter.
 
 The same breakdown is exposed by `QUERY /explain` as `candidate_rows`, `index_traversal`,
-`record_reads`, `filter_evaluations`, `sort_work`, and `total` when a valid sidecar is available.
-It is a local cardinality, traversal, and sort model, not a full physical I/O, memory, or cache
-cost model.
+`index_page_reads`, `record_reads`, `record_page_reads`, `filter_evaluations`, `sort_work`, and
+`total` when a valid sidecar is available.
+`index_page_reads` and `record_page_reads` use a deterministic 4 KiB logical-page estimate.
+Candidate record pages are bounded conservatively because the planner does not materialize a page map.
+Filesystem latency, memory, and cache behavior remain outside the contract.
 
 The planner now records the active-record count and derives each single-field index's distinct-key count from its entries.
 
@@ -227,9 +229,9 @@ It still materializes candidate record numbers and sorts them by physical DBF or
 
 Freshness validation still reads the DBF and memo bytes, and the query executor still materializes candidate record numbers, so this is not a claim of zero-copy or end-to-end index I/O.
 
-A full I/O-aware cost model, collation-aware planning, and cross-table index definitions or query planning require separate contracts.
+More precise physical I/O, collation-aware planning, and cross-table index definitions or query planning require separate contracts.
 
-The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs a full I/O-aware model and cross-table index or planning contracts.
+The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, logical-page cost, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs more precise physical modeling and cross-table index or planning contracts.
 
 ## Primary references and scope
 
