@@ -49,7 +49,11 @@ pub(super) fn load_ordered(
     fields: &[String],
 ) -> Option<OrderedIndex> {
     let index = load_fields(catalog, table_name, fields)?;
-    let records = ordered_records(&index, fields)?;
+    ordered_from_index(&index, fields)
+}
+
+pub(super) fn ordered_from_index(index: &IndexFile, fields: &[String]) -> Option<OrderedIndex> {
+    let records = ordered_records(index, fields)?;
     Some(OrderedIndex {
         records,
         page_reads: index.estimated_page_count(),

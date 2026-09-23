@@ -51,6 +51,7 @@ pub(super) fn execute(
                     &spec.kind,
                 )?,
                 output_columns: output_columns(&rows, &right.values, &spec.kind),
+                ..JoinCostInput::default()
             }
         };
         let next_rows = stages::apply(

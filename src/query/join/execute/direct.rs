@@ -49,12 +49,14 @@ pub(super) fn execute<S: JoinSource>(
         inner_page_reads: right_page_reads,
         output_rows: estimated_output_rows,
         output_columns,
+        ..join_strategy::JoinCostInput::default()
     };
     let right_cost_input = join_strategy::JoinCostInput {
         outer_page_reads: right_page_reads,
         inner_page_reads: left_page_reads,
         output_rows: estimated_output_rows,
         output_columns,
+        ..join_strategy::JoinCostInput::default()
     };
     let large_join = current_catalog.is_some()
         && !source.is_historical()

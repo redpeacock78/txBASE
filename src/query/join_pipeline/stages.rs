@@ -1,6 +1,7 @@
 mod cross;
 mod full;
 mod hash;
+mod merge;
 
 use super::super::join::JoinSource;
 use super::super::join::{JoinError, JoinSpec, JoinType};
@@ -29,48 +30,58 @@ pub(super) fn apply(
         .iter()
         .map(|field| unqualified_field(field, &spec.table).map(str::to_owned))
         .collect::<Option<Vec<_>>>();
-    let right_index = if !source.is_historical() {
-        if let Some(index_fields) = index_fields.as_deref() {
-            let should_try = if matches!(&spec.kind, JoinType::Right) {
-                local_fields.len() == index_fields.len()
-            } else {
-                matches!(
-                    super::super::join_strategy::choose_with_costs(
-                        left.len(),
-                        right.len(),
-                        None,
-                        None,
-                        cost_input,
-                    ),
-                    super::super::join_strategy::JoinStrategy::Hash
-                )
-            };
-            source
-                .catalog()
-                .and_then(|catalog| {
-                    should_try.then(|| {
-                        super::super::join_index::load_fields(catalog, &spec.table, index_fields)
-                    })
-                })
-                .flatten()
-        } else {
-            None
-        }
+    let right_index = if !source.is_historical()
+        && left.len().saturating_mul(right.len())
+            > super::super::join_strategy::NESTED_LOOP_PAIR_LIMIT
+    {
+        index_fields.as_deref().and_then(|index_fields| {
+            source.catalog().and_then(|catalog| {
+                super::super::join_index::load_fields(catalog, &spec.table, index_fields)
+            })
+        })
     } else {
         None
     };
+    let right_ordered = right_index.as_ref().and_then(|index| {
+        index_fields
+            .as_deref()
+            .and_then(|fields| super::super::join_index::ordered_from_index(index, fields))
+    });
+    let cost_input = JoinCostInput {
+        merge_sort_work: right_ordered
+            .as_ref()
+            .map(|_| {
+                super::super::join_strategy::ordered_merge_sort_work(left.len(), local_fields.len())
+            })
+            .unwrap_or_default(),
+        ..cost_input
+    };
+    let strategy = super::super::join_strategy::choose_with_costs(
+        left.len(),
+        right.len(),
+        right_index.as_ref().and_then(|index| {
+            index_fields.as_deref().and_then(|fields| {
+                super::super::join_index::equality_probe_cost(index, right.len(), fields)
+            })
+        }),
+        right_ordered.as_ref().map(|ordered| ordered.page_reads),
+        cost_input,
+    );
+    if matches!(strategy, super::super::join_strategy::JoinStrategy::Merge) {
+        if let Some(ordered) = right_ordered.as_ref() {
+            return merge::execute(
+                &left,
+                right,
+                right_numbers,
+                &ordered.records,
+                spec,
+                &local_fields,
+                &foreign_fields,
+            );
+        }
+    }
     if matches!(
-        super::super::join_strategy::choose_with_costs(
-            left.len(),
-            right.len(),
-            right_index.as_ref().and_then(|index| {
-                index_fields.as_deref().and_then(|fields| {
-                    super::super::join_index::equality_probe_cost(index, right.len(), fields)
-                })
-            }),
-            None,
-            cost_input,
-        ),
+        strategy,
         super::super::join_strategy::JoinStrategy::IndexNestedLoop
     ) {
         if let Some(index) = right_index.as_ref() {

@@ -84,6 +84,9 @@ Direct and chained stages may also use a fresh compound index when the equality 
 
 For a large direct equality join with compatible fresh ordered indexes on both inputs, the planner selects `Merge` when its bounded cost is lowest and restores left-major or right-major output order after matching key groups.
 
+For a chained non-`full` equality stage with a fresh exact ordered index on the newly joined table, the planner also compares `Merge`.
+It sorts the materialized intermediate rows by the stage keys, includes bounded sort work in the merge estimate, consumes the loaded new-table rows in index order, and restores the documented output order.
+
 When an index is unavailable, stale, malformed, or more expensive than the hash estimate, larger inputs select `Hash` and build one in-memory equality map for the right table, or the left table for a `right` join.
 
 A direct `full` join uses the compatible ordered-index merge path when both sides are fresh and that bounded merge cost wins; otherwise it uses the bounded hash fallback.
@@ -106,11 +109,11 @@ Every intermediate result is capped at 100,000 rows.
 
 This is a bounded row-work, logical-page, pre-filter-cardinality, and output-materialization cost model with a compatible-index merge path.
 
-It does not measure filesystem latency, cache state, or page reuse.
-
 Chained stages propagate their estimated cardinality, materialized row width, and logical page inputs into the hash or index-probe choice for the next stage.
 
-The model does not yet provide an ordered-merge path for chained stages or filesystem- and cache-aware merge planning.
+The model does not measure filesystem latency, cache state, or page reuse.
+
+Filesystem- and cache-aware merge planning remains future work.
 
 The single-table HTTP server does not expose joins.
 

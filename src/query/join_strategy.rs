@@ -19,6 +19,7 @@ pub(super) struct JoinCostInput {
     pub(super) inner_page_reads: usize,
     pub(super) output_rows: usize,
     pub(super) output_columns: usize,
+    pub(super) merge_sort_work: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,7 +132,9 @@ fn merge_cost(
     input: JoinCostInput,
 ) -> JoinCost {
     JoinCost {
-        strategy_work: left_count.saturating_add(right_count),
+        strategy_work: left_count
+            .saturating_add(right_count)
+            .saturating_add(input.merge_sort_work),
         index_page_reads,
         record_page_reads: input
             .outer_page_reads
@@ -171,6 +174,15 @@ pub(super) fn index_probe_cost(inner_count: usize, average_fanout: usize) -> usi
     }
 }
 
+pub(super) fn ordered_merge_sort_work(row_count: usize, key_width: usize) -> usize {
+    if row_count <= 1 || key_width == 0 {
+        return 0;
+    }
+    row_count
+        .saturating_mul((row_count.ilog2() as usize).saturating_add(1))
+        .saturating_mul(key_width)
+}
+
 impl JoinProbeCost {
     fn legacy(inner_count: usize) -> Self {
         Self {
@@ -185,7 +197,7 @@ impl JoinProbeCost {
 mod tests {
     use super::{
         JoinCostInput, JoinProbeCost, JoinStrategy, NESTED_LOOP_PAIR_LIMIT, choose,
-        choose_with_costs, choose_with_probe_cost,
+        choose_with_costs, choose_with_probe_cost, ordered_merge_sort_work,
     };
 
     #[test]
@@ -296,6 +308,7 @@ mod tests {
             inner_page_reads: 2,
             output_rows: 100,
             output_columns: 2,
+            ..JoinCostInput::default()
         };
         assert_eq!(
             choose_with_costs(80, 80, None, Some(0), input),
@@ -324,6 +337,39 @@ mod tests {
                     inner_page_reads: 1,
                     output_rows: 80,
                     output_columns: 1,
+                    ..JoinCostInput::default()
+                },
+            ),
+            JoinStrategy::Hash
+        );
+    }
+
+    #[test]
+    fn accounts_for_sorting_the_intermediate_merge_input() {
+        assert_eq!(ordered_merge_sort_work(1, 2), 0);
+        assert_eq!(ordered_merge_sort_work(8, 1), 32);
+        assert_eq!(
+            choose_with_costs(
+                8,
+                1_000,
+                None,
+                Some(0),
+                JoinCostInput {
+                    merge_sort_work: ordered_merge_sort_work(8, 1),
+                    ..JoinCostInput::default()
+                },
+            ),
+            JoinStrategy::Merge
+        );
+        assert_eq!(
+            choose_with_costs(
+                80,
+                80,
+                None,
+                Some(0),
+                JoinCostInput {
+                    merge_sort_work: ordered_merge_sort_work(80, 1),
+                    ..JoinCostInput::default()
                 },
             ),
             JoinStrategy::Hash
