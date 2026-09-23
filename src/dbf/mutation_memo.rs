@@ -63,7 +63,14 @@ impl DbfTable {
         path: &Path,
     ) -> Result<Option<MemoSnapshot>, DbfError> {
         if self.memo_updates.is_empty() {
-            return Ok(None);
+            return Ok(if self.layout_changed {
+                self.memo.as_ref().map(|memo| MemoSnapshot {
+                    format: memo.format,
+                    bytes: memo.bytes.clone(),
+                })
+            } else {
+                None
+            });
         }
         if find_memo_path(path).is_none() {
             return Err(DbfError::Invalid(

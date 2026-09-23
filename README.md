@@ -187,7 +187,7 @@ txbase pack path/to/users.dbf
 txbase recall path/to/users.dbf 2
 ```
 
-`index verify` rejects stale sidecars; `index rebuild` is the explicit repair path. `pack` removes logically deleted records, and `recall` restores one by physical record number.
+`index verify` rejects stale sidecars; `index rebuild` is the explicit repair path. `pack` removes logically deleted records, compacts referenced DBT/FPT memo blocks, refreshes an existing index sidecar, and persists the DBF and memo snapshot through one WAL boundary. `recall` restores one logically deleted record by physical record number.
 
 XBF conversion and sidecar-aware file transfer:
 

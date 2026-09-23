@@ -90,9 +90,9 @@ This phase keeps the database local and makes its operational boundary useful be
 - `verify`, `backup`, and `restore` tooling.
 - Read-only WAL inspection.
 
-`PACK` must define whether memo blocks and indexes are rebuilt or left as reclaimable orphan space.
+`PACK` compacts DBT/FPT blocks referenced by surviving records, updates their DBF pointers, refreshes an existing index sidecar, and persists the DBF, memo, index, MVCC, transaction-state, and CDC changes through one WAL-backed recovery boundary.
 
-`RECALL` must define whether it restores only the deletion marker or also participates in an indexed or transactional update.
+`RECALL` restores the deletion marker after schema validation and participates in the normal indexed, MVCC, CDC, and transaction-state update path.
 
 ### Completion conditions
 

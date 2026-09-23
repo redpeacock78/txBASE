@@ -136,6 +136,55 @@ fn reads_and_writes_dbase3_binary_sidecar() {
 }
 
 #[test]
+fn pack_compacts_dbase3_memo_blocks_and_updates_pointers() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-dbase3-pack-memo-{}.dbf",
+        std::process::id()
+    ));
+    let memo_path = path.with_extension("dbt");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&memo_path);
+
+    let mut bytes = fixture();
+    bytes[0] = 0x83;
+    bytes[64 + 11] = b'M';
+    let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+    let record_length = usize::from(u16::from_le_bytes([bytes[10], bytes[11]]));
+    bytes[record_start + 4..record_start + 14].copy_from_slice(b"         2");
+    let deleted_start = record_start + record_length;
+    bytes[deleted_start + 4..deleted_start + 14].copy_from_slice(b"         1");
+    fs::write(&path, bytes).unwrap();
+
+    let mut memo = vec![0; DBT_BLOCK_SIZE * 3];
+    memo[..4].copy_from_slice(&3u32.to_be_bytes());
+    memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + 7].copy_from_slice(b"deleted");
+    memo[DBT_BLOCK_SIZE + 7..DBT_BLOCK_SIZE + 9].copy_from_slice(&[EOF_MARKER, EOF_MARKER]);
+    memo[DBT_BLOCK_SIZE * 2..DBT_BLOCK_SIZE * 2 + 4].copy_from_slice(b"live");
+    memo[DBT_BLOCK_SIZE * 2 + 4..DBT_BLOCK_SIZE * 2 + 6].copy_from_slice(&[EOF_MARKER, EOF_MARKER]);
+    fs::write(&memo_path, memo).unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    assert_eq!(table.active_record(1).unwrap().values["NAME"], "live");
+    table.pack().unwrap();
+    table.save_with_wal(&path).unwrap();
+
+    let reread = DbfTable::from_path(&path).unwrap();
+    assert_eq!(reread.records().len(), 1);
+    assert_eq!(reread.active_record(1).unwrap().values["NAME"], "live");
+    assert_eq!(
+        &reread.to_bytes()[record_start + 4..record_start + 14],
+        b"         1"
+    );
+    let memo = MemoFile::open(&memo_path, 0x83).unwrap();
+    assert_eq!(memo.bytes.len(), DBT_BLOCK_SIZE * 2);
+    assert_eq!(memo.read(1).unwrap().unwrap(), b"live");
+    assert_eq!(u32::from_be_bytes(memo.bytes[..4].try_into().unwrap()), 2);
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(memo_path).unwrap();
+}
+
+#[test]
 fn reads_and_writes_dbase4_memo_sidecar() {
     let path = std::env::temp_dir().join(format!("txbase-dbase4-memo-{}.dbf", std::process::id()));
     let memo_path = path.with_extension("dbt");

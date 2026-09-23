@@ -234,7 +234,7 @@ The CLI now exposes the first local-database maintenance boundary:
 | `txbase schema FILE` | Prints parsed DBF header metadata and field descriptors as JSON |
 | `txbase schema apply FILE SCHEMA_JSON` | Validates a metadata candidate against the current DBF and active records, then atomically replaces only `FILE`'s schema sidecar |
 | `txbase verify FILE` | Loads the DBF, validates detected memo data and any `.txidx` sidecar, reparses the serialized DBF, and checks record boundaries |
-| `txbase pack FILE` | Removes logically deleted records, renumbers the remaining physical records, and persists the result through the existing WAL |
+| `txbase pack FILE` | Removes logically deleted records, renumbers the remaining physical records, compacts live DBT/FPT memo blocks, refreshes an existing index sidecar, and persists the DBF and memo snapshot through the existing WAL |
 | `txbase recall FILE RECORD` | Restores one logically deleted record through the existing WAL |
 | `txbase cdc FILE [--after TRANSACTION_ID]` | Reads committed single-table row-change events from the CDC sidecar, optionally after an exclusive transaction-ID cursor |
 | `txbase cdc catalog DIRECTORY [--after TRANSACTION_ID]` | Reads atomic multi-table row-change events from the catalog CDC sidecar, optionally after an exclusive catalog transaction-ID cursor |
@@ -252,13 +252,16 @@ DBF and memo sidecar replacement is still a sequence of file operations, not a n
 
 An interrupted copy should therefore be followed by `txbase verify DEST` before the destination is used.
 
-`PACK` does not compact memo sidecars. An existing index sidecar is refreshed after the packed DBF is saved, but memo blocks remain untouched.
+`PACK` rewrites the memo sidecar with only the blocks referenced by remaining records.
+It updates each surviving DBF memo pointer and refreshes an existing index sidecar in the same WAL-backed commit.
+The DBF, compacted memo snapshot, index snapshot, MVCC image, transaction state, and CDC event share the same recovery boundary.
+An in-memory `PACK` with a loaded memo sidecar must use `save_with_wal` to persist the sidecar replacement.
 
 `wal inspect` reports the WAL file size, the valid byte boundary, and each complete record's LSN and
 payload length. A torn final header or payload is reported as `truncated_tail: true`; complete
 malformed records remain errors. The command is read-only and does not create or truncate the WAL.
 
-Deleted memo blocks can therefore remain as reclaimable orphan space until a sidecar-specific compaction contract exists.
+`PACK` does not change the logical memo values of surviving records, but it renumbers their physical memo blocks.
 
 ## 7. Deliberate limits
 

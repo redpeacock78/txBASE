@@ -3,10 +3,11 @@ use super::mvcc::path_for as mvcc_path;
 use super::persistence::transaction_state_path;
 use super::schema_metadata::schema_metadata_path;
 use super::{
-    ACTIVE_RECORD, DbfError, DbfTable, EOF_MARKER, find_memo_path, sync_parent_directory,
-    write_record_count,
+    ACTIVE_RECORD, DbfError, DbfTable, EOF_MARKER, decode_field_with_encoding, encode_memo_pointer,
+    find_memo_path, is_sidecar_field, memo_index, sync_parent_directory, write_record_count,
 };
 use crate::index::{IndexFile, sidecar_path};
+use serde_json::{Map, Value};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -233,12 +234,94 @@ impl DbfTable {
         write_record_count(&mut bytes, count)?;
         bytes.push(EOF_MARKER);
 
+        let compacted_memo = self.compact_memo_sidecar(&mut bytes, &records, &mut stored_values)?;
+
         self.bytes = bytes;
         self.header.record_count = count;
         self.records = records;
         self.stored_values = stored_values;
+        self.memo = compacted_memo;
         self.layout_changed = true;
         Ok(())
+    }
+
+    fn compact_memo_sidecar(
+        &self,
+        bytes: &mut [u8],
+        records: &[super::DbfRecord],
+        stored_values: &mut [Map<String, Value>],
+    ) -> Result<Option<super::MemoFile>, DbfError> {
+        let Some(source) = &self.memo else {
+            return Ok(None);
+        };
+        let header = source
+            .bytes
+            .get(..source.block_size)
+            .ok_or_else(|| DbfError::Invalid("memo header is truncated".into()))?;
+        let mut compacted = super::MemoFile::from_bytes(header.to_vec(), source.format)?;
+        let next_block = match source.format {
+            super::MemoFormat::Dbase4 => 1u32.to_le_bytes(),
+            super::MemoFormat::Dbase3 | super::MemoFormat::FoxPro => 1u32.to_be_bytes(),
+        };
+        compacted.bytes[..4].copy_from_slice(&next_block);
+
+        let header_length = usize::from(self.header.header_length);
+        let record_length = usize::from(self.header.record_length);
+        for (index, record) in records.iter().enumerate() {
+            if record.deleted {
+                continue;
+            }
+            let record_offset = header_length
+                .checked_add(
+                    index
+                        .checked_mul(record_length)
+                        .ok_or_else(|| DbfError::Invalid("record offset overflows usize".into()))?,
+                )
+                .ok_or_else(|| DbfError::Invalid("record offset overflows usize".into()))?;
+            for field in self.fields.iter().filter(|field| is_sidecar_field(field)) {
+                let start = record_offset.checked_add(field.offset).ok_or_else(|| {
+                    DbfError::Invalid("memo pointer offset overflows usize".into())
+                })?;
+                let end = start
+                    .checked_add(usize::from(field.length))
+                    .ok_or_else(|| DbfError::Invalid("memo pointer end overflows usize".into()))?;
+                let pointer = bytes
+                    .get(start..end)
+                    .ok_or_else(|| DbfError::Invalid("memo pointer area is truncated".into()))?;
+                let Some(block) = memo_index(pointer, source.format)? else {
+                    continue;
+                };
+                let Some(data) = source.read(block)? else {
+                    continue;
+                };
+                let new_block = if data.is_empty() {
+                    0
+                } else if field.is_binary() {
+                    compacted.append_binary(&data)?
+                } else {
+                    compacted.append_text(&data)?
+                };
+                let encoded = encode_memo_pointer(field, new_block, compacted.format)?;
+                bytes
+                    .get_mut(start..end)
+                    .ok_or_else(|| DbfError::Invalid("memo pointer area is truncated".into()))?
+                    .copy_from_slice(&encoded);
+                let storage = stored_values.get_mut(index).ok_or_else(|| {
+                    DbfError::Invalid("stored record values are truncated".into())
+                })?;
+                storage.insert(
+                    field.name.clone(),
+                    decode_field_with_encoding(
+                        field.field_type,
+                        &encoded,
+                        self.header.language_driver,
+                        Some(compacted.format),
+                        self.encoding_override.as_deref(),
+                    ),
+                );
+            }
+        }
+        Ok(Some(compacted))
     }
 
     fn record_end_for_pack(&self) -> Result<usize, DbfError> {

@@ -99,6 +99,11 @@ impl DbfTable {
                 "memo updates require save_with_wal".into(),
             ));
         }
+        if self.layout_changed && self.memo.is_some() {
+            return Err(DbfError::Invalid(
+                "layout-changing memo updates require save_with_wal".into(),
+            ));
+        }
         let path = path.as_ref();
         let _lock = TableLock::acquire(path)?;
         let _ = Self::recover_wal_with_encoding(path, self.encoding_override.as_deref())?;

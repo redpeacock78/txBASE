@@ -39,6 +39,9 @@ The catalog form uses the same exclusive `--after` cursor over catalog transacti
 Adding `--keep-rows COUNT` also retains up to `COUNT` older versions for each physical row before the oldest retained full snapshot.
 The row history is stored in the same MVCC sidecar; the current DBF and full snapshots are not changed by GC.
 
+`pack` removes deleted physical records, renumbers survivors, compacts referenced DBT/FPT memo blocks, refreshes an existing index sidecar, and persists the DBF, memo, index, MVCC, transaction-state, and CDC changes through one WAL-backed boundary.
+`recall` restores one deleted record after schema validation through the normal persistence boundary.
+
 ## Design rules
 
 - Read-only inspection commands must not create or truncate a data, history, or event file merely to inspect it. Lock files and documented torn-tail repair are allowed.

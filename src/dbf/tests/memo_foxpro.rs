@@ -119,6 +119,54 @@ fn reads_and_writes_foxpro_binary_memo_sidecar_as_hex() {
 }
 
 #[test]
+fn pack_compacts_foxpro_binary_memo_blocks_and_updates_pointers() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-foxpro-pack-binary-{}.dbf",
+        std::process::id()
+    ));
+    let memo_path = path.with_extension("fpt");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&memo_path);
+
+    let mut bytes = fixture();
+    bytes[0] = 0xf5;
+    bytes[64 + 11] = b'B';
+    let record_start = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+    let record_length = usize::from(u16::from_le_bytes([bytes[10], bytes[11]]));
+    bytes[record_start + 4..record_start + 14].copy_from_slice(b"         2");
+    let deleted_start = record_start + record_length;
+    bytes[deleted_start + 4..deleted_start + 14].copy_from_slice(b"         1");
+    fs::write(&path, bytes).unwrap();
+
+    let mut memo = vec![0; DBT_BLOCK_SIZE * 3];
+    memo[6..8].copy_from_slice(&(DBT_BLOCK_SIZE as u16).to_be_bytes());
+    memo[DBT_BLOCK_SIZE..DBT_BLOCK_SIZE + 4].copy_from_slice(&0u32.to_be_bytes());
+    memo[DBT_BLOCK_SIZE + 4..DBT_BLOCK_SIZE + 7].copy_from_slice(&[0xde, 0xad, 0x01]);
+    memo[DBT_BLOCK_SIZE * 2..DBT_BLOCK_SIZE * 2 + 4].copy_from_slice(&0u32.to_be_bytes());
+    memo[DBT_BLOCK_SIZE * 2 + 4..DBT_BLOCK_SIZE * 2 + 7].copy_from_slice(&[0xca, 0xfe, 0x02]);
+    fs::write(&memo_path, memo).unwrap();
+
+    let mut table = DbfTable::from_path(&path).unwrap();
+    assert_eq!(table.active_record(1).unwrap().values["NAME"], "cafe02");
+    table.pack().unwrap();
+    table.save_with_wal(&path).unwrap();
+
+    let reread = DbfTable::from_path(&path).unwrap();
+    assert_eq!(reread.records().len(), 1);
+    assert_eq!(reread.active_record(1).unwrap().values["NAME"], "cafe02");
+    assert_eq!(
+        &reread.to_bytes()[record_start + 4..record_start + 14],
+        b"         1"
+    );
+    let memo = MemoFile::open(&memo_path, 0xf5).unwrap();
+    assert_eq!(memo.bytes.len(), DBT_BLOCK_SIZE * 2);
+    assert_eq!(memo.read(1).unwrap().unwrap(), [0xca, 0xfe, 0x02]);
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(memo_path).unwrap();
+}
+
+#[test]
 fn preserves_visual_foxpro_null_sidecar_values() {
     let mut bytes = vec![0; 104];
     bytes[0] = 0x30;
