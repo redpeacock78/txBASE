@@ -33,6 +33,19 @@ pub(super) fn estimated_cost(
     }
 }
 
+pub(super) fn selection_cost(
+    access: &PlannedAccess,
+    index_file: &IndexFile,
+    active_record_count: usize,
+    request: &QueryRequest,
+) -> usize {
+    // Preserve the existing plan ranking while the explanation exposes the additional work terms.
+    let cost = estimated_cost(access, index_file, active_record_count, request);
+    cost.candidate_rows
+        .saturating_add(cost.index_traversal)
+        .saturating_add(cost.sort_work)
+}
+
 fn estimated_record_reads(
     access: &PlannedAccess,
     index_file: &IndexFile,

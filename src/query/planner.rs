@@ -96,10 +96,10 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
     candidates
         .into_iter()
         .min_by_key(|access| {
-            let cost = cost::estimated_cost(access, &index_file, active_record_count, request);
+            let cost = cost::selection_cost(access, &index_file, active_record_count, request);
             let is_equality_prefix =
                 matches!(&access.plan, QueryPlan::CompoundEqualityPrefixIndex { .. });
-            (cost.total, is_equality_prefix)
+            (cost, is_equality_prefix)
         })
         .unwrap_or_else(table_scan)
 }
@@ -270,9 +270,9 @@ fn choose_range(
             });
         }
     }
-    candidates.into_iter().min_by_key(|access| {
-        cost::estimated_cost(access, index_file, active_record_count, request).total
-    })
+    candidates
+        .into_iter()
+        .min_by_key(|access| cost::selection_cost(access, index_file, active_record_count, request))
 }
 
 fn choose_ordered(index_file: &IndexFile, request: &QueryRequest) -> Option<PlannedAccess> {

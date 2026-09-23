@@ -136,7 +136,7 @@ fn explain_endpoint_reports_scan_and_index_plans() {
         .with_method("QUERY".parse().unwrap())
         .with_path("/explain")
         .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
-        .with_body(r#"{"filter":{"NAME":"Bob"}}"#)
+        .with_body(r#"{"filter":{"NAME":"Alice"}}"#)
         .into();
     let response = explain::response(&mut index_request, &path);
     assert_eq!(response.status_code(), StatusCode(200));

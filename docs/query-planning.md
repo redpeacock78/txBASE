@@ -87,7 +87,9 @@ The single-table HTTP server exposes the same explanation as `QUERY /explain`.
 Its response is `{"plan": {"kind": "table_scan"}}` or a tagged index-plan object with the selected name, fields, and directions.
 When a valid index sidecar is available, the response also includes a `cost` object.
 
-`explain_query_details_at` and the `cost` object expose the row-equivalent work used for access-path selection.
+`explain_query_details_at` and the `cost` object expose deterministic row-equivalent work for the selected access path.
+
+The planner continues to choose among bounded candidate-count, index-traversal, and remaining-sort costs; the additional fields make record reads and filter evaluations observable.
 
 `candidate_rows` is the exact candidate count after the selected access path.
 
@@ -129,9 +131,11 @@ A compound index can supply range candidates when every preceding indexed field 
 
 The compound candidate path filters the indexed range component and returns physical record order before the normal query filter pipeline runs.
 
-These statistics feed a deterministic row-equivalent cost estimate.
+These statistics feed the deterministic estimates exposed by `QUERY /explain`.
 
-The planner compares the active-record count for a table scan with the exact candidate count for an index path, adds a bounded logarithmic traversal term derived from the selected sidecar's entry count, counts candidate record reads and filter evaluations, and adds estimated in-memory sort work when the path does not provide the complete requested order.
+The planner compares the active-record count for a table scan with the exact candidate count for an index path, adds a bounded logarithmic traversal term derived from the selected sidecar's entry count, and adds estimated in-memory sort work when the path does not provide the complete requested order.
+
+The explanation additionally reports candidate record reads and filter evaluations, and an equality intersection includes estimated lists read before its record-number intersection.
 
 Access-path candidate construction remains in `src/query/planner.rs`, while the bounded cost calculation lives in `src/query/planner_cost.rs`.
 
