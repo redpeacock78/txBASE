@@ -24,7 +24,12 @@ pub fn copy_table_files(
         ));
     }
 
-    let table = DbfTable::from_path(source)?;
+    let _lock = super::TableLock::acquire(source)?;
+    let recovered = super::recover_path_with_lock_held(source)?;
+    let table = super::load_path_with_lock_held(source)?;
+    if recovered {
+        let _ = crate::index::refresh_if_present(source, &table);
+    }
     table.verify()?;
     let dbf_bytes = fs::read(source)?;
     let source_memo = find_memo_path(source);

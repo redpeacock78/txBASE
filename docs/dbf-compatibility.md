@@ -248,6 +248,8 @@ The CLI now exposes the first local-database maintenance boundary:
 
 The copy operation replaces each destination file through a synced temporary file.
 
+Before reading the source, the copy operation recovers pending WAL or schema-export work and holds the source table lock while it reads and validates the DBF and all supported sidecars.
+
 DBF and memo sidecar replacement is still a sequence of file operations, not a new multi-file transaction protocol.
 
 An interrupted copy should therefore be followed by `txbase verify DEST` before the destination is used.

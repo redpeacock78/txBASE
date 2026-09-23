@@ -122,10 +122,10 @@ pub(crate) fn load_path_with_lock_held(path: &Path) -> Result<DbfTable, DbfError
     DbfTable::load_path_with_encoding(path, None)
 }
 
-pub(crate) fn recover_path_with_lock_held(path: &Path) -> Result<(), DbfError> {
-    DbfTable::recover_wal_with_encoding(path, None)?;
-    let _ = schema_export::recover_schema_export_locked(path)?;
-    Ok(())
+pub(crate) fn recover_path_with_lock_held(path: &Path) -> Result<bool, DbfError> {
+    let wal_recovered = DbfTable::recover_wal_with_encoding(path, None)?;
+    let export_recovered = schema_export::recover_schema_export_locked(path)?;
+    Ok(wal_recovered || export_recovered)
 }
 
 pub fn apply_schema_metadata(path: impl AsRef<Path>, schema_bytes: &[u8]) -> Result<(), DbfError> {
