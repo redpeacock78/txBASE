@@ -34,7 +34,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - A native threaded asynchronous query-stream adapter with bounded backpressure and drop cancellation.
 - A committed single-table change-data-capture sidecar with WAL recovery and an inspection CLI.
 - A committed catalog change-data-capture sidecar with atomic multi-table events and an inspection CLI.
-- A process-local fixed-term replication log with journaled `TXRP` sidecar state, validated current and retained catalog snapshots, suffix-preserving local log compaction, atomic local snapshot installation, restart position checks, bounded historical follower reads, and bounded HTTP entry/snapshot delivery routes.
+- A process-local fixed-term replication log with journaled `TXRP` sidecar state, validated current and retained catalog snapshots, suffix-preserving local log compaction, follower progress acknowledgements, atomic local snapshot installation, restart position checks, bounded historical follower reads, and bounded HTTP entry, snapshot, and progress routes.
 - An opt-in coarse-grained serializable transaction boundary for one DBF table.
 - An opt-in coarse-grained serializable transaction boundary for a catalog's discovered tables.
 
@@ -97,8 +97,8 @@ Catalog `POST /transaction` commits named-table mutations through a catalog jour
 Large direct equality joins can use fresh compatible ordered indexes for merge execution.
 The planner falls back to bounded hash or index-probe paths when that merge path is unavailable or more expensive.
 
-The catalog server also exposes `GET /replication/status`, `GET /replication/snapshot`, `POST /replication/entry`, and `POST /replication/snapshot` for versioned, bounded replication delivery.
-In the default `authority` role, `/transaction` and named-table mutation routes construct replication entries and journal the catalog change with the matching `TXRP` position. `--replication-role follower` rejects direct catalog mutations and accepts changes through replication delivery. Set `TXBASE_REPLICATION_TOKEN` to require an RFC 6750 Bearer token on the four replication routes; TLS, quorum, and consensus are not provided.
+The catalog server also exposes `GET /replication/status`, `GET /replication/snapshot`, `POST /replication/entry`, `POST /replication/snapshot`, and authority-only `POST /replication/progress` for versioned, bounded replication delivery and follower progress acknowledgements.
+In the default `authority` role, `/transaction` and named-table mutation routes construct replication entries and journal the catalog change with the matching `TXRP` position. `--replication-role follower` rejects direct catalog mutations and accepts changes through replication delivery. Set `TXBASE_REPLICATION_TOKEN` to require an RFC 6750 Bearer token on the replication routes; TLS, quorum, and consensus are not provided.
 
 See the [query model](docs/query-model.md), [aggregation model](docs/aggregation.md), [join model](docs/joins.md), and [query planning](docs/query-planning.md) for the exact boundary.
 
@@ -313,7 +313,7 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 
 The current implementation prioritizes bounded, recoverable local operations over an unbounded database server.
 
-It also includes a process-local fixed-term replication authority and follower boundary over the catalog journal, with a journaled `TXRP` sidecar, automatic authority capture for catalog mutations, retained-snapshot export, suffix-preserving local log compaction, bounded historical follower reads, and bounded HTTP entry/snapshot delivery; quorum, consensus, networked snapshot transfer, follower-watermark coordination, and distributed follower-read guarantees remain outside the current slice.
+It also includes a process-local fixed-term replication authority and follower boundary over the catalog journal, with a journaled `TXRP` sidecar, automatic authority capture for catalog mutations, retained-snapshot export, suffix-preserving local log compaction, follower progress acknowledgements, bounded historical follower reads, and bounded HTTP entry, snapshot, and progress delivery; quorum, consensus, networked snapshot transfer, and distributed follower-read guarantees remain outside the current slice.
 
 The roadmap still leaves the following areas as future work:
 

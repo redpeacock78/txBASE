@@ -61,10 +61,11 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 | `POST /{table}/records`（カタログサーバー） | 既知のフィールドを持つ JSON オブジェクト | `201 Created`とテーブル修飾済み`Location` |
 | `PUT`、`PATCH`、`DELETE /{table}/records/{id}`（カタログサーバー） | 単一テーブルと同じ本文および前提条件規則 | 独立した名前付きテーブル更新 |
 | `POST /transaction`（カタログサーバー） | 名前付きテーブル更新操作を含む JSON オブジェクト | カタログジャーナルコミット後に新しいカタログ`ETag`付きの`200`、または失敗した`If-Match`と一致する`If-None-Match`に対する変更なしの`412` |
-| `GET`、`HEAD /replication/status`（カタログサーバー） | JSON 本文なし | バージョン付きレプリケーション位置とカタログ表現の状態 |
+| `GET`、`HEAD /replication/status`（カタログサーバー） | JSON 本文なし | バージョン付きレプリケーション位置、カタログ表現、フォロワー数、安全な圧縮index |
 | `GET`、`HEAD /replication/snapshot`（カタログサーバー） | JSON 本文なし | 検証済み`ReplicationSnapshot` JSON |
 | `POST /replication/entry`（カタログサーバー） | バージョン付き`ReplicationEntry` JSON | 適用または重複確認の`200` |
 | `POST /replication/snapshot`（カタログサーバー） | バージョン付き`ReplicationSnapshot` JSON | インストールまたは重複確認の`200` |
+| `POST /replication/progress`（カタログサーバー） | バージョン付き`ReplicationProgress` JSON | 現在の安全な圧縮indexを含む確認応答の`200` |
 | `POST /records` | 既知のフィールドを持つ JSON オブジェクト | `201 Created`と`Location` |
 | `POST /transaction` | 空でない`operations`配列を含む JSON オブジェクト | 一つのテーブルのアトミックスナップショットコミット後に`200` |
 | `PUT /records/{id}` | フィールドを置き換える JSON オブジェクト | 結果のレコード |
@@ -79,15 +80,15 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 レプリケーションスナップショットのルートには、64 MiBのエンコード済みスナップショット上限を適用します。
 該当するバイト数の上限を超えた場合、HTTP境界は`413 Payload Too Large`を返します。
 
-レプリケーション配送は、構築済みのエントリまたはスナップショットを検証します。
-不正な文書は`422`を返し、term、位置、スキーマ、競合する重複、スナップショット状態の競合は`409`を返し、ストレージ障害は`500`を返します。
+レプリケーション配送は、構築済みのエントリ、スナップショット、またはフォロワー適用位置を検証します。
+不正な文書は`422`を返し、term、位置、スキーマ、適用位置、競合する重複、スナップショット状態の競合は`409`を返し、ストレージ障害は`500`を返します。
 既定の`authority`ロールでは、`/transaction`と名前付きテーブルの更新ルートが、カタログ更新と`TXRP`状態を原子的に追記します。
-`follower`ロールは直接のカタログ更新を`409`で拒否し、レプリケーション配送は受け付けます。
+`follower`ロールは直接のカタログ更新と適用位置確認を`409`で拒否し、レプリケーション配送は受け付けます。
 
 ### レプリケーション認証
 
 [RFC 6750](https://www.rfc-editor.org/rfc/rfc6750.html)は、HTTPリクエスト向けのBearer認可方式を定義します。
-`serve-catalog`で`TXBASE_REPLICATION_TOKEN`を設定すると、4つのレプリケーションルートに`Authorization: Bearer <token>`が必要になります。
+`serve-catalog`で`TXBASE_REPLICATION_TOKEN`を設定すると、すべてのレプリケーションルートに`Authorization: Bearer <token>`が必要になります。
 設定値はASCIIの`b64token`でなければならず、txBASEはサーバー起動前に検査し、受信値をエラー応答へ露出させずに比較します。
 認証情報がない、不正な形式である、または一致しない場合は、`WWW-Authenticate: Bearer`とJSONエラーコードを伴う`401 Unauthorized`を返します。
 その他のカタログルートは、このトークン境界の対象ではありません。

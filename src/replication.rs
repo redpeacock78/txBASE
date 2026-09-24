@@ -10,7 +10,12 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
+mod progress;
 mod snapshot;
+pub use progress::{
+    MAX_REPLICATION_FOLLOWERS, REPLICATION_PROGRESS_VERSION, ReplicationProgress,
+    ReplicationProgressOutcome,
+};
 pub use snapshot::{MAX_REPLICATION_SNAPSHOT_BYTES, ReplicationSnapshot};
 
 pub const REPLICATION_ENTRY_VERSION: u16 = 1;
@@ -125,6 +130,8 @@ pub struct ReplicationLog {
     base_index: u64,
     base_transaction_id: u64,
     entries: Vec<ReplicationEntry>,
+    #[serde(skip, default)]
+    follower_watermarks: progress::FollowerWatermarks,
 }
 
 impl ReplicationLog {
@@ -146,6 +153,7 @@ impl ReplicationLog {
             base_index,
             base_transaction_id,
             entries: Vec::new(),
+            follower_watermarks: progress::FollowerWatermarks::default(),
         })
     }
 
@@ -171,6 +179,27 @@ impl ReplicationLog {
 
     pub fn entries(&self) -> &[ReplicationEntry] {
         &self.entries
+    }
+
+    /// Records a validated, monotonic applied position for one follower.
+    pub fn acknowledge_follower(
+        &mut self,
+        catalog: &Catalog,
+        progress: ReplicationProgress,
+    ) -> Result<ReplicationProgressOutcome, ReplicationError> {
+        let mut watermarks = std::mem::take(&mut self.follower_watermarks);
+        let outcome = watermarks.acknowledge(self, catalog, progress);
+        self.follower_watermarks = watermarks;
+        outcome
+    }
+
+    /// Returns the lowest applied index reported by all registered followers.
+    pub fn safe_compaction_index(&self) -> Option<u64> {
+        self.follower_watermarks.safe_compaction_index()
+    }
+
+    pub fn follower_count(&self) -> usize {
+        self.follower_watermarks.follower_count()
     }
 
     /// Reads a retained catalog snapshot at an already applied transaction.
@@ -645,6 +674,20 @@ pub enum ReplicationError {
         requested: u64,
         applied: u64,
     },
+    ProgressUnavailable {
+        requested: u64,
+        applied: u64,
+    },
+    ProgressRegression {
+        follower_id: String,
+        previous_index: u64,
+        requested_index: u64,
+    },
+    NoFollowerProgress,
+    CompactionNotAcknowledged {
+        requested: u64,
+        acknowledged: u64,
+    },
     SnapshotStale {
         requested: u64,
         current: u64,
@@ -721,6 +764,29 @@ impl Display for ReplicationError {
             Self::SnapshotUnavailable { requested, applied } => write!(
                 formatter,
                 "replication snapshot index {requested} is beyond applied index {applied}"
+            ),
+            Self::ProgressUnavailable { requested, applied } => write!(
+                formatter,
+                "replication progress index {requested} is beyond applied index {applied}"
+            ),
+            Self::ProgressRegression {
+                follower_id,
+                previous_index,
+                requested_index,
+            } => write!(
+                formatter,
+                "replication progress for follower {follower_id} regressed from index {previous_index} to {requested_index}"
+            ),
+            Self::NoFollowerProgress => write!(
+                formatter,
+                "replication compaction requires progress from at least one follower"
+            ),
+            Self::CompactionNotAcknowledged {
+                requested,
+                acknowledged,
+            } => write!(
+                formatter,
+                "replication compaction index {requested} exceeds the lowest acknowledged follower index {acknowledged}"
             ),
             Self::SnapshotStale { requested, current } => write!(
                 formatter,

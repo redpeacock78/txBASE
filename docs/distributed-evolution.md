@@ -4,8 +4,8 @@ This document isolates the replication and distributed-database boundary.
 
 txBASE now has a local, process-scoped replication slice and a bounded HTTP
 delivery surface. It defines the versioned entry, single-authority replay,
-snapshot installation, and versioned transport contracts, but it is not quorum
-replication or consensus.
+snapshot installation, follower progress acknowledgements, and versioned
+transport contracts, but it is not quorum replication or consensus.
 
 ## 1. Prerequisites
 
@@ -32,7 +32,7 @@ single-writer correctness (current local slice)
       ↓
 replicated log (current local replay slice)
       ↓
-bounded HTTP entry and snapshot delivery (current transport slice)
+bounded HTTP entry, snapshot, and progress delivery (current transport slice)
       ↓
 Raft or another selected authority protocol
 ```
@@ -100,7 +100,7 @@ Installing the same image is an acknowledged duplicate. Older images,
 conflicting images at the same transaction, sidecar divergence, and a catalog
 that changed during installation are rejected without publishing a partial
 replacement. This is a local recovery primitive; networked snapshot transport
-and follower coordination remain future distributed contracts.
+remains a future distributed contract.
 
 ### Authority-side log compaction
 
@@ -119,28 +119,60 @@ The sidecar-only journal path gives one local authority a crash-recoverable
 retention primitive. It does not decide which followers have acknowledged a
 snapshot, establish a quorum, or expose networked log truncation.
 
+### Follower watermark coordination
+
+`ReplicationProgress` is the control-plane acknowledgement sent by a follower
+after it has applied a position.
+It contains a bounded follower identifier, term, log index, catalog transaction
+ID, and catalog representation tag.
+
+The authority validates the acknowledgement against its live log and catalog.
+It rejects a different term or schema tag, an index outside the retained log,
+an index and transaction pair that is not contiguous, and a position that
+regresses for an already registered follower.
+An exact repeated acknowledgement is a duplicate and does not change state.
+
+The authority computes the safe compaction index as the minimum acknowledged
+index across all registered followers.
+`compact_through_acknowledged` rejects compaction when no follower has
+registered progress or when the requested snapshot is beyond that minimum.
+The existing `compact_through` method remains an explicit local-only primitive
+for deployments that intentionally manage retention outside this control plane.
+
+Follower progress is process-local control state and is not included in the
+`TXRP` data-plane sidecar.
+An authority restart therefore forgets its acknowledgements and requires each
+follower to register again before coordinated compaction can proceed.
+This prevents an old acknowledgement from authorizing retention after a term
+or process restart.
+
+This contract is a watermark safety check, not quorum or consensus.
+It has no membership persistence, lease, fencing token, network retry queue, or
+failure detector.
+
 ### HTTP transport boundary
 
 The catalog server exposes a version 1 JSON delivery surface for an already
-constructed replication entry or snapshot:
+constructed replication entry, snapshot, or follower progress acknowledgement:
 
 | Route | Contract |
 | --- | --- |
-| `GET` or `HEAD /replication/status` | Returns the transport version, fixed term, base and last positions, and the current catalog representation tag. |
+| `GET` or `HEAD /replication/status` | Returns the transport version, fixed term, base and last positions, catalog representation tag, follower count, and safe compaction index. |
 | `GET` or `HEAD /replication/snapshot` | Exports the current validated `ReplicationSnapshot` JSON. |
 | `POST /replication/entry` | Validates and delivers one `ReplicationEntry`; exact duplicates are acknowledged. |
 | `POST /replication/snapshot` | Validates and installs one `ReplicationSnapshot` atomically. |
+| `POST /replication/progress` | Authority-only endpoint that validates one `ReplicationProgress` acknowledgement and returns the current safe compaction index. |
 
 Entry request bodies use the existing 1 MiB JSON input bound. Snapshot request
 bodies use the existing 64 MiB encoded-payload bound. Invalid documents return
-`422`; term, position, schema, conflicting-duplicate, and snapshot state conflicts return
+`422`; term, position, schema, conflicting-duplicate, progress, and snapshot state conflicts return
 `409`; storage failures return `500`. Responses identify the transport version
-and, for apply operations, the resulting index and transaction ID.
+and, for apply or progress operations, the resulting index and transaction ID.
 
 This is a delivery boundary, not a leader-election protocol.
 The default `authority` role captures `/transaction` and named-table mutation routes in the same catalog journal commit as `TXRP` state and rechecks table ETags before commit.
 The `follower` role reports its role through `status`, rejects direct catalog mutations with `409`, and still accepts replication delivery.
-When `TXBASE_REPLICATION_TOKEN` is configured, the four replication routes require
+When `TXBASE_REPLICATION_TOKEN` is configured, the replication routes require
 RFC 6750 Bearer authorization and return `401` with `WWW-Authenticate: Bearer`
 for missing or invalid credentials. Without that environment variable, the routes
 remain unauthenticated for local development compatibility. The transport still has
@@ -182,15 +214,16 @@ The local slice defines the following initial contracts:
 - follower reads: a caller can read a retained catalog image at an applied log transaction;
 - snapshot recovery: a follower can install one validated catalog image atomically and resume at its next log position;
 - log retention: the local authority can compact through an exact retained snapshot without advancing the catalog transaction or losing the log suffix;
+- follower safety: the authority accepts monotonic follower progress, exposes the minimum acknowledged index, and permits coordinated compaction only through that index; acknowledgements must be re-established after restart;
 - transport: the catalog server accepts versioned entry and snapshot JSON through bounded HTTP routes with explicit conflict statuses;
 - authority capture: the default authority role journals `/transaction` and named-table mutations with `TXRP` state, while the follower role rejects direct catalog mutations;
-- authentication: `TXBASE_REPLICATION_TOKEN` optionally protects the four replication routes with RFC 6750 Bearer credentials;
+- authentication: `TXBASE_REPLICATION_TOKEN` optionally protects the replication routes with RFC 6750 Bearer credentials;
 - deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
 
 The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
-- TLS, streaming, retry, backpressure, follower-watermark coordination, and quorum-safe log truncation;
+- TLS, streaming, retry, backpressure, quorum-safe log truncation, and authority discovery;
 - observability for lag and transport state;
 - quorum and network failure behavior.
 
@@ -210,12 +243,13 @@ The initial local replication slice is complete because it has:
 - partition-gap, serialized-log recovery, term, and schema-tag tests;
 - snapshot round-trip, installation, resume, stale-image, and conflict tests;
 - retained snapshot export, suffix-preserving log compaction, sidecar-only journal recovery, and compaction conflict tests;
+- follower watermark monotonicity, minimum-index compaction gating, restart re-registration, and bounded HTTP progress tests;
 - bounded HTTP status, entry delivery, duplicate delivery, snapshot installation, and export tests;
 - default authority capture, table-ETag recheck, and follower read-only role tests;
 - explicit write consistency: only the next catalog transaction can commit;
 - a leader/follower fixture that fails and recovers without external infrastructure.
 
-Quorum replication, follower-watermark coordination, full MVCC coordination,
+Quorum replication, full MVCC coordination,
 distributed follower-read guarantees, and distributed partitioning remain future
 work.
 
@@ -238,8 +272,8 @@ It does not select Raft for txBASE and does not define the future txBASE log, sc
 
 The current repository has a local entry/replay implementation, a versioned
 snapshot installation primitive, a journaled `TXRP` sidecar, bounded HTTP
-delivery routes, default authority capture for catalog mutations, a read-only
-follower role, and a bounded historical follower-read primitive, but no
-consensus, quorum, distributed follower-read guarantee, or distributed-join
-implementation.
+delivery routes, follower watermark acknowledgements, default authority
+capture for catalog mutations, a read-only follower role, and a bounded
+historical follower-read primitive, but no consensus, quorum, distributed
+follower-read guarantee, or distributed-join implementation.
 Those statements remain design constraints rather than compatibility claims.

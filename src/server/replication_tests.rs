@@ -1,6 +1,6 @@
 use super::{CatalogReplicationRole, JSON_QUERY_MEDIA_TYPE, header};
 use crate::catalog::Catalog;
-use crate::replication::{ReplicationLog, ReplicationSnapshot};
+use crate::replication::{ReplicationLog, ReplicationProgress, ReplicationSnapshot};
 use crate::xbase::{OperationIr, OperationMethod};
 use serde_json::{Value, json};
 use std::fs;
@@ -180,6 +180,71 @@ fn replication_http_installs_and_exports_snapshots() {
 
     fs::remove_dir_all(leader_root).unwrap();
     fs::remove_dir_all(follower_root).unwrap();
+}
+
+#[test]
+fn replication_http_accepts_follower_progress_and_reports_safe_compaction() {
+    let root = temporary_catalog("progress");
+    let mut catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::new(10).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+    log.propose(&catalog, vec![post(4, "Dave")]).unwrap();
+    let (_, schema_tag) = catalog.schema_representation().unwrap();
+    let progress = ReplicationProgress::new("follower-a".into(), 10, 1, 1, schema_tag).unwrap();
+
+    let mut request = json_request(
+        Method::Post,
+        "/replication/progress",
+        progress.to_json().unwrap(),
+    );
+    let response = super::replication::response(
+        &mut request,
+        "/replication/progress",
+        &mut catalog,
+        &mut log,
+        CatalogReplicationRole::Authority,
+    )
+    .unwrap();
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert_eq!(response_json(response)["outcome"], "accepted");
+    assert_eq!(log.safe_compaction_index(), Some(1));
+
+    let mut status_request = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/replication/status")
+        .into();
+    let response = super::replication::response(
+        &mut status_request,
+        "/replication/status",
+        &mut catalog,
+        &mut log,
+        CatalogReplicationRole::Authority,
+    )
+    .unwrap();
+    let status = response_json(response);
+    assert_eq!(status["follower_count"], 1);
+    assert_eq!(status["safe_compaction_index"], 1);
+
+    let mut follower_request = json_request(
+        Method::Post,
+        "/replication/progress",
+        progress.to_json().unwrap(),
+    );
+    let response = super::replication::response(
+        &mut follower_request,
+        "/replication/progress",
+        &mut catalog,
+        &mut log,
+        CatalogReplicationRole::Follower,
+    )
+    .unwrap();
+    assert_eq!(response.status_code(), StatusCode(409));
+    assert_eq!(
+        response_json(response)["error"]["code"],
+        "replication_progress_authority_only"
+    );
+
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

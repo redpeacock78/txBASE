@@ -225,6 +225,7 @@ impl ReplicationLog {
             base_index: snapshot.last_index,
             base_transaction_id: snapshot.last_transaction_id,
             entries: self.entries[offset..].to_vec(),
+            follower_watermarks: self.follower_watermarks.clone(),
         };
         next_log.validate()?;
         let sidecar_after = next_log.to_sidecar_bytes()?;
@@ -237,6 +238,24 @@ impl ReplicationLog {
             .map_err(ReplicationError::Commit)?;
         *self = next_log;
         Ok(())
+    }
+
+    /// Compacts only through an index acknowledged by every registered follower.
+    pub fn compact_through_acknowledged(
+        &mut self,
+        catalog: &Catalog,
+        snapshot: ReplicationSnapshot,
+    ) -> Result<(), ReplicationError> {
+        let Some(acknowledged) = self.safe_compaction_index() else {
+            return Err(ReplicationError::NoFollowerProgress);
+        };
+        if snapshot.last_index > acknowledged {
+            return Err(ReplicationError::CompactionNotAcknowledged {
+                requested: snapshot.last_index,
+                acknowledged,
+            });
+        }
+        self.compact_through(catalog, snapshot)
     }
 
     /// Installs a retained catalog image and compacts the local log to its base position.

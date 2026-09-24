@@ -515,6 +515,136 @@ fn authority_compaction_rejects_unavailable_and_divergent_snapshots() {
 }
 
 #[test]
+fn follower_watermarks_gate_compaction_and_require_re_registration_after_restart() {
+    let root = catalog_root("watermarks");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::open(&catalog, 1).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+    log.propose(&catalog, vec![post(4, "Dave")]).unwrap();
+    log.propose(&catalog, vec![post(5, "Eve")]).unwrap();
+    let (_, schema_tag) = catalog.schema_representation().unwrap();
+
+    let snapshot = log.snapshot_at(&catalog, 2).unwrap();
+    assert!(matches!(
+        log.compact_through_acknowledged(&catalog, snapshot.clone()),
+        Err(ReplicationError::NoFollowerProgress)
+    ));
+
+    let progress =
+        ReplicationProgress::new("follower-a".into(), 1, 1, 1, schema_tag.clone()).unwrap();
+    assert_eq!(
+        log.acknowledge_follower(&catalog, progress.clone())
+            .unwrap(),
+        ReplicationProgressOutcome::Accepted
+    );
+    assert_eq!(
+        log.acknowledge_follower(&catalog, progress).unwrap(),
+        ReplicationProgressOutcome::Duplicate
+    );
+    let progress =
+        ReplicationProgress::new("follower-b".into(), 1, 1, 1, schema_tag.clone()).unwrap();
+    assert_eq!(
+        log.acknowledge_follower(&catalog, progress).unwrap(),
+        ReplicationProgressOutcome::Accepted
+    );
+    assert_eq!(log.safe_compaction_index(), Some(1));
+    assert!(matches!(
+        log.compact_through_acknowledged(&catalog, snapshot.clone()),
+        Err(ReplicationError::CompactionNotAcknowledged {
+            requested: 2,
+            acknowledged: 1
+        })
+    ));
+
+    let progress =
+        ReplicationProgress::new("follower-a".into(), 1, 2, 2, schema_tag.clone()).unwrap();
+    assert_eq!(
+        log.acknowledge_follower(&catalog, progress).unwrap(),
+        ReplicationProgressOutcome::Accepted
+    );
+    assert_eq!(log.safe_compaction_index(), Some(1));
+    let progress = ReplicationProgress::new("follower-b".into(), 1, 2, 2, schema_tag).unwrap();
+    assert_eq!(
+        log.acknowledge_follower(&catalog, progress).unwrap(),
+        ReplicationProgressOutcome::Accepted
+    );
+    assert_eq!(log.safe_compaction_index(), Some(2));
+    log.compact_through_acknowledged(&catalog, snapshot)
+        .unwrap();
+    assert_eq!(log.base_index(), 2);
+    assert_eq!(log.follower_count(), 2);
+
+    let reopened = ReplicationLog::from_sidecar_bytes(&log.to_sidecar_bytes().unwrap()).unwrap();
+    assert_eq!(reopened.base_index(), 2);
+    assert_eq!(reopened.follower_count(), 0);
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn follower_watermarks_reject_invalid_positions_and_regressions() {
+    let root = catalog_root("watermark-validation");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::open(&catalog, 1).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+    log.propose(&catalog, vec![post(4, "Dave")]).unwrap();
+    let (_, schema_tag) = catalog.schema_representation().unwrap();
+
+    let ahead = ReplicationProgress::new("follower-a".into(), 1, 3, 3, schema_tag.clone()).unwrap();
+    assert!(matches!(
+        log.acknowledge_follower(&catalog, ahead),
+        Err(ReplicationError::ProgressUnavailable {
+            requested: 3,
+            applied: 2
+        })
+    ));
+
+    let wrong_term =
+        ReplicationProgress::new("follower-b".into(), 2, 1, 1, schema_tag.clone()).unwrap();
+    assert!(matches!(
+        log.acknowledge_follower(&catalog, wrong_term),
+        Err(ReplicationError::TermMismatch {
+            expected: 1,
+            actual: 2
+        })
+    ));
+    let wrong_schema =
+        ReplicationProgress::new("follower-b".into(), 1, 1, 1, "other-schema".into()).unwrap();
+    assert!(matches!(
+        log.acknowledge_follower(&catalog, wrong_schema),
+        Err(ReplicationError::SchemaMismatch { .. })
+    ));
+    let transaction_gap =
+        ReplicationProgress::new("follower-b".into(), 1, 1, 2, schema_tag.clone()).unwrap();
+    assert!(matches!(
+        log.acknowledge_follower(&catalog, transaction_gap),
+        Err(ReplicationError::TransactionGap {
+            expected: 1,
+            actual: 2
+        })
+    ));
+
+    let accepted =
+        ReplicationProgress::new("follower-a".into(), 1, 1, 1, schema_tag.clone()).unwrap();
+    log.acknowledge_follower(&catalog, accepted).unwrap();
+    let regression = ReplicationProgress::new("follower-a".into(), 1, 0, 0, schema_tag).unwrap();
+    assert!(matches!(
+        log.acknowledge_follower(&catalog, regression),
+        Err(ReplicationError::ProgressRegression {
+            follower_id,
+            previous_index: 1,
+            requested_index: 0
+        }) if follower_id == "follower-a"
+    ));
+
+    let invalid_id =
+        ReplicationProgress::new("follower/a".into(), 1, 1, 1, "schema".into()).unwrap_err();
+    assert!(matches!(invalid_id, ReplicationError::Invalid(_)));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn snapshot_install_rejects_a_stale_txrp_sidecar_without_mutating_catalog() {
     let leader_root = catalog_root("snapshot-sidecar-leader");
     let follower_root = catalog_root("snapshot-sidecar-follower");

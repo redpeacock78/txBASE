@@ -5,7 +5,8 @@ use super::{
 use crate::catalog::{Catalog, CatalogTransactionError};
 use crate::replication::{
     ApplyOutcome, MAX_REPLICATION_SNAPSHOT_BYTES, REPLICATION_TRANSPORT_VERSION, ReplicationEntry,
-    ReplicationError, ReplicationLog, ReplicationSnapshot,
+    ReplicationError, ReplicationLog, ReplicationProgress, ReplicationProgressOutcome,
+    ReplicationSnapshot,
 };
 use serde_json::json;
 use tiny_http::{Method, Request};
@@ -13,6 +14,7 @@ use tiny_http::{Method, Request};
 const STATUS_PATH: &str = "/replication/status";
 const SNAPSHOT_PATH: &str = "/replication/snapshot";
 const ENTRY_PATH: &str = "/replication/entry";
+const PROGRESS_PATH: &str = "/replication/progress";
 
 #[cfg(test)]
 pub(super) fn response(
@@ -47,11 +49,12 @@ pub(super) fn response_with_auth(
         (Method::Get | Method::Head, SNAPSHOT_PATH) => snapshot(catalog, log),
         (Method::Post, ENTRY_PATH) => receive_entry(request, catalog, log),
         (Method::Post, SNAPSHOT_PATH) => install_snapshot(request, catalog, log),
+        (Method::Post, PROGRESS_PATH) => receive_progress(request, catalog, log, role),
         _ => json_response(
             405,
             error(
                 "method_not_allowed",
-                "replication supports GET or HEAD for status and snapshots, and POST for entries or snapshots",
+                "replication supports GET or HEAD for status and snapshots, and POST for entries, snapshots, or follower progress",
             ),
             false,
         )
@@ -147,6 +150,8 @@ fn status(catalog: &Catalog, log: &ReplicationLog, role: CatalogReplicationRole)
             "base_transaction_id": log.base_transaction_id(),
             "last_index": log.last_index(),
             "last_transaction_id": log.last_transaction_id(),
+            "follower_count": log.follower_count(),
+            "safe_compaction_index": log.safe_compaction_index(),
             "schema_tag": schema_tag,
         }),
         false,
@@ -213,6 +218,53 @@ fn install_snapshot(
     };
     match log.install_snapshot(catalog, snapshot) {
         Ok(outcome) => apply_outcome_response(outcome),
+        Err(error) => replication_error_response(error),
+    }
+}
+
+fn receive_progress(
+    request: &mut Request,
+    catalog: &Catalog,
+    log: &mut ReplicationLog,
+    role: CatalogReplicationRole,
+) -> HttpResponse {
+    if role != CatalogReplicationRole::Authority {
+        return json_response(
+            409,
+            error(
+                "replication_progress_authority_only",
+                "follower progress must be acknowledged by the authority",
+            ),
+            false,
+        );
+    }
+    let body = match read_json_body(request, "POST /replication/progress", false) {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+    let progress = match ReplicationProgress::from_json(&body) {
+        Ok(progress) => progress,
+        Err(error) => return replication_error_response(error),
+    };
+    let follower_id = progress.follower_id.clone();
+    let index = progress.index;
+    let transaction_id = progress.transaction_id;
+    match log.acknowledge_follower(catalog, progress) {
+        Ok(outcome) => json_response(
+            200,
+            json!({
+                "transport_version": REPLICATION_TRANSPORT_VERSION,
+                "outcome": match outcome {
+                    ReplicationProgressOutcome::Accepted => "accepted",
+                    ReplicationProgressOutcome::Duplicate => "duplicate",
+                },
+                "follower_id": follower_id,
+                "index": index,
+                "transaction_id": transaction_id,
+                "safe_compaction_index": log.safe_compaction_index(),
+            }),
+            false,
+        ),
         Err(error) => replication_error_response(error),
     }
 }
@@ -297,6 +349,12 @@ fn error_json(replication_error: &ReplicationError) -> serde_json::Value {
         ReplicationError::ReadUnavailable { .. }
         | ReplicationError::ReadHistoryUnavailable { .. } => "replication_read_unavailable",
         ReplicationError::SnapshotUnavailable { .. } => "replication_snapshot_unavailable",
+        ReplicationError::ProgressUnavailable { .. } => "replication_progress_unavailable",
+        ReplicationError::ProgressRegression { .. } => "replication_progress_regression",
+        ReplicationError::NoFollowerProgress => "replication_no_follower_progress",
+        ReplicationError::CompactionNotAcknowledged { .. } => {
+            "replication_compaction_not_acknowledged"
+        }
         ReplicationError::SnapshotStale { .. } => "replication_snapshot_stale",
         ReplicationError::SnapshotConflict { .. } => "replication_snapshot_conflict",
         ReplicationError::SnapshotInstallRace { .. } => "replication_snapshot_install_race",

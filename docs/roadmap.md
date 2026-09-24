@@ -77,7 +77,7 @@ The baseline intentionally does not include the following:
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Cloud object-storage adapters and retention policy.
-- Quorum or consensus, follower-watermark or quorum-coordinated snapshot/log retention, distributed follower reads, and distributed partitioning.
+- Quorum or consensus, quorum-coordinated snapshot/log retention, distributed follower reads, and distributed partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -363,18 +363,20 @@ It also exports a versioned `ReplicationSnapshot` and installs it through one
 catalog-journal commit: the catalog image becomes the new MVCC base, stale
 table-local state sidecars are cleared, and the empty `TXRP` position resumes
 at the snapshot's next index and transaction.
-The catalog server also exposes version 1 `status`, entry-delivery, snapshot-export, and snapshot-install routes as bounded HTTP JSON.
+The catalog server also exposes version 1 `status`, entry-delivery, snapshot-export, snapshot-install, and follower-progress routes as bounded HTTP JSON.
 The default `authority` role routes `/transaction` and named-table mutations through the same catalog journal commit as `TXRP` state and rechecks table ETags before commit.
 The `follower` role reports its role through `status`, rejects direct catalog mutations with `409`, and still accepts replication delivery.
-Optional RFC 6750 Bearer authentication protects those four replication routes when `TXBASE_REPLICATION_TOKEN` is configured; TLS, quorum, consensus, and retry queues are not provided.
-The authority can export a retained snapshot at an applied index and compact the local `TXRP` prefix through that exact image while preserving the suffix and catalog transaction ID; follower-watermark coordination and quorum-safe truncation remain future work.
+Optional RFC 6750 Bearer authentication protects the replication routes when `TXBASE_REPLICATION_TOKEN` is configured; TLS, quorum, consensus, and retry queues are not provided.
+The authority can export a retained snapshot at an applied index and compact the local `TXRP` prefix through that exact image while preserving the suffix and catalog transaction ID.
+It accepts validated monotonic follower progress and exposes the minimum acknowledged index for coordinated compaction.
+Follower progress is process-local and must be re-registered after an authority restart; quorum-safe truncation remains future work.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, and `TXRP` sidecars.
 - Raft or another explicitly selected authority protocol.
-- TLS, retry, backpressure, follower-watermark coordination, and quorum-safe log truncation.
+- TLS, retry, backpressure, quorum-safe log truncation, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.
 

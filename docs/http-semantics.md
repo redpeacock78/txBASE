@@ -61,10 +61,11 @@ The response does not authorize a method on a resource that its route rules woul
 | `POST /{table}/records` (catalog server) | JSON object with known fields | `201 Created`, table-qualified `Location` |
 | `PUT`/`PATCH`/`DELETE /{table}/records/{id}` (catalog server) | Same body and precondition rules as single-table routes | Independent named-table mutation |
 | `POST /transaction` (catalog server) | JSON object containing named-table mutation operations | `200` with the new catalog `ETag` after catalog-journal commit, or `412` without mutation for a failed `If-Match` or matching `If-None-Match` |
-| `GET`/`HEAD /replication/status` (catalog server) | No JSON body | Versioned replication position and catalog representation status |
+| `GET`/`HEAD /replication/status` (catalog server) | No JSON body | Versioned replication position, catalog representation, follower count, and safe compaction index |
 | `GET`/`HEAD /replication/snapshot` (catalog server) | No JSON body | Validated `ReplicationSnapshot` JSON |
 | `POST /replication/entry` (catalog server) | Versioned `ReplicationEntry` JSON | `200` apply or duplicate result |
 | `POST /replication/snapshot` (catalog server) | Versioned `ReplicationSnapshot` JSON | `200` install or duplicate result |
+| `POST /replication/progress` (catalog server) | Versioned `ReplicationProgress` JSON | `200` acknowledgement with the current safe compaction index |
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |
 | `POST /transaction` | JSON object containing a non-empty `operations` array | `200` after one-table atomic snapshot commit |
 | `PUT /records/{id}` | JSON object replacing fields | Resulting record |
@@ -80,15 +81,15 @@ Every JSON request body except `POST /replication/snapshot` is capped at
 The replication snapshot route is capped at the 64 MiB encoded snapshot bound.
 The HTTP boundary returns `413 Payload Too Large` when the applicable byte limit is exceeded.
 
-Replication delivery validates already-constructed entries or snapshots.
-Malformed documents return `422`, term, position, schema, conflicting-duplicate, or snapshot-state conflicts return `409`, and storage failures return `500`.
+Replication delivery validates already-constructed entries, snapshots, or follower progress.
+Malformed documents return `422`, term, position, schema, progress, conflicting-duplicate, or snapshot-state conflicts return `409`, and storage failures return `500`.
 In the default `authority` role, `/transaction` and named-table mutation routes append their catalog change and `TXRP` state atomically.
-The `follower` role rejects direct catalog mutations with `409`; replication delivery remains available.
+The `follower` role rejects direct catalog mutations and progress acknowledgements with `409`; replication delivery remains available.
 
 ### Replication authentication
 
 [RFC 6750](https://www.rfc-editor.org/rfc/rfc6750.html) defines the Bearer authorization scheme for HTTP requests.
-When `TXBASE_REPLICATION_TOKEN` is configured for `serve-catalog`, the four replication routes require `Authorization: Bearer <token>`.
+When `TXBASE_REPLICATION_TOKEN` is configured for `serve-catalog`, all replication routes require `Authorization: Bearer <token>`.
 The configured value must be an ASCII `b64token`; txBASE validates it before the server starts and compares the received value without exposing it in an error response.
 Missing, malformed, or non-matching credentials return `401 Unauthorized` with `WWW-Authenticate: Bearer` and a JSON error code.
 The other catalog routes are not covered by this token boundary.
