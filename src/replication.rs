@@ -12,11 +12,15 @@ use std::fmt::{self, Display, Formatter};
 
 mod progress;
 mod snapshot;
+mod transport;
 pub use progress::{
     MAX_REPLICATION_FOLLOWERS, REPLICATION_PROGRESS_VERSION, ReplicationProgress,
     ReplicationProgressOutcome,
 };
 pub use snapshot::{MAX_REPLICATION_SNAPSHOT_BYTES, ReplicationSnapshot};
+pub use transport::{
+    MAX_REPLICATION_ENTRY_BATCH, MAX_REPLICATION_ENTRY_BATCH_BYTES, ReplicationEntryBatch,
+};
 
 pub const REPLICATION_ENTRY_VERSION: u16 = 1;
 pub const REPLICATION_LOG_VERSION: u16 = 1;
@@ -693,6 +697,10 @@ pub enum ReplicationError {
         requested: u64,
         applied: u64,
     },
+    EntriesUnavailable {
+        requested: u64,
+        applied: u64,
+    },
     ProgressUnavailable {
         requested: u64,
         applied: u64,
@@ -783,6 +791,10 @@ impl Display for ReplicationError {
             Self::SnapshotUnavailable { requested, applied } => write!(
                 formatter,
                 "replication snapshot index {requested} is beyond applied index {applied}"
+            ),
+            Self::EntriesUnavailable { requested, applied } => write!(
+                formatter,
+                "replication entry index {requested} is beyond applied index {applied}"
             ),
             Self::ProgressUnavailable { requested, applied } => write!(
                 formatter,

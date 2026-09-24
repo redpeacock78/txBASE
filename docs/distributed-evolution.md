@@ -32,7 +32,7 @@ single-writer correctness (current local slice)
       ↓
 replicated log (current local replay slice)
       ↓
-bounded HTTP entry, snapshot, and progress delivery (current transport slice)
+bounded HTTP status, contiguous entry-range, entry, snapshot, and progress delivery (current transport slice)
       ↓
 Raft or another selected authority protocol
 ```
@@ -154,12 +154,13 @@ failure detector.
 
 ### HTTP transport boundary
 
-The catalog server exposes a version 1 JSON delivery surface for an already
-constructed replication entry, snapshot, or follower progress acknowledgement:
+The catalog server exposes a version 1 JSON delivery surface for contiguous entry
+ranges, already constructed replication entries, snapshots, and follower progress acknowledgements:
 
 | Route | Contract |
 | --- | --- |
 | `GET` or `HEAD /replication/status` | Returns the transport version, fixed term, base and last positions, catalog representation tag, follower count, and safe compaction index. |
+| `GET` or `HEAD /replication/entries?after=<index>&limit=<count>` | Returns a bounded contiguous `ReplicationEntryBatch` page after the requested retained index, with `next_after` when another entry remains. |
 | `GET` or `HEAD /replication/snapshot` | Exports the current validated `ReplicationSnapshot` JSON. |
 | `POST /replication/entry` | Validates and delivers one `ReplicationEntry`; exact duplicates are acknowledged. |
 | `POST /replication/snapshot` | Validates and installs one `ReplicationSnapshot` atomically. |
@@ -170,6 +171,11 @@ bodies use the existing 64 MiB encoded-payload bound. Invalid documents return
 `422`; term, position, schema, conflicting-duplicate, progress, and snapshot state conflicts return
 `409`; storage failures return `500`. Responses identify the transport version
 and, for apply or progress operations, the resulting index and transaction ID.
+The entry-range query accepts a non-negative `after` index and a `limit` from 1 through
+128, defaults to `after=0` and the maximum limit, and returns contiguous retained entries only.
+An `after` position before the retained base or beyond the applied index returns `409`.
+Malformed or repeated query parameters return `400`. The serialized response is capped at the
+shared 1 MiB JSON boundary, so a page may contain fewer entries than its requested limit.
 
 This is a delivery boundary, not a leader-election protocol.
 The default `authority` role captures `/transaction` and named-table mutation routes in the same catalog journal commit as `TXRP` state and rechecks table ETags before commit.
@@ -217,7 +223,7 @@ The local slice defines the following initial contracts:
 - snapshot recovery: a follower can install one validated catalog image atomically and resume at its next log position;
 - log retention: the local authority can compact through an exact retained snapshot without advancing the catalog transaction or losing the log suffix;
 - follower safety: the authority accepts monotonic follower progress, exposes the minimum acknowledged index, and permits coordinated compaction only through that index; acknowledgements must be re-established after restart;
-- transport: the catalog server accepts versioned entry and snapshot JSON through bounded HTTP routes with explicit conflict statuses;
+- transport: the catalog server exposes bounded status and contiguous entry-range reads, and accepts versioned entry, snapshot, and progress JSON through HTTP routes with explicit conflict statuses;
 - authority capture: the default authority role journals `/transaction` and named-table mutations with `TXRP` state, while the follower role rejects direct catalog mutations;
 - authentication: `TXBASE_REPLICATION_TOKEN` optionally protects the replication routes with RFC 6750 Bearer credentials;
 - deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
@@ -246,7 +252,7 @@ The initial local replication slice is complete because it has:
 - snapshot round-trip, installation, resume, stale-image, and conflict tests;
 - retained snapshot export, suffix-preserving log compaction, sidecar-only journal recovery, and compaction conflict tests;
 - follower watermark monotonicity, minimum-index compaction gating, restart re-registration, and bounded HTTP progress tests;
-- bounded HTTP status, entry delivery, duplicate delivery, snapshot installation, and export tests;
+- bounded HTTP status, contiguous entry-range, entry delivery, duplicate delivery, snapshot installation, and export tests;
 - default authority capture, table-ETag recheck, and follower read-only role tests;
 - explicit write consistency: only the next catalog transaction can commit;
 - a leader/follower fixture that fails and recovers without external infrastructure.
@@ -274,7 +280,7 @@ It does not select Raft for txBASE and does not define the future txBASE log, sc
 
 The current repository has a local entry/replay implementation, a versioned
 snapshot installation primitive, a journaled `TXRP` sidecar, bounded HTTP
-delivery routes, follower watermark acknowledgements, default authority
+status and contiguous entry-range delivery routes, follower watermark acknowledgements, default authority
 capture for catalog mutations, a read-only follower role, and a bounded
 historical follower-read primitive, but no consensus, quorum, distributed
 follower-read guarantee, or distributed-join implementation.

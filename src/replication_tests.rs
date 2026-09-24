@@ -671,6 +671,62 @@ fn follower_progress_reports_the_applied_log_position_and_round_trips() {
 }
 
 #[test]
+fn replication_entry_batches_page_contiguous_positions_and_boundaries() {
+    let root = catalog_root("entry-batch");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::new(8).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+    log.propose(&catalog, vec![post(4, "Dave")]).unwrap();
+    log.propose(&catalog, vec![post(5, "Eve")]).unwrap();
+
+    let first = log.entry_batch(0, 2).unwrap();
+    assert_eq!(first.after_index, 0);
+    assert_eq!(
+        first
+            .entries
+            .iter()
+            .map(|entry| entry.index)
+            .collect::<Vec<_>>(),
+        [1, 2]
+    );
+    assert_eq!(first.next_after, Some(2));
+    assert_eq!(
+        ReplicationEntryBatch::from_json(&first.to_json().unwrap()).unwrap(),
+        first
+    );
+
+    let second = log.entry_batch(first.next_after.unwrap(), 2).unwrap();
+    assert_eq!(
+        second
+            .entries
+            .iter()
+            .map(|entry| entry.index)
+            .collect::<Vec<_>>(),
+        [3]
+    );
+    assert_eq!(second.next_after, None);
+    assert!(
+        log.entry_batch(log.last_index(), 1)
+            .unwrap()
+            .entries
+            .is_empty()
+    );
+    assert!(matches!(
+        log.entry_batch(log.last_index() + 1, 1),
+        Err(ReplicationError::EntriesUnavailable {
+            requested: 4,
+            applied: 3
+        })
+    ));
+    assert!(matches!(
+        log.entry_batch(0, 0),
+        Err(ReplicationError::Invalid(_))
+    ));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn snapshot_install_rejects_a_stale_txrp_sidecar_without_mutating_catalog() {
     let leader_root = catalog_root("snapshot-sidecar-leader");
     let follower_root = catalog_root("snapshot-sidecar-follower");

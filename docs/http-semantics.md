@@ -62,6 +62,7 @@ The response does not authorize a method on a resource that its route rules woul
 | `PUT`/`PATCH`/`DELETE /{table}/records/{id}` (catalog server) | Same body and precondition rules as single-table routes | Independent named-table mutation |
 | `POST /transaction` (catalog server) | JSON object containing named-table mutation operations | `200` with the new catalog `ETag` after catalog-journal commit, or `412` without mutation for a failed `If-Match` or matching `If-None-Match` |
 | `GET`/`HEAD /replication/status` (catalog server) | No JSON body | Versioned replication position, catalog representation, follower count, and safe compaction index |
+| `GET`/`HEAD /replication/entries?after={index}&limit={count}` (catalog server) | Optional non-negative `after` and bounded positive `limit` query parameters | A contiguous versioned `ReplicationEntryBatch` page with `next_after` when more entries remain |
 | `GET`/`HEAD /replication/snapshot` (catalog server) | No JSON body | Validated `ReplicationSnapshot` JSON |
 | `POST /replication/entry` (catalog server) | Versioned `ReplicationEntry` JSON | `200` apply or duplicate result |
 | `POST /replication/snapshot` (catalog server) | Versioned `ReplicationSnapshot` JSON | `200` install or duplicate result |
@@ -83,6 +84,12 @@ The HTTP boundary returns `413 Payload Too Large` when the applicable byte limit
 
 Replication delivery validates already-constructed entries, snapshots, or follower progress.
 Malformed documents return `422`, term, position, schema, progress, conflicting-duplicate, or snapshot-state conflicts return `409`, and storage failures return `500`.
+The entry-range route accepts a non-negative `after` index and a `limit` from 1 through
+128, defaults to `after=0` and the maximum limit, and returns only contiguous retained entries.
+An `after` position before the retained base or beyond the authority's applied index returns
+`409`; malformed or repeated query parameters return `400`. The serialized batch is capped at
+the shared 1 MiB JSON boundary and may contain fewer entries than requested when that cap is
+reached. `next_after` is the last returned index only when another retained entry remains.
 In the default `authority` role, `/transaction` and named-table mutation routes append their catalog change and `TXRP` state atomically.
 The `follower` role rejects direct catalog mutations and progress acknowledgements with `409`; replication delivery remains available.
 

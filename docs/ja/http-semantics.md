@@ -62,6 +62,7 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 | `PUT`、`PATCH`、`DELETE /{table}/records/{id}`（カタログサーバー） | 単一テーブルと同じ本文および前提条件規則 | 独立した名前付きテーブル更新 |
 | `POST /transaction`（カタログサーバー） | 名前付きテーブル更新操作を含む JSON オブジェクト | カタログジャーナルコミット後に新しいカタログ`ETag`付きの`200`、または失敗した`If-Match`と一致する`If-None-Match`に対する変更なしの`412` |
 | `GET`、`HEAD /replication/status`（カタログサーバー） | JSON 本文なし | バージョン付きレプリケーション位置、カタログ表現、フォロワー数、安全な圧縮index |
+| `GET`、`HEAD /replication/entries?after={index}&limit={count}`（カタログサーバー） | 任意の非負`after`と、有界な正の`limit`クエリパラメーター | `next_after`を含む、連続したバージョン付き`ReplicationEntryBatch`ページ |
 | `GET`、`HEAD /replication/snapshot`（カタログサーバー） | JSON 本文なし | 検証済み`ReplicationSnapshot` JSON |
 | `POST /replication/entry`（カタログサーバー） | バージョン付き`ReplicationEntry` JSON | 適用または重複確認の`200` |
 | `POST /replication/snapshot`（カタログサーバー） | バージョン付き`ReplicationSnapshot` JSON | インストールまたは重複確認の`200` |
@@ -82,6 +83,11 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 
 レプリケーション配送は、構築済みのエントリ、スナップショット、またはフォロワー適用位置を検証します。
 不正な文書は`422`を返し、term、位置、スキーマ、適用位置、競合する重複、スナップショット状態の競合は`409`を返し、ストレージ障害は`500`を返します。
+エントリ範囲ルートは、非負の`after` indexと1から128までの`limit`を受け付けます。
+既定値は`after=0`と最大`limit`です。
+保持されている連続したエントリだけを返し、保持基底より前またはauthorityの適用済み位置より後の`after`には`409`を返します。
+不正または重複したクエリパラメーターには`400`を返します。
+シリアライズ済みページには共有する1 MiBのJSON上限を適用するため、要求した件数より少ないエントリを返す場合があります。
 既定の`authority`ロールでは、`/transaction`と名前付きテーブルの更新ルートが、カタログ更新と`TXRP`状態を原子的に追記します。
 `follower`ロールは直接のカタログ更新と適用位置確認を`409`で拒否し、レプリケーション配送は受け付けます。
 

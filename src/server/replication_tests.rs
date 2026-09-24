@@ -1,6 +1,8 @@
 use super::{CatalogReplicationRole, JSON_QUERY_MEDIA_TYPE, header};
 use crate::catalog::Catalog;
-use crate::replication::{ReplicationLog, ReplicationProgress, ReplicationSnapshot};
+use crate::replication::{
+    ReplicationEntryBatch, ReplicationLog, ReplicationProgress, ReplicationSnapshot,
+};
 use crate::xbase::{OperationIr, OperationMethod};
 use serde_json::{Value, json};
 use std::fs;
@@ -127,6 +129,126 @@ fn replication_http_delivers_entries_idempotently_and_reports_status() {
 
     fs::remove_dir_all(leader_root).unwrap();
     fs::remove_dir_all(follower_root).unwrap();
+}
+
+#[test]
+fn replication_http_exports_contiguous_entry_pages() {
+    let root = temporary_catalog("entries");
+    let mut catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::new(6).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+    log.propose(&catalog, vec![post(4, "Dave")]).unwrap();
+    log.propose(&catalog, vec![post(5, "Eve")]).unwrap();
+
+    let mut first_request = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/replication/entries?after=0&limit=2")
+        .into();
+    let response = super::replication::response(
+        &mut first_request,
+        "/replication/entries",
+        &mut catalog,
+        &mut log,
+        CatalogReplicationRole::Authority,
+    )
+    .unwrap();
+    let first: ReplicationEntryBatch = serde_json::from_value(response_json(response)).unwrap();
+    assert_eq!(
+        first
+            .entries
+            .iter()
+            .map(|entry| entry.index)
+            .collect::<Vec<_>>(),
+        [1, 2]
+    );
+    assert_eq!(first.next_after, Some(2));
+
+    let mut second_request = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/replication/entries?after=2&limit=2")
+        .into();
+    let response = super::replication::response(
+        &mut second_request,
+        "/replication/entries",
+        &mut catalog,
+        &mut log,
+        CatalogReplicationRole::Authority,
+    )
+    .unwrap();
+    let second: ReplicationEntryBatch = serde_json::from_value(response_json(response)).unwrap();
+    assert_eq!(
+        second
+            .entries
+            .iter()
+            .map(|entry| entry.index)
+            .collect::<Vec<_>>(),
+        [3]
+    );
+    assert_eq!(second.next_after, None);
+
+    let mut unavailable_request = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/replication/entries?after=4&limit=1")
+        .into();
+    let response = super::replication::response(
+        &mut unavailable_request,
+        "/replication/entries",
+        &mut catalog,
+        &mut log,
+        CatalogReplicationRole::Authority,
+    )
+    .unwrap();
+    assert_eq!(response.status_code(), StatusCode(409));
+    assert_eq!(
+        response_json(response)["error"]["code"],
+        "replication_entries_unavailable"
+    );
+
+    let mut invalid_request = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/replication/entries?after=0&limit=0")
+        .into();
+    let response = super::replication::response(
+        &mut invalid_request,
+        "/replication/entries",
+        &mut catalog,
+        &mut log,
+        CatalogReplicationRole::Authority,
+    )
+    .unwrap();
+    assert_eq!(response.status_code(), StatusCode(400));
+    assert_eq!(
+        response_json(response)["error"]["code"],
+        "invalid_replication_cursor"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn replication_entry_query_parameters_are_bounded_and_unambiguous() {
+    let (after, limit) = match super::replication::parse_entry_parameters("/replication/entries") {
+        Ok(parameters) => parameters,
+        Err(_) => panic!("default replication entry parameters must be accepted"),
+    };
+    assert_eq!(after, 0);
+    assert_eq!(limit, crate::replication::MAX_REPLICATION_ENTRY_BATCH);
+
+    for query in [
+        "/replication/entries?after=1&after=2",
+        "/replication/entries?limit=0",
+        "/replication/entries?limit=129",
+        "/replication/entries?unknown=1",
+        "/replication/entries?after",
+    ] {
+        assert_eq!(
+            super::replication::parse_entry_parameters(query)
+                .unwrap_err()
+                .status_code(),
+            StatusCode(400),
+            "{query}"
+        );
+    }
 }
 
 #[test]
@@ -347,6 +469,7 @@ fn replication_http_enforces_configured_bearer_token() {
 
     for (method, path) in [
         (Method::Get, "/replication/status"),
+        (Method::Get, "/replication/entries"),
         (Method::Get, "/replication/snapshot"),
         (Method::Post, "/replication/entry"),
         (Method::Post, "/replication/snapshot"),

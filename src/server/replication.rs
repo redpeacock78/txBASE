@@ -4,14 +4,15 @@ use super::{
 };
 use crate::catalog::{Catalog, CatalogTransactionError};
 use crate::replication::{
-    ApplyOutcome, MAX_REPLICATION_SNAPSHOT_BYTES, REPLICATION_TRANSPORT_VERSION, ReplicationEntry,
-    ReplicationError, ReplicationLog, ReplicationProgress, ReplicationProgressOutcome,
-    ReplicationSnapshot,
+    ApplyOutcome, MAX_REPLICATION_ENTRY_BATCH, MAX_REPLICATION_SNAPSHOT_BYTES,
+    REPLICATION_TRANSPORT_VERSION, ReplicationEntry, ReplicationError, ReplicationLog,
+    ReplicationProgress, ReplicationProgressOutcome, ReplicationSnapshot,
 };
 use serde_json::json;
 use tiny_http::{Method, Request};
 
 const STATUS_PATH: &str = "/replication/status";
+const ENTRIES_PATH: &str = "/replication/entries";
 const SNAPSHOT_PATH: &str = "/replication/snapshot";
 const ENTRY_PATH: &str = "/replication/entry";
 const PROGRESS_PATH: &str = "/replication/progress";
@@ -46,6 +47,7 @@ pub(super) fn response_with_auth(
 
     Some(match (request.method(), path) {
         (Method::Get | Method::Head, STATUS_PATH) => status(catalog, log, role),
+        (Method::Get | Method::Head, ENTRIES_PATH) => entries(request, log),
         (Method::Get | Method::Head, SNAPSHOT_PATH) => snapshot(catalog, log),
         (Method::Post, ENTRY_PATH) => receive_entry(request, catalog, log),
         (Method::Post, SNAPSHOT_PATH) => install_snapshot(request, catalog, log),
@@ -54,7 +56,7 @@ pub(super) fn response_with_auth(
             405,
             error(
                 "method_not_allowed",
-                "replication supports GET or HEAD for status and snapshots, and POST for entries, snapshots, or follower progress",
+                "replication supports GET or HEAD for status, entries, and snapshots, and POST for entries, snapshots, or follower progress",
             ),
             false,
         )
@@ -177,6 +179,74 @@ fn snapshot(catalog: &Catalog, log: &ReplicationLog) -> HttpResponse {
         Ok(body) => json_bytes_response(200, body, false),
         Err(error) => replication_error_response(error),
     }
+}
+
+fn entries(request: &Request, log: &ReplicationLog) -> HttpResponse {
+    let (after_index, limit) = match parse_entry_parameters(request.url()) {
+        Ok(parameters) => parameters,
+        Err(response) => return response,
+    };
+    match log
+        .entry_batch(after_index, limit)
+        .and_then(|batch| batch.to_json())
+    {
+        Ok(body) => json_bytes_response(200, body, false),
+        Err(error) => replication_error_response(error),
+    }
+}
+
+pub(super) fn parse_entry_parameters(url: &str) -> Result<(u64, usize), HttpResponse> {
+    let query = url.split_once('?').map_or("", |(_, query)| query);
+    let mut after = None;
+    let mut limit = None;
+    for pair in query.split('&').filter(|pair| !pair.is_empty()) {
+        let Some((name, value)) = pair.split_once('=') else {
+            return Err(invalid_entry_parameters(
+                "replication entry query parameters must use name=value",
+            ));
+        };
+        match name {
+            "after" => {
+                if after.is_some() {
+                    return Err(invalid_entry_parameters(
+                        "replication after parameter was repeated",
+                    ));
+                }
+                after = Some(value.parse::<u64>().map_err(|_| {
+                    invalid_entry_parameters("replication after must be a non-negative integer")
+                })?);
+            }
+            "limit" => {
+                if limit.is_some() {
+                    return Err(invalid_entry_parameters(
+                        "replication limit parameter was repeated",
+                    ));
+                }
+                let parsed = value.parse::<usize>().map_err(|_| {
+                    invalid_entry_parameters("replication limit must be a positive integer")
+                })?;
+                if !(1..=MAX_REPLICATION_ENTRY_BATCH).contains(&parsed) {
+                    return Err(invalid_entry_parameters(&format!(
+                        "replication limit must be between 1 and {MAX_REPLICATION_ENTRY_BATCH}"
+                    )));
+                }
+                limit = Some(parsed);
+            }
+            _ => {
+                return Err(invalid_entry_parameters(
+                    "unknown replication entry query parameter",
+                ));
+            }
+        }
+    }
+    Ok((
+        after.unwrap_or(0),
+        limit.unwrap_or(MAX_REPLICATION_ENTRY_BATCH),
+    ))
+}
+
+fn invalid_entry_parameters(message: &str) -> HttpResponse {
+    json_response(400, error("invalid_replication_cursor", message), false)
 }
 
 fn receive_entry(
@@ -348,6 +418,7 @@ fn error_json(replication_error: &ReplicationError) -> serde_json::Value {
         ReplicationError::SidecarStateMismatch => "replication_sidecar_mismatch",
         ReplicationError::ReadUnavailable { .. }
         | ReplicationError::ReadHistoryUnavailable { .. } => "replication_read_unavailable",
+        ReplicationError::EntriesUnavailable { .. } => "replication_entries_unavailable",
         ReplicationError::SnapshotUnavailable { .. } => "replication_snapshot_unavailable",
         ReplicationError::ProgressUnavailable { .. } => "replication_progress_unavailable",
         ReplicationError::ProgressRegression { .. } => "replication_progress_regression",
