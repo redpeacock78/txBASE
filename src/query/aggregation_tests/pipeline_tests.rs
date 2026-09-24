@@ -43,12 +43,15 @@ fn groups_by_a_shared_scalar_expression() {
     let table = table_with_two_active_records();
     let request = crate::query::parse(
         br#"{
-            "aggregate": [{
-                "$group": {
-                    "_id": {"$add": ["$AGE", 1]},
-                    "count": {"$count": {}}
-                }
-            }]
+            "aggregate": [
+                {
+                    "$group": {
+                        "_id": {"$add": ["$AGE", 1]},
+                        "count": {"$count": {}}
+                    }
+                },
+                {"$sort": {"_id": 1}}
+            ]
         }"#,
     )
     .unwrap();
