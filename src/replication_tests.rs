@@ -645,6 +645,32 @@ fn follower_watermarks_reject_invalid_positions_and_regressions() {
 }
 
 #[test]
+fn follower_progress_reports_the_applied_log_position_and_round_trips() {
+    let root = catalog_root("progress-for");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::open(&catalog, 7).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+    log.propose(&catalog, vec![post(4, "Dave")]).unwrap();
+
+    let progress = log.progress_for(&catalog, "follower-a".into()).unwrap();
+    assert_eq!(progress.version, REPLICATION_PROGRESS_VERSION);
+    assert_eq!(progress.follower_id, "follower-a");
+    assert_eq!(progress.term, 7);
+    assert_eq!(progress.index, 2);
+    assert_eq!(progress.transaction_id, 2);
+    assert!(!progress.schema_tag.is_empty());
+    assert_eq!(
+        ReplicationProgress::from_json(&progress.to_json().unwrap()).unwrap(),
+        progress
+    );
+
+    let invalid = log.progress_for(&catalog, "follower/a".into()).unwrap_err();
+    assert!(matches!(invalid, ReplicationError::Invalid(_)));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn snapshot_install_rejects_a_stale_txrp_sidecar_without_mutating_catalog() {
     let leader_root = catalog_root("snapshot-sidecar-leader");
     let follower_root = catalog_root("snapshot-sidecar-follower");

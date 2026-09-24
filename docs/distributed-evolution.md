@@ -125,6 +125,8 @@ snapshot, establish a quorum, or expose networked log truncation.
 after it has applied a position.
 It contains a bounded follower identifier, term, log index, catalog transaction
 ID, and catalog representation tag.
+`ReplicationLog::progress_for` constructs this acknowledgement from the
+follower's applied log position and live catalog representation.
 
 The authority validates the acknowledgement against its live log and catalog.
 It rejects a different term or schema tag, an index outside the retained log,

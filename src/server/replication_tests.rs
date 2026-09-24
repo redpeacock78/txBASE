@@ -345,6 +345,34 @@ fn replication_http_enforces_configured_bearer_token() {
     .unwrap();
     assert_eq!(response.status_code(), StatusCode(200));
 
+    for (method, path) in [
+        (Method::Get, "/replication/status"),
+        (Method::Get, "/replication/snapshot"),
+        (Method::Post, "/replication/entry"),
+        (Method::Post, "/replication/snapshot"),
+        (Method::Post, "/replication/progress"),
+    ] {
+        let mut request = TestRequest::new()
+            .with_method(method.clone())
+            .with_path(path)
+            .into();
+        let response = super::replication::response_with_auth(
+            &mut request,
+            path,
+            &mut catalog,
+            &mut log,
+            CatalogReplicationRole::Authority,
+            Some("secret"),
+        )
+        .unwrap();
+        assert_eq!(response.status_code(), StatusCode(401), "{method:?} {path}");
+        assert_eq!(
+            response_header(&response, "WWW-Authenticate").as_deref(),
+            Some("Bearer"),
+            "{method:?} {path}"
+        );
+    }
+
     fs::remove_dir_all(root).unwrap();
 }
 

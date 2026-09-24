@@ -103,6 +103,7 @@ operation IR
 
 `ReplicationProgress`は、フォロワーが適用した位置をauthorityへ通知する制御面の確認情報です。
 この情報は、有界なフォロワー識別子、term、ログindex、カタログtransaction ID、カタログ表現タグを含みます。
+`ReplicationLog::progress_for`は、フォロワー側の適用済みログ位置と稼働中のカタログ表現から、この確認情報を生成します。
 
 authorityは、稼働中のログとカタログに対して確認情報を検証します。
 異なるtermまたはスキーマタグ、保持ログの範囲外のindex、連続しないindexとtransaction IDの組み合わせ、登録済みフォロワーの後退した位置は拒否します。

@@ -202,6 +202,25 @@ impl ReplicationLog {
         self.follower_watermarks.follower_count()
     }
 
+    /// Builds the progress acknowledgement for this log's applied position.
+    pub fn progress_for(
+        &self,
+        catalog: &Catalog,
+        follower_id: String,
+    ) -> Result<ReplicationProgress, ReplicationError> {
+        self.ensure_catalog_position(current_transaction_id(catalog)?)?;
+        let (_, schema_tag) = catalog
+            .schema_representation()
+            .map_err(ReplicationError::Catalog)?;
+        ReplicationProgress::new(
+            follower_id,
+            self.term(),
+            self.last_index(),
+            self.last_transaction_id(),
+            schema_tag,
+        )
+    }
+
     /// Reads a retained catalog snapshot at an already applied transaction.
     ///
     /// This is a local historical follower-read primitive. It does not claim
