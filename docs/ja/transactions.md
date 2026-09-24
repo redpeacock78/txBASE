@@ -73,6 +73,8 @@ APIはマージ方針を自動選択せず、ネットワーク応答を失っ�
 
 単一テーブルのHTTP `POST /transaction`経路は、この適用とcommitの境界を再利用します。
 
+この経路はWASM境界と`OperationBatch`デコーダーを共有し、空のバッチまたは1,000操作を超えるバッチを、操作の適用前に拒否します。
+
 カタログの`POST /transaction`経路は、カタログロックの下でDBFとサイドカーのイメージを調整するため、テーブル間ジャーナルの別境界として残ります。
 
 テーブル横断の書き込み境界をbeginからcommitまたはrollbackまで保持する必要があるRustの呼び出し元には、`Catalog::begin_serializable`が`CatalogTransaction`を返します。

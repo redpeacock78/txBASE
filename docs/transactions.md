@@ -73,6 +73,9 @@ The API does not select the merge policy automatically and does not promise exac
 
 The single-table HTTP `POST /transaction` route reuses this apply-and-commit boundary.
 
+The route shares the `OperationBatch` decoder with the WASM boundary and rejects empty batches or
+batches larger than 1,000 operations before applying any operation.
+
 The catalog `POST /transaction` route remains a separate cross-table journal boundary because it coordinates DBF and sidecar images under the catalog lock.
 
 For a Rust caller that must hold a cross-table write boundary from begin through commit or

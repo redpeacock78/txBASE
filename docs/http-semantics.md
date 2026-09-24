@@ -270,6 +270,9 @@ or WAL recovery. The current boundary is one DBF table; it does not provide cros
 catalog-wide transaction IDs, or MVCC visibility. The Rust API boundary is defined in
 [Snapshot transactions](transactions.md).
 
+The single-table and catalog transaction routes share the `OperationBatch` decoder with WASM.
+They reject empty batches and batches larger than 1,000 operations before applying any operation.
+
 The catalog server's `POST /transaction` accepts `/table/records` and
 `/table/records/{id}` mutation paths. It prepares every affected table under one catalog lock,
 commits the DBF and changed sidecars through a directory journal, and rolls back an incomplete

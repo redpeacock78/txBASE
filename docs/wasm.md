@@ -25,7 +25,9 @@ Its versioned boundary currently provides:
   operation IR;
 - `apply_operations_json` for the same operation IR in the bounded
   `{"operations":[...]}` transaction document; it applies the whole batch to
-  a private copy and publishes a snapshot only when every operation succeeds;
+  a private copy and publishes a snapshot only when every operation succeeds.
+  The shared `MAX_OPERATION_BATCH` limit is 1,000 operations, and oversized
+  or empty batches are rejected before any operation is applied;
 - a `wasm-bindgen` `WasmDatabase` wrapper on `wasm32` with the same methods;
 - native contract tests and a CI `wasm32-unknown-unknown` library check.
 

@@ -140,6 +140,7 @@ mod bindings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::xbase::MAX_OPERATION_BATCH;
     use serde_json::{Value, json};
 
     fn fixture() -> Vec<u8> {
@@ -216,5 +217,19 @@ mod tests {
             .apply_operations_json(br#"{"operations":[]}"#)
             .unwrap_err();
         assert!(error.to_string().contains("must not be empty"));
+    }
+
+    #[test]
+    fn wasm_core_rejects_oversized_operation_batches_without_mutation() {
+        let mut core = WasmCore::open_dbf(&fixture()).unwrap();
+        let before = core.snapshot();
+        let operations = (0..=MAX_OPERATION_BATCH)
+            .map(|_| json!({"method": "DELETE", "path": "/records/1"}))
+            .collect::<Vec<_>>();
+        let body = serde_json::to_vec(&json!({"operations": operations})).unwrap();
+
+        let error = core.apply_operations_json(&body).unwrap_err();
+        assert!(error.to_string().contains("operation count"));
+        assert_eq!(core.snapshot(), before);
     }
 }

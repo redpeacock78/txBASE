@@ -20,6 +20,7 @@ WASMはパスとbodyの検証を二重に実装しません。
 - 既存の`POST`、`PUT`、`PATCH`、`DELETE`操作IRを受け取る`apply_operation_json`。
 - 同じ操作IRを有界な`{"operations":[...]}`トランザクション文書で受け取る`apply_operations_json`。
   すべての操作が成功した場合だけ、非公開コピーからスナップショットを公開する。
+  共有する`MAX_OPERATION_BATCH`の上限は1,000操作であり、上限超過または空のバッチは操作を適用する前に拒否する。
 - `wasm32`で同じメソッドを公開する`wasm-bindgen`の`WasmDatabase`ラッパー。
 - ネイティブ契約テストと、CIでの`wasm32-unknown-unknown`ライブラリ検査。
 
