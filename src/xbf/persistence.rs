@@ -22,6 +22,12 @@ pub(super) fn read_path_without_recovery_with_limits(
     path: &Path,
     limits: &XbfLimits,
 ) -> Result<XbfTable, XbfError> {
+    let file_size = fs::metadata(path)?.len();
+    if file_size > limits.max_file_size as u64 {
+        return Err(XbfError::Invalid(
+            "XBF file exceeds the configured limit".into(),
+        ));
+    }
     let bytes = fs::read(path)?;
     decode_with_limits(&bytes, limits)
 }

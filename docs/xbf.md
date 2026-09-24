@@ -239,6 +239,8 @@ The codec exposes explicit limits for file, section, record, field-name, and val
 
 The encoder checks the fixed header, schema, and directory footprint before building record data, then checks each record against both section and file limits before extending its buffers.
 The decoder applies the corresponding section, record, value, field, record-count, and file checks before allocating decoded collections.
+Path reads preflight the filesystem size against the configured file limit before calling `fs::read`, and the decoder rechecks the loaded bytes to cover a concurrent growth race.
+XBF WAL recovery rejects a snapshot whose declared length exceeds that same file limit before copying the snapshot out of the WAL record.
 
 ## 8. Generations and transaction log
 

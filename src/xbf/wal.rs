@@ -60,7 +60,7 @@ pub(super) fn recover_path_with_limits(
     let current_generation = current_generation(path, limits)?;
     let mut pending = None;
     for (_, payload) in wal.records() {
-        pending = Some(decode_record(payload)?);
+        pending = Some(decode_record(payload, limits)?);
     }
     let (base_generation, target_generation, snapshot) = pending.expect("non-empty WAL");
     let table = decode_with_limits(&snapshot, limits)?;
@@ -103,7 +103,7 @@ pub(super) fn encode_record(
     Ok(bytes)
 }
 
-fn decode_record(payload: &[u8]) -> Result<(u64, u64, Vec<u8>), XbfError> {
+fn decode_record(payload: &[u8], limits: &XbfLimits) -> Result<(u64, u64, Vec<u8>), XbfError> {
     if payload.len() < RECORD_HEADER_SIZE || payload[..4] != RECORD_MAGIC {
         return Err(XbfError::Invalid("XBF WAL record header is invalid".into()));
     }
@@ -131,6 +131,11 @@ fn decode_record(payload: &[u8]) -> Result<(u64, u64, Vec<u8>), XbfError> {
     if end != payload.len() {
         return Err(XbfError::Invalid(
             "XBF WAL snapshot length does not match the record".into(),
+        ));
+    }
+    if length > limits.max_file_size {
+        return Err(XbfError::Invalid(
+            "XBF WAL snapshot exceeds the configured file limit".into(),
         ));
     }
     let snapshot = payload[RECORD_HEADER_SIZE..].to_vec();

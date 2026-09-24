@@ -1,6 +1,7 @@
 use super::{
     XbfField, XbfLimits, XbfRecord, XbfTable, XbfType, XbfValue, decode, decode_with_limits,
-    encode, encode_with_limits, read_path, recover_path, save_with_wal, write_path,
+    encode, encode_with_limits, read_path, read_path_with_limits, recover_path, save_with_wal,
+    write_path,
 };
 use crate::transaction::{FileWal, Wal};
 use std::fs;
@@ -269,6 +270,55 @@ fn rejects_file_and_section_limits_while_building_record_data() {
     };
     let error = encode_with_limits(&table, &section_limited).unwrap_err();
     assert!(error.to_string().contains("record data section exceeds"));
+}
+
+#[test]
+fn enforces_file_limits_before_loading_a_path_or_wal_snapshot() {
+    let path = snapshot_test_path("path-file-limit");
+    let wal_path = path.with_extension("xwl");
+    let lock_path = path.with_extension("txbase.lock");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&lock_path);
+
+    let base = fixture();
+    let base_bytes = encode(&base).unwrap();
+    write_path(&path, &base).unwrap();
+    let path_limits = XbfLimits {
+        max_file_size: base_bytes.len() - 1,
+        ..XbfLimits::default()
+    };
+    let error = read_path_with_limits(&path, &path_limits).unwrap_err();
+    assert!(error.to_string().contains("XBF file exceeds"));
+
+    let mut target = base.clone();
+    target.generation += 1;
+    target.records.push(target.records[0].clone());
+    let target_bytes = encode(&target).unwrap();
+    let limits = XbfLimits {
+        max_file_size: base_bytes.len(),
+        ..XbfLimits::default()
+    };
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(
+        &super::wal::encode_record(base.generation, target.generation, &target_bytes).unwrap(),
+    )
+    .unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    let error = read_path_with_limits(&path, &limits).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("XBF WAL snapshot exceeds the configured file limit")
+    );
+    assert_eq!(read_path_without_recovery(&path), base);
+    assert!(wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(wal_path).unwrap();
+    fs::remove_file(lock_path).unwrap();
 }
 
 #[test]
