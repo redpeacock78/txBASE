@@ -30,7 +30,7 @@ cargo test --all-targets --all-features
 ネイティブのワークフローはUbuntu、macOS、Windowsでこのゲートを実行します。
 別のUbuntu WASMジョブは`cargo build --locked --lib --target wasm32-unknown-unknown --release`を実行します。
 `wasm-bindgen-cli` `0.2.128`でNode.jsラッパーを生成します。
-生成したラッパーに対して`node tests/wasm_smoke.mjs target/wasm-bindgen`と`node tests/wasm_edge_smoke.mjs target/wasm-bindgen`を実行します。
+生成したラッパーに対して`node tests/wasm_smoke.mjs target/wasm-bindgen`、`node tests/wasm_edge_smoke.mjs target/wasm-bindgen`、`node tests/wasm_worker_smoke.mjs target/wasm-bindgen`を実行します。
 
 ## 現在の契約
 
@@ -122,6 +122,7 @@ cargo test --all-targets --all-features
 | WASM-002 | ホスト非依存WASMコアが、解析前に共有する1 MiBの入力上限を超えるJSON入力を拒否し、DBFスナップショットを変更しない。 | `src/lib.rs`; `src/wasm.rs`; `docs/ja/wasm.md` | `wasm_core_rejects_oversized_json_inputs_without_mutation` | Boundary |
 | WASM-003 | `wasm-bindgen`が生成したCI release artifactを固定Node.jsホストから読み込み、ABIバージョン1を返し、DBFスナップショットを往復し、4種類の更新操作を実行し、共有DBFコアで原子的なバッチのロールバックを検証できる。 | `Cargo.toml`; `.github/workflows/ci.yml`; `tests/wasm_smoke.mjs`; `docs/ja/wasm.md` | `cargo build --locked --lib --target wasm32-unknown-unknown --release`; `wasm-bindgen --target nodejs`; `node tests/wasm_smoke.mjs target/wasm-bindgen` | Current |
 | WASM-004 | 生成した`wasm-bindgen`ラッパーが、JavaScriptホスト接続型の非同期XBFオブジェクトテーブルを公開し、5つのPromiseベースのオブジェクトストレージ操作によるcompare-and-swap公開、失敗したWAL削除の復旧、過去世代読み取り、世代数による保持、孤立オブジェクト削除、タグ付きホストエラー変換を維持する。 | `src/wasm_edge.rs`; `src/edge/object_store_async.rs`; `src/edge/store.rs`; `.github/workflows/ci.yml`; `tests/wasm_edge_smoke.mjs`; `docs/ja/wasm.md`; `docs/ja/edge-storage.md` | `node tests/wasm_edge_smoke.mjs target/wasm-bindgen` | Boundary |
+| WASM-005 | Worker互換Fetchオブジェクトストレージアダプターが、生成したWASMラッパーを介して、不変な公開、強いSHA-256 ETagによるcompare-and-swap、列挙、存在しない読み取り、HTTP競合、リクエストタイムアウト、呼び出し側`AbortSignal`キャンセルを対応付け、Rustのオブジェクトテーブルプロトコルを変更しない。 | `src/worker-object-store.mjs`; `src/wasm_edge.rs`; `src/edge/store.rs`; `.github/workflows/ci.yml`; `tests/wasm_worker_smoke.mjs`; `docs/worker-object-store.md`; `docs/ja/wasm.md` | `node tests/wasm_worker_smoke.mjs target/wasm-bindgen` | Boundary |
 | HTTP-009 | HTTPのJSONリクエスト本文が共有する1 MiBの入力境界に制限され、解析または永続化の前に`413 Payload Too Large`を返す。 | `src/lib.rs`; `src/server.rs`; `src/server/body.rs`; `src/server/tests/query_tests.rs`; `docs/ja/http-semantics.md` | `query_endpoint_rejects_an_oversized_json_body_before_parsing` | Boundary |
 | QRY-011 | `$expr`と入力用`$set`/`$addFields`が、フィールド参照、リテラル、nullフォールバック、文字列結合、ロケールに依存しないUnicodeの大文字と小文字の変換、有界な数値式について1つのスカラー式ASTと評価器を共有する。型が合わない値は表面ごとの規則に従って不一致または`null`になり、計算した文字列は1 MiBまでである。 | `src/query/expression.rs`; `src/query/expression/numeric.rs`; `src/query/aggregation_plan/set.rs`; `src/query/aggregation/input.rs`; `src/query/field_expression_tests.rs`; `src/query/aggregation_tests/input_stage_tests.rs`; `docs/ja/query-model.md`; `docs/ja/aggregation.md` | `compares_string_scalar_expression_results`; `string_scalar_expressions_support_null_fallback_and_literal_values`; `sets_string_scalar_expressions_before_matching_and_grouping`; `rejects_unsupported_or_malformed_expr` | Boundary |
 
@@ -129,13 +130,13 @@ cargo test --all-targets --all-features
 
 次の話題には文書または設計メモがありますが、マトリクスで現在の実装とは主張していません。
 
-- ワーカーまたはWASIの`AsyncQueryStream`におけるタイムアウト、転送、キャンセル、非同期ストレージの意味論と、リモートオブジェクトストレージアダプター。
+- ワーカーまたはWASIの`AsyncQueryStream`におけるスケジューリング、バックプレッシャー、転送、キャンセルのライフサイクル、非同期ストレージの意味論と、プロバイダー固有のクラウドオブジェクトストレージアダプター。
 - ファイルシステムおよびキャッシュを考慮したマージ結合戦略。
 - 入力`$match`、`$unwind`、式サブセットを持つ`$set`/`$addFields`、`$project`、`$sort`、`$skip`、`$limit`、グループ出力の`$match`、`$count`、`$distinct`、`$group`、`$bucket`、結果が有限な数値になる有界なスカラー式を使う`$bucketAuto`、有界なスカラー式を使う`$sortByCount`を超える集約ステージ。
   `$group`または`$bucket`の`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を超えるアキュムレータも対象とする。
 - 述語単位のロックと分散serializable調整。
 - ロケール対応CJK照合と、より広い上流CJKフィクスチャ。
-- スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、クラウドオブジェクトストレージのアダプターと保持方針、ワーカーまたはWASIのランタイムアダプターと非同期WASMストレージ、ネットワーク転送、クォーラムまたはコンセンサス、分散レプリケーション。
+- スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、プロバイダー固有のクラウドオブジェクトストレージアダプターと保持方針、ワーカーまたはWASIのランタイムアダプターと非同期WASMストレージ、ネットワークレプリケーション転送、クォーラムまたはコンセンサス、分散レプリケーション。
 
 これらのいずれかをCurrentへ移す前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。
 

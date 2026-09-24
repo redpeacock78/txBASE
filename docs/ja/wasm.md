@@ -3,7 +3,8 @@
 この文書では、WASMとエッジランタイムの境界を分離して記述します。
 
 リポジトリには、ホスト非依存DBFコアのスライス、ランタイム非依存の非同期オブジェクトストレージ境界、非同期XBFオブジェクトテーブルのcommit用JavaScriptホストアダプターがあります。
-ワーカーとWASI固有のランタイムアダプターは今後の作業です。
+明示的なタイムアウトとキャンセルの対応付けを持つ、Worker互換のFetch転送アダプターもあります。
+ワーカーとWASI固有のクエリストリームランタイムアダプターは今後の作業です。
 
 ## 0. 現在の実装スライス
 
@@ -26,7 +27,9 @@ WASMはパスとbodyの検証を二重に実装しません。
 - ネイティブ契約テスト。
 - 生成したラッパーを読み込み、ABIバージョンとスナップショットの往復を検査し、4種類の更新操作と原子的なバッチのロールバックを検査する、固定したNode.js `wasm-bindgen`スモークテスト。
 - JavaScriptのオブジェクトストレージホストを受け取り、Promiseを返す`get`、`putIfAbsent`、`compareAndSwap`、`delete`、`list`を`AsyncObjectStore`へ接続し、XBFの読み取り、commit、復旧、過去世代読み取り、保持、孤立オブジェクト削除を公開する`WasmObjectTable`アダプター。
+- それら5つの操作をWeb Fetch、条件付きリクエスト、強いSHA-256 ETag、リクエストタイムアウト、`AbortSignal`によるキャンセルでHTTPオブジェクトサービスへ対応付ける`createWorkerObjectStore`アダプター。
 - compare-and-swap公開、WALクリーンアップ失敗後の復旧、過去世代読み取り、保持、ホストエラー変換を検査する固定Node.jsホストフィクスチャ。
+- 生成したWASMラッパーを介してWorker転送を検査し、タイムアウトとキャンセルを含めてWeb Fetchを検証する固定Node.jsフィクスチャ。
 - CIでの`wasm32-unknown-unknown` release buildとラッパースモーク検査。
 
 コアはファイル書き込み、ネットワークアクセス、タスクのスケジューリング、トランザクションのコミットを行いません。
@@ -85,8 +88,9 @@ WASM境界は、対応する範囲で既存のDBFとXBFのコーデックを再�
 
 `wasm-bindgen`のJavaScriptアダプターは、Promiseを返すホストオブジェクトに同じ5つの操作を委譲します。
 `get`は`Uint8Array`または`null`を、`list`は文字列キーを、その他の操作は`undefined`を解決します。
-ホストの拒否オブジェクトは`invalid`、`conflict`、`missing`、`unavailable`の`code`を指定でき、アダプターは共有する`ObjectStoreError`の分類へ変換します。
-codeのない拒否は`unavailable`になり、タイムアウト、キャンセル、再試行、転送の方針はホストが提供します。
+ホストの拒否オブジェクトは`invalid`、`conflict`、`missing`、`unavailable`、`cancelled`の`code`を指定でき、アダプターは共有する`ObjectStoreError`の分類へ変換します。
+codeのない拒否は`unavailable`になります。
+Worker FetchアダプターはHTTP転送、タイムアウト、キャンセルの対応付けを提供し、再試行方針はホスト側とプロバイダー側が担当します。
 
 ## 4. 対象ホスト
 
@@ -126,16 +130,17 @@ codeのない拒否は`unavailable`になり、タイムアウト、キャンセ
 - ネイティブ経路とWASM経路が同じクエリと更新の実装経路を使う。
 - ランタイムから独立したストレージ契約を使う非同期テーブルフィクスチャが1つある。
 - 生成した`wasm-bindgen`ラッパーを使うJavaScriptホスト接続型の非同期オブジェクトテーブルフィクスチャが1つある。
+- Worker互換のFetchオブジェクトストレージアダプターと決定的なHTTPフィクスチャがある。
 - バイト列とJSONの境界で不正入力エラーを明示的に扱う。
 - 生成した`wasm-bindgen`ラッパーをNode.jsから検査するスモークテストがある。
 
-ワーカーまたはWASIホストを完了と呼ぶ前に、次の条件を満たします。
+デプロイ済みワーカーまたはWASIホストを完了と呼ぶ前に、次の条件を満たします。
 
-- ワーカーまたはWASIランタイムのスモークテストが1つある。
-- ストレージ、タイムアウト、キャンセルのエラー対応付けが明示されている。
-- 条件付き公開の契約を提供するホスト接続型の非同期オブジェクトストレージアダプターがある。
+- 選択したワーカーまたはWASIランタイムのスモークテストが1つある。
+- ホスト固有のクエリストリームスケジューリング、バックプレッシャー、ライフサイクル動作がある。
+- リモートストレージを選択する場合、プロバイダー固有の整合性と再試行の契約がある。
 
-それまでは、WASMを現在のコア境界、ホストアダプターを今後の作業として扱います。
+それまでは、Worker Fetch転送を現在の汎用ホスト境界として扱い、デプロイ済みワーカーまたはWASIランタイム統合を今後の作業とします。
 
 ## 7. 明示的な非目標
 
@@ -149,6 +154,9 @@ codeのない拒否は`unavailable`になり、タイムアウト、キャンセ
 - [WASI](https://wasi.dev/)
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
+- [Cloudflare Workersのfetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
+- [Cloudflare WorkersのWeb標準](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)
+- [Cloudflare WorkersのRequest `AbortSignal`](https://developers.cloudflare.com/workers/runtime-apis/request/)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
 - [wasm-bindgenガイド](https://rustwasm.github.io/docs/wasm-bindgen/)
 - [`wasm-bindgen-futures` API](https://docs.rs/wasm-bindgen-futures/latest/wasm_bindgen_futures/)
@@ -157,4 +165,5 @@ codeのない拒否は`unavailable`になり、タイムアウト、キャンセ
 WebAssemblyとWASIの仕様は、コアモジュールとホストインターフェースの語彙を定義します。
 Component Model、Cloudflare Workers、Node.jsの資料は候補ホストの実装参照であり、txBASEの互換性を約束するものではありません。
 
-リポジトリにはWASMコアの実装、生成ラッパーのNode.jsスモーク検査、ランタイムから独立した非同期オブジェクトストレージとテーブルの契約、JavaScriptホストアダプターがありますが、ワーカーまたはWASIランタイム、ホスト固有の非同期永続化、ネイティブの復旧経路をすでにサポートするとは主張しません。
+リポジトリにはWASMコアの実装、生成ラッパーのNode.jsスモーク検査、JavaScriptホスト接続型の非同期オブジェクトテーブルフィクスチャ、Worker互換Fetchオブジェクトストレージアダプターとスモークフィクスチャ、ランタイムから独立した非同期オブジェクトストレージとテーブルの契約があります。
+デプロイ済みワーカーまたはWASIランタイム、ホスト固有のクエリストリームのライフサイクル方針、ネイティブの復旧経路をすでにサポートするとは主張しません。

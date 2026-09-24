@@ -9,6 +9,7 @@ pub enum ObjectStoreError {
     Conflict(String),
     Missing(String),
     Unavailable(String),
+    Cancelled(String),
 }
 
 impl Display for ObjectStoreError {
@@ -21,6 +22,9 @@ impl Display for ObjectStoreError {
             }
             Self::Unavailable(message) => {
                 write!(formatter, "object-store is unavailable: {message}")
+            }
+            Self::Cancelled(message) => {
+                write!(formatter, "object-store operation was cancelled: {message}")
             }
         }
     }

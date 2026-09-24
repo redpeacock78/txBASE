@@ -29,7 +29,11 @@ The host supplies Promise-returning `get`, `putIfAbsent`, `compareAndSwap`, `del
 The adapter exposes XBF bytes, manifest inspection, commit, historical reads, recovery, retention, and orphan cleanup through the generated `wasm-bindgen` wrapper.
 It maps tagged host rejection codes to the shared object-store error categories, while timeout, cancellation, retry, and transport policy remain host responsibilities.
 
-A remote object-store adapter can implement `AsyncObjectStore` directly without changing the XBF snapshot or generation rules.
+`createWorkerObjectStore` supplies a Worker-compatible HTTP transport for those five methods.
+It uses Web Fetch APIs, standard conditional request headers, strong SHA-256 ETags, `AbortSignal`, and a bounded request timeout without adding a cloud-provider dependency to the Rust core.
+Its deterministic local HTTP fixture is exercised through the generated WASM wrapper in CI.
+
+A provider-specific remote object-store adapter can implement `AsyncObjectStore` directly without changing the XBF snapshot or generation rules.
 
 ## 2. Manifest schema
 
@@ -134,13 +138,14 @@ These concerns do not belong in `MemoryObjectStore` or in the XBF codec.
 
 The local and asynchronous object-table tests also verify that an encode-limit failure happens before the snapshot or pending WAL object is published.
 
-The remote adapter may implement `ObjectStore` for a blocking native client or `AsyncObjectStore` for a host-managed client.
+The Worker Fetch adapter implements the host-managed HTTP shape described in [Worker Fetch object-store adapter](worker-object-store.md).
+The remote adapter may implement `ObjectStore` for a blocking native client or `AsyncObjectStore` for another host-managed client.
 The high-level asynchronous manifest protocol covers commit, recovery, retention, and conditional publication.
-The JavaScript WASM adapter supplies one host-managed fixture for this protocol; timeout and cancellation mapping remain host responsibilities until a worker or WASI adapter defines them.
+The JavaScript WASM adapter and Worker Fetch adapter supply host-managed fixtures for this protocol; provider-specific consistency and retry behavior remain outside this generic transport.
 
 ## 7. Explicit non-goals
 
-This slice does not promise an R2 adapter, a specific cloud vendor, worker or WASI timeout and cancellation mapping, multi-region consensus, automatic background garbage collection, immutable page splitting, or a cloud-backed WASM host.
+This slice does not promise an R2 adapter, a specific cloud vendor, Worker or WASI query-stream scheduling, multi-region consensus, automatic background garbage collection, immutable page splitting, or a cloud-backed WASM host.
 
 Those features can reuse the manifest and generation contract after their host-specific failure behavior has a deterministic test.
 

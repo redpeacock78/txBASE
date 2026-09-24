@@ -4,8 +4,10 @@ This document isolates the WASM and edge-runtime boundary.
 
 The repository now contains a host-independent DBF core slice, a
 runtime-neutral asynchronous object-store boundary, and a JavaScript host
-adapter for asynchronous XBF object-table commits. Worker and WASI-specific
-runtime adapters remain future work.
+adapter for asynchronous XBF object-table commits. It also contains a
+Worker-compatible Fetch transport adapter with explicit timeout and
+cancellation mapping. Worker and WASI-specific query-stream runtime adapters
+remain future work.
 
 ## 0. Current implementation slice
 
@@ -40,9 +42,14 @@ Its versioned boundary currently provides:
   bridges Promise-returning `get`, `putIfAbsent`, `compareAndSwap`, `delete`,
   and `list` methods to `AsyncObjectStore`, and exposes XBF read, commit,
   recovery, historical-read, retention, and orphan-cleanup methods;
+- a `createWorkerObjectStore` adapter that maps those five operations to an
+  HTTP object service through Web Fetch, conditional requests, strong
+  SHA-256 ETags, request timeouts, and `AbortSignal` cancellation;
 - a pinned Node.js host fixture that exercises compare-and-swap publication,
   a failed WAL cleanup followed by recovery, historical reads, retention, and
   host error mapping;
+- a pinned Node.js Web Fetch fixture that exercises the Worker transport
+  through the generated WASM wrapper, including timeout and cancellation;
 - a CI `wasm32-unknown-unknown` release build and wrapper smoke check.
 
 The core does not write files, access a network, schedule tasks, or commit a
@@ -105,10 +112,10 @@ object whose methods return Promises.
 `get` resolves to a `Uint8Array` or `null`; `list` resolves to string keys; the
 other methods resolve to `undefined`.
 Host rejection objects may provide `code` values `invalid`, `conflict`,
-`missing`, or `unavailable`; the adapter maps them to the shared
+`missing`, `unavailable`, or `cancelled`; the adapter maps them to the shared
 `ObjectStoreError` categories and maps untagged rejection to `unavailable`.
-The adapter requires the host to provide its own timeout, cancellation, retry,
-and transport policy.
+The Worker Fetch adapter supplies HTTP transport, timeout, and cancellation
+mapping, while retry policy remains a host or provider concern.
 
 ## 4. Target hosts
 
@@ -149,16 +156,19 @@ The current core slice meets the following initial conditions:
 - an asynchronous object-table fixture using the runtime-neutral store contract;
 - a JavaScript host-backed asynchronous object-table fixture using the generated
   `wasm-bindgen` wrapper;
+- a Worker-compatible Fetch object-store adapter and deterministic HTTP fixture;
 - explicit malformed-input errors at the byte and JSON boundaries;
 - a Node.js host smoke test for the generated `wasm-bindgen` wrapper.
 
-The following conditions remain before calling a worker or WASI host complete:
+The following conditions remain before calling a deployed worker or WASI host
+complete:
 
-- one worker or WASI runtime smoke test;
-- explicit storage, timeout, and cancellation error mapping;
-- a host-backed asynchronous object-store adapter that supplies the conditional-publication contract.
+- one smoke test in the selected worker or WASI runtime;
+- host-specific query-stream scheduling, backpressure, and lifecycle behavior;
+- a provider-specific consistency and retry contract when remote storage is selected.
 
-Until then, WASM hosting is a current core boundary with future host adapters.
+Until then, the Worker Fetch transport is a current generic host boundary, and
+deployed worker or WASI runtime integration remains future work.
 
 ## 7. Explicit non-goals
 
@@ -172,6 +182,9 @@ Those would be separate products and would obscure the shared core contract.
 - [WASI](https://wasi.dev/)
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
+- [Cloudflare Workers fetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
+- [Cloudflare Workers web standards](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)
+- [Cloudflare Workers Request `AbortSignal`](https://developers.cloudflare.com/workers/runtime-apis/request/)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
 - [wasm-bindgen guide](https://rustwasm.github.io/docs/wasm-bindgen/)
 - [`wasm-bindgen-futures` API](https://docs.rs/wasm-bindgen-futures/latest/wasm_bindgen_futures/)
@@ -181,7 +194,8 @@ The WebAssembly and WASI specifications define the core module and host-interfac
 The Component Model and the Cloudflare Workers and Node.js pages are implementation references for possible hosts, not txBASE compatibility commitments.
 
 The repository has a WASM core implementation, a generated-wrapper Node.js
-smoke check, a JavaScript host-backed asynchronous object-table fixture, and
+smoke check, a JavaScript host-backed asynchronous object-table fixture, a
+Worker-compatible Fetch object-store adapter and smoke fixture, and
 runtime-neutral asynchronous object-store and object-table contracts.
-It does not claim that a worker or WASI runtime, host-specific timeout and
-cancellation policy, or a native recovery path is already supported.
+It does not claim that a deployed worker or WASI runtime, host-specific
+query-stream lifecycle policy, or a native recovery path is already supported.

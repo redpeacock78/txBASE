@@ -261,6 +261,7 @@ fn map_host_error(value: &JsValue) -> ObjectStoreError {
         Some("invalid") => ObjectStoreError::Invalid(message),
         Some("conflict") => ObjectStoreError::Conflict(message),
         Some("missing") => ObjectStoreError::Missing(message),
+        Some("cancelled") => ObjectStoreError::Cancelled(message),
         _ => ObjectStoreError::Unavailable(message),
     }
 }

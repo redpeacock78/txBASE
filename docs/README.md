@@ -44,6 +44,7 @@ Research and future work do not imply an implemented feature.
 ## Future architecture
 
 - [WASM and worker host boundary](wasm.md)
+- [Worker Fetch object-store adapter](worker-object-store.md)
 - [Distributed evolution](distributed-evolution.md)
 
 ## File-granularity rule

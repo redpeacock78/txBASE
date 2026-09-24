@@ -65,7 +65,8 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 | Gitのコマンドラインインターフェース文書 | CLI設計の参照に使う公式プロジェクト文書です。 | txBASEの明示的なサブコマンドとオプションの形だけに影響します。Gitのコマンド群、リポジトリモデル、オプションの意味はコピーしません。 | 設計判断は[CLIコマンド体系の設計](cli-design.md)に置き、コマンド契約は[CLIコマンドリファレンス](cli.md)に置きます。MVCCやストレージの契約には置きません。 |
 | RFC 9110、RFC 5789、RFC 10008、RFC 6750 | IETFの標準化過程にある仕様です。 | HTTPメソッドの安全性、PATCHの意味、QUERYの安全性と冪等性、Bearer認証ヘッダーをHTTP契約へ反映します。txBASEは対応メディアタイプ、応答形状、範囲上限、ルート上限、環境変数で選択するトークン境界を別に定義します。 | 規範的なHTTP意味論は[HTTPの意味](http-semantics.md)に置き、txBASE固有の制約は実装契約のそばに置きます。 |
 | POSIXの`rename()`と`fsync()` | The Open Groupの仕様です。 | Unixコードはrenameによる置換と`sync_all`を使います。Windowsには別の置換経路があるため、POSIXのディレクトリ永続性保証と同一とは記述しません。 | ファイルシステムの永続性の前提は永続化とXBFの文書に置き、Unix限定であることを明記します。 |
-| WebAssembly、WASI、Component Model | 標準仕様または標準化中の仕様です。ホスト資料は実装参照です。 | リポジトリにはバージョン付きホスト非依存DBFコア、生成した`wasm-bindgen` Node.jsラッパー、Promiseベースの非同期XBFオブジェクトテーブルアダプターがあります。CIはABI、スナップショットの往復、4種類の更新操作、原子的なバッチのロールバック、オブジェクト公開、復旧、保持、ホストエラー変換を検査します。ワーカーまたはWASIのランタイムアダプターとホスト固有の方針は今後の作業です。 | コアABIとホスト境界の判断は[WASM](wasm.md)に置きます。ワーカーまたはWASIアダプターとスモークテストを追加した時点で、ホスト固有の一次資料を追記します。 |
+| WebAssembly、WASI、Component Model | 標準仕様または標準化中の仕様です。ホスト資料は実装参照です。 | リポジトリにはバージョン付きホスト非依存DBFコア、生成した`wasm-bindgen` Node.jsラッパー、Promiseベースの非同期XBFオブジェクトテーブルアダプター、汎用Worker互換Fetchオブジェクトストレージアダプターがあります。CIはABI、スナップショットの往復、4種類の更新操作、原子的なバッチのロールバック、オブジェクト公開、復旧、保持、ホストエラー変換、HTTP条件付き公開、タイムアウト、キャンセルを検査します。デプロイ済みワーカーまたはWASIランタイムアダプターと、ホスト固有のクエリストリーム方針は今後の作業です。 | コアABIと汎用転送境界は[WASM](wasm.md)と[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)に置きます。プロバイダー固有の保証はプロバイダーアダプターの文書に置きます。 |
+| Fetch、DOM、Cloudflare Workersのホスト文書 | FetchとDOMはWebプラットフォーム仕様であり、Cloudflare Workersの文書は公式ホスト実装の参照です。 | Workerアダプターは`fetch`、`URL`、`Headers`、`AbortController`、Web Crypto、条件付きHTTPリクエスト、リクエストコンテキストのタイマーを使います。リポジトリはNode.jsで汎用Web APIの形を検査しますが、デプロイ済みCloudflareまたはWASIランタイムは主張しません。 | 転送契約とエラー対応付けは[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)に置き、ホストのデプロイとプロバイダー動作は汎用txBASE契約の外側に置きます。 |
 | Raft論文とRaftプロジェクト資料 | 論文とプロジェクトの一次資料です。 | リポジトリ所有の`ReplicationEntry`/`ReplicationLog`/`ReplicationSnapshot`スライスは、現在は固定termのプロセス内単一writerを選択し、カタログ更新、ローカルスナップショットインストール、またはsuffixを保つローカル圧縮とともに`TXRP`位置をジャーナル化し、ローカルの最小index安全制御のために単調なフォロワー適用位置を記録し、過去時点の読み取りを適用済み位置に限定し、status、連続したエントリ範囲、エントリ、スナップショット、適用位置確認を有界なHTTPで配送します。Raftは権威の候補にとどまり、クォーラムと分散実行はありません。 | ローカルのエントリ、再生、スナップショット、圧縮、フォロワー適用位置、`TXRP`、過去時点読み取り、HTTP配送の契約は[分散化の進化](distributed-evolution.md)に置き、Raftは現在の実装依存ではなく将来候補として扱います。 |
 | XBF v1形式草案 | このリポジトリが所有する仕様草案です。外部向けの互換性標準ではありません。 | 現在のコーデック、エッジ、世代検査付きWALのテストは草案を実装契約として検査します。外部リーダーでの原子的な公開が証明されるまでは草案のままです。 | バイト形式と受け入れ条件は[XBF v1草案](xbf.md)に置き、外部標準のようには扱いません。 |
 | `encoding_rs` APIと固定した`dbf`互換性表 | 依存ライブラリのAPI文書と第三者実装の参照であり、エンコーディング標準ではありません。 | Rustのコーデック動作とlegacy aliasの特定に使います。互換性の根拠は第三者の表ではなく、固定したバイトフィクスチャです。 | [DBF互換性](dbf-compatibility.md)の実装補助資料として残し、規範的なフォーマット資料にはしません。 |
@@ -190,6 +191,11 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 - [WASI](https://wasi.dev/)
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
+- [Cloudflare Workersのfetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
+- [Cloudflare WorkersのWeb標準](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)
+- [Cloudflare WorkersのRequest `AbortSignal`](https://developers.cloudflare.com/workers/runtime-apis/request/)
+- [Fetch Standard](https://fetch.spec.whatwg.org/)
+- [DOM Standardの`AbortController`](https://dom.spec.whatwg.org/#interface-abortcontroller)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
 
 ### 分散システム
