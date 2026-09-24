@@ -153,7 +153,7 @@ fn copy_table_files_recovers_a_pending_destination_wal_before_replacement() {
     pending
         .patch_record(
             1,
-            serde_json::json!({"NAME": "stale destination"})
+            serde_json::json!({"NAME": "stale"})
                 .as_object()
                 .unwrap()
                 .clone(),
