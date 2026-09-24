@@ -63,6 +63,10 @@ the commit succeeds. It journals the next `TXRP` sidecar image in the same
 catalog transaction, so the catalog data and local replication position recover
 together. `receive` accepts only the next index and transaction ID, checks the
 term and representation tag, and then applies the same atomic catalog commit.
+`receive_batch` validates one contiguous `ReplicationEntryBatch` and delivers
+its entries in order. The page is a transport boundary rather than a
+transaction boundary, so a failure may leave an already applied entry prefix
+in place and a retry safely acknowledges that prefix as duplicates.
 
 The entry format defines duplicate delivery as a no-op when the complete entry
 matches. A conflicting duplicate, an index or transaction gap, a term mismatch,
@@ -166,8 +170,9 @@ ranges, already constructed replication entries, snapshots, and follower progres
 | `POST /replication/snapshot` | Validates and installs one `ReplicationSnapshot` atomically. |
 | `POST /replication/progress` | Authority-only endpoint that validates one `ReplicationProgress` acknowledgement and returns the current safe compaction index. |
 
-Entry request bodies use the existing 1 MiB JSON input bound. Snapshot request
-bodies use the existing 64 MiB encoded-payload bound. Invalid documents return
+Entry and progress JSON helpers, including their serialized output, use the
+existing 1 MiB JSON bound. Entry-range responses use the same bound. Snapshot JSON uses the existing 64 MiB
+encoded-payload bound. Invalid documents return
 `422`; term, position, schema, conflicting-duplicate, progress, and snapshot state conflicts return
 `409`; storage failures return `500`. Responses identify the transport version
 and, for apply or progress operations, the resulting index and transaction ID.

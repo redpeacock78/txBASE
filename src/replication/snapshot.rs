@@ -82,7 +82,14 @@ impl ReplicationSnapshot {
 
     pub fn to_json(&self) -> Result<Vec<u8>, ReplicationError> {
         self.validate()?;
-        serde_json::to_vec(self).map_err(|error| ReplicationError::Serialization(error.to_string()))
+        let bytes = serde_json::to_vec(self)
+            .map_err(|error| ReplicationError::Serialization(error.to_string()))?;
+        if bytes.len() > MAX_REPLICATION_SNAPSHOT_BYTES {
+            return Err(ReplicationError::Invalid(format!(
+                "snapshot JSON exceeds {MAX_REPLICATION_SNAPSHOT_BYTES} bytes"
+            )));
+        }
+        Ok(bytes)
     }
 
     pub fn from_json(bytes: &[u8]) -> Result<Self, ReplicationError> {

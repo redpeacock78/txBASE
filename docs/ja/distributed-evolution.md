@@ -57,6 +57,9 @@ operation IR
 `propose`は既存のカタログジャーナルでバッチをcommitし、commit成功後にだけ記録します。
 次の`TXRP`サイドカーのイメージも同じカタログtransactionに含めるため、カタログデータとローカルのレプリケーション位置は一緒に復旧します。
 `receive`は次のindexとtransaction IDだけを受け付け、termと表現タグを検査してから、同じ原子的なカタログcommitを適用します。
+`receive_batch`は、1つの連続した`ReplicationEntryBatch`を検証して、含まれるエントリを順番に配送します。
+ページは転送境界であり、transaction境界ではありません。
+そのため、途中で失敗すると適用済みのエントリprefixが残る場合がありますが、再送時にはそのprefixを重複として安全に確認できます。
 
 エントリ形式では、同じ内容の重複配送をno-opとして扱います。
 内容が異なる重複、indexまたはtransaction IDの欠落、term不一致、利用できない履歴の先頭は、新しいcommitの前に拒否します。
@@ -133,8 +136,9 @@ authorityを再起動すると確認情報を失うため、調整された圧�
 | `POST /replication/snapshot` | 1つの`ReplicationSnapshot`を検証して原子的にインストールする。 |
 | `POST /replication/progress` | authorityだけが受け付け、1つの`ReplicationProgress`確認情報を検証し、現在の安全な圧縮indexを返す。 |
 
-エントリのリクエスト本文には、既存の1 MiB JSON入力上限を適用します。
-スナップショットのリクエスト本文には、既存の64 MiBエンコード済みペイロード上限を適用します。
+エントリと進捗のJSONヘルパーは、シリアライズ済みの出力を含め、既存の1 MiB JSON上限を適用します。
+エントリ範囲の応答にも同じ上限を適用します。
+スナップショットのJSONには、既存の64 MiBエンコード済みペイロード上限を適用します。
 不正な文書は`422`を返し、term、位置、スキーマ、競合する重複、フォロワー位置、スナップショット状態の競合は`409`を返し、ストレージ障害は`500`を返します。
 応答には転送バージョンを含め、適用操作では結果のindexとtransaction IDも含めます。
 エントリ範囲クエリは、非負の`after` indexと1から128までの`limit`を受け付け、既定値は`after=0`と最大`limit`です。

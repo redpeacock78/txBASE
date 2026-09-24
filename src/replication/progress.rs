@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 pub const REPLICATION_PROGRESS_VERSION: u16 = 1;
 pub const MAX_REPLICATION_FOLLOWERS: usize = 1024;
+pub const MAX_REPLICATION_PROGRESS_BYTES: usize = crate::MAX_JSON_INPUT_BYTES;
 const MAX_FOLLOWER_ID_BYTES: usize = 128;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,10 +76,22 @@ impl ReplicationProgress {
 
     pub fn to_json(&self) -> Result<Vec<u8>, ReplicationError> {
         self.validate()?;
-        serde_json::to_vec(self).map_err(|error| ReplicationError::Serialization(error.to_string()))
+        let bytes = serde_json::to_vec(self)
+            .map_err(|error| ReplicationError::Serialization(error.to_string()))?;
+        if bytes.len() > MAX_REPLICATION_PROGRESS_BYTES {
+            return Err(ReplicationError::Invalid(format!(
+                "replication progress JSON exceeds {MAX_REPLICATION_PROGRESS_BYTES} bytes"
+            )));
+        }
+        Ok(bytes)
     }
 
     pub fn from_json(bytes: &[u8]) -> Result<Self, ReplicationError> {
+        if bytes.len() > MAX_REPLICATION_PROGRESS_BYTES {
+            return Err(ReplicationError::Invalid(format!(
+                "replication progress JSON exceeds {MAX_REPLICATION_PROGRESS_BYTES} bytes"
+            )));
+        }
         let progress: Self = serde_json::from_slice(bytes)
             .map_err(|error| ReplicationError::Serialization(error.to_string()))?;
         progress.validate()?;

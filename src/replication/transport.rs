@@ -127,6 +127,11 @@ impl ReplicationEntryBatch {
                 "replication entry batch exceeds {MAX_REPLICATION_ENTRY_BATCH} entries"
             )));
         }
+        if self.entries.is_empty() && self.after_index < self.last_index {
+            return Err(ReplicationError::Invalid(
+                "replication entry batch cannot be empty before the last index".into(),
+            ));
+        }
         let mut expected_index = self.after_index.checked_add(1);
         let mut expected_transaction_id = self
             .base_transaction_id
@@ -146,6 +151,11 @@ impl ReplicationEntryBatch {
                     actual: entry.index,
                 });
             }
+            if entry.index > self.last_index {
+                return Err(ReplicationError::Invalid(
+                    "replication entry batch contains an index beyond last_index".into(),
+                ));
+            }
             let Some(expected_transaction_id_value) = expected_transaction_id else {
                 return Err(ReplicationError::Invalid(
                     "replication entry transaction ID is exhausted".into(),
@@ -156,6 +166,12 @@ impl ReplicationEntryBatch {
                     expected: expected_transaction_id_value,
                     actual: entry.transaction_id,
                 });
+            }
+            if entry.transaction_id > self.last_transaction_id {
+                return Err(ReplicationError::Invalid(
+                    "replication entry batch contains a transaction beyond last_transaction_id"
+                        .into(),
+                ));
             }
             expected_transaction_id = entry.transaction_id.checked_add(1);
             expected_index = entry.index.checked_add(1);
