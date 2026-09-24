@@ -1,4 +1,5 @@
 use super::IndexError;
+use crate::Collation;
 use serde::de::Error as DeError;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -9,6 +10,7 @@ pub struct IndexDefinition {
     pub(super) name: String,
     pub(super) fields: Vec<String>,
     pub(super) directions: Vec<i8>,
+    pub(super) collation: Option<Collation>,
 }
 
 impl Serialize for IndexDefinition {
@@ -17,8 +19,11 @@ impl Serialize for IndexDefinition {
         S: Serializer,
     {
         let has_directions = self.directions.iter().any(|direction| *direction != 1);
-        let mut state =
-            serializer.serialize_struct("IndexDefinition", if has_directions { 3 } else { 2 })?;
+        let field_count = if has_directions { 3 } else { 2 };
+        let mut state = serializer.serialize_struct(
+            "IndexDefinition",
+            field_count + usize::from(self.collation.is_some()),
+        )?;
         state.serialize_field("name", &self.name)?;
         if self.fields.len() == 1 {
             state.serialize_field("field", &self.fields[0])?;
@@ -27,6 +32,9 @@ impl Serialize for IndexDefinition {
         }
         if has_directions {
             state.serialize_field("directions", &self.directions)?;
+        }
+        if self.collation.is_some() {
+            state.serialize_field("collation", &self.collation)?;
         }
         state.end()
     }
@@ -47,6 +55,8 @@ impl<'de> Deserialize<'de> for IndexDefinition {
             fields: Option<Vec<String>>,
             #[serde(default)]
             directions: Option<Vec<i8>>,
+            #[serde(default)]
+            collation: Option<Collation>,
         }
 
         let wire = Wire::deserialize(deserializer)?;
@@ -80,6 +90,7 @@ impl<'de> Deserialize<'de> for IndexDefinition {
             name: wire.name,
             fields,
             directions,
+            collation: wire.collation,
         })
     }
 }
@@ -91,6 +102,7 @@ impl IndexDefinition {
             name: field.clone(),
             fields: vec![field],
             directions: vec![1],
+            collation: None,
         }
     }
 
@@ -99,6 +111,7 @@ impl IndexDefinition {
             name: name.into(),
             fields: vec![field.into()],
             directions: vec![1],
+            collation: None,
         }
     }
 
@@ -107,6 +120,7 @@ impl IndexDefinition {
             name: name.into(),
             directions: vec![1; fields.len()],
             fields,
+            collation: None,
         }
     }
 
@@ -119,6 +133,7 @@ impl IndexDefinition {
             name: name.into(),
             fields,
             directions,
+            collation: None,
         }
     }
 
@@ -137,6 +152,15 @@ impl IndexDefinition {
     pub fn directions(&self) -> &[i8] {
         &self.directions
     }
+
+    pub fn collation(&self) -> Option<Collation> {
+        self.collation
+    }
+
+    pub fn with_collation(mut self, collation: Collation) -> Self {
+        self.collation = Some(collation);
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -149,27 +173,36 @@ pub enum IndexKey {
 }
 
 impl IndexKey {
-    pub(super) fn from_value(value: Option<&Value>) -> Result<Self, IndexError> {
+    pub(super) fn from_value(
+        value: Option<&Value>,
+        collation: Option<Collation>,
+    ) -> Result<Self, IndexError> {
         let Some(value) = value else {
             return Ok(Self::Missing);
         };
         match value {
             Value::Null => Ok(Self::Null),
-            Value::Bool(_) | Value::Number(_) | Value::String(_) => Ok(Self::Scalar(value.clone())),
+            Value::Bool(_) | Value::Number(_) => Ok(Self::Scalar(value.clone())),
+            Value::String(value) => Ok(Self::Scalar(Value::String(
+                collation.map_or_else(|| value.clone(), |collation| collation.key(value)),
+            ))),
             Value::Array(_) | Value::Object(_) => Err(IndexError::Invalid(
                 "only scalar values can be indexed".into(),
             )),
         }
     }
 
-    pub(super) fn from_values(values: Vec<Option<&Value>>) -> Result<Self, IndexError> {
+    pub(super) fn from_values(
+        values: Vec<Option<&Value>>,
+        collation: Option<Collation>,
+    ) -> Result<Self, IndexError> {
         if values.len() == 1 {
-            return Self::from_value(values[0]);
+            return Self::from_value(values[0], collation);
         }
         Ok(Self::Compound(
             values
                 .into_iter()
-                .map(Self::from_value)
+                .map(|value| Self::from_value(value, collation))
                 .collect::<Result<_, _>>()?,
         ))
     }

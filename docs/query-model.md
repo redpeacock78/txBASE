@@ -58,7 +58,13 @@ Collation affects sorting only.
 
 Filters and index lookup retain their existing comparison rules.
 
-Collation requires a non-empty top-level `sort`, is unavailable with aggregation, and deliberately uses a table scan.
+Collation requires a non-empty top-level `sort` and is unavailable with aggregation.
+
+A matching collated sidecar may provide the requested order.
+
+When no matching sidecar exists, the planner falls back to a table scan.
+
+Collated indexes provide order only; filter, equality, and range lookup retain their existing comparison rules.
 
 Sorted cursors encode the collation and reject a token from a different sort contract.
 

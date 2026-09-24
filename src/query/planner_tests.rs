@@ -140,6 +140,29 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
         execute_query(&table, &collated_sort_request).unwrap()
     );
 
+    IndexFile::build(
+        &path,
+        vec![
+            IndexDefinition::named("by_name_ci", "NAME")
+                .with_collation(crate::Collation::UnicodeLowercase),
+        ],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+    assert_eq!(
+        explain_query_at(&path, &collated_sort_request).unwrap(),
+        QueryPlan::OrderedIndex {
+            name: "by_name_ci".into(),
+            field: "NAME".into(),
+            direction: 1,
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &collated_sort_request).unwrap(),
+        execute_query(&table, &collated_sort_request).unwrap()
+    );
+
     fs::remove_file(&sidecar).unwrap();
     assert_eq!(
         explain_query_at(&path, &request).unwrap(),

@@ -17,8 +17,11 @@ pub mod wasm_edge;
 pub mod xbase;
 pub mod xbf;
 
+mod collation;
 mod json_order;
 mod query_path;
+
+pub use collation::Collation;
 
 /// Maximum size of a JSON request accepted by public parser boundaries.
 pub const MAX_JSON_INPUT_BYTES: usize = 1024 * 1024;

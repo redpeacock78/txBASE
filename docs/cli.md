@@ -56,8 +56,8 @@ The following table is the current command contract.
 | `txbase mvcc catalog read DIRECTORY TRANSACTION_ID` | Reads one historical catalog snapshot and returns its tables and records. |
 | `txbase mvcc catalog gc DIRECTORY --keep COUNT` | Retains the newest catalog snapshots and replaces only the catalog MVCC history sidecar. |
 | `txbase wal inspect WAL` | Reads a WAL without creating or truncating it and reports complete records plus an incomplete final tail. |
-| `txbase index build FILE FIELD...` | Builds and persists one scalar index sidecar for the named fields. |
-| `txbase index build-compound FILE NAME FIELD[:DIRECTION]...` | Builds one named compound index. A direction is `1` or `asc` for ascending and `-1` or `desc` for descending order. |
+| `txbase index build FILE FIELD... [--collation NAME]` | Builds and persists one scalar index sidecar for the named fields. `NAME` may be `unicode-lowercase` or `unicode-nfkc-lowercase` to build an ordered index for that sort collation. |
+| `txbase index build-compound FILE NAME FIELD[:DIRECTION]... [--collation NAME]` | Builds one named compound index. A direction is `1` or `asc` for ascending and `-1` or `desc` for descending order. `NAME` accepts the same two locale-independent collations. |
 | `txbase index verify FILE` | Validates an index sidecar and prints its schema as JSON. |
 | `txbase index rebuild FILE` | Rebuilds and persists an index sidecar from the current table. |
 | `txbase xbf import DBF XBF [--encoding NAME]` | Converts a DBF into a bounded XBF snapshot. |
@@ -82,6 +82,7 @@ The following table is the current command contract.
 - `--after` belongs only to `cdc` and `cdc catalog`.
 - `--keep` belongs to table and catalog MVCC garbage collection; `--keep-rows` belongs only to table MVCC garbage collection.
 - `index build-compound` accepts `1` or `asc`, and `-1` or `desc`, for each field direction.
+- `index build` and `index build-compound` accept `--collation unicode-lowercase` or `--collation unicode-nfkc-lowercase` for ordered query support.
 
 Positive transaction IDs, epochs, record numbers, and retention counts are required where the command names them as positive values.
 

@@ -34,6 +34,7 @@ fn cli_help_lists_the_command_families_and_unknown_commands_fail() {
         assert!(help.contains(command), "help is missing {command}");
     }
     assert!(help.contains("--replication-role authority|follower"));
+    assert!(help.contains("--collation unicode-lowercase"));
 
     let unknown = run_cli(&["not-a-command"]);
     assert!(!unknown.status.success());
@@ -398,11 +399,23 @@ fn verify_cli_rejects_a_stale_index_sidecar() {
     let _ = fs::remove_file(&path);
 
     fs::write(&path, users_fixture()).unwrap();
-    let build = run_cli(&["index", "build", path.to_str().unwrap(), "NAME"]);
+    let build = run_cli(&[
+        "index",
+        "build",
+        path.to_str().unwrap(),
+        "NAME",
+        "--collation",
+        "unicode-lowercase",
+    ]);
     assert!(
         build.status.success(),
         "index build failed: {}",
         String::from_utf8_lossy(&build.stderr)
+    );
+    let schema: serde_json::Value = serde_json::from_slice(&build.stdout).unwrap();
+    assert_eq!(
+        schema["indexes"][0]["collation"],
+        serde_json::json!("unicode-lowercase")
     );
     let mut changed = txbase::dbf::DbfTable::from_path(&path).unwrap();
     changed

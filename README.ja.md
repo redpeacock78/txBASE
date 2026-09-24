@@ -178,12 +178,14 @@ txbase cdc catalog path/to/database --after 10
 ```bash
 txbase index build path/to/users.dbf NAME AGE
 txbase index build-compound path/to/users.dbf by_name_age NAME AGE
+txbase index build path/to/users.dbf NAME --collation unicode-lowercase
 txbase index rebuild path/to/users.dbf
 txbase pack path/to/users.dbf
 txbase recall path/to/users.dbf 2
 ```
 
 `index verify`は古いサイドカーを拒否し、`index rebuild`が明示的な修復手段になります。
+照合付きインデックスは一致するソート順だけを提供し、完全一致または範囲フィルターには使いません。
 `pack`は論理削除したレコードを除去し、`recall`は物理レコード番号で一件の論理削除を取り消します。
 
 XBF変換とサイドカーを含むファイル転送。

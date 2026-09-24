@@ -6,14 +6,14 @@ The sidecar path for `users.dbf` is `users.txidx`.
 
 The DBF remains readable by legacy xBase tools because the index is not embedded in the DBF bytes.
 
-## Version 3 contract
+## Version 4 contract
 
 An index file is JSON with this top-level shape:
 
 ```json
 {
   "format": "txbase-index",
-  "version": 3,
+  "version": 4,
   "source": {
     "dbf": {"length": 0, "hash": 0},
     "memo": null
@@ -42,13 +42,25 @@ A compound definition uses an ordered `fields` array instead of `field`:
 {"name": "by_name_age", "fields": ["NAME", "AGE"]}
 ```
 
-A version 3 compound definition may add a `directions` array with one `1` or `-1` value per field:
+A version 4 compound definition may add a `directions` array with one `1` or `-1` value per field:
 
 ```json
 {"name": "by_score_name", "fields": ["SCORE", "NAME"], "directions": [-1, 1]}
 ```
 
 When `directions` is absent, every field is ascending for compatibility with older sidecars.
+
+An index definition may add `collation` with `unicode-lowercase` or `unicode-nfkc-lowercase`.
+
+```json
+{"name": "by_name_ci", "field": "NAME", "collation": "unicode-lowercase"}
+```
+
+A collated index stores the bounded normalized string keys used by the matching query sort.
+
+It provides ordered traversal only, because normalization can make distinct filter values share one index key.
+
+Exact equality and range candidate lookup therefore ignore collated indexes, and a query without the same collation never uses one for ordering.
 
 Single-field indexes remain ascending because range lookup and histogram boundaries use ascending key order.
 
@@ -100,6 +112,13 @@ Add per-field directions with `:1`, `:-1`, `:asc`, or `:desc`:
 txbase index build-compound path/to/users.dbf by_score_name SCORE:-1 NAME:1
 ```
 
+Build a case-insensitive ordered index with the supported locale-independent collation:
+
+```bash
+txbase index build path/to/users.dbf NAME --collation unicode-lowercase
+txbase index build-compound path/to/users.dbf by_name_age NAME AGE --collation unicode-nfkc-lowercase
+```
+
 Verify the sidecar against the current DBF and memo bytes:
 
 ```bash
@@ -112,9 +131,9 @@ Rebuild the existing definitions after a table mutation:
 txbase index rebuild path/to/users.dbf
 ```
 
-`index rebuild` also migrates a version 1 sidecar to the current format when its definitions can be read.
+`index rebuild` also migrates a version 1, version 2, or version 3 sidecar to the current format when its definitions can be read.
 
-A version 1 or version 2 sidecar is not used for query planning until it has been rebuilt.
+A version 1, version 2, or version 3 sidecar is not used for query planning until it has been rebuilt.
 
 `load` and `verify` recover the DBF first, then compare the stored source fingerprint.
 
@@ -160,7 +179,7 @@ It depends on the file system honoring the file and directory sync operations us
 
 ## Current boundary
 
-The sidecar currently supports build, exact scalar and compound equality lookup, compound equality-prefix candidate lookup, range candidate lookup, compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, per-field-direction compound-key construction and prefix traversal, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
+The sidecar currently supports build, exact scalar and compound equality lookup, compound equality-prefix candidate lookup, range candidate lookup, compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, per-field-direction compound-key construction and prefix traversal, bounded Unicode collated ordered keys, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
@@ -177,6 +196,10 @@ repair path. Unsupported sidecar definitions and refresh I/O failures reject
 schema-preserving export before its journal is written.
 
 The path-aware query executor uses equality, compound equality-prefix, equality intersection, range, compound equality-prefix range, single-field ordered, or compound-prefix ordered sidecar traversal when it can prove that the lookup is valid, then applies the normal filter pipeline to the candidate records.
+
+For a sorted query with `collation`, the planner uses only a sidecar with the same collation and otherwise falls back to a table scan.
+
+Collated sidecars are not filter candidates, so normalized keys cannot change exact filter semantics.
 
 For a multi-key sort, a single-field index supplies the first sort-key order and the executor stably sorts only equal-key groups by the remaining keys.
 
@@ -229,9 +252,9 @@ It still materializes candidate record numbers and sorts them by physical DBF or
 
 Freshness validation still reads the DBF and memo bytes, and the query executor still materializes candidate record numbers, so this is not a claim of zero-copy or end-to-end index I/O.
 
-More precise physical I/O, collation-aware planning, and cross-table index definitions or query planning require separate contracts.
+More precise physical I/O, locale-aware CJK collation, and cross-table index definitions or query planning require separate contracts.
 
-The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, logical-page cost, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs more precise physical modeling and cross-table index or planning contracts.
+The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, collated ordered-key, logical-page cost, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs more precise physical modeling and cross-table index or planning contracts.
 
 ## Primary references and scope
 

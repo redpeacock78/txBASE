@@ -4,17 +4,20 @@ use serde_json::{Map, Value};
 impl IndexFile {
     pub(crate) fn compound_indexes(&self) -> impl Iterator<Item = (&str, &[String])> {
         self.indexes.iter().filter_map(|index| {
-            (index.definition.fields.len() > 1).then_some((
-                index.definition.name.as_str(),
-                index.definition.fields.as_slice(),
-            ))
+            (index.definition.fields.len() > 1 && index.definition.collation().is_none()).then_some(
+                (
+                    index.definition.name.as_str(),
+                    index.definition.fields.as_slice(),
+                ),
+            )
         })
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn has_exact_fields(&self, fields: &[&str]) -> bool {
         self.indexes.iter().any(|index| {
-            index.definition.fields.len() == fields.len()
+            index.definition.collation().is_none()
+                && index.definition.fields.len() == fields.len()
                 && index
                     .definition
                     .fields
@@ -26,7 +29,9 @@ impl IndexFile {
 
     pub(crate) fn equality_selectivity_estimate(&self, field: &str) -> Option<usize> {
         let index = self.indexes.iter().find(|index| {
-            index.definition.fields.len() == 1 && index.definition.fields[0] == field
+            index.definition.collation().is_none()
+                && index.definition.fields.len() == 1
+                && index.definition.fields[0] == field
         })?;
         let distinct_keys = index.entries.len();
         if distinct_keys == 0 {
@@ -40,7 +45,8 @@ impl IndexFile {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn equality_fanout_estimate(&self, fields: &[&str]) -> Option<usize> {
         let index = self.indexes.iter().find(|index| {
-            index.definition.fields.len() == fields.len()
+            index.definition.collation().is_none()
+                && index.definition.fields.len() == fields.len()
                 && index
                     .definition
                     .fields
@@ -82,12 +88,17 @@ impl IndexFile {
     }
 
     pub fn lookup_eq(&self, index_name: &str, value: &Value) -> Result<Vec<usize>, IndexError> {
-        let key = IndexKey::from_value(Some(value))?;
         let index = self
             .indexes
             .iter()
             .find(|index| index.definition.name == index_name)
             .ok_or_else(|| IndexError::Invalid(format!("index not found: {index_name}")))?;
+        if index.definition.collation().is_some() {
+            return Err(IndexError::Invalid(
+                "collated indexes cannot serve equality lookup".into(),
+            ));
+        }
+        let key = IndexKey::from_value(Some(value), None)?;
         Ok(index
             .entries
             .binary_search_by(|entry| ordering::compare_keys(&entry.key, &key))
@@ -102,11 +113,13 @@ impl IndexFile {
         value: &Value,
     ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
         let Some(index) = self.indexes.iter().find(|index| {
-            index.definition.fields.len() == 1 && index.definition.fields[0] == field
+            index.definition.collation().is_none()
+                && index.definition.fields.len() == 1
+                && index.definition.fields[0] == field
         }) else {
             return Ok(None);
         };
-        let key = IndexKey::from_value(Some(value))?;
+        let key = IndexKey::from_value(Some(value), None)?;
         Ok(Some((
             index.definition.name.clone(),
             index
@@ -125,7 +138,8 @@ impl IndexFile {
         values: &[Value],
     ) -> Result<Option<(String, Vec<usize>)>, IndexError> {
         let Some(index) = self.indexes.iter().find(|index| {
-            index.definition.fields.len() == fields.len()
+            index.definition.collation().is_none()
+                && index.definition.fields.len() == fields.len()
                 && index
                     .definition
                     .fields
@@ -150,7 +164,7 @@ impl IndexFile {
         let Some(index) = self
             .indexes
             .iter()
-            .find(|index| index.definition.name == name)
+            .find(|index| index.definition.name == name && index.definition.collation().is_none())
         else {
             return Ok(None);
         };
@@ -165,7 +179,7 @@ impl IndexFile {
         {
             return Ok(None);
         }
-        let key = IndexKey::from_values(values.iter().map(Some).collect())?;
+        let key = IndexKey::from_values(values.iter().map(Some).collect(), None)?;
         Ok(Some(
             index
                 .entries
@@ -187,7 +201,7 @@ pub(super) fn equality_prefix(
         .iter()
         .map(|field| {
             let value = exact_equality_value(filter.get(field)?)?;
-            IndexKey::from_value(Some(value)).ok()
+            IndexKey::from_value(Some(value), None).ok()
         })
         .collect()
 }

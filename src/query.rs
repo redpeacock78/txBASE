@@ -8,6 +8,8 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 
+pub use crate::Collation;
+
 mod aggregation;
 mod aggregation_plan;
 mod array_predicate;
@@ -71,13 +73,6 @@ pub const SUPPORTED_FILTER_OPERATORS: &[&str] = &[
     "$not",
     "$expr",
 ];
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Collation {
-    UnicodeLowercase,
-    UnicodeNfkcLowercase,
-}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

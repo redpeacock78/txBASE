@@ -1,4 +1,5 @@
 use super::*;
+use crate::Collation;
 use serde_json::{Map, json};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -47,6 +48,23 @@ fn index_definition_wire_shape_validates_fields_and_directions() {
             .unwrap()
             .fields(),
         &["NAME".to_owned()]
+    );
+
+    let collated =
+        IndexDefinition::named("by_name_ci", "NAME").with_collation(Collation::UnicodeLowercase);
+    assert_eq!(
+        serde_json::to_value(&collated).unwrap(),
+        json!({
+            "name": "by_name_ci",
+            "field": "NAME",
+            "collation": "unicode-lowercase"
+        })
+    );
+    assert_eq!(
+        serde_json::from_value::<IndexDefinition>(serde_json::to_value(&collated).unwrap())
+            .unwrap()
+            .collation(),
+        Some(Collation::UnicodeLowercase)
     );
 
     let compound = IndexDefinition::named_fields_with_directions(
@@ -175,13 +193,56 @@ fn builds_and_loads_a_compound_ordered_index() {
         0
     );
     let (name, fields, directions, records) = loaded
-        .lookup_ordered_for_fields(&["NAME", "AGE"], &[1, 1], &Map::new())
+        .lookup_ordered_for_fields(&["NAME", "AGE"], &[1, 1], &Map::new(), None)
         .unwrap()
         .unwrap();
     assert_eq!(name, "by_name_age");
     assert_eq!(fields, vec!["NAME", "AGE"]);
     assert_eq!(directions, vec![1, 1]);
     assert_eq!(records.len(), 2);
+
+    remove_table_files(&path);
+}
+
+#[test]
+fn builds_a_collated_ordered_index_without_enabling_exact_lookup() {
+    let path = temporary_dbf();
+    let mut bytes = fixture();
+    bytes[179] = b' ';
+    bytes[183..193].copy_from_slice(b"alice     ");
+    fs::write(&path, bytes).unwrap();
+
+    IndexFile::build(
+        &path,
+        vec![
+            IndexDefinition::named("by_name_ci", "NAME")
+                .with_collation(Collation::UnicodeLowercase),
+        ],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+
+    let loaded = IndexFile::load(&path).unwrap();
+    assert_eq!(
+        loaded.schema_json()["indexes"][0]["collation"],
+        json!("unicode-lowercase")
+    );
+    let (_, records) = loaded
+        .lookup_ordered_for_field("NAME", false, Some(Collation::UnicodeLowercase))
+        .unwrap()
+        .unwrap();
+    assert_eq!(records, vec![1, 2]);
+    assert!(
+        loaded
+            .lookup_ordered_for_field("NAME", false, None)
+            .unwrap()
+            .is_none()
+    );
+    assert!(matches!(
+        loaded.lookup_eq("by_name_ci", &json!("alice")),
+        Err(IndexError::Invalid(message)) if message.contains("cannot serve equality lookup")
+    ));
 
     remove_table_files(&path);
 }
@@ -211,7 +272,7 @@ fn builds_a_mixed_direction_compound_index() {
         json!([1, -1])
     );
     let (_, _, directions, records) = loaded
-        .lookup_ordered_for_fields(&["NAME", "AGE"], &[1, -1], &Map::new())
+        .lookup_ordered_for_fields(&["NAME", "AGE"], &[1, -1], &Map::new(), None)
         .unwrap()
         .unwrap();
     assert_eq!(directions, vec![1, -1]);
@@ -338,7 +399,7 @@ fn rebuild_migrates_a_v1_sidecar() {
     ));
 
     let rebuilt = IndexFile::rebuild(&path).unwrap();
-    assert_eq!(rebuilt.schema_json()["version"], json!(3));
+    assert_eq!(rebuilt.schema_json()["version"], json!(4));
     assert!(IndexFile::load(&path).is_ok());
 
     remove_table_files(&path);

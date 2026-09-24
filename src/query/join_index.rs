@@ -67,13 +67,13 @@ pub(super) fn ordered_records(index: &IndexFile, fields: &[String]) -> Option<Ve
     let fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
     if fields.len() == 1 {
         return index
-            .lookup_ordered_for_field(fields[0], false)
+            .lookup_ordered_for_field(fields[0], false, None)
             .ok()?
             .map(|(_, records)| records);
     }
     let directions = vec![1; fields.len()];
     index
-        .lookup_ordered_for_fields(&fields, &directions, &Map::new())
+        .lookup_ordered_for_fields(&fields, &directions, &Map::new(), None)
         .ok()?
         .map(|(_, _, _, records)| records)
 }

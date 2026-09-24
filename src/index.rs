@@ -5,7 +5,7 @@ use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 
 const INDEX_FORMAT: &str = "txbase-index";
-const INDEX_VERSION: u8 = 3;
+const INDEX_VERSION: u8 = 4;
 const INDEX_EXTENSION: &str = "txidx";
 pub(crate) const COST_PAGE_SIZE: usize = 4 * 1024;
 
@@ -180,7 +180,7 @@ impl IndexFile {
                 "active_record_count": self.active_record_count(),
             },
             "indexes": self.indexes.iter().map(|index| {
-                if index.definition.fields.len() == 1 {
+                let mut schema = if index.definition.fields.len() == 1 {
                     json!({
                         "name": index.definition.name,
                         "field": index.definition.fields[0],
@@ -199,7 +199,11 @@ impl IndexFile {
                         "indexed_record_count": index.entries.iter().map(|entry| entry.records.len()).sum::<usize>(),
                         "histogram_bucket_count": self.statistics.as_ref().map_or(0, |statistics| statistics.histogram_bucket_count(&index.definition.name)),
                     })
+                };
+                if let Some(collation) = index.definition.collation {
+                    schema["collation"] = serde_json::to_value(collation).unwrap_or(Value::Null);
                 }
+                schema
             }).collect::<Vec<_>>(),
         })
     }

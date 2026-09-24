@@ -77,10 +77,6 @@ pub(super) struct PlannedAccess {
 }
 
 pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
-    // ponytail: custom collation uses a table scan; add collation-aware index keys only if needed.
-    if request.collation.is_some() {
-        return table_scan();
-    }
     let Ok(index_file) = IndexFile::load(dbf_path) else {
         return table_scan();
     };
@@ -93,9 +89,6 @@ pub(super) fn choose_with_table(
     request: &QueryRequest,
 ) -> PlannedAccess {
     // The caller holds the table read lock, so do not reacquire the exclusive lock in load().
-    if request.collation.is_some() {
-        return table_scan();
-    }
     let Ok(index_file) = IndexFile::load_with_table(dbf_path, table) else {
         return table_scan();
     };
@@ -321,8 +314,8 @@ fn choose_ordered(index_file: &IndexFile, request: &QueryRequest) -> Option<Plan
     if !request.sort.is_empty() {
         let fields = request.sort.keys().map(String::as_str).collect::<Vec<_>>();
         let directions = request.sort.values().copied().collect::<Vec<_>>();
-        if let Ok(Some((name, index_fields, index_directions, records))) =
-            index_file.lookup_ordered_for_fields(&fields, &directions, &request.filter)
+        if let Ok(Some((name, index_fields, index_directions, records))) = index_file
+            .lookup_ordered_for_fields(&fields, &directions, &request.filter, request.collation)
         {
             let plan = if index_fields.len() == 1 {
                 QueryPlan::OrderedIndex {
@@ -345,7 +338,7 @@ fn choose_ordered(index_file: &IndexFile, request: &QueryRequest) -> Option<Plan
         }
         let (field, direction) = request.sort.iter().next().expect("sort has one field");
         let Ok(Some((name, records))) =
-            index_file.lookup_ordered_for_field(field, *direction == -1)
+            index_file.lookup_ordered_for_field(field, *direction == -1, request.collation)
         else {
             return None;
         };

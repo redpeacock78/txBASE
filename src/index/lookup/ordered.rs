@@ -1,5 +1,6 @@
 use super::super::{IndexFile, IndexKey};
 use super::{CompoundOrdered, equality::equality_prefix};
+use crate::Collation;
 use serde_json::{Map, Value};
 
 impl IndexFile {
@@ -7,9 +8,12 @@ impl IndexFile {
         &self,
         field: &str,
         descending: bool,
+        collation: Option<Collation>,
     ) -> Result<Option<(String, Vec<usize>)>, super::super::IndexError> {
         let Some(index) = self.indexes.iter().find(|index| {
-            index.definition.fields.len() == 1 && index.definition.fields[0] == field
+            index.definition.collation() == collation
+                && index.definition.fields.len() == 1
+                && index.definition.fields[0] == field
         }) else {
             return Ok(None);
         };
@@ -31,16 +35,16 @@ impl IndexFile {
         fields: &[&str],
         directions: &[i8],
         filter: &Map<String, Value>,
+        collation: Option<Collation>,
     ) -> Result<Option<CompoundOrdered>, super::super::IndexError> {
         if fields.is_empty() {
             return Ok(None);
         }
         let mut best = None;
-        for index in self
-            .indexes
-            .iter()
-            .filter(|index| index.definition.fields.len() >= fields.len())
-        {
+        for index in self.indexes.iter().filter(|index| {
+            index.definition.collation() == collation
+                && index.definition.fields.len() >= fields.len()
+        }) {
             for offset in 0..=index.definition.fields.len() - fields.len() {
                 let indexed_fields = &index.definition.fields[offset..offset + fields.len()];
                 if !indexed_fields
@@ -50,16 +54,28 @@ impl IndexFile {
                 {
                     continue;
                 }
+                if index.definition.collation().is_some()
+                    && fields.len() != index.definition.fields.len()
+                {
+                    continue;
+                }
                 let Some(reverse) = traversal_is_reverse(
                     &index.definition.directions[offset..offset + fields.len()],
                     directions,
                 ) else {
                     continue;
                 };
-                let Some(equality_prefix) =
-                    equality_prefix(filter, &index.definition.fields[..offset])
-                else {
-                    continue;
+                let equality_prefix = if index.definition.collation().is_some() {
+                    if offset != 0 {
+                        continue;
+                    }
+                    Vec::new()
+                } else {
+                    let Some(prefix) = equality_prefix(filter, &index.definition.fields[..offset])
+                    else {
+                        continue;
+                    };
+                    prefix
                 };
                 let records = ordered_records(index, reverse, &equality_prefix);
                 let score = (

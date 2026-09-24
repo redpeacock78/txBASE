@@ -3,13 +3,14 @@ use std::fs;
 use std::path::PathBuf;
 
 use txbase::{
+    Collation,
     catalog::Catalog,
     dbf::DbfTable,
     index::{IndexDefinition, IndexFile},
     transaction::FileWal,
 };
 
-use super::super::{parse_compound_field, parse_encoding_option};
+use super::super::{parse_collation, parse_compound_field, parse_encoding_option};
 
 pub(crate) fn inspect(
     command: &str,
@@ -126,7 +127,14 @@ pub(crate) fn index(mut args: impl Iterator<Item = String>) -> Result<(), Box<dy
     );
     match operation.as_str() {
         "build" => {
-            let definitions = args.map(IndexDefinition::for_field).collect::<Vec<_>>();
+            let (fields, collation) = parse_index_options(args)?;
+            let definitions = fields
+                .into_iter()
+                .map(|field| {
+                    let definition = IndexDefinition::for_field(field);
+                    collation.map_or(definition.clone(), |value| definition.with_collation(value))
+                })
+                .collect::<Vec<_>>();
             if definitions.is_empty() {
                 return Err("index build requires at least one field".into());
             }
@@ -135,12 +143,14 @@ pub(crate) fn index(mut args: impl Iterator<Item = String>) -> Result<(), Box<dy
             println!("{}", serde_json::to_string_pretty(&index.schema_json())?);
         }
         "build-compound" => {
-            let name = args
+            let (index_args, collation) = parse_index_options(args)?;
+            let mut index_args = index_args.into_iter();
+            let name = index_args
                 .next()
                 .ok_or_else(|| "index build-compound requires an index name".to_owned())?;
             let mut fields = Vec::new();
             let mut directions = Vec::new();
-            for specification in args {
+            for specification in index_args {
                 let (field, direction) = parse_compound_field(&specification)?;
                 fields.push(field);
                 directions.push(direction);
@@ -152,6 +162,11 @@ pub(crate) fn index(mut args: impl Iterator<Item = String>) -> Result<(), Box<dy
                 IndexDefinition::named_fields(name, fields)
             } else {
                 IndexDefinition::named_fields_with_directions(name, fields, directions)
+            };
+            let definition = if let Some(value) = collation {
+                definition.with_collation(value)
+            } else {
+                definition
             };
             let index = IndexFile::build(&path, vec![definition])?;
             index.save(&path)?;
@@ -180,4 +195,26 @@ pub(crate) fn index(mut args: impl Iterator<Item = String>) -> Result<(), Box<dy
         _ => return Err(format!("unknown index operation: {operation}").into()),
     }
     Ok(())
+}
+
+fn parse_index_options(
+    args: impl Iterator<Item = String>,
+) -> Result<(Vec<String>, Option<Collation>), Box<dyn Error>> {
+    let mut positional = Vec::new();
+    let mut collation = None;
+    let mut args = args;
+    while let Some(argument) = args.next() {
+        if argument == "--collation" {
+            if collation.is_some() {
+                return Err("index collation was specified more than once".into());
+            }
+            let value = args.next().ok_or("--collation requires a name")?;
+            collation = Some(parse_collation(&value)?);
+        } else if argument.starts_with('-') {
+            return Err(format!("unexpected argument: {argument}").into());
+        } else {
+            positional.push(argument);
+        }
+    }
+    Ok((positional, collation))
 }

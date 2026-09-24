@@ -10,7 +10,9 @@ impl IndexFile {
         upper: Option<(&Value, bool)>,
     ) -> Option<usize> {
         let index = self.indexes.iter().find(|index| {
-            index.definition.fields.len() == 1 && index.definition.fields[0] == field
+            index.definition.collation().is_none()
+                && index.definition.fields.len() == 1
+                && index.definition.fields[0] == field
         })?;
         self.statistics
             .as_ref()?
@@ -26,7 +28,7 @@ impl IndexFile {
         let Some(index) = self
             .indexes
             .iter()
-            .find(|index| index.definition.name == name)
+            .find(|index| index.definition.name == name && index.definition.collation().is_none())
         else {
             return Ok(None);
         };
@@ -44,7 +46,7 @@ impl IndexFile {
         }
         let prefix = values
             .iter()
-            .map(|value| IndexKey::from_value(Some(value)))
+            .map(|value| IndexKey::from_value(Some(value), None))
             .collect::<Result<Vec<_>, _>>()?;
         let prefix_start = lower_bound(&index.entries, |entry| {
             !compare_index_prefix(&entry.key, &prefix, index.definition.directions()).is_lt()
@@ -71,7 +73,9 @@ impl IndexFile {
             return Err(IndexError::Invalid("range must have a bound".into()));
         }
         let Some(index) = self.indexes.iter().find(|index| {
-            index.definition.fields.len() == 1 && index.definition.fields[0] == field
+            index.definition.collation().is_none()
+                && index.definition.fields.len() == 1
+                && index.definition.fields[0] == field
         }) else {
             return Ok(None);
         };
@@ -136,13 +140,20 @@ impl IndexFile {
             return Err(IndexError::Invalid("range must have a bound".into()));
         }
         let lower = lower
-            .map(|(value, inclusive)| IndexKey::from_value(Some(value)).map(|key| (key, inclusive)))
+            .map(|(value, inclusive)| {
+                IndexKey::from_value(Some(value), None).map(|key| (key, inclusive))
+            })
             .transpose()?;
         let upper = upper
-            .map(|(value, inclusive)| IndexKey::from_value(Some(value)).map(|key| (key, inclusive)))
+            .map(|(value, inclusive)| {
+                IndexKey::from_value(Some(value), None).map(|key| (key, inclusive))
+            })
             .transpose()?;
 
         for index in &self.indexes {
+            if index.definition.collation().is_some() {
+                continue;
+            }
             let Some(offset) = index
                 .definition
                 .fields

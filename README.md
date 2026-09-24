@@ -189,12 +189,13 @@ Index lifecycle and maintenance:
 ```bash
 txbase index build path/to/users.dbf NAME AGE
 txbase index build-compound path/to/users.dbf by_name_age NAME AGE
+txbase index build path/to/users.dbf NAME --collation unicode-lowercase
 txbase index rebuild path/to/users.dbf
 txbase pack path/to/users.dbf
 txbase recall path/to/users.dbf 2
 ```
 
-`index verify` rejects stale sidecars; `index rebuild` is the explicit repair path. `pack` removes logically deleted records, compacts referenced DBT/FPT memo blocks, refreshes an existing index sidecar, and persists the DBF and memo snapshot through one WAL boundary. `recall` restores one logically deleted record by physical record number.
+`index verify` rejects stale sidecars; `index rebuild` is the explicit repair path. Collated indexes serve matching sort order only and do not serve exact or range filters. `pack` removes logically deleted records, compacts referenced DBT/FPT memo blocks, refreshes an existing index sidecar, and persists the DBF and memo snapshot through one WAL boundary. `recall` restores one logically deleted record by physical record number.
 
 XBF conversion and sidecar-aware file transfer:
 

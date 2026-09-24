@@ -92,6 +92,7 @@ pub(super) fn validate_for_table(
                     .iter()
                     .map(|field| record.values.get(field))
                     .collect(),
+                index.definition.collation(),
             )?;
             let Some(position) = index
                 .entries
@@ -147,6 +148,7 @@ pub(super) fn build_indexes(
                     .iter()
                     .map(|field| record.values.get(field))
                     .collect(),
+                definition.collation(),
             )?;
             let token = key_token(&key)?;
             grouped
