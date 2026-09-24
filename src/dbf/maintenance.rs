@@ -33,6 +33,7 @@ pub fn copy_table_files(
     };
     let _first_lock = super::TableLock::acquire(first)?;
     let _second_lock = super::TableLock::acquire(second)?;
+    let _ = super::recover_path_with_lock_held(destination)?;
     let recovered = super::recover_path_with_lock_held(source)?;
     let table = super::load_path_with_lock_held(source)?;
     if recovered {

@@ -134,6 +134,50 @@ fn copy_table_files_preserves_schema_and_replaces_a_stale_destination_schema() {
 }
 
 #[test]
+fn copy_table_files_recovers_a_pending_destination_wal_before_replacement() {
+    let source = std::env::temp_dir().join(format!(
+        "txbase-maintenance-destination-wal-source-{}.dbf",
+        std::process::id()
+    ));
+    let destination = std::env::temp_dir().join(format!(
+        "txbase-maintenance-destination-wal-destination-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&source);
+    remove_table_files(&destination);
+
+    let original = fixture();
+    fs::write(&source, &original).unwrap();
+    fs::write(&destination, &original).unwrap();
+    let mut pending = DbfTable::from_bytes(&original).unwrap();
+    pending
+        .patch_record(
+            1,
+            serde_json::json!({"NAME": "stale destination"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+    let mut payload = SNAPSHOT_MAGIC.to_vec();
+    payload.extend_from_slice(&pending.to_bytes());
+    let wal_path = destination.with_extension("txbase.wal");
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(&payload).unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    copy_table_files(&source, &destination).unwrap();
+
+    let restored = DbfTable::from_path(&destination).unwrap();
+    assert_eq!(restored.to_bytes(), original);
+    assert!(!wal_path.exists());
+
+    remove_table_files(&source);
+    remove_table_files(&destination);
+}
+
+#[test]
 fn copy_table_files_preserves_transaction_state() {
     let source = std::env::temp_dir().join(format!(
         "txbase-maintenance-state-source-{}.dbf",

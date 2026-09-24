@@ -248,7 +248,7 @@ The CLI now exposes the first local-database maintenance boundary:
 
 The copy operation replaces each destination file through a synced temporary file.
 
-Before reading the source, the copy operation recovers pending WAL or schema-export work and holds both the source and destination table locks while it reads, validates, and replaces the DBF and all supported sidecars. It acquires those locks in stable lock-path order so opposite-direction copies do not deadlock.
+Before reading the source, the copy operation recovers pending WAL or schema-export work for the destination and source, then holds both table locks while it reads, validates, and replaces the DBF and all supported sidecars. It acquires those locks in stable lock-path order so opposite-direction copies do not deadlock.
 
 DBF and memo sidecar replacement is still a sequence of file operations, not a new multi-file transaction protocol.
 
