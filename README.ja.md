@@ -222,7 +222,7 @@ cargo build --release
 
 ### 品質ゲート
 
-CIはUbuntuのdocsジョブでドキュメントを検査し、Ubuntuの生成WASM Node.jsスモーク検査を実行し、Ubuntu、macOS、WindowsのRustジョブで次のチェックを実行します。
+CIはUbuntuのdocsジョブでドキュメントを検査し、Ubuntuの生成WASM Node.jsスモークを確認し、Ubuntu、macOS、WindowsのRustジョブで次のチェックを実行します。
 
 ```bash
 bun install --frozen-lockfile
