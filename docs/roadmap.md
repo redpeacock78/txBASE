@@ -70,6 +70,7 @@ The repository currently provides:
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, `ReplicationSnapshot`, and `ReplicationProgress` JSON formats, journaled `TXRP` sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, monotonic follower-progress acknowledgement with minimum-index coordinated compaction and restart re-registration, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded entry-batch validation and ordered receiver application, bounded HTTP entry, contiguous entry-range, snapshot, and progress delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
 - A bounded `ReplicationHttpClient` that validates authority status, pulls contiguous entry pages or a current snapshot, applies them through the local ordered replay contract, and acknowledges follower progress over plain HTTP.
+- A public `txbase replicate catch-up` command that opens a fixed-term follower catalog, resumes its journaled `TXRP` position, performs one bounded HTTP catch-up session, and reports the resulting progress as JSON.
 
 The baseline intentionally does not include the following:
 
@@ -383,6 +384,8 @@ The catalog server also exposes version 1 `status`, contiguous entry-range deliv
 The default `authority` role routes `/transaction` and named-table mutations through the same catalog journal commit as `TXRP` state and rechecks table ETags before commit.
 The `follower` role reports its role through `status`, rejects direct catalog mutations with `409`, and still accepts replication delivery.
 Optional RFC 6750 Bearer authentication protects the replication routes when `TXBASE_REPLICATION_TOKEN` is configured; TLS, quorum, consensus, and retry queues are not provided.
+The public `txbase replicate catch-up` command provides a one-shot operational
+client for the same routes and resumes an already persisted follower prefix.
 The authority can export a retained snapshot at an applied index and compact the local `TXRP` prefix through that exact image while preserving the suffix and catalog transaction ID.
 It accepts validated monotonic follower progress and exposes the minimum acknowledged index for coordinated compaction.
 Follower progress is process-local and must be re-registered after an authority restart; quorum-safe truncation remains future work.

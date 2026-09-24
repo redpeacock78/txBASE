@@ -25,6 +25,7 @@ pub(super) fn run() -> Result<(), Box<dyn Error>> {
         "mvcc" => commands::mvcc(args),
         "serve" => commands::serve(args),
         "serve-catalog" => commands::serve_catalog(args),
+        "replicate" => commands::replicate(args),
         "schema" => commands::schema(args),
         "verify" => commands::inspect("verify", args),
         "catalog" | "verify-catalog" => commands::catalog(&first, args),
@@ -51,6 +52,9 @@ fn print_help() {
     );
     println!(
         "\nCatalog replication: txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower] exposes GET /replication/status, GET /replication/snapshot, POST /replication/entry, and POST /replication/snapshot. Authority mode captures catalog mutations; follower mode rejects direct catalog mutations and accepts replication delivery."
+    );
+    println!(
+        "\nReplication catch-up: txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS] pulls one bounded session from an authority and prints its result as JSON. TXBASE_REPLICATION_TOKEN optionally authenticates the session."
     );
     println!(
         "\nCDC:\n  txbase cdc FILE [--after TRANSACTION_ID]\n  txbase cdc catalog DIRECTORY [--after TRANSACTION_ID]"

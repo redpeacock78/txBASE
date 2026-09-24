@@ -213,6 +213,13 @@ order, and acknowledges the resulting follower position.
 An entry page remains independently atomic, so a failure can leave an applied
 prefix that a later call safely retries.
 
+The public CLI exposes the same one-shot operation as
+`txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID`.
+It opens the local catalog and `TXRP` sidecar, optionally reads
+`TXBASE_REPLICATION_TOKEN`, and prints the synchronization result as JSON.
+The command is intentionally not a daemon, scheduler, retry queue, or leader
+election process; invoke it again to resume a persisted prefix.
+
 The client uses HTTP/1.1 with `Connection: close`, explicit
 `Content-Length`, the existing `1 MiB` entry/progress and `64 MiB` snapshot
 limits, and no chunked decoding.

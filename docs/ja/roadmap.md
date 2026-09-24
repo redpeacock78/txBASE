@@ -85,6 +85,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
   `follower`ロールは読み取り専用である。
   外部インフラなしの決定的なleader/followerフィクスチャも提供する。
 - 有界な`ReplicationHttpClient`がauthorityの状態を検証し、連続したエントリページまたは現在のスナップショットを取得し、ローカルの順序付き再生契約で適用し、平文HTTPでフォロワー適用位置を確認する。
+- 公開`txbase replicate catch-up`コマンドが固定termのフォロワーカタログを開き、ジャーナル化された`TXRP`位置を再開し、有界なHTTP catch-upを1回実行して、結果の適用位置をJSONで表示する。
 
 ベースラインには意図的に、次を含めません。
 
@@ -430,6 +431,7 @@ WASMは2つ目のデータベース実装を作らず、DBFまたはXBFコーデ
 既定の`authority`ロールは`/transaction`と名前付きテーブルの更新を`TXRP`状態と同じカタログジャーナルcommitに通し、commit前にテーブルETagを再検査します。
 `follower`ロールは`status`で自身のロールを報告し、直接のカタログ更新を`409`で拒否しながらレプリケーション配送を受け付けます。
 `TXBASE_REPLICATION_TOKEN`を設定した場合、RFC 6750 Bearer認証がレプリケーションルートを保護します。TLS、クォーラム、コンセンサス、再試行キューは提供しません。
+公開`txbase replicate catch-up`コマンドは、同じルートを使う1回限りの運用クライアントであり、永続化済みのフォロワーprefixから再開します。
 authorityは、適用済みindexの保持済みスナップショットを出力し、そのイメージまでのローカル`TXRP` prefixをsuffixとカタログtransaction IDを保ったまま圧縮できます。
 authorityは、検証済みで単調なフォロワー適用位置を受け付け、最小確認indexを調整された圧縮の上限として公開します。
 フォロワー位置はプロセス内に保持し、authorityの再起動後に再登録します。クォーラム安全な切り詰めは将来の作業です。

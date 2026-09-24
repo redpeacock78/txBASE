@@ -70,6 +70,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 | `txbase restore SOURCE DEST` | バックアップをソースとして、同じ検証済みコピー手順を使う。 |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | 単一テーブルHTTPサーバーを起動する。 |
 | `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | カタログHTTPサーバーと有界なレプリケーション配送およびフォロワー適用位置確認ルートを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、`follower`ロールは直接のカタログ更新とフォロワー適用位置確認を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。`TXBASE_REPLICATION_TOKEN`を設定した場合、すべてのレプリケーションルートにRFC 6750の`Authorization: Bearer <token>`ヘッダーが必要になる。 |
+| `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | フォロワーカタログを開き、authorityから有界な1回のcatch-upを取得し、適用済みカタログと`TXRP`位置を永続化し、適用位置を確認して、同期結果をJSONで表示する。`TERM`はauthorityと一致する必要があり、`COUNT`は`1`から`128`の範囲で指定する。authorityがBearer認証を要求する場合は、任意の`TXBASE_REPLICATION_TOKEN`環境変数を使う。 |
 
 ## オプションの所有範囲
 
@@ -77,9 +78,12 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 - `--encoding`はDBFテキストをデコードするパスロードコマンドの`read`、`schema`、`verify`、`xbf import`、`pack`、`recall`、`serve`に属する。
 - `--schema`は`xbf export`だけに属する。
 - `--bind`は`serve`と`serve-catalog`だけに属する。
-- `--replication-term`は`serve-catalog`だけに属し、正の固定ローカルtermを選択する。
+- `--replication-term`は`serve-catalog`と`replicate catch-up`に属し、どちらの操作でも正の固定ローカルtermを選択する。
 - `--replication-role`は`serve-catalog`だけに属し、既定の`authority`は書き込みロール、`follower`は直接のカタログ更新と適用位置確認を拒否してレプリケーション配送を受け付ける。
 - `TXBASE_REPLICATION_TOKEN`は`serve-catalog`の任意の環境変数であり、CLIオプションではない。コマンドラインにトークンを露出させずにレプリケーションルートを保護する。
+- `--replication-term`と`--follower-id`は`replicate catch-up`だけに属し、ローカルの固定termとフォロワーセッションを指定する。
+- `--limit`と`--timeout-ms`は`replicate catch-up`だけに属し、1回のpullセッションとソケット操作を制限する。
+- `TXBASE_REPLICATION_TOKEN`は`replicate catch-up`でも読み取り、authorityのBearer認証に使う。
 - `--after`は`cdc`と`cdc catalog`だけに属する。
 - `--keep`はテーブルとカタログのMVCCガベージコレクションに属し、`--keep-rows`はテーブルMVCCガベージコレクションだけに属する。
 - `index build-compound`は、各フィールドの方向に`1`または`asc`、`-1`または`desc`を受け付ける。
@@ -111,6 +115,12 @@ WALの作成や切り詰めは行いません。
 
 中断後の宛先を使う前に、`txbase verify DEST`を実行します。
 
+`replicate catch-up`は、1回だけ実行する更新操作です。
+
+スナップショットのインストール、エントリページの一部適用、フォロワーの`TXRP`サイドカー書き込みの後にエラーを返す場合があります。
+
+同じコマンドを再実行すると、永続化済みの位置から再開して、結果の適用位置を確認できます。
+
 単一テーブルサーバーとカタログサーバーは、一度だけ検査するコマンドではなく、長時間動作するプロセスです。
 
 HTTP契約は、[HTTPメソッドの意味](http-semantics.md)、[クエリモデル](query-model.md)、[複数テーブルカタログ](catalog.md)、レプリケーション配送については[分散化の進化](distributed-evolution.md)で定義します。
@@ -122,6 +132,7 @@ HTTP契約は、[HTTPメソッドの意味](http-semantics.md)、[クエリモ�
 | 読み取りと検査 | `read`、`cdc`、`cdc catalog`、`schema`、`verify`、`catalog`、`verify-catalog`、`wal inspect`、`mvcc list`、`mvcc read`、`mvcc row`、`mvcc row-at`、`mvcc catalog list`、`mvcc catalog read`、`xbf report`、`index verify` | 読み取り指向の出力です。上記の通常復旧に関する注意を伴います。 |
 | 作成と更新 | `init`、`insert`、`pack`、`recall`、`schema apply`、`mvcc gc`、`mvcc catalog gc`、`index build`、`index build-compound`、`index rebuild`、`xbf import`、`xbf export` | コマンド契約に従って、DBFバイト列、サイドカー、永続履歴を書き換えることがあります。 |
 | コピーと提供 | `backup`、`restore`、`serve`、`serve-catalog` | 別の文書で定義する境界を通して、データをコピーまたは公開します。 |
+| レプリケーション | `replicate catch-up` | 有界なHTTPレプリケーション境界を通して、フォロワーカタログを更新します。 |
 
 `schema apply`を`schema`から分けているのは意図的です。
 `schema`は現在のメタデータを検査し、`schema apply`は候補サイドカーを検証してインストールします。

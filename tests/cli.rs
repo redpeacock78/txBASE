@@ -1,5 +1,18 @@
 use std::fs;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::path::PathBuf;
 use std::process::{Command, Output};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
+
+use serde_json::json;
+use txbase::catalog::Catalog;
+use txbase::replication::{REPLICATION_TRANSPORT_VERSION, ReplicationLog};
+use txbase::xbase::{OperationIr, OperationMethod};
+
+static NEXT_REPLICATION_CLI_ID: AtomicUsize = AtomicUsize::new(0);
 
 fn users_fixture() -> Vec<u8> {
     include_str!("fixtures/users.dbf.hex")
@@ -13,6 +26,100 @@ fn run_cli(args: &[&str]) -> Output {
         .args(args)
         .output()
         .unwrap()
+}
+
+fn replication_fixture_catalog(label: &str) -> PathBuf {
+    let id = NEXT_REPLICATION_CLI_ID.fetch_add(1, Ordering::Relaxed);
+    let root = std::env::temp_dir().join(format!(
+        "txbase-cli-replication-{label}-{}-{id}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir(&root).unwrap();
+    fs::write(
+        root.join("users.dbf"),
+        include_str!("fixtures/users.dbf.hex")
+            .split_whitespace()
+            .map(|byte| u8::from_str_radix(byte, 16).unwrap())
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    root
+}
+
+fn replication_post(record_id: i64, name: &str) -> OperationIr {
+    OperationIr {
+        method: OperationMethod::Post,
+        path: "/users/records".into(),
+        body: Some(json!({
+            "ID": record_id,
+            "NAME": name,
+            "AGE": 42,
+            "ACTIVE": true
+        })),
+    }
+}
+
+fn http_json_response(body: Vec<u8>) -> Vec<u8> {
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .into_bytes()
+    .into_iter()
+    .chain(body)
+    .collect()
+}
+
+fn spawn_replication_sequence(responses: Vec<Vec<u8>>) -> (String, JoinHandle<Vec<Vec<u8>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut requests = Vec::new();
+        for response in responses {
+            let (mut stream, _) = loop {
+                match listener.accept() {
+                    Ok(connection) => break connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "replication CLI did not connect");
+                        thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("replication CLI listener failed: {error}"),
+                }
+            };
+            requests.push(read_http_request(&mut stream));
+            stream.write_all(&response).unwrap();
+        }
+        requests
+    });
+    (format!("http://{address}/api/"), handle)
+}
+
+fn read_http_request(stream: &mut TcpStream) -> Vec<u8> {
+    let mut request = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    let header_end = loop {
+        let read = stream.read(&mut buffer).unwrap();
+        assert!(read > 0);
+        request.extend_from_slice(&buffer[..read]);
+        if let Some(index) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+            break index + 4;
+        }
+    };
+    let headers = String::from_utf8_lossy(&request[..header_end]);
+    let content_length = headers
+        .lines()
+        .find_map(|line| line.strip_prefix("Content-Length: "))
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0);
+    while request.len() < header_end + content_length {
+        let read = stream.read(&mut buffer).unwrap();
+        assert!(read > 0);
+        request.extend_from_slice(&buffer[..read]);
+    }
+    request
 }
 
 #[test]
@@ -30,6 +137,7 @@ fn cli_help_lists_the_command_families_and_unknown_commands_fail() {
         "txbase index",
         "txbase serve",
         "txbase serve-catalog",
+        "txbase replicate catch-up",
     ] {
         assert!(help.contains(command), "help is missing {command}");
     }
@@ -39,6 +147,88 @@ fn cli_help_lists_the_command_families_and_unknown_commands_fail() {
     let unknown = run_cli(&["not-a-command"]);
     assert!(!unknown.status.success());
     assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown command"));
+}
+
+#[test]
+fn replication_catch_up_cli_applies_entries_and_reports_progress() {
+    let leader_root = replication_fixture_catalog("leader");
+    let follower_root = replication_fixture_catalog("follower");
+    let leader = Catalog::from_path(&leader_root).unwrap();
+    let mut authority = ReplicationLog::new(4).unwrap();
+    let entry = authority
+        .propose(&leader, vec![replication_post(3, "Carol")])
+        .unwrap();
+    let batch = authority.entry_batch(0, 1).unwrap();
+    let responses = vec![
+        http_json_response(
+            json!({
+                "transport_version": REPLICATION_TRANSPORT_VERSION,
+                "role": "authority",
+                "term": 4,
+                "base_index": 0,
+                "base_transaction_id": 0,
+                "last_index": 1,
+                "last_transaction_id": 1,
+                "follower_count": 0,
+                "safe_compaction_index": null,
+                "schema_tag": entry.schema_tag
+            })
+            .to_string()
+            .into_bytes(),
+        ),
+        http_json_response(batch.to_json().unwrap()),
+        http_json_response(
+            json!({
+                "transport_version": REPLICATION_TRANSPORT_VERSION,
+                "outcome": "accepted",
+                "follower_id": "follower-1",
+                "index": 1,
+                "transaction_id": 1,
+                "safe_compaction_index": 1
+            })
+            .to_string()
+            .into_bytes(),
+        ),
+    ];
+    let (authority_url, server) = spawn_replication_sequence(responses);
+    let output = run_cli(&[
+        "replicate",
+        "catch-up",
+        follower_root.to_str().unwrap(),
+        &authority_url,
+        "--replication-term",
+        "4",
+        "--follower-id",
+        "follower-1",
+        "--limit",
+        "1",
+        "--timeout-ms",
+        "5000",
+    ]);
+    assert!(
+        output.status.success(),
+        "replication catch-up failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["entries_applied"], 1);
+    assert_eq!(report["snapshot_installed"], false);
+    assert_eq!(report["progress"]["follower_id"], "follower-1");
+    assert_eq!(server.join().unwrap().len(), 3);
+
+    let follower = Catalog::from_path(&follower_root).unwrap();
+    assert!(
+        follower
+            .open_table("users")
+            .unwrap()
+            .active_record(3)
+            .is_some()
+    );
+    let log = ReplicationLog::open(&follower, 4).unwrap();
+    assert_eq!(log.last_index(), 1);
+
+    fs::remove_dir_all(leader_root).unwrap();
+    fs::remove_dir_all(follower_root).unwrap();
 }
 
 #[test]

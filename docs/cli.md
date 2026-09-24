@@ -69,6 +69,7 @@ The following table is the current command contract.
 | `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as the source. |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | Starts the single-table HTTP server. |
 | `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | Starts the catalog HTTP server and its bounded replication delivery and follower-progress routes. The default `authority` role captures `/transaction` and named-table mutation routes in the catalog journal and `TXRP` sidecar; `follower` rejects direct catalog mutations and follower-progress acknowledgements with `409` while accepting replication delivery. `TERM` is a positive fixed local replication term and defaults to `1`. When `TXBASE_REPLICATION_TOKEN` is set, all replication routes require an RFC 6750 `Authorization: Bearer <token>` header. |
+| `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | Opens a follower catalog, pulls one bounded catch-up session from an authority, persists the applied catalog and `TXRP` position, acknowledges progress, and prints the synchronization result as JSON. `TERM` must match the authority, `COUNT` is between `1` and `128`, and the optional `TXBASE_REPLICATION_TOKEN` environment variable supplies the Bearer credential. |
 
 ## Option ownership
 
@@ -76,9 +77,12 @@ The following table is the current command contract.
 - `--encoding` belongs to path-loading commands that decode DBF text: `read`, `schema`, `verify`, `xbf import`, `pack`, `recall`, and `serve`.
 - `--schema` belongs only to `xbf export`.
 - `--bind` belongs only to `serve` and `serve-catalog`.
-- `--replication-term` belongs only to `serve-catalog` and selects its positive fixed local replication term.
+- `--replication-term` belongs to `serve-catalog` and `replicate catch-up`; it selects the positive fixed local term for either operation.
 - `--replication-role` belongs only to `serve-catalog`; `authority` is the default write role, while `follower` rejects direct catalog mutations and progress acknowledgements and accepts replication delivery.
 - `TXBASE_REPLICATION_TOKEN` is an optional `serve-catalog` environment variable, not a CLI option; it protects the replication routes without exposing the token in the command line.
+- `--replication-term` and `--follower-id` belong to `replicate catch-up` and identify the local fixed-term follower session.
+- `--limit` and `--timeout-ms` belong only to `replicate catch-up`; they bound one pull session and its socket operations.
+- `TXBASE_REPLICATION_TOKEN` is also read by `replicate catch-up` when the authority requires Bearer authentication.
 - `--after` belongs only to `cdc` and `cdc catalog`.
 - `--keep` belongs to table and catalog MVCC garbage collection; `--keep-rows` belongs only to table MVCC garbage collection.
 - `index build-compound` accepts `1` or `asc`, and `-1` or `desc`, for each field direction.
@@ -106,6 +110,11 @@ Mutation commands reuse the lock and recovery path owned by the DBF, catalog, or
 
 Run `txbase verify DEST` before using a destination after an interrupted copy.
 
+`replicate catch-up` is a mutating one-shot operation. It may install a snapshot,
+apply a prefix of the requested entry pages, and write the follower's `TXRP`
+sidecar before returning an error. Re-running the same command resumes from the
+persisted position and acknowledges the resulting progress.
+
 The single-table and catalog servers are long-running processes rather than one-shot inspection commands.
 
 Their HTTP contracts are defined in [HTTP method semantics](http-semantics.md), [the query model](query-model.md), [the multi-table catalog](catalog.md), and [distributed evolution](distributed-evolution.md) for replication delivery.
@@ -117,6 +126,7 @@ Their HTTP contracts are defined in [HTTP method semantics](http-semantics.md), 
 | Read and inspect | `read`, `cdc`, `cdc catalog`, `schema`, `verify`, `catalog`, `verify-catalog`, `wal inspect`, `mvcc list`, `mvcc read`, `mvcc row`, `mvcc row-at`, `mvcc catalog list`, `mvcc catalog read`, `xbf report`, `index verify` | Read-only output; these commands do not intentionally publish a mutation. |
 | Create and mutate | `init`, `insert`, `pack`, `recall`, `schema apply`, `mvcc gc`, `mvcc catalog gc`, `index build`, `index build-compound`, `index rebuild`, `xbf import`, `xbf export` | May write DBF bytes, sidecars, or durable history according to the command contract. |
 | Copy and serve | `backup`, `restore`, `serve`, `serve-catalog` | Copy or expose data through a separately documented boundary. |
+| Replicate | `replicate catch-up` | Mutate a follower catalog through the bounded HTTP replication boundary. |
 
 `schema apply` is deliberately separate from `schema`: `schema` inspects the current metadata, while `schema apply` validates and installs a candidate sidecar.
 

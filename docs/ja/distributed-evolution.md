@@ -172,6 +172,11 @@ authorityの状態を読み取り、ローカルのカーソルが保持範囲�
 失敗時には、適用済みのprefixを残すことがあります。
 次の呼び出しでは、そのprefixを安全に再試行できます。
 
+公開CLIでは、同じ1回限りの操作を`txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID`として提供します。
+このコマンドはローカルのカタログと`TXRP`サイドカーを開き、`TXBASE_REPLICATION_TOKEN`が設定されている場合はその値を認証に使い、同期結果をJSONで表示します。
+daemon、スケジューラー、再試行キュー、leader選出プロセスではありません。
+永続化済みのprefixから再開するときは、同じコマンドを再実行します。
+
 クライアントは、HTTP/1.1の`Connection: close`、明示的な`Content-Length`、既存のエントリと進捗に対する`1 MiB`上限、スナップショットに対する`64 MiB`上限を使います。
 chunked転送のデコードは行いません。
 TLS、再試行キュー、ストリーミング、バックプレッシャー、権威検出、クォーラム、コンセンサスは実装しません。
