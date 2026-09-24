@@ -51,7 +51,7 @@ The repository currently provides:
 - Direct and chained equality-join cost models that compare hash and index-nested-loop paths with exact pre-filter key-cardinality estimates, materialized row-width work, logical input page reads, and logical index-sidecar page reads, plus ordered-merge paths for direct joins and eligible chained stages.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
-- A bounded `unicode-lowercase` sort collation with cursor-boundary validation and a safe table-scan fallback.
+- Bounded `unicode-lowercase` and `unicode-nfkc-lowercase` sort collations with cursor-boundary validation and a safe table-scan fallback.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
 - A bounded thread-backed snapshot stream whose producer applies channel backpressure and stops when its consumer is dropped.
 - A runtime-neutral `AsyncQueryStream` polling boundary for long-lived query streams, immediate in-memory implementations, and a native `ThreadedQueryStream` adapter with bounded backpressure, waker notification, and drop cancellation.
@@ -263,8 +263,8 @@ and the legacy dBASE `0x4d` ID, and round-trip their multibyte record values. Al
 the complete legacy alias set. An upstream Visual FoxPro Windows-1251 fixture also
 round-trips Cyrillic record values. Pinned explicit-codec byte fixtures cover DBF record decoding
 and write round-trips for all eight supported explicit codec names. The query layer now has a bounded
-`unicode-lowercase` sort collation; locale-aware CJK collation and additional broader upstream CJK
-fixtures remain future work.
+`unicode-lowercase` and `unicode-nfkc-lowercase` sort collations; locale-aware CJK collation and
+additional broader upstream CJK fixtures remain future work.
 
 An upstream JavaDBF GBK fixture now covers three GBK-encoded CJK field names and 28 real records,
 including a read, mutation, and byte round-trip.

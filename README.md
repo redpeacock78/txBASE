@@ -77,6 +77,8 @@ curl -i -X QUERY \
 
 `GET` and `HEAD` use one-based physical DBF record numbers. `QUERY /records` accepts bounded `filter`, `sort`, `projection`, `collation`, `skip`, `limit`, `page_size`, `cursor`, and `aggregate` controls.
 
+`collation` accepts `unicode-lowercase` and `unicode-nfkc-lowercase`; the latter applies Unicode NFKC compatibility normalization before lowercase comparison. Neither mode provides locale-specific CJK dictionary ordering.
+
 `page_size` returns an opaque cursor.
 Physical cursors follow record order.
 Sorted cursors use the declared sort and a physical-record tie-breaker.

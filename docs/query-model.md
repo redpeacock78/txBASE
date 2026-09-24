@@ -41,9 +41,16 @@ WASM parser calls return an invalid-query error.
 
 `sort` uses `1` for ascending order and `-1` for descending order.
 
-The optional `collation` currently accepts only `"unicode-lowercase"`.
+The optional `collation` accepts `"unicode-lowercase"` and
+`"unicode-nfkc-lowercase"`.
 
-It lowercases Unicode string sort keys before comparison.
+`unicode-lowercase` lowercases Unicode string sort keys before comparison.
+
+`unicode-nfkc-lowercase` first applies Unicode NFKC compatibility normalization
+and then lowercases the resulting sort key. This makes compatibility-equivalent
+forms such as full-width Latin characters and half-width Katakana compare equal.
+
+Neither mode provides locale-specific Japanese, Chinese, or Korean dictionary order.
 
 Omitting it keeps the existing Unicode codepoint ordering.
 
@@ -274,3 +281,4 @@ The current implementation does not promise every MongoDB projection rule, posit
 - [MongoDB `$size` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/size/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
+- [Unicode Standard Annex #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/)

@@ -252,9 +252,40 @@ fn supports_unicode_lowercase_collation_for_sort_keys() {
 }
 
 #[test]
+fn supports_unicode_nfkc_lowercase_collation_for_cjk_compatibility_keys() {
+    let fullwidth = Value::String("ＡＢＣ".into());
+    let ascii = Value::String("abc".into());
+    assert_eq!(
+        super::ordering::compare_for_sort_with_collation(
+            Some(&fullwidth),
+            Some(&ascii),
+            Some(Collation::UnicodeNfkcLowercase),
+        ),
+        Ordering::Equal
+    );
+
+    let halfwidth_katakana = Value::String("ｶﾀｶﾅ".into());
+    let fullwidth_katakana = Value::String("カタカナ".into());
+    assert_eq!(
+        super::ordering::compare_for_sort_with_collation(
+            Some(&halfwidth_katakana),
+            Some(&fullwidth_katakana),
+            Some(Collation::UnicodeNfkcLowercase),
+        ),
+        Ordering::Equal
+    );
+}
+
+#[test]
 fn validates_the_bounded_collation_contract() {
     let request = parse(br#"{"sort":{"NAME":1},"collation":"unicode-lowercase"}"#).unwrap();
     assert_eq!(request.collation, Some(Collation::UnicodeLowercase));
+    let normalized_request =
+        parse(br#"{"sort":{"NAME":1},"collation":"unicode-nfkc-lowercase"}"#).unwrap();
+    assert_eq!(
+        normalized_request.collation,
+        Some(Collation::UnicodeNfkcLowercase)
+    );
     assert!(parse(br#"{"collation":"unicode-lowercase"}"#).is_err());
     assert!(parse(br#"{"sort":{"NAME":1},"collation":"locale-aware"}"#).is_err());
 }

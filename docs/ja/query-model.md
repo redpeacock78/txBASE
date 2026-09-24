@@ -39,9 +39,15 @@ HTTP本文リーダーは大きすぎるリクエストに`413 Payload Too Large
 
 `sort`では昇順に`1`、降順に`-1`を使用します。
 
-任意の`collation`が現在受け付ける値は`"unicode-lowercase"`だけです。
+任意の`collation`は`"unicode-lowercase"`と`"unicode-nfkc-lowercase"`を受け付けます。
 
-この値を指定すると、比較前に文字列のソートキーをUnicodeの小文字へ変換します。
+`unicode-lowercase`は、比較前に文字列のソートキーをUnicodeの小文字へ変換します。
+
+`unicode-nfkc-lowercase`は、UnicodeのNFKC互換正規化を適用してからソートキーを小文字へ変換します。
+
+そのため、全角ラテン文字や半角カタカナなど、互換等価な形式は同じ値として比較します。
+
+どちらのモードも、日本語、中国語、韓国語のロケール固有の辞書順は提供しません。
 
 省略した場合は既存のUnicodeコードポイント順を保ちます。
 
@@ -271,3 +277,4 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 - [MongoDB `$size` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/size/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
+- [Unicode Standard Annex #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/)

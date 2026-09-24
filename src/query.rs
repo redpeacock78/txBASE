@@ -76,6 +76,7 @@ pub const SUPPORTED_FILTER_OPERATORS: &[&str] = &[
 #[serde(rename_all = "kebab-case")]
 pub enum Collation {
     UnicodeLowercase,
+    UnicodeNfkcLowercase,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

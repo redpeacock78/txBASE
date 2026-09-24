@@ -176,7 +176,11 @@ Shift_JISとCP932は交換可能なラベルではありません。
 
 固定した明示コーデックのバイトフィクスチャは、サポートする8つの明示コーデック名についてDBFレコードのデコードと書き込みの往復をカバーします。
 
-クエリソートには有界なUnicode小文字化モードがあります。
+クエリソートには有界なUnicode小文字化モードとUnicode NFKC小文字化モードがあります。
+
+後者はロケールに依存しない小文字化の前にUnicodeのNFKC互換正規化を適用します。
+
+そのため、全角ラテン文字や半角カタカナなど、互換等価な形式は同じソートキーを共有します。
 
 ロケール対応CJK照合と、追加のより広い上流CJKフィクスチャは将来の作業です。
 
@@ -293,3 +297,4 @@ memoサイドカーをロードしたメモリ内の`PACK`は、サイドカー�
 - [Visual FoxPro auto-increment fields](https://www.vfphelp.com/vfp9/html/bd6eff0c-2ce5-43b7-ab29-f5360cd2f90e.htm)
 - [Visual FoxPro code pages](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)
 - [`encoding_rs` encoding and error behavior](https://docs.rs/encoding_rs/latest/encoding_rs/struct.Encoding.html)
+- [Unicode Standard Annex #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/)

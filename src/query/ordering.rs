@@ -5,6 +5,7 @@ use indexmap::IndexMap;
 use serde::Serialize;
 use serde_json::Value;
 use std::cmp::Ordering;
+use unicode_normalization::UnicodeNormalization;
 
 #[cfg(test)]
 pub(super) fn compare_records(
@@ -128,12 +129,17 @@ fn compare_values_with_collation(
     right: &Value,
     collation: Option<Collation>,
 ) -> Option<Ordering> {
-    match (left, right) {
-        (Value::String(left), Value::String(right))
-            if matches!(collation, Some(Collation::UnicodeLowercase)) =>
-        {
-            Some(left.to_lowercase().cmp(&right.to_lowercase()))
-        }
+    match (left, right, collation) {
+        (Value::String(left), Value::String(right), Some(Collation::UnicodeLowercase)) => Some(
+            left.chars()
+                .flat_map(char::to_lowercase)
+                .cmp(right.chars().flat_map(char::to_lowercase)),
+        ),
+        (Value::String(left), Value::String(right), Some(Collation::UnicodeNfkcLowercase)) => Some(
+            left.nfkc()
+                .flat_map(char::to_lowercase)
+                .cmp(right.nfkc().flat_map(char::to_lowercase)),
+        ),
         _ => compare_values(left, right),
     }
 }

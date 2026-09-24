@@ -170,8 +170,11 @@ The current override slice covers both explicit invocation and sidecar selection
 declared-driver codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP.
 Pinned DBF fixtures cover the four Visual FoxPro CJK driver IDs and the legacy dBASE `0x4d` driver
 ID, and round-trip their multibyte record values. Pinned explicit-codec byte fixtures cover DBF
-record decoding and write round-trips for all eight supported explicit codec names. Query sorting has a bounded Unicode-lowercase mode; locale-aware
-CJK collation and additional broader upstream CJK fixtures remain future work.
+record decoding and write round-trips for all eight supported explicit codec names. Query sorting
+has bounded Unicode-lowercase and Unicode-NFKC-lowercase modes. The latter applies Unicode NFKC
+compatibility normalization before locale-independent lowercase, so compatibility-equivalent forms
+such as full-width Latin and half-width Katakana share a sort key. Locale-aware CJK collation and
+additional broader upstream CJK fixtures remain future work.
 
 An upstream JavaDBF GBK fixture also covers three GBK-encoded CJK field names and 28 real records,
 including a read, mutation, and byte round-trip.
@@ -286,3 +289,4 @@ These items require a contract, external fixtures, failure tests, and a clear ow
 - [Visual FoxPro auto-increment fields](https://www.vfphelp.com/vfp9/html/bd6eff0c-2ce5-43b7-ab29-f5360cd2f90e.htm)
 - [Visual FoxPro code pages](https://www.vfphelp.com/help/html/a3d7b0e0-8320-44b1-8983-17c30a78c6c4.htm)
 - [`encoding_rs` encoding and error behavior](https://docs.rs/encoding_rs/latest/encoding_rs/struct.Encoding.html)
+- [Unicode Standard Annex #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/)

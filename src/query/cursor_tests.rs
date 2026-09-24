@@ -178,10 +178,11 @@ fn rejects_a_sorted_cursor_for_a_changed_snapshot() {
 }
 
 #[test]
-fn sorted_cursor_keeps_collation_in_its_boundary() {
+fn sorted_cursor_keeps_nfkc_collation_in_its_boundary() {
     let table = table_with_two_active_records();
     let request =
-        parse(br#"{"page_size":1,"sort":{"NAME":1},"collation":"unicode-lowercase"}"#).unwrap();
+        parse(br#"{"page_size":1,"sort":{"NAME":1},"collation":"unicode-nfkc-lowercase"}"#)
+            .unwrap();
     let cursor = execute_query_page(&table, &request)
         .unwrap()
         .next_cursor
@@ -191,7 +192,7 @@ fn sorted_cursor_keeps_collation_in_its_boundary() {
         serde_json::json!({
             "page_size": 1,
             "sort": {"NAME": 1},
-            "collation": "unicode-lowercase",
+            "collation": "unicode-nfkc-lowercase",
             "cursor": cursor.clone(),
         })
         .to_string()
