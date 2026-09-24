@@ -71,7 +71,7 @@ database.apply_operations_json(
       {
         method: "POST",
         path: "/records",
-        body: { ID: 3, NAME: "wasm-post-batch", AGE: 42, ACTIVE: true },
+        body: { ID: 3, NAME: "batch-post", AGE: 42, ACTIVE: true },
       },
     ],
   }),
@@ -79,7 +79,7 @@ database.apply_operations_json(
 rows = decodeJson(database.query_json(jsonBytes({ sort: { ID: 1 } })));
 assert.deepEqual(
   rows.map((row) => row.NAME),
-  ["wasm-batch", "wasm-post-batch"],
+  ["wasm-batch", "batch-post"],
 );
 
 const beforeFailedBatch = [...database.snapshot()];
@@ -91,7 +91,7 @@ assertError(
           {
             method: "PATCH",
             path: "/records/1",
-            body: { NAME: "must-not-publish" },
+            body: { NAME: "failed" },
           },
           { method: "DELETE", path: "/records/0" },
         ],
@@ -105,7 +105,7 @@ const restored = new WasmDatabase(database.snapshot());
 rows = decodeJson(restored.query_json(jsonBytes({ sort: { ID: 1 } })));
 assert.deepEqual(
   rows.map((row) => row.NAME),
-  ["wasm-batch", "wasm-post-batch"],
+  ["wasm-batch", "batch-post"],
 );
 
 console.log("wasm-bindgen Node smoke passed");
