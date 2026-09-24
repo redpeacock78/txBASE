@@ -20,6 +20,8 @@ fn remove_table_files(path: &std::path::Path) {
         "txbase.state",
         "txbase.mvcc",
         "txbase.cdc",
+        "txschema.json",
+        "txbase.xbf-export.wal",
     ] {
         let candidate = if extension == "dbf" {
             path.to_path_buf()
@@ -28,6 +30,9 @@ fn remove_table_files(path: &std::path::Path) {
         };
         let _ = fs::remove_file(candidate);
     }
+    let mut export_directory = path.as_os_str().to_os_string();
+    export_directory.push(".txbase-xbf-export");
+    let _ = fs::remove_dir_all(export_directory);
 }
 
 #[test]
@@ -81,6 +86,49 @@ fn copy_table_files_preserves_dbf_and_memo_sidecar() {
     );
 
     let _ = fs::remove_file(source.with_extension("dbt"));
+    remove_table_files(&source);
+    remove_table_files(&destination);
+}
+
+#[test]
+fn copy_table_files_preserves_schema_and_replaces_a_stale_destination_schema() {
+    let source = std::env::temp_dir().join(format!(
+        "txbase-maintenance-schema-source-{}.dbf",
+        std::process::id()
+    ));
+    let destination = std::env::temp_dir().join(format!(
+        "txbase-maintenance-schema-destination-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&source);
+    remove_table_files(&destination);
+
+    let schema = serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {
+            "ID": {"primary": true},
+            "NAME": {"not_null": true}
+        }
+    }))
+    .unwrap();
+    fs::write(&source, fixture()).unwrap();
+    fs::write(source.with_extension("txschema.json"), &schema).unwrap();
+    fs::write(&destination, fixture()).unwrap();
+    fs::write(destination.with_extension("txschema.json"), b"stale schema").unwrap();
+
+    copy_table_files(&source, &destination).unwrap();
+
+    assert_eq!(
+        fs::read(destination.with_extension("txschema.json")).unwrap(),
+        schema
+    );
+    let loaded = DbfTable::from_path(&destination).unwrap();
+    assert_eq!(
+        loaded.schema_json()["schema_metadata"]["fields"]["ID"]["primary"],
+        true
+    );
+
     remove_table_files(&source);
     remove_table_files(&destination);
 }

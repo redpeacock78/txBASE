@@ -24,7 +24,15 @@ pub fn copy_table_files(
         ));
     }
 
-    let _lock = super::TableLock::acquire(source)?;
+    let source_lock_path = source.with_extension("txbase.lock");
+    let destination_lock_path = destination.with_extension("txbase.lock");
+    let (first, second) = if source_lock_path <= destination_lock_path {
+        (source, destination)
+    } else {
+        (destination, source)
+    };
+    let _first_lock = super::TableLock::acquire(first)?;
+    let _second_lock = super::TableLock::acquire(second)?;
     let recovered = super::recover_path_with_lock_held(source)?;
     let table = super::load_path_with_lock_held(source)?;
     if recovered {
