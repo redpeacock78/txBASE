@@ -41,6 +41,7 @@ pub use planner::{QueryCost, QueryExplanation, QueryPlan};
 #[cfg(test)]
 pub(crate) use predicate::matches_condition;
 pub(crate) use predicate::matches_filter;
+pub(crate) use stream::validate_stream_request;
 pub use stream::{
     BoundedQueryStream, QuerySnapshotStream, QueryStream, stream_query, stream_query_bounded,
     stream_query_snapshot,

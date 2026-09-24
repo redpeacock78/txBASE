@@ -48,6 +48,20 @@ Dropping the stream sets its cancellation flag, closes the receiver, and joins t
 
 This adapter is not compiled for `wasm32`.
 
+`AsyncObjectTable::query_stream` returns `AsyncObjectQueryStream` for a runtime-neutral asynchronous-storage-backed query.
+
+Its first poll recovers and reads one committed XBF snapshot through `AsyncObjectStore`, converts that snapshot through the existing XBF-to-DBF export contract, and then delegates row delivery to the owned snapshot stream.
+
+The load may return `Pending` and must wake the caller through the future's host contract; after the load completes, rows come from a stable in-memory snapshot.
+
+The adapter preserves the store implementation's scheduling behavior; `SyncObjectStoreAdapter` returns ready futures but does not make blocking filesystem I/O non-blocking.
+
+The adapter accepts the same filter, projection, skip, and limit controls as the existing snapshot stream.
+
+Unsupported sort, aggregation, pagination, and cursor controls are rejected before the storage future is created.
+
+An absent committed snapshot or an XBF snapshot that cannot be represented as DBF is reported as one `QueryError` item and the stream then ends.
+
 ## 3. Host responsibilities
 
 A host-specific stream implementation owns the behavior that the shared contract cannot decide.
@@ -73,7 +87,8 @@ The native threaded adapter is one concrete host implementation.
 It does not make the filesystem channel non-blocking, add resume tokens, or define a remote storage protocol.
 
 The Worker-compatible Web Streams adapter supplies pull scheduling, bounded queueing, NDJSON transport chunks, and `AbortSignal` cancellation for the in-memory WASM query snapshot.
-The WASI runtime adapter and asynchronous storage-backed query streams still need their own host contracts and fixtures.
+The runtime-neutral asynchronous-storage-backed adapter is available through `AsyncObjectTable::query_stream`.
+It does not define a WASI scheduler, remote retry policy, or Worker transport; those remain host-specific.
 
 ## 5. Worker Web Streams adapter
 

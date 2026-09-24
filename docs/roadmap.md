@@ -73,7 +73,7 @@ The repository currently provides:
 The baseline intentionally does not include the following:
 
 - Filesystem- and cache-aware merge join costing.
-- WASI-specific query-stream scheduling, asynchronous-storage-backed query streams, and host-specific lifecycle semantics beyond the current Worker Web Streams adapter.
+- WASI-specific query-stream scheduling and host-specific lifecycle semantics beyond the current Worker Web Streams and runtime-neutral asynchronous-storage adapters.
 - Predicate-level locking and distributed serializable coordination.
 - Aggregation stages or accumulators beyond bounded input `$match`, `$unwind` with its documented top-level options, `$set`/`$addFields` with its documented expression subset, `$project`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, `$group`, `$bucket`, bounded scalar-expression `$bucketAuto` with finite numeric results, and bounded scalar-expression `$sortByCount` with bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
@@ -90,7 +90,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - Schema introspection.
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
-- WASI-specific `AsyncQueryStream` implementations, asynchronous-storage-backed query streams, and provider-specific asynchronous object-table adapters.
+- WASI-specific `AsyncQueryStream` implementations and provider-specific asynchronous object-table adapters.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
 - Read-only WAL inspection.
@@ -144,9 +144,12 @@ The native `query::stream_query_threaded` adapter supplies non-blocking polling,
 backpressure, waker notification, and worker cancellation on drop.
 The Worker-compatible Web Streams adapter now supplies pull scheduling, bounded
 NDJSON chunks, reader cancellation, and `AbortSignal` lifecycle handling for a
-WASM snapshot stream. WASI scheduling and asynchronous-storage-backed query
-streams remain host-specific, as does the asynchronous object-table adapter for
-a provider-backed worker or WASI host.
+WASM snapshot stream.
+`AsyncObjectTable::query_stream` supplies a runtime-neutral asynchronous-storage-backed
+query stream by recovering one committed XBF snapshot, reusing the existing XBF-to-DBF
+conversion contract, and delegating row delivery to the owned snapshot stream.
+WASI scheduling, host-specific lifecycle policy, and the asynchronous object-table
+adapter for a provider-backed worker or WASI host remain host-specific.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 
@@ -351,8 +354,10 @@ The native `ThreadedQueryStream` adapter is available outside `wasm32` and does 
 The WASM slice now supplies generic Fetch timeout and cancellation mapping through the Worker adapter.
 The Worker-compatible Web Streams query adapter supplies bounded pull scheduling,
 NDJSON chunks, and `AbortSignal` cancellation through `src/worker-query-stream.mjs`.
-It does not yet supply a WASI runtime adapter, asynchronous-storage-backed query
-streams, a deployed worker fixture, or a provider-specific object-store adapter.
+The runtime-neutral asynchronous-storage-backed query stream is implemented for
+DBF-representable XBF snapshots through `AsyncObjectTable::query_stream`.
+It does not yet supply a WASI runtime adapter, a deployed worker fixture, or a
+provider-specific object-store adapter.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 

@@ -187,7 +187,9 @@ whole query.
 
 The native threaded adapter supplies scheduling, bounded backpressure, waker notification, and drop cancellation.
 
-Worker/WASI scheduling, timeout, cancellation, transport, and asynchronous-storage behavior remain host-specific.
+`AsyncObjectTable::query_stream` supplies the runtime-neutral asynchronous-storage handoff for one recovered committed XBF snapshot, then reuses the owned snapshot stream after the existing XBF-to-DBF conversion.
+
+Worker/WASI scheduling, timeout, cancellation, transport, and provider-specific asynchronous-storage behavior remain host-specific.
 
 The complete boundary is documented in [asynchronous query streaming](async-streaming.md).
 

@@ -24,6 +24,14 @@ The filesystem backend is a local durable adapter and does not claim cloud-provi
 `with_limits` applies the configured XBF limits to both snapshot encoding before publication and snapshot decoding during reads.
 The synchronous adapter does not make filesystem I/O non-blocking, but it exercises the same high-level protocol without selecting an executor.
 
+`AsyncObjectTable::query_stream` returns an `AsyncObjectQueryStream` that loads one recovered committed snapshot through `AsyncObjectStore` and reuses the existing query snapshot stream.
+
+The first poll may be `Pending`; once loading completes, the stream owns a stable DBF-representable snapshot and accepts only filter, projection, skip, and limit controls.
+
+Unsupported stream controls are rejected before the asynchronous storage read starts.
+
+A missing committed snapshot or an XBF value that the existing DBF export contract cannot represent produces one query error item and then end-of-stream.
+
 On `wasm32`, `WasmObjectTable` wraps the same asynchronous table protocol for a JavaScript host object.
 The host supplies Promise-returning `get`, `putIfAbsent`, `compareAndSwap`, `delete`, and `list` methods.
 The adapter exposes XBF bytes, manifest inspection, commit, historical reads, recovery, retention, and orphan cleanup through the generated `wasm-bindgen` wrapper.
@@ -143,9 +151,11 @@ The remote adapter may implement `ObjectStore` for a blocking native client or `
 The high-level asynchronous manifest protocol covers commit, recovery, retention, and conditional publication.
 The JavaScript WASM adapter and Worker Fetch adapter supply host-managed fixtures for this protocol; provider-specific consistency and retry behavior remain outside this generic transport.
 
+The asynchronous query adapter supplies the generic storage-to-query handoff, but it does not select host scheduling, cancellation propagation, timeout, or retry behavior.
+
 ## 7. Explicit non-goals
 
-This slice does not promise an R2 adapter, a specific cloud vendor, Worker or WASI query-stream scheduling, multi-region consensus, automatic background garbage collection, immutable page splitting, or a cloud-backed WASM host.
+This slice does not promise an R2 adapter, a specific cloud vendor, Worker or WASI query-stream scheduling, host-specific timeout or retry behavior, multi-region consensus, automatic background garbage collection, immutable page splitting, or a cloud-backed WASM host.
 
 Those features can reuse the manifest and generation contract after their host-specific failure behavior has a deterministic test.
 
