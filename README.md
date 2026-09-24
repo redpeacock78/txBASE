@@ -34,7 +34,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - A native threaded asynchronous query-stream adapter with bounded backpressure and drop cancellation.
 - A committed single-table change-data-capture sidecar with WAL recovery and an inspection CLI.
 - A committed catalog change-data-capture sidecar with atomic multi-table events and an inspection CLI.
-- A process-local fixed-term replication log with journaled `TXRP` sidecar state, validated catalog snapshots, atomic local snapshot installation, restart position checks, and bounded historical follower reads.
+- A process-local fixed-term replication log with journaled `TXRP` sidecar state, validated catalog snapshots, atomic local snapshot installation, restart position checks, bounded historical follower reads, and bounded HTTP entry/snapshot delivery routes.
 - An opt-in coarse-grained serializable transaction boundary for one DBF table.
 - An opt-in coarse-grained serializable transaction boundary for a catalog's discovered tables.
 
@@ -63,6 +63,7 @@ cargo run -- serve-catalog path/to/database
 ```
 
 The default listener is `127.0.0.1:8080`. Use `--bind ADDRESS` to choose another address.
+Use `--replication-term TERM` to reopen a catalog with its fixed local replication term; it defaults to `1`.
 
 ### Read and query
 
@@ -95,6 +96,9 @@ Catalog `POST /transaction` commits named-table mutations through a catalog jour
 `QUERY /join` supports bounded `inner`, `left`, `right`, `full`, `semi`, `anti`, and `cross` joins.
 Large direct equality joins can use fresh compatible ordered indexes for merge execution.
 The planner falls back to bounded hash or index-probe paths when that merge path is unavailable or more expensive.
+
+The catalog server also exposes `GET /replication/status`, `GET /replication/snapshot`, `POST /replication/entry`, and `POST /replication/snapshot` for versioned, bounded replication delivery.
+These routes deliver already-constructed entries or snapshots; ordinary catalog mutations are not automatically appended to the replication log, and quorum, consensus, and authentication are not provided.
 
 See the [query model](docs/query-model.md), [aggregation model](docs/aggregation.md), [join model](docs/joins.md), and [query planning](docs/query-planning.md) for the exact boundary.
 

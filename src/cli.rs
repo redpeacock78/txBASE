@@ -45,6 +45,9 @@ fn print_help() {
         "\nHTTP CDC: GET/HEAD /cdc supports exclusive after and bounded limit cursors on both server surfaces."
     );
     println!(
+        "\nCatalog replication: txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] exposes GET /replication/status, GET /replication/snapshot, POST /replication/entry, and POST /replication/snapshot."
+    );
+    println!(
         "\nCDC:\n  txbase cdc FILE [--after TRANSACTION_ID]\n  txbase cdc catalog DIRECTORY [--after TRANSACTION_ID]"
     );
     println!("\nSchema metadata:\n  txbase schema apply FILE SCHEMA_JSON");

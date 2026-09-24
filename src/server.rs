@@ -15,6 +15,7 @@ mod json_patch;
 mod merge_patch;
 mod range;
 mod records;
+mod replication;
 mod response;
 mod stream;
 mod transaction;
@@ -60,7 +61,10 @@ impl Read for ServerBody {
 
 type HttpResponse = Response<ServerBody>;
 
-pub(super) use body::{read_json_body, read_json_object, read_json_patch_document, request_header};
+pub(super) use body::{
+    read_json_body, read_json_body_with_limit, read_json_object, read_json_patch_document,
+    request_header,
+};
 pub(super) use response::{
     dbf_error_response, empty_response, error, header, json_bytes_response, json_response,
     options_response,
@@ -80,7 +84,15 @@ pub fn serve(mut table: DbfTable, dbf_path: impl AsRef<Path>, bind: &str) -> Res
 }
 
 pub fn serve_catalog(root: impl AsRef<Path>, bind: &str) -> Result<(), String> {
-    catalog::serve(root, bind)
+    serve_catalog_with_replication_term(root, bind, 1)
+}
+
+pub fn serve_catalog_with_replication_term(
+    root: impl AsRef<Path>,
+    bind: &str,
+    replication_term: u64,
+) -> Result<(), String> {
+    catalog::serve(root, bind, replication_term)
 }
 
 fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {
@@ -206,3 +218,6 @@ mod catalog_tests;
 
 #[cfg(test)]
 mod etag_tests;
+
+#[cfg(test)]
+mod replication_tests;

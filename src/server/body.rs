@@ -1,6 +1,6 @@
 use super::{
-    HttpResponse, JSON_MERGE_PATCH_MEDIA_TYPE, JSON_PATCH_MEDIA_TYPE, MAX_BODY, PatchMediaType,
-    error, json_response,
+    HttpResponse, JSON_MERGE_PATCH_MEDIA_TYPE, JSON_PATCH_MEDIA_TYPE, PatchMediaType, error,
+    json_response,
 };
 use serde_json::{Map, Value};
 use std::io::Read;
@@ -20,7 +20,8 @@ pub fn read_json_patch_document(
     operation: &str,
     accept_query: bool,
 ) -> Result<(Value, PatchMediaType), HttpResponse> {
-    let (body, media_type) = read_json_body_with_options(request, operation, accept_query, true)?;
+    let (body, media_type) =
+        read_json_body_with_options(request, operation, accept_query, super::MAX_BODY, true)?;
     let value = parse_json_value(&body, accept_query)?;
     let valid_root = match media_type {
         PatchMediaType::Json | PatchMediaType::MergePatch => value.is_object(),
@@ -66,13 +67,24 @@ pub fn read_json_body(
     operation: &str,
     accept_query: bool,
 ) -> Result<Vec<u8>, HttpResponse> {
-    read_json_body_with_options(request, operation, accept_query, false).map(|(body, _)| body)
+    read_json_body_with_limit(request, operation, accept_query, super::MAX_BODY)
+}
+
+pub(crate) fn read_json_body_with_limit(
+    request: &mut Request,
+    operation: &str,
+    accept_query: bool,
+    max_body: usize,
+) -> Result<Vec<u8>, HttpResponse> {
+    read_json_body_with_options(request, operation, accept_query, max_body, false)
+        .map(|(body, _)| body)
 }
 
 fn read_json_body_with_options(
     request: &mut Request,
     operation: &str,
     accept_query: bool,
+    max_body: usize,
     allow_patch_formats: bool,
 ) -> Result<(Vec<u8>, PatchMediaType), HttpResponse> {
     let Some(content_type) = content_type(request) else {
@@ -117,7 +129,7 @@ fn read_json_body_with_options(
     let mut body = Vec::new();
     if request
         .as_reader()
-        .take((MAX_BODY + 1) as u64)
+        .take((max_body + 1) as u64)
         .read_to_end(&mut body)
         .is_err()
     {
@@ -127,10 +139,13 @@ fn read_json_body_with_options(
             accept_query,
         ));
     }
-    if body.len() > MAX_BODY {
+    if body.len() > max_body {
         return Err(json_response(
             413,
-            error("body_too_large", "request body exceeds 1 MiB"),
+            error(
+                "body_too_large",
+                &format!("request body exceeds {max_body} bytes"),
+            ),
             accept_query,
         ));
     }

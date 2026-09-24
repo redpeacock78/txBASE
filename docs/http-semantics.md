@@ -61,6 +61,10 @@ The response does not authorize a method on a resource that its route rules woul
 | `POST /{table}/records` (catalog server) | JSON object with known fields | `201 Created`, table-qualified `Location` |
 | `PUT`/`PATCH`/`DELETE /{table}/records/{id}` (catalog server) | Same body and precondition rules as single-table routes | Independent named-table mutation |
 | `POST /transaction` (catalog server) | JSON object containing named-table mutation operations | `200` with the new catalog `ETag` after catalog-journal commit, or `412` without mutation for a failed `If-Match` or matching `If-None-Match` |
+| `GET`/`HEAD /replication/status` (catalog server) | No JSON body | Versioned replication position and catalog representation status |
+| `GET`/`HEAD /replication/snapshot` (catalog server) | No JSON body | Validated `ReplicationSnapshot` JSON |
+| `POST /replication/entry` (catalog server) | Versioned `ReplicationEntry` JSON | `200` apply or duplicate result |
+| `POST /replication/snapshot` (catalog server) | Versioned `ReplicationSnapshot` JSON | `200` install or duplicate result |
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |
 | `POST /transaction` | JSON object containing a non-empty `operations` array | `200` after one-table atomic snapshot commit |
 | `PUT /records/{id}` | JSON object replacing fields | Resulting record |
@@ -71,8 +75,14 @@ The response does not authorize a method on a resource that its route rules woul
 
 Unknown fields, malformed JSON, unsupported update operators, and invalid field values are rejected before persistence.
 
-Every JSON request body is capped at `MAX_JSON_INPUT_BYTES`, currently 1 MiB, before parsing.
-The HTTP boundary returns `413 Payload Too Large` when the byte limit is exceeded.
+Every JSON request body except `POST /replication/snapshot` is capped at
+`MAX_JSON_INPUT_BYTES`, currently 1 MiB, before parsing.
+The replication snapshot route is capped at the 64 MiB encoded snapshot bound.
+The HTTP boundary returns `413 Payload Too Large` when the applicable byte limit is exceeded.
+
+Replication delivery validates already-constructed entries or snapshots.
+Malformed documents return `422`, term, position, schema, conflicting-duplicate, or snapshot-state conflicts return `409`, and storage failures return `500`.
+Ordinary catalog mutation routes do not automatically append to the replication log.
 
 `DELETE` is a logical DBF deletion.
 

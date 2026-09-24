@@ -14,22 +14,36 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use tiny_http::{Method, Request, Server};
 
-pub(super) fn serve(root: impl AsRef<Path>, bind: &str) -> Result<(), String> {
-    let catalog =
+pub(super) fn serve(
+    root: impl AsRef<Path>,
+    bind: &str,
+    replication_term: u64,
+) -> Result<(), String> {
+    let mut catalog =
         Catalog::from_path(root).map_err(|error| format!("cannot open catalog: {error}"))?;
+    let mut replication = crate::replication::ReplicationLog::open(&catalog, replication_term)
+        .map_err(|error| format!("cannot open replication log: {error}"))?;
     let server = Server::http(bind).map_err(|error| format!("cannot bind {bind}: {error}"))?;
     eprintln!("listening on http://{bind}");
     for request in server.incoming_requests() {
-        handle_request(request, &catalog);
+        handle_request(request, &mut catalog, &mut replication);
     }
     Ok(())
 }
 
-fn handle_request(mut request: Request, catalog: &Catalog) {
+fn handle_request(
+    mut request: Request,
+    catalog: &mut Catalog,
+    replication: &mut crate::replication::ReplicationLog,
+) {
     let url = request.url().to_owned();
     let path = url.split('?').next().unwrap_or("/").to_owned();
     let response = if request.method().as_str() == "OPTIONS" {
         options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY")
+    } else if let Some(response) =
+        super::replication::response(&mut request, &path, catalog, replication)
+    {
+        response
     } else if matches!(request.method(), Method::Get | Method::Head) && path == "/cdc" {
         super::cdc::catalog_response(&url, catalog)
     } else {

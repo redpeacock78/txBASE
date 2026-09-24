@@ -67,7 +67,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 | `txbase backup SOURCE DEST` | DBFと対応するmemo、スキーマ、CDC、状態、MVCC、有効なインデックスサイドカーを検証してコピーする。 |
 | `txbase restore SOURCE DEST` | バックアップをソースとして、同じ検証済みコピー手順を使う。 |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | 単一テーブルHTTPサーバーを起動する。 |
-| `txbase serve-catalog DIRECTORY [--bind ADDRESS]` | カタログHTTPサーバーを起動する。 |
+| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM]` | カタログHTTPサーバーと有界なレプリケーション配送ルートを起動する。`TERM`は正の固定ローカルtermで、既定値は`1`。 |
 
 ## オプションの所有範囲
 
@@ -75,6 +75,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 - `--encoding`はDBFテキストをデコードするパスロードコマンドの`read`、`schema`、`verify`、`xbf import`、`pack`、`recall`、`serve`に属する。
 - `--schema`は`xbf export`だけに属する。
 - `--bind`は`serve`と`serve-catalog`だけに属する。
+- `--replication-term`は`serve-catalog`だけに属し、正の固定ローカルtermを選択する。
 - `--after`は`cdc`と`cdc catalog`だけに属する。
 - `--keep`はテーブルとカタログのMVCCガベージコレクションに属し、`--keep-rows`はテーブルMVCCガベージコレクションだけに属する。
 - `index build-compound`は、各フィールドの方向に`1`または`asc`、`-1`または`desc`を受け付ける。
@@ -107,7 +108,7 @@ WALの作成や切り詰めは行いません。
 
 単一テーブルサーバーとカタログサーバーは、一度だけ検査するコマンドではなく、長時間動作するプロセスです。
 
-HTTP契約は、[HTTPメソッドの意味](http-semantics.md)、[クエリモデル](query-model.md)、[複数テーブルカタログ](catalog.md)で定義します。
+HTTP契約は、[HTTPメソッドの意味](http-semantics.md)、[クエリモデル](query-model.md)、[複数テーブルカタログ](catalog.md)、レプリケーション配送については[分散化の進化](distributed-evolution.md)で定義します。
 
 ## 責務のグループ
 

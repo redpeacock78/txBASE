@@ -61,6 +61,10 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 | `POST /{table}/records`（カタログサーバー） | 既知のフィールドを持つ JSON オブジェクト | `201 Created`とテーブル修飾済み`Location` |
 | `PUT`、`PATCH`、`DELETE /{table}/records/{id}`（カタログサーバー） | 単一テーブルと同じ本文および前提条件規則 | 独立した名前付きテーブル更新 |
 | `POST /transaction`（カタログサーバー） | 名前付きテーブル更新操作を含む JSON オブジェクト | カタログジャーナルコミット後に新しいカタログ`ETag`付きの`200`、または失敗した`If-Match`と一致する`If-None-Match`に対する変更なしの`412` |
+| `GET`、`HEAD /replication/status`（カタログサーバー） | JSON 本文なし | バージョン付きレプリケーション位置とカタログ表現の状態 |
+| `GET`、`HEAD /replication/snapshot`（カタログサーバー） | JSON 本文なし | 検証済み`ReplicationSnapshot` JSON |
+| `POST /replication/entry`（カタログサーバー） | バージョン付き`ReplicationEntry` JSON | 適用または重複確認の`200` |
+| `POST /replication/snapshot`（カタログサーバー） | バージョン付き`ReplicationSnapshot` JSON | インストールまたは重複確認の`200` |
 | `POST /records` | 既知のフィールドを持つ JSON オブジェクト | `201 Created`と`Location` |
 | `POST /transaction` | 空でない`operations`配列を含む JSON オブジェクト | 一つのテーブルのアトミックスナップショットコミット後に`200` |
 | `PUT /records/{id}` | フィールドを置き換える JSON オブジェクト | 結果のレコード |
@@ -71,8 +75,13 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 
 未知のフィールド、不正なJSON、未サポートの更新演算子、不正なフィールド値は、永続化前に拒否します。
 
-すべてのJSONリクエスト本文は、解析前に`MAX_JSON_INPUT_BYTES`（現在は1 MiB）で制限します。
-バイト数の上限を超えた場合、HTTP境界は`413 Payload Too Large`を返します。
+`POST /replication/snapshot`を除くすべてのJSONリクエスト本文は、解析前に`MAX_JSON_INPUT_BYTES`（現在は1 MiB）で制限します。
+レプリケーションスナップショットのルートには、64 MiBのエンコード済みスナップショット上限を適用します。
+該当するバイト数の上限を超えた場合、HTTP境界は`413 Payload Too Large`を返します。
+
+レプリケーション配送は、構築済みのエントリまたはスナップショットを検証します。
+不正な文書は`422`を返し、term、位置、スキーマ、競合する重複、スナップショット状態の競合は`409`を返し、ストレージ障害は`500`を返します。
+通常のカタログ更新ルートはレプリケーションログへ自動的に追記しません。
 
 `DELETE`はDBFの論理削除です。
 

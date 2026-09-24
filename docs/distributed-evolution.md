@@ -2,9 +2,10 @@
 
 This document isolates the replication and distributed-database boundary.
 
-txBASE now has a local, process-scoped replication slice. It defines the
-versioned entry, single-authority replay, and transport-independent snapshot
-installation contracts, but it is not network replication or consensus.
+txBASE now has a local, process-scoped replication slice and a bounded HTTP
+delivery surface. It defines the versioned entry, single-authority replay,
+snapshot installation, and versioned transport contracts, but it is not quorum
+replication or consensus.
 
 ## 1. Prerequisites
 
@@ -30,6 +31,8 @@ deterministic mutation IR
 single-writer correctness (current local slice)
       ↓
 replicated log (current local replay slice)
+      ↓
+bounded HTTP entry and snapshot delivery (current transport slice)
       ↓
 Raft or another selected authority protocol
 ```
@@ -100,6 +103,30 @@ replacement. This is a local recovery primitive; snapshot transport, log
 truncation policy, and authority coordination remain future distributed
 contracts.
 
+### HTTP transport boundary
+
+The catalog server exposes a version 1 JSON delivery surface for an already
+constructed replication entry or snapshot:
+
+| Route | Contract |
+| --- | --- |
+| `GET` or `HEAD /replication/status` | Returns the transport version, fixed term, base and last positions, and the current catalog representation tag. |
+| `GET` or `HEAD /replication/snapshot` | Exports the current validated `ReplicationSnapshot` JSON. |
+| `POST /replication/entry` | Validates and delivers one `ReplicationEntry`; exact duplicates are acknowledged. |
+| `POST /replication/snapshot` | Validates and installs one `ReplicationSnapshot` atomically. |
+
+Entry request bodies use the existing 1 MiB JSON input bound. Snapshot request
+bodies use the existing 64 MiB encoded-payload bound. Invalid documents return
+`422`; term, position, schema, conflicting-duplicate, and snapshot state conflicts return
+`409`; storage failures return `500`. Responses identify the transport version
+and, for apply operations, the resulting index and transaction ID.
+
+This is a delivery boundary, not a leader-election protocol. The ordinary
+catalog mutation routes do not automatically append to `ReplicationLog`, and
+the transport has no authentication, TLS, streaming, retry queue, backpressure,
+quorum, or authority discovery. An embedding authority must construct and
+deliver entries or snapshots explicitly until that wiring is designed.
+
 ## 4. Co-location before distributed joins
 
 Distributed relational support should first favor co-location.
@@ -135,12 +162,13 @@ The local slice defines the following initial contracts:
 - recovery: a follower retries a missing prefix, and the journaled `TXRP` log can resume after process restart;
 - follower reads: a caller can read a retained catalog image at an applied log transaction;
 - snapshot recovery: a follower can install one validated catalog image atomically and resume at its next log position;
+- transport: the catalog server accepts versioned entry and snapshot JSON through bounded HTTP routes with explicit conflict statuses;
 - deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
 
 The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
-- networked snapshot transfer and authority-coordinated log truncation;
+- authority integration for ordinary catalog writes, authentication, and authority-coordinated log truncation;
 - observability for lag and transport state;
 - quorum and network failure behavior.
 
@@ -159,18 +187,20 @@ The initial local replication slice is complete because it has:
 - deterministic replay, duplicate-delivery, conflict, and ordering tests;
 - partition-gap, serialized-log recovery, term, and schema-tag tests;
 - snapshot round-trip, installation, resume, stale-image, and conflict tests;
+- bounded HTTP status, entry delivery, duplicate delivery, snapshot installation, and export tests;
 - explicit write consistency: only the next catalog transaction can commit;
 - a leader/follower fixture that fails and recovers without external infrastructure.
 
-Network replication, full MVCC coordination, networked snapshot transfer,
-distributed follower-read guarantees, and distributed partitioning remain
-future work.
+Quorum replication, authority integration for ordinary catalog writes, full
+MVCC coordination, distributed follower-read guarantees, and distributed
+partitioning remain future work.
 
 ## 7. Explicit non-goals
 
 This document does not promise Raft, quorum, multi-region writes, global
-transactions, networked log truncation or snapshot transfer, distributed
-follower-read guarantees, or automatic partition balancing.
+transactions, automatic authority capture of catalog writes, networked log
+truncation, distributed follower-read guarantees, or automatic partition
+balancing.
 
 Those choices require the authority and recovery contracts above.
 
@@ -178,13 +208,14 @@ Those choices require the authority and recovery contracts above.
 
 - [In Search of an Understandable Consensus Algorithm (Raft)](https://raft.github.io/raft.pdf)
 - [Raft consensus algorithm](https://raft.github.io/)
+- [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
 
 The Raft paper is a candidate protocol reference for the authority step in the progression.
 It does not select Raft for txBASE and does not define the future txBASE log, schema, or recovery format.
 
 The current repository has a local entry/replay implementation, a versioned
-snapshot installation primitive, a journaled `TXRP` sidecar, and a bounded
-historical follower-read primitive, but no network transport, consensus,
-quorum, distributed follower-read guarantee, or distributed-join
-implementation.
+snapshot installation primitive, a journaled `TXRP` sidecar, bounded HTTP
+delivery routes, and a bounded historical follower-read primitive, but no
+consensus, quorum, automatic authority capture, distributed follower-read
+guarantee, or distributed-join implementation.
 Those statements remain design constraints rather than compatibility claims.

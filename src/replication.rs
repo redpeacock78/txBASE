@@ -11,10 +11,11 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
 mod snapshot;
-pub use snapshot::ReplicationSnapshot;
+pub use snapshot::{MAX_REPLICATION_SNAPSHOT_BYTES, ReplicationSnapshot};
 
 pub const REPLICATION_ENTRY_VERSION: u16 = 1;
 pub const REPLICATION_LOG_VERSION: u16 = 1;
+pub const REPLICATION_TRANSPORT_VERSION: u16 = 1;
 pub const REPLICATION_SIDECAR_NAME: &str = ".txbase.replication";
 const REPLICATION_SIDECAR_MAGIC: &[u8; 4] = b"TXRP";
 const REPLICATION_SIDECAR_VERSION: u8 = 1;
@@ -140,6 +141,14 @@ impl ReplicationLog {
         self.term
     }
 
+    pub fn base_index(&self) -> u64 {
+        self.base_index
+    }
+
+    pub fn base_transaction_id(&self) -> u64 {
+        self.base_transaction_id
+    }
+
     pub fn last_index(&self) -> u64 {
         self.base_index + self.entries.len() as u64
     }
@@ -205,7 +214,14 @@ impl ReplicationLog {
             .map_err(ReplicationError::Catalog)?;
         let log = match bytes {
             Some(bytes) => Self::from_sidecar_bytes(&bytes)?,
-            None => Self::new(term)?,
+            None => {
+                let transaction_id = current_transaction_id(catalog)?;
+                if transaction_id == 0 {
+                    Self::new(term)?
+                } else {
+                    Self::with_position(term, transaction_id, transaction_id)?
+                }
+            }
         };
         if log.term != term {
             return Err(ReplicationError::TermMismatch {

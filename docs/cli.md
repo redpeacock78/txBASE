@@ -66,7 +66,7 @@ The following table is the current command contract.
 | `txbase backup SOURCE DEST` | Validates and copies a DBF with its supported memo, schema, CDC, state, MVCC, and valid index sidecars. |
 | `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as the source. |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | Starts the single-table HTTP server. |
-| `txbase serve-catalog DIRECTORY [--bind ADDRESS]` | Starts the catalog HTTP server. |
+| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM]` | Starts the catalog HTTP server and its bounded replication delivery routes. `TERM` is a positive fixed local replication term and defaults to `1`. |
 
 ## Option ownership
 
@@ -74,6 +74,7 @@ The following table is the current command contract.
 - `--encoding` belongs to path-loading commands that decode DBF text: `read`, `schema`, `verify`, `xbf import`, `pack`, `recall`, and `serve`.
 - `--schema` belongs only to `xbf export`.
 - `--bind` belongs only to `serve` and `serve-catalog`.
+- `--replication-term` belongs only to `serve-catalog` and selects its positive fixed local replication term.
 - `--after` belongs only to `cdc` and `cdc catalog`.
 - `--keep` belongs to table and catalog MVCC garbage collection; `--keep-rows` belongs only to table MVCC garbage collection.
 - `index build-compound` accepts `1` or `asc`, and `-1` or `desc`, for each field direction.
@@ -102,7 +103,7 @@ Run `txbase verify DEST` before using a destination after an interrupted copy.
 
 The single-table and catalog servers are long-running processes rather than one-shot inspection commands.
 
-Their HTTP contracts are defined in [HTTP method semantics](http-semantics.md), [the query model](query-model.md), and [the multi-table catalog](catalog.md).
+Their HTTP contracts are defined in [HTTP method semantics](http-semantics.md), [the query model](query-model.md), [the multi-table catalog](catalog.md), and [distributed evolution](distributed-evolution.md) for replication delivery.
 
 ## Responsibility groups
 
