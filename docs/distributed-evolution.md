@@ -3,9 +3,10 @@
 This document isolates the replication and distributed-database boundary.
 
 txBASE now has a local, process-scoped replication slice and a bounded HTTP
-delivery surface. It defines the versioned entry, single-authority replay,
-snapshot installation, follower progress acknowledgements, and versioned
-transport contracts, but it is not quorum replication or consensus.
+delivery surface with a matching client. It defines the versioned entry,
+single-authority replay, snapshot installation, follower progress
+acknowledgements, and versioned transport contracts, but it is not quorum
+replication or consensus.
 
 ## 1. Prerequisites
 
@@ -32,7 +33,7 @@ single-writer correctness (current local slice)
       ↓
 replicated log (current local replay slice)
       ↓
-bounded HTTP status, contiguous entry-range, entry, snapshot, and progress delivery (current transport slice)
+bounded HTTP status, contiguous entry-range, entry, snapshot, and progress delivery plus one-shot client catch-up (current transport slice)
       ↓
 Raft or another selected authority protocol
 ```
@@ -191,6 +192,33 @@ for missing or invalid credentials. Without that environment variable, the route
 remain unauthenticated for local development compatibility. The transport still has
 no TLS, streaming, retry queue, backpressure, quorum, or authority discovery.
 
+### HTTP client
+
+`ReplicationHttpClient` connects the existing delivery routes to a local
+`ReplicationLog`.
+It accepts only a plain `http://` authority URL, an optional base path,
+a positive socket timeout, and an optional validated Bearer token.
+
+`status()` validates the remote term, schema tag, retained base, and applied
+position.
+`entries()` reads one bounded contiguous page, `snapshot()` reads the current
+validated image, and the three POST methods deliver an entry, snapshot, or
+follower progress acknowledgement.
+
+`catch_up()` is a bounded one-shot pull operation.
+It reads the authority status, installs the current snapshot when the local
+cursor is behind retention or the requested history has been compacted, reads
+pages until the initial authority position is reached, applies each page in
+order, and acknowledges the resulting follower position.
+An entry page remains independently atomic, so a failure can leave an applied
+prefix that a later call safely retries.
+
+The client uses HTTP/1.1 with `Connection: close`, explicit
+`Content-Length`, the existing `1 MiB` entry/progress and `64 MiB` snapshot
+limits, and no chunked decoding.
+It does not implement TLS, retry queues, streaming, backpressure, authority
+discovery, quorum, or consensus.
+
 ## 4. Co-location before distributed joins
 
 Distributed relational support should first favor co-location.
@@ -228,7 +256,7 @@ The local slice defines the following initial contracts:
 - snapshot recovery: a follower can install one validated catalog image atomically and resume at its next log position;
 - log retention: the local authority can compact through an exact retained snapshot without advancing the catalog transaction or losing the log suffix;
 - follower safety: the authority accepts monotonic follower progress, exposes the minimum acknowledged index, and permits coordinated compaction only through that index; acknowledgements must be re-established after restart;
-- transport: the catalog server exposes bounded status and contiguous entry-range reads, and accepts versioned entry, snapshot, and progress JSON through HTTP routes with explicit conflict statuses;
+- transport: the catalog server exposes bounded status and contiguous entry-range reads, accepts versioned entry, snapshot, and progress JSON through HTTP routes with explicit conflict statuses, and `ReplicationHttpClient::catch_up` connects those routes to local ordered replay;
 - authority capture: the default authority role journals `/transaction` and named-table mutations with `TXRP` state, while the follower role rejects direct catalog mutations;
 - authentication: `TXBASE_REPLICATION_TOKEN` optionally protects the replication routes with RFC 6750 Bearer credentials;
 - deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
@@ -257,20 +285,19 @@ The initial local replication slice is complete because it has:
 - snapshot round-trip, installation, resume, stale-image, and conflict tests;
 - retained snapshot export, suffix-preserving log compaction, sidecar-only journal recovery, and compaction conflict tests;
 - follower watermark monotonicity, minimum-index compaction gating, restart re-registration, and bounded HTTP progress tests;
-- bounded HTTP status, contiguous entry-range, entry delivery, duplicate delivery, snapshot installation, and export tests;
+- bounded HTTP status, contiguous entry-range, entry delivery, duplicate delivery, snapshot installation, export, client parsing, authenticated requests, and one-shot catch-up tests;
 - default authority capture, table-ETag recheck, and follower read-only role tests;
 - explicit write consistency: only the next catalog transaction can commit;
 - a leader/follower fixture that fails and recovers without external infrastructure.
 
-Quorum replication, full MVCC coordination,
-distributed follower-read guarantees, and distributed partitioning remain future
-work.
+Quorum replication, full MVCC coordination, distributed follower-read
+guarantees, and distributed partitioning remain future work.
 
 ## 7. Explicit non-goals
 
 This document does not promise Raft, quorum, multi-region writes, global
-transactions, networked log truncation, distributed follower-read guarantees, or automatic partition
-balancing.
+transactions, networked log truncation, distributed follower-read guarantees,
+automatic partition balancing, TLS, retry queues, or authority discovery.
 
 Those choices require the authority and recovery contracts above.
 
@@ -285,8 +312,9 @@ It does not select Raft for txBASE and does not define the future txBASE log, sc
 
 The current repository has a local entry/replay implementation, a versioned
 snapshot installation primitive, a journaled `TXRP` sidecar, bounded HTTP
-status and contiguous entry-range delivery routes, follower watermark acknowledgements, default authority
-capture for catalog mutations, a read-only follower role, and a bounded
-historical follower-read primitive, but no consensus, quorum, distributed
-follower-read guarantee, or distributed-join implementation.
+status and contiguous entry-range delivery routes, a bounded HTTP client,
+follower watermark acknowledgements, default authority capture for catalog
+mutations, a read-only follower role, and a bounded historical follower-read
+primitive, but no consensus, quorum, distributed follower-read guarantee, or
+distributed-join implementation.
 Those statements remain design constraints rather than compatibility claims.

@@ -9,10 +9,16 @@ use crate::xbase::{MAX_OPERATION_BATCH, OperationIr, OperationMethod};
 use serde::{Deserialize, Serialize};
 
 mod error;
+mod http;
 mod progress;
 mod snapshot;
 mod transport;
 pub use error::ReplicationError;
+pub use http::{
+    ReplicationDeliveryOutcome, ReplicationDeliveryResponse, ReplicationHttpClient,
+    ReplicationHttpError, ReplicationHttpStatus, ReplicationProgressResponse,
+    ReplicationProgressResponseOutcome, ReplicationSyncResult,
+};
 pub use progress::{
     MAX_REPLICATION_FOLLOWERS, MAX_REPLICATION_PROGRESS_BYTES, REPLICATION_PROGRESS_VERSION,
     ReplicationProgress, ReplicationProgressOutcome,
@@ -697,3 +703,7 @@ fn next(value: u64, name: &str) -> Result<u64, ReplicationError> {
 #[cfg(test)]
 #[path = "replication_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "replication/http_tests.rs"]
+mod http_tests;

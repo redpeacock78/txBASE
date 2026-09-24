@@ -4,7 +4,11 @@
     "preset-japanese": {
       "no-doubled-joshi": false,
       "sentence-length": {
-        "max": 200
+        "max": 200,
+        "skipPatterns": [
+          "/`[^`]+`/",
+          "/\\s\\|\\s.*/"
+        ]
       },
       "max-ten": {
         "max": 4
@@ -24,7 +28,11 @@
     },
     "preset-ja-technical-writing": {
       "sentence-length": {
-        "max": 200
+        "max": 200,
+        "skipPatterns": [
+          "/`[^`]+`/",
+          "/\\s\\|\\s.*/"
+        ]
       },
       "max-ten": {
         "max": 4

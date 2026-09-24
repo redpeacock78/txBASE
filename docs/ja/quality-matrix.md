@@ -128,6 +128,8 @@ cargo test --all-targets --all-features
 | HTTP-009 | HTTPのJSONリクエスト本文が共有する1 MiBの入力境界に制限され、解析または永続化の前に`413 Payload Too Large`を返す。 | `src/lib.rs`; `src/server.rs`; `src/server/body.rs`; `src/server/tests/query_tests.rs`; `docs/ja/http-semantics.md` | `query_endpoint_rejects_an_oversized_json_body_before_parsing` | Boundary |
 | QRY-011 | `$expr`と入力用`$set`/`$addFields`が、フィールド参照、リテラル、nullフォールバック、文字列結合、ロケールに依存しないUnicodeの大文字と小文字の変換、有界な数値式について1つのスカラー式ASTと評価器を共有する。型が合わない値は表面ごとの規則に従って不一致または`null`になり、計算した文字列は1 MiBまでである。 | `src/query/expression.rs`; `src/query/expression/numeric.rs`; `src/query/aggregation_plan/set.rs`; `src/query/aggregation/input.rs`; `src/query/field_expression_tests.rs`; `src/query/aggregation_tests/input_stage_tests.rs`; `docs/ja/query-model.md`; `docs/ja/aggregation.md` | `compares_string_scalar_expression_results`; `string_scalar_expressions_support_null_fallback_and_literal_values`; `sets_string_scalar_expressions_before_matching_and_grouping`; `rejects_unsupported_or_malformed_expr` | Boundary |
 
+| REPL-007 | `ReplicationHttpClient`がauthorityの状態を検証し、エントリまたはスナップショットを取得し、順序付き再生と進捗確認を平文HTTPで行う。入力と応答の上限は既存契約に従い、TLS、再試行、クォーラム、コンセンサスは対象外です。 | `src/replication/http.rs`; `src/replication/http/client.rs`; `src/replication/http/protocol.rs`; `src/replication/http_tests.rs`; `src/server/replication.rs`; `docs/ja/distributed-evolution.md` | `client_validates_plain_http_configuration`; `client_reads_status_with_base_path_and_bearer_auth`; `client_catches_up_entry_pages_and_acknowledges_progress` | Boundary |
+
 ## 明示的に残るギャップ
 
 次の話題には文書または設計メモがありますが、マトリクスで現在の実装とは主張していません。
@@ -138,7 +140,7 @@ cargo test --all-targets --all-features
   `$group`または`$bucket`の`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を超えるアキュムレータも対象とする。
 - 述語単位のロックと分散serializable調整。
 - ロケール対応CJK照合と、より広い上流CJKフィクスチャ。
-- スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、プロバイダー固有のクラウドオブジェクトストレージアダプターと保持方針、ワーカーまたはWASIのランタイムアダプターと非同期WASMストレージ、ネットワークレプリケーション転送、クォーラムまたはコンセンサス、分散レプリケーション。
+- スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、プロバイダー固有のクラウドオブジェクトストレージアダプターと保持方針、ワーカーまたはWASIのランタイムアダプターと非同期WASMストレージ、TLS、再試行キュー、権威検出、クォーラムまたはコンセンサス、分散レプリケーション。
 
 これらのいずれかをCurrentへ移す前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。
 
