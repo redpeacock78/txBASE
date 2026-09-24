@@ -56,6 +56,8 @@ All `5xx` responses are unavailable outcomes.
 
 Object keys use ordinary non-empty path components; `.` and `..` components are rejected before a request is sent.
 
+List prefixes may end in `/` to select a namespace, but may not contain an empty component elsewhere.
+
 ## 3. Timeout and cancellation
 
 Each operation creates a private `AbortController` for its fetch request.

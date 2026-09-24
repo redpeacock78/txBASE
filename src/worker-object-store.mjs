@@ -146,7 +146,7 @@ export function createWorkerObjectStore({
   };
 
   const list = async (prefix) => {
-    validateKey(prefix);
+    validatePrefix(prefix);
     const url = new URL(root);
     url.searchParams.set("prefix", prefix);
     const response = await request(url);
@@ -238,6 +238,25 @@ function validateKey(key) {
     throw new WorkerObjectStoreError(
       "invalid",
       "object-store keys must contain ordinary non-empty path components",
+    );
+  }
+}
+
+function validatePrefix(prefix) {
+  if (
+    typeof prefix !== "string" ||
+    prefix.length === 0 ||
+    prefix.includes("\0") ||
+    prefix.split("/").some(
+      (component, index, components) =>
+        component === "." ||
+        component === ".." ||
+        (component === "" && index !== components.length - 1),
+    )
+  ) {
+    throw new WorkerObjectStoreError(
+      "invalid",
+      "object-store list prefixes must contain ordinary path components",
     );
   }
 }
