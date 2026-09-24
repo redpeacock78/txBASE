@@ -120,12 +120,24 @@ impl Parser {
         }
     }
 
-    fn can_append_group_output(&self) -> bool {
+    fn can_append_group_match_or_projection(&self) -> bool {
         self.has_group_stage()
             && self.projection.is_none()
             && self.sort.is_none()
             && self.skip.is_none()
             && self.limit.is_none()
+    }
+
+    fn can_append_group_sort(&self) -> bool {
+        self.has_group_stage() && self.sort.is_none() && self.skip.is_none() && self.limit.is_none()
+    }
+
+    fn can_append_group_skip(&self) -> bool {
+        self.has_group_stage() && self.skip.is_none() && self.limit.is_none()
+    }
+
+    fn can_append_group_limit(&self) -> bool {
+        self.has_group_stage() && self.limit.is_none()
     }
 
     fn can_append_input(&self) -> bool {

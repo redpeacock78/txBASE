@@ -16,36 +16,32 @@ impl Parser {
         operator: &str,
         value: &Value,
     ) -> Result<bool, QueryError> {
-        if self.can_append_group_output() {
-            match operator {
-                "$match" => {
-                    let filter = value.as_object().ok_or_else(|| {
-                        QueryError::Invalid(format!(
-                            "aggregate stage {index}.$match must be an object"
-                        ))
-                    })?;
-                    validation::validate_filter(filter, &format!("aggregate[{index}].$match"))?;
-                    self.group_matches.push(filter.clone());
-                    return Ok(true);
-                }
-                "$project" => {
-                    self.projection = Some(parse_projection(value, index)?);
-                    return Ok(true);
-                }
-                "$sort" => {
-                    self.sort = Some(parse_sort(value, index)?);
-                    return Ok(true);
-                }
-                "$skip" => {
-                    self.skip = Some(parse_skip(value, index)?);
-                    return Ok(true);
-                }
-                "$limit" => {
-                    self.limit = Some(parse_limit(value, index)?);
-                    return Ok(true);
-                }
-                _ => {}
+        match operator {
+            "$match" if self.can_append_group_match_or_projection() => {
+                let filter = value.as_object().ok_or_else(|| {
+                    QueryError::Invalid(format!("aggregate stage {index}.$match must be an object"))
+                })?;
+                validation::validate_filter(filter, &format!("aggregate[{index}].$match"))?;
+                self.group_matches.push(filter.clone());
+                return Ok(true);
             }
+            "$project" if self.can_append_group_match_or_projection() => {
+                self.projection = Some(parse_projection(value, index)?);
+                return Ok(true);
+            }
+            "$sort" if self.can_append_group_sort() => {
+                self.sort = Some(parse_sort(value, index)?);
+                return Ok(true);
+            }
+            "$skip" if self.can_append_group_skip() => {
+                self.skip = Some(parse_skip(value, index)?);
+                return Ok(true);
+            }
+            "$limit" if self.can_append_group_limit() => {
+                self.limit = Some(parse_limit(value, index)?);
+                return Ok(true);
+            }
+            _ => {}
         }
 
         if self.has_terminal_stage() {
