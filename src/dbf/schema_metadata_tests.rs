@@ -27,6 +27,8 @@ pub(super) fn cleanup(path: &Path) {
         "txbase.wal",
         "txbase.lock",
         "txbase.state",
+        "txbase.cdc",
+        "txbase.mvcc",
     ] {
         let candidate = if extension == "dbf" {
             path.to_path_buf()
