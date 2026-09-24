@@ -328,6 +328,14 @@ fn snapshot_installation_compacts_history_and_resumes_replication() {
     authority.propose(&leader, vec![post(3, "Carol")]).unwrap();
     authority.propose(&leader, vec![post(4, "Dave")]).unwrap();
 
+    for extension in ["mvcc", "cdc", "wal", "state", "idx"] {
+        fs::write(
+            follower_root.join(format!("users.txbase.{extension}")),
+            b"stale",
+        )
+        .unwrap();
+    }
+
     let snapshot = authority.snapshot(&leader).unwrap();
     assert_eq!(
         replica.install_snapshot(&mut follower, snapshot).unwrap(),
@@ -348,6 +356,13 @@ fn snapshot_installation_compacts_history_and_resumes_replication() {
     assert_eq!(replica.last_index(), 2);
     assert_eq!(replica.last_transaction_id(), 2);
     assert_eq!(Catalog::mvcc_versions(&follower_root).unwrap(), vec![2]);
+    for extension in ["mvcc", "cdc", "wal", "state", "idx"] {
+        assert!(
+            !follower_root
+                .join(format!("users.txbase.{extension}"))
+                .exists()
+        );
+    }
     assert!(
         follower
             .open_table("users")
@@ -409,6 +424,58 @@ fn snapshot_installation_rejects_stale_and_conflicting_images() {
     fs::remove_dir_all(leader_root).unwrap();
     fs::remove_dir_all(follower_root).unwrap();
     fs::remove_dir_all(conflict_root).unwrap();
+}
+
+#[test]
+fn snapshot_install_rejects_a_stale_txrp_sidecar_without_mutating_catalog() {
+    let leader_root = catalog_root("snapshot-sidecar-leader");
+    let follower_root = catalog_root("snapshot-sidecar-follower");
+    let leader = Catalog::from_path(&leader_root).unwrap();
+    let mut follower = Catalog::from_path(&follower_root).unwrap();
+    let mut authority = ReplicationLog::open(&leader, 1).unwrap();
+    authority.propose(&leader, vec![post(3, "Carol")]).unwrap();
+    let snapshot = authority.snapshot(&leader).unwrap();
+    let sidecar_after = ReplicationLog::with_position(
+        snapshot.term,
+        snapshot.last_index,
+        snapshot.last_transaction_id,
+    )
+    .unwrap()
+    .to_sidecar_bytes()
+    .unwrap();
+
+    let error = follower
+        .install_snapshot_with_sidecar(
+            &snapshot.catalog,
+            0,
+            crate::replication::REPLICATION_SIDECAR_NAME,
+            Some(b"stale".to_vec()),
+            sidecar_after,
+        )
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        crate::catalog::CatalogTransactionError::SidecarPreconditionFailed { name }
+            if name == crate::replication::REPLICATION_SIDECAR_NAME
+    ));
+    assert_eq!(follower.transaction_id().unwrap(), None);
+    assert!(
+        follower
+            .open_table("users")
+            .unwrap()
+            .active_record(3)
+            .is_none()
+    );
+    assert!(
+        follower
+            .read_sidecar_bytes(crate::replication::REPLICATION_SIDECAR_NAME)
+            .unwrap()
+            .is_none()
+    );
+    assert!(!follower_root.join(".txbase.catalog.txn").exists());
+
+    fs::remove_dir_all(leader_root).unwrap();
+    fs::remove_dir_all(follower_root).unwrap();
 }
 
 #[test]
