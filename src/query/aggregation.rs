@@ -5,6 +5,7 @@ use serde_json::{Map, Value};
 mod accumulators;
 mod input;
 mod output;
+mod sort_by_count;
 mod standard_deviation;
 
 pub(super) const MAX_GROUPS: usize = 10_000;

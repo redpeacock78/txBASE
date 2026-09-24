@@ -16,6 +16,7 @@ pub struct AggregationPlan {
     pub group_matches: Vec<Map<String, Value>>,
     pub group: Option<GroupSpec>,
     pub bucket: Option<BucketSpec>,
+    pub sort_by_count: Option<String>,
     pub count: Option<String>,
     pub distinct: Option<String>,
     pub projection: Option<BTreeMap<String, i8>>,

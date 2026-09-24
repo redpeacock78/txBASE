@@ -145,6 +145,10 @@ A delta with the wrong base must be rejected.
 
 `src/query/aggregation_tests/accumulator_tests.rs::groups_filtered_records_with_count_and_integer_sum` covers group `$count` and integer `$sum`.
 
+`src/query/aggregation_tests/sort_by_count_tests.rs::sort_by_count_groups_missing_values_and_sorts_descending` covers `$sortByCount` grouping, shared missing/null keys, and descending count order.
+
+`src/query/aggregation_tests/sort_by_count_tests.rs::sort_by_count_applies_input_and_group_output_stages` and `rejects_unsupported_sort_by_count_forms_and_combinations` cover stage ordering, output filtering, projection, limits, and malformed or repeated terminal stages.
+
 `src/query/aggregation_tests/pipeline_tests.rs::filters_group_output_before_projection_and_sorting` covers a bounded post-group `$match`.
 
 `src/query/aggregation_tests/accumulator_tests.rs::sums_fractional_and_integer_numbers` covers mixed numeric `$sum` input and preserves integer output for all-integral input.

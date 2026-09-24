@@ -13,3 +13,4 @@ mod accumulator_tests;
 mod bucket_tests;
 mod input_stage_tests;
 mod pipeline_tests;
+mod sort_by_count_tests;

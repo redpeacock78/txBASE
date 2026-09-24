@@ -146,6 +146,14 @@ DBF、memo、WAL、JSON入力について決定的なコーパスを保ちます
 
 `src/query/aggregation_tests/accumulator_tests.rs::groups_filtered_records_with_count_and_integer_sum`は、group内の`$count`と整数`$sum`を検査します。
 
+`src/query/aggregation_tests/sort_by_count_tests.rs::sort_by_count_groups_missing_values_and_sorts_descending`は、`$sortByCount`のグループ化と件数の降順を検査します。
+
+このテストは、欠損とnullが共有するキーも検査します。
+
+`src/query/aggregation_tests/sort_by_count_tests.rs::sort_by_count_applies_input_and_group_output_stages`は、ステージ順序、出力フィルター、プロジェクション、limitを検査します。
+
+`rejects_unsupported_sort_by_count_forms_and_combinations`は、壊れたまたは重複した終端ステージを検査します。
+
 `src/query/aggregation_tests/pipeline_tests.rs::filters_group_output_before_projection_and_sorting`は、有界なグループ後`$match`を検査します。
 
 `src/query/aggregation_tests/accumulator_tests.rs::sums_fractional_and_integer_numbers`は、整数と小数が混在する`$sum`入力と、整数だけの入力で整数を返す規則を検査します。

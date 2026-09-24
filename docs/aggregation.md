@@ -6,7 +6,7 @@ The aggregation boundary is separate from ordinary cursor pagination and from th
 
 ## 1. Bounded aggregation
 
-The query document can contain one terminal `$count` or `$distinct` stage, one blocking `$group` stage, or one blocking `$bucket` stage after `filter` and zero or more preceding `$match` stages:
+The query document can contain one terminal `$count` or `$distinct` stage, one blocking `$group` stage, one blocking `$bucket` stage, or one `$sortByCount` stage after `filter` and zero or more preceding `$match` stages:
 
 ```json
 {
@@ -23,7 +23,7 @@ The query document can contain one terminal `$count` or `$distinct` stage, one b
 }
 ```
 
-The input portion accepts zero or more `$match` and `$unwind` stages, at most one input `$set` or `$addFields` stage in total, and at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each before one terminal `$count`, one terminal `$distinct`, one `$group` stage, or one `$bucket` stage.
+The input portion accepts zero or more `$match` and `$unwind` stages, at most one input `$set` or `$addFields` stage in total, and at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each before one terminal `$count`, one terminal `$distinct`, one `$group` stage, one `$bucket` stage, or one `$sortByCount` stage.
 
 Input stages execute in the order listed in the pipeline.
 
@@ -92,13 +92,30 @@ Each non-empty range produces one document whose `_id` is the range lower bounda
 
 Empty buckets are omitted, and the default bucket is emitted after the range buckets.
 
+`$sortByCount` groups records by a field reference and emits the grouping value as `_id` with a `count`, ordered by `count` descending:
+
+```json
+{
+  "$sortByCount": "$COUNTRY"
+}
+```
+
+The txBASE subset accepts one field reference only; arbitrary expressions and document literals remain unsupported.
+
+Missing and explicit `null` field values share one group.
+
+Empty groups are not emitted, the stage is capped at 10,000 groups, and it does not spill to disk.
+
+The built-in descending count order is applied before later group-output stages.
+A later `$sort` may replace that order.
+
 When `output` is omitted, `$bucket` emits a `count` accumulator.
 
 When `output` is present, it uses the same bounded accumulator forms as `$group` except that `_id` is assigned by the bucket stage.
 
 The stage supports at most 10,000 ranges, does not spill to disk, and shares the 10,000-value materialization bound with `$push` and `$addToSet`.
 
-Group or bucket output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, at most one `$skip`, and at most one final `$limit` stage.
+Group, bucket, or `$sortByCount` output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, at most one `$skip`, and at most one final `$limit` stage.
 
 `_id` is either `null` or one dotted field reference.
 
@@ -110,11 +127,11 @@ The bounded numeric expression evaluator is shared with `$expr`; missing or nonn
 
 The filter runs before grouping or bucketing.
 
-The result is a JSON array of documents containing `_id` and the named accumulator fields for `$group` or `$bucket`.
+The result is a JSON array of documents containing `_id` and the named accumulator fields for `$group` or `$bucket`, or `_id` and `count` for `$sortByCount`.
 
 `$project` reuses the query projection rules for group-output fields.
 
-It must appear after `$group` or `$bucket` and before `$sort`, `$skip`, or `$limit`.
+It must appear after `$group`, `$bucket`, or `$sortByCount` and before `$sort`, `$skip`, or `$limit`.
 
 Inclusion and exclusion cannot be mixed.
 
@@ -168,9 +185,11 @@ Missing fields are appended as `null` by both accumulators.
 
 The combined materialized value count for all `$push` and `$addToSet` accumulators is capped at 10,000.
 
-The executor rejects more than 10,000 groups or bucket ranges and rejects aggregation combined with top-level sort, projection, skip, limit, or cursor pagination.
+The executor rejects more than 10,000 groups, `$sortByCount` groups, or bucket ranges and rejects aggregation combined with top-level sort, projection, skip, limit, or cursor pagination.
 
 Without `$sort`, group or bucket output order is not part of the contract, although the current implementation emits deterministic key or boundary order.
+
+`$sortByCount` output is ordered by descending `count` before any later group-output stage.
 
 `$sort` uses the existing JSON sort ordering and stable ties.
 
@@ -182,9 +201,9 @@ Without `$sort`, group or bucket output order is not part of the contract, altho
 
 `$match` stages use the same predicate rules as top-level `filter`.
 
-Input `$match` stages must precede `$group`, `$bucket`, `$count`, or `$distinct`.
+Input `$match` stages must precede `$group`, `$bucket`, `$sortByCount`, `$count`, or `$distinct`.
 
-Group-output `$match` stages must follow `$group` or `$bucket` and precede `$project`, `$sort`, `$skip`, or `$limit`.
+Group-output `$match` stages must follow `$group`, `$bucket`, or `$sortByCount` and precede `$project`, `$sort`, `$skip`, or `$limit`.
 
 `$count` emits one document containing the named non-negative integer field, including zero when no records match.
 
@@ -196,15 +215,17 @@ Both stages are terminal and cannot be combined with group-output stages.
 
 Distinct output is capped at 10,000 values.
 
-Additional grouping, bucket, count, or distinct stages remain unsupported.
+Additional grouping, bucket, sort-by-count, count, or distinct stages remain unsupported.
 
-After `$group` or `$bucket`, stages after the group-output `$limit` remain unsupported.
+After `$group`, `$bucket`, or `$sortByCount`, stages after the group-output `$limit` remain unsupported.
 
 `$expr`, `$sum`, and `$avg` operands are supported only in the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` forms described in the query model.
 
 Broader expression evaluation remains unsupported.
 
 MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as `$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).
+
+MongoDB documents `$sortByCount` as a grouping stage that is equivalent to `$group` followed by a descending `$sort` on `count`; txBASE keeps that behavior while limiting the group expression to one field reference.
 
 Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/) is represented by this bounded txBASE stage without claiming full MongoDB pipeline compatibility.
 
@@ -223,6 +244,7 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 - [MongoDB `$stdDevSamp` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB `$bucket` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucket/)
+- [MongoDB `$sortByCount` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sortByCount/)
 - [MongoDB `$project` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB `$set` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)
 - [MongoDB `$addFields` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)

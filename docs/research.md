@@ -44,7 +44,7 @@ Implementation behavior is checked against the current source and tests before i
 
 Design notes are labeled future when they are not implemented.
 
-The research pass for this index was refreshed on 2026-09-22.
+The research pass for this index was refreshed on 2026-09-24.
 
 The README organization follows the section shape of [texenv's README](https://github.com/redpeacock78/texenv/blob/master/README.md), while the content is specific to txBASE.
 
@@ -113,6 +113,7 @@ Second, POSIX durability language is limited to the Unix path; cross-platform re
 - [MongoDB `$stdDevSamp` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB `$bucket` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucket/)
+- [MongoDB `$sortByCount` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sortByCount/)
 - [MongoDB `$project` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB `$set` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)
 - [MongoDB `$addFields` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)

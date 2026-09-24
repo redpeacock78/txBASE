@@ -6,7 +6,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 ## 1. 有界集約
 
-クエリ文書には、`filter`と0個以上の先行`$match`ステージの後に、終端`$count`、終端`$distinct`、ブロッキングな`$group`、またはブロッキングな`$bucket`を1つ置けます。
+クエリ文書には、`filter`と0個以上の先行`$match`ステージの後に、終端`$count`、終端`$distinct`、ブロッキングな`$group`、ブロッキングな`$bucket`、または`$sortByCount`を1つ置けます。
 
 ```json
 {
@@ -23,7 +23,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 }
 ```
 
-入力部分は、0個以上の`$match`と`$unwind`、合計で最大1つの入力用`$set`または`$addFields`、入力用の`$project`、`$sort`、`$skip`、`$limit`をそれぞれ最大1つ受け付け、その後に終端`$count`、終端`$distinct`、`$group`、または`$bucket`を1つ受け付けます。
+入力部分は、0個以上の`$match`と`$unwind`、合計で最大1つの入力用`$set`または`$addFields`、入力用の`$project`、`$sort`、`$skip`、`$limit`をそれぞれ最大1つ受け付け、その後に終端`$count`、終端`$distinct`、`$group`、`$bucket`、または`$sortByCount`を1つ受け付けます。
 
 入力ステージはパイプラインに記載した順序で実行します。
 
@@ -97,13 +97,30 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 空バケットは出力せず、defaultバケットは範囲バケットの後に出力します。
 
+`$sortByCount`はフィールド参照ごとにレコードをグループ化し、グループ値を`_id`、件数を`count`として、`count`の降順で出力します。
+
+```json
+{
+  "$sortByCount": "$COUNTRY"
+}
+```
+
+txBASEのサブセットが受け付けるのは1つのフィールド参照だけであり、任意の式とドキュメントリテラルは未サポートです。
+
+欠損したフィールドと明示的な`null`は同じグループになります。
+
+空のグループは出力せず、グループ数は10,000件までに制限し、ディスクへ退避しません。
+
+組み込みの件数降順は、後続のグループ出力ステージより前に適用します。
+後続の`$sort`で順序を上書きできます。
+
 `output`を省略すると、`$bucket`は`count`アキュムレータを出力します。
 
 `output`を指定した場合は、`_id`をバケットステージが設定する点を除き、`$group`と同じ有界なアキュムレータ形式を使います。
 
 範囲は10,000個までであり、ディスクへ退避せず、`$push`と`$addToSet`に対する10,000値の具体化上限を共有します。
 
-グループまたはバケット出力には0個以上の`$match`を置けます。
+グループ、バケット、または`$sortByCount`の出力には0個以上の`$match`を置けます。
 その後に任意の`$project`を1つ、最後の`$sort`、`$skip`、`$limit`をそれぞれ最大1つ置けます。
 
 `_id`は`null`または1つのドット区切りフィールド参照です。
@@ -116,11 +133,11 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 フィルターはグループ化またはバケット化より前に実行します。
 
-結果は`$group`または`$bucket`が生成した`_id`と名前付きアキュムレータフィールドを持つJSONオブジェクトの配列です。
+結果は`$group`または`$bucket`が生成した`_id`と名前付きアキュムレータフィールド、または`$sortByCount`が生成した`_id`と`count`を持つJSONオブジェクトの配列です。
 
 `$project`はクエリのプロジェクション規則を再利用してグループまたはバケット出力のフィールドを包含または除外します。
 
-`$project`は`$group`または`$bucket`の後、`$sort`、`$skip`、または`$limit`の前に置く必要があります。
+`$project`は`$group`、`$bucket`、または`$sortByCount`の後、`$sort`、`$skip`、または`$limit`の前に置く必要があります。
 
 包含と除外は混在できません。
 
@@ -174,11 +191,13 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 すべての`$push`と`$addToSet`がマテリアライズする値の合計は10,000件に制限されます。
 
-10,000を超えるグループまたはバケット範囲は拒否し、集約とトップレベルの`sort`、`projection`、`skip`、`limit`、cursorページングの併用も拒否します。
+10,000を超えるグループ、`$sortByCount`のグループ、またはバケット範囲は拒否し、集約とトップレベルの`sort`、`projection`、`skip`、`limit`、cursorページングの併用も拒否します。
 
 `$sort`がない場合のグループまたはバケット出力順は契約に含めませんが、現在の実装は決定的なキー順または境界順で出力します。
 
 `$sort`は既存のJSONソート順と安定した同値順を使います。
+
+`$sortByCount`の出力は、後続のグループ出力ステージより前に`count`の降順で並びます。
 
 `$limit`は0以上の整数を受け付け、ソート後の具体化されたグループ結果を切り詰めます。
 
@@ -188,9 +207,9 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 `$match`ステージはトップレベルの`filter`と同じ述語規則を使います。
 
-入力に対する`$match`ステージは`$group`、`$bucket`、`$count`、`$distinct`より前に置く必要があります。
+入力に対する`$match`ステージは`$group`、`$bucket`、`$sortByCount`、`$count`、`$distinct`より前に置く必要があります。
 
-グループまたはバケット出力に対する`$match`ステージは`$group`または`$bucket`の後、`$project`、`$sort`、`$skip`、`$limit`より前に置く必要があります。
+グループ、バケット、または`$sortByCount`出力に対する`$match`ステージは`$group`、`$bucket`、または`$sortByCount`の後、`$project`、`$sort`、`$skip`、`$limit`より前に置く必要があります。
 
 `$count`は名前付きの0以上の整数フィールドを1つ持つ文書を返し、一致するレコードがない場合も0を返します。
 
@@ -202,15 +221,17 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 distinct出力は10,000値までです。
 
-追加のgroup、bucket、count、distinctステージは未サポートです。
+追加のgroup、bucket、sort-by-count、count、distinctステージは未サポートです。
 
-`$group`または`$bucket`の後では、グループ出力用の`$limit`より後のステージは未サポートです。
+`$group`、`$bucket`、または`$sortByCount`の後では、グループ出力用の`$limit`より後のステージは未サポートです。
 
 `$expr`、`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`のオペランドは、クエリモデルで説明する有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`の形式だけをサポートします。
 
 より広い式評価は未サポートです。
 
 MongoDBは`$group`をブロッキングステージとして説明し、[$count と $sum を含む集約ステージの仕様](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)を定義しています。
+
+MongoDBは`$sortByCount`を、`$group`の後に`count`の降順ソートを続ける処理と同等のグループ化ステージとして説明しています。txBASEはこの動作を保ちつつ、グループ化式を1つのフィールド参照に制限します。
 
 txBASEはMongoDBの完全なパイプライン互換性を主張せず、その別個の[`$count`ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)を有界なステージとして表現します。
 
@@ -229,6 +250,7 @@ txBASEはMongoDBの完全なパイプライン互換性を主張せず、その�
 - [MongoDB の`$stdDevSamp`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB の`$count`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB の`$bucket`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucket/)
+- [MongoDB の`$sortByCount`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sortByCount/)
 - [MongoDB の`$project`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB の`$set`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)
 - [MongoDB の`$addFields`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)

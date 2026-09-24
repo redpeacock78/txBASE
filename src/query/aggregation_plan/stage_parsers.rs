@@ -108,6 +108,15 @@ pub(super) fn parse_distinct(value: &Value, index: usize) -> Result<String, Quer
     field_reference(field, &format!("aggregate stage {index}.$distinct"))
 }
 
+pub(super) fn parse_sort_by_count(value: &Value, index: usize) -> Result<String, QueryError> {
+    let Some(field) = value.as_str() else {
+        return Err(QueryError::Invalid(format!(
+            "aggregate stage {index}.$sortByCount must be a field reference"
+        )));
+    };
+    field_reference(field, &format!("aggregate stage {index}.$sortByCount"))
+}
+
 pub(super) fn parse_projection(
     value: &Value,
     index: usize,

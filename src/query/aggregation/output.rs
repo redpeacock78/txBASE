@@ -45,10 +45,23 @@ pub(super) fn execute_materialized<'a>(
         return execute_bucket(records, bucket, plan);
     }
 
+    if let Some(field) = &plan.sort_by_count {
+        return super::sort_by_count::execute(records, field, plan);
+    }
+
     let spec = plan
         .group
         .as_ref()
-        .expect("validated aggregation has a group, bucket, or count stage");
+        .expect("validated aggregation has a group, bucket, sortByCount, or count stage");
+    execute_group(records, spec, plan, None)
+}
+
+pub(super) fn execute_group<'a>(
+    records: impl Iterator<Item = &'a DbfRecord>,
+    spec: &aggregation_plan::GroupSpec,
+    plan: &aggregation_plan::AggregationPlan,
+    built_in_sort: Option<&IndexMap<String, i8>>,
+) -> Result<Vec<Value>, QueryError> {
     let mut groups = BTreeMap::<String, accumulators::GroupState>::new();
     let mut collected_values = 0;
     if spec.key_field.is_none() {
@@ -82,10 +95,13 @@ pub(super) fn execute_materialized<'a>(
         accumulators::accumulate_record(group, record, spec, &mut collected_values)?;
     }
 
-    let output = groups
+    let mut output = groups
         .into_values()
         .map(|group| accumulators::finish_group(group, spec))
         .collect::<Result<Vec<_>, _>>()?;
+    if let Some(sort) = built_in_sort {
+        output.sort_by(|left, right| compare_output_values(left, right, sort));
+    }
     finish_group_output(output, plan)
 }
 

@@ -44,7 +44,7 @@
 
 実装していない設計メモはFutureとしてラベル付けします。
 
-このインデックスの調査は2026-09-22に更新しました。
+このインデックスの調査は2026-09-24に更新しました。
 
 READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blob/master/README.md)の節構造に従いますが、内容はtxBASE固有です。
 
@@ -113,6 +113,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 - [MongoDB `$stdDevSamp` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB `$bucket` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucket/)
+- [MongoDB `$sortByCount` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sortByCount/)
 - [MongoDB `$project` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB `$set` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)
 - [MongoDB `$addFields` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)
