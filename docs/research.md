@@ -34,7 +34,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | CJK, indexes, XBF, storage, and concurrency | [Roadmap](roadmap.md) | Current boundary plus future work |
 | Edge and object-storage commits | [Edge storage](edge-storage.md) | Current local boundary plus future cloud work |
 | WASM and worker host boundary | [WASM](wasm.md) | Current host-independent core and JavaScript Promise-backed asynchronous XBF adapter; future worker/WASI adapters |
-| Distributed replication and authority | [Distributed evolution](distributed-evolution.md) | Current process-local versioned entry/replay boundary with journaled `TXRP` sidecar persistence, validated catalog snapshot export and atomic local snapshot installation, bounded historical follower reads, and bounded HTTP entry/snapshot delivery; future authority integration for ordinary writes, quorum, consensus, and distributed follower-read guarantees |
+| Distributed replication and authority | [Distributed evolution](distributed-evolution.md) | Current process-local versioned entry/replay boundary with journaled `TXRP` sidecar persistence, validated catalog snapshot export and atomic local snapshot installation, bounded historical follower reads, bounded HTTP entry/snapshot delivery, and default authority capture of `/transaction` and named-table mutations; the follower role rejects direct catalog writes; future quorum, consensus, and distributed follower-read guarantees |
 
 ## Research method
 

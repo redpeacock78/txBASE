@@ -1,8 +1,8 @@
 use super::{
-    HttpResponse, error, header, json_bytes_response, json_response, read_json_body,
-    read_json_body_with_limit,
+    CatalogReplicationRole, HttpResponse, error, header, json_bytes_response, json_response,
+    read_json_body, read_json_body_with_limit,
 };
-use crate::catalog::Catalog;
+use crate::catalog::{Catalog, CatalogTransactionError};
 use crate::replication::{
     ApplyOutcome, MAX_REPLICATION_SNAPSHOT_BYTES, REPLICATION_TRANSPORT_VERSION, ReplicationEntry,
     ReplicationError, ReplicationLog, ReplicationSnapshot,
@@ -19,13 +19,14 @@ pub(super) fn response(
     path: &str,
     catalog: &mut Catalog,
     log: &mut ReplicationLog,
+    role: CatalogReplicationRole,
 ) -> Option<HttpResponse> {
     if !path.starts_with("/replication/") {
         return None;
     }
 
     Some(match (request.method(), path) {
-        (Method::Get | Method::Head, STATUS_PATH) => status(catalog, log),
+        (Method::Get | Method::Head, STATUS_PATH) => status(catalog, log, role),
         (Method::Get | Method::Head, SNAPSHOT_PATH) => snapshot(catalog, log),
         (Method::Post, ENTRY_PATH) => receive_entry(request, catalog, log),
         (Method::Post, SNAPSHOT_PATH) => install_snapshot(request, catalog, log),
@@ -41,7 +42,7 @@ pub(super) fn response(
     })
 }
 
-fn status(catalog: &Catalog, log: &ReplicationLog) -> HttpResponse {
+fn status(catalog: &Catalog, log: &ReplicationLog, role: CatalogReplicationRole) -> HttpResponse {
     let (_, schema_tag) = match catalog.schema_representation() {
         Ok(value) => value,
         Err(error) => {
@@ -56,6 +57,10 @@ fn status(catalog: &Catalog, log: &ReplicationLog) -> HttpResponse {
         200,
         json!({
             "transport_version": REPLICATION_TRANSPORT_VERSION,
+            "role": match role {
+                CatalogReplicationRole::Authority => "authority",
+                CatalogReplicationRole::Follower => "follower",
+            },
             "term": log.term(),
             "base_index": log.base_index(),
             "base_transaction_id": log.base_transaction_id(),
@@ -63,6 +68,17 @@ fn status(catalog: &Catalog, log: &ReplicationLog) -> HttpResponse {
             "last_transaction_id": log.last_transaction_id(),
             "schema_tag": schema_tag,
         }),
+        false,
+    )
+}
+
+pub(super) fn follower_read_only_response() -> HttpResponse {
+    json_response(
+        409,
+        error(
+            "replication_follower_read_only",
+            "catalog mutations require the authority role; deliver a replication entry instead",
+        ),
         false,
     )
 }
@@ -151,19 +167,44 @@ fn apply_outcome_response(outcome: ApplyOutcome) -> HttpResponse {
     )
 }
 
-fn replication_error_response(error: ReplicationError) -> HttpResponse {
-    let status = match &error {
-        ReplicationError::Invalid(_) | ReplicationError::Serialization(_) => 422,
-        ReplicationError::Catalog(_) | ReplicationError::Commit(_) => 500,
-        _ => 409,
+pub(super) fn replication_error_response(error: ReplicationError) -> HttpResponse {
+    let (status, tag) = match &error {
+        ReplicationError::Invalid(_) | ReplicationError::Serialization(_) => (422, None),
+        ReplicationError::Catalog(_) => (500, None),
+        ReplicationError::Commit(CatalogTransactionError::PreconditionFailed { tag }) => {
+            (412, Some(tag.as_str()))
+        }
+        ReplicationError::Commit(CatalogTransactionError::Invalid(_)) => (422, None),
+        ReplicationError::Commit(
+            CatalogTransactionError::SidecarPreconditionFailed { .. }
+            | CatalogTransactionError::TransactionPreconditionFailed { .. }
+            | CatalogTransactionError::TableSetChanged,
+        ) => (409, None),
+        ReplicationError::Commit(CatalogTransactionError::Catalog(_)) => (500, None),
+        _ => (409, None),
     };
-    json_response(status, error_json(&error), false)
+    let response = json_response(status, error_json(&error), false);
+    if let Some(tag) = tag {
+        super::etag::with_tag(response, tag)
+    } else {
+        response
+    }
 }
 
 fn error_json(replication_error: &ReplicationError) -> serde_json::Value {
     let code = match replication_error {
         ReplicationError::Invalid(_) | ReplicationError::Serialization(_) => "invalid_replication",
-        ReplicationError::Catalog(_) | ReplicationError::Commit(_) => "replication_storage",
+        ReplicationError::Catalog(_) => "replication_storage",
+        ReplicationError::Commit(CatalogTransactionError::PreconditionFailed { .. }) => {
+            "precondition_failed"
+        }
+        ReplicationError::Commit(CatalogTransactionError::Invalid(_)) => "invalid_transaction",
+        ReplicationError::Commit(
+            CatalogTransactionError::SidecarPreconditionFailed { .. }
+            | CatalogTransactionError::TransactionPreconditionFailed { .. }
+            | CatalogTransactionError::TableSetChanged,
+        ) => "catalog_changed",
+        ReplicationError::Commit(CatalogTransactionError::Catalog(_)) => "replication_storage",
         ReplicationError::TermMismatch { .. } => "replication_term_mismatch",
         ReplicationError::IndexGap { .. } => "replication_index_gap",
         ReplicationError::TransactionGap { .. } => "replication_transaction_gap",

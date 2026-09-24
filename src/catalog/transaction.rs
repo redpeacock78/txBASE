@@ -14,6 +14,18 @@ struct SidecarChange {
     after: Vec<u8>,
 }
 
+enum CommitPrecondition<'a> {
+    Catalog {
+        if_match: Option<&'a str>,
+        if_none_match: Option<&'a str>,
+    },
+    Table {
+        name: &'a str,
+        if_match: Option<&'a str>,
+        if_none_match: Option<&'a str>,
+    },
+}
+
 impl Catalog {
     pub(crate) fn read_sidecar_bytes(
         &self,
@@ -30,7 +42,14 @@ impl Catalog {
         if_match: Option<&str>,
         if_none_match: Option<&str>,
     ) -> Result<u64, CatalogTransactionError> {
-        self.commit_operations_internal(operations, if_match, if_none_match, None)
+        self.commit_operations_internal(
+            operations,
+            Some(CommitPrecondition::Catalog {
+                if_match,
+                if_none_match,
+            }),
+            None,
+        )
     }
 
     pub(crate) fn commit_operations_with_sidecar(
@@ -43,7 +62,53 @@ impl Catalog {
         self.commit_operations_internal(
             operations,
             None,
-            None,
+            Some(SidecarChange {
+                name: sidecar_name.to_owned(),
+                before: expected_sidecar,
+                after: sidecar_after,
+            }),
+        )
+    }
+
+    pub(crate) fn commit_operations_with_preconditions_and_sidecar(
+        &self,
+        operations: &[OperationIr],
+        if_match: Option<&str>,
+        if_none_match: Option<&str>,
+        sidecar_name: &str,
+        expected_sidecar: Option<Vec<u8>>,
+        sidecar_after: Vec<u8>,
+    ) -> Result<u64, CatalogTransactionError> {
+        self.commit_operations_internal(
+            operations,
+            Some(CommitPrecondition::Catalog {
+                if_match,
+                if_none_match,
+            }),
+            Some(SidecarChange {
+                name: sidecar_name.to_owned(),
+                before: expected_sidecar,
+                after: sidecar_after,
+            }),
+        )
+    }
+
+    pub(crate) fn commit_operations_with_sidecar_and_table_preconditions(
+        &self,
+        operations: &[OperationIr],
+        table_name: &str,
+        (if_match, if_none_match): (Option<&str>, Option<&str>),
+        sidecar_name: &str,
+        expected_sidecar: Option<Vec<u8>>,
+        sidecar_after: Vec<u8>,
+    ) -> Result<u64, CatalogTransactionError> {
+        self.commit_operations_internal(
+            operations,
+            Some(CommitPrecondition::Table {
+                name: table_name,
+                if_match,
+                if_none_match,
+            }),
             Some(SidecarChange {
                 name: sidecar_name.to_owned(),
                 before: expected_sidecar,
@@ -55,8 +120,7 @@ impl Catalog {
     fn commit_operations_internal(
         &self,
         operations: &[OperationIr],
-        if_match: Option<&str>,
-        if_none_match: Option<&str>,
+        precondition: Option<CommitPrecondition<'_>>,
         sidecar: Option<SidecarChange>,
     ) -> Result<u64, CatalogTransactionError> {
         if operations.is_empty() {
@@ -89,16 +153,6 @@ impl Catalog {
                 })
             })
             .transpose()?;
-        if if_match.is_some() || if_none_match.is_some() {
-            let (_, tag) = self
-                .schema_representation_unlocked()
-                .map_err(CatalogTransactionError::Catalog)?;
-            if if_match.is_some_and(|value| !matches_if_match(value, &tag))
-                || if_none_match.is_some_and(|value| matches_if_none_match(value, &tag))
-            {
-                return Err(CatalogTransactionError::PreconditionFailed { tag });
-            }
-        }
         let mut before = BTreeMap::<String, DbfTable>::new();
         for entry in self.tables() {
             before.insert(
@@ -106,6 +160,38 @@ impl Catalog {
                 self.open_table_unlocked(entry.name())
                     .map_err(CatalogTransactionError::Catalog)?,
             );
+        }
+        if let Some(precondition) = precondition {
+            let (if_match, if_none_match, tag) = match precondition {
+                CommitPrecondition::Catalog {
+                    if_match,
+                    if_none_match,
+                } => {
+                    let (_, tag) = self
+                        .schema_representation_unlocked()
+                        .map_err(CatalogTransactionError::Catalog)?;
+                    (if_match, if_none_match, tag)
+                }
+                CommitPrecondition::Table {
+                    name,
+                    if_match,
+                    if_none_match,
+                } => {
+                    let table = before.get(name).ok_or_else(|| {
+                        CatalogTransactionError::Invalid(format!("table not found: {name}"))
+                    })?;
+                    (
+                        if_match,
+                        if_none_match,
+                        format!("\"txbase-{:016x}\"", table.representation_hash()),
+                    )
+                }
+            };
+            if if_match.is_some_and(|value| !matches_if_match(value, &tag))
+                || if_none_match.is_some_and(|value| matches_if_none_match(value, &tag))
+            {
+                return Err(CatalogTransactionError::PreconditionFailed { tag });
+            }
         }
         let mut tables = before.clone();
         let mut touched = BTreeSet::new();

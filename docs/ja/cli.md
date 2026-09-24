@@ -67,7 +67,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 | `txbase backup SOURCE DEST` | DBFと対応するmemo、スキーマ、CDC、状態、MVCC、有効なインデックスサイドカーを検証してコピーする。 |
 | `txbase restore SOURCE DEST` | バックアップをソースとして、同じ検証済みコピー手順を使う。 |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | 単一テーブルHTTPサーバーを起動する。 |
-| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM]` | カタログHTTPサーバーと有界なレプリケーション配送ルートを起動する。`TERM`は正の固定ローカルtermで、既定値は`1`。 |
+| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | カタログHTTPサーバーと有界なレプリケーション配送ルートを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、`follower`ロールは直接のカタログ更新を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。 |
 
 ## オプションの所有範囲
 
@@ -76,6 +76,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 - `--schema`は`xbf export`だけに属する。
 - `--bind`は`serve`と`serve-catalog`だけに属する。
 - `--replication-term`は`serve-catalog`だけに属し、正の固定ローカルtermを選択する。
+- `--replication-role`は`serve-catalog`だけに属し、既定の`authority`は書き込みロール、`follower`は直接のカタログ更新を拒否してレプリケーション配送を受け付ける。
 - `--after`は`cdc`と`cdc catalog`だけに属する。
 - `--keep`はテーブルとカタログのMVCCガベージコレクションに属し、`--keep-rows`はテーブルMVCCガベージコレクションだけに属する。
 - `index build-compound`は、各フィールドの方向に`1`または`asc`、`-1`または`desc`を受け付ける。

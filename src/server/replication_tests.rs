@@ -1,4 +1,4 @@
-use super::{JSON_QUERY_MEDIA_TYPE, header};
+use super::{CatalogReplicationRole, JSON_QUERY_MEDIA_TYPE, header};
 use crate::catalog::Catalog;
 use crate::replication::{ReplicationLog, ReplicationSnapshot};
 use crate::xbase::{OperationIr, OperationMethod};
@@ -75,6 +75,7 @@ fn replication_http_delivers_entries_idempotently_and_reports_status() {
         "/replication/entry",
         &mut follower,
         &mut replica,
+        CatalogReplicationRole::Follower,
     )
     .unwrap();
     assert_eq!(response.status_code(), StatusCode(200));
@@ -86,6 +87,7 @@ fn replication_http_delivers_entries_idempotently_and_reports_status() {
         "/replication/entry",
         &mut follower,
         &mut replica,
+        CatalogReplicationRole::Follower,
     )
     .unwrap();
     assert_eq!(response_json(response)["outcome"], "duplicate");
@@ -99,9 +101,11 @@ fn replication_http_delivers_entries_idempotently_and_reports_status() {
         "/replication/status",
         &mut follower,
         &mut replica,
+        CatalogReplicationRole::Follower,
     )
     .unwrap();
     let status = response_json(response);
+    assert_eq!(status["role"], "follower");
     assert_eq!(status["term"], 4);
     assert_eq!(status["last_index"], 1);
     assert_eq!(status["last_transaction_id"], 1);
@@ -138,6 +142,7 @@ fn replication_http_installs_and_exports_snapshots() {
         "/replication/snapshot",
         &mut follower,
         &mut replica,
+        CatalogReplicationRole::Follower,
     )
     .unwrap();
     assert_eq!(response_json(response)["outcome"], "snapshot_installed");
@@ -158,6 +163,7 @@ fn replication_http_installs_and_exports_snapshots() {
         "/replication/snapshot",
         &mut follower,
         &mut replica,
+        CatalogReplicationRole::Follower,
     )
     .unwrap();
     let exported: ReplicationSnapshot = serde_json::from_value(response_json(response)).unwrap();
@@ -192,10 +198,121 @@ fn replication_http_rejects_unknown_entry_fields_before_commit() {
         "/replication/entry",
         &mut catalog,
         &mut replica,
+        CatalogReplicationRole::Follower,
     )
     .unwrap();
     assert_eq!(response.status_code(), StatusCode(422));
     assert_eq!(catalog.transaction_id().unwrap(), None);
 
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn authority_captures_catalog_and_named_mutations_in_one_replication_log() {
+    let root = temporary_catalog("authority");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::new(12).unwrap();
+
+    let mut transaction = json_request(
+        Method::Post,
+        "/transaction",
+        br#"{"operations":[{"method":"POST","path":"/users/records","body":{"ID":3,"NAME":"Carol","AGE":42,"ACTIVE":true}}]}"#.to_vec(),
+    );
+    let response = super::catalog_transaction::response_with_replication(
+        &mut transaction,
+        &catalog,
+        Some(&mut log),
+    );
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert_eq!(log.entries().len(), 1);
+    assert_eq!(catalog.transaction_id().unwrap(), Some(1));
+    assert!(
+        root.join(crate::replication::REPLICATION_SIDECAR_NAME)
+            .exists()
+    );
+
+    let mut post = json_request(
+        Method::Post,
+        "/users/records",
+        br#"{"ID":4,"NAME":"Dave","AGE":43,"ACTIVE":true}"#.to_vec(),
+    );
+    let response =
+        super::catalog_mutation::response(&mut post, "/users/records", &catalog, &mut log);
+    assert_eq!(response.status_code(), StatusCode(201));
+    assert_eq!(log.entries().len(), 2);
+    assert_eq!(catalog.transaction_id().unwrap(), Some(2));
+    assert!(
+        catalog
+            .open_table("users")
+            .unwrap()
+            .active_record(4)
+            .is_some()
+    );
+
+    let reloaded = Catalog::from_path(&root).unwrap();
+    let recovered = ReplicationLog::open(&reloaded, 12).unwrap();
+    assert_eq!(recovered.entries(), log.entries());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn authority_named_mutations_recheck_table_etags_before_commit() {
+    let root = temporary_catalog("authority-etag");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::new(13).unwrap();
+    let table_request = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/users/records/1")
+        .into();
+    let tag = super::catalog::table_response(&table_request, "/users/records/1", &catalog)
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv("ETag"))
+        .map(|header| header.value.as_str().to_owned())
+        .unwrap();
+
+    let mut stale = TestRequest::new()
+        .with_method(Method::Patch)
+        .with_path("/users/records/1")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-Match", "\"stale\""))
+        .with_body(r#"{"$inc":{"AGE":1}}"#)
+        .into();
+    let response =
+        super::catalog_mutation::response(&mut stale, "/users/records/1", &catalog, &mut log);
+    assert_eq!(response.status_code(), StatusCode(412));
+    assert!(log.entries().is_empty());
+
+    let mut matching = TestRequest::new()
+        .with_method(Method::Patch)
+        .with_path("/users/records/1")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_header(header("If-Match", &tag))
+        .with_body(r#"{"$inc":{"AGE":1}}"#)
+        .into();
+    let response =
+        super::catalog_mutation::response(&mut matching, "/users/records/1", &catalog, &mut log);
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert_eq!(log.entries().len(), 1);
+    assert_eq!(
+        catalog
+            .open_table("users")
+            .unwrap()
+            .active_record(1)
+            .unwrap()
+            .values["AGE"],
+        30
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn follower_role_reports_read_only_mutations() {
+    let response = super::replication::follower_read_only_response();
+    assert_eq!(response.status_code(), StatusCode(409));
+    assert_eq!(
+        response_json(response)["error"]["code"],
+        "replication_follower_read_only"
+    );
 }

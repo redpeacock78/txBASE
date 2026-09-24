@@ -82,7 +82,8 @@ The HTTP boundary returns `413 Payload Too Large` when the applicable byte limit
 
 Replication delivery validates already-constructed entries or snapshots.
 Malformed documents return `422`, term, position, schema, conflicting-duplicate, or snapshot-state conflicts return `409`, and storage failures return `500`.
-Ordinary catalog mutation routes do not automatically append to the replication log.
+In the default `authority` role, `/transaction` and named-table mutation routes append their catalog change and `TXRP` state atomically.
+The `follower` role rejects direct catalog mutations with `409`; replication delivery remains available.
 
 `DELETE` is a logical DBF deletion.
 

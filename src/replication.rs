@@ -20,6 +20,18 @@ pub const REPLICATION_SIDECAR_NAME: &str = ".txbase.replication";
 const REPLICATION_SIDECAR_MAGIC: &[u8; 4] = b"TXRP";
 const REPLICATION_SIDECAR_VERSION: u8 = 1;
 
+enum CommitPreconditions<'a> {
+    Catalog {
+        if_match: Option<&'a str>,
+        if_none_match: Option<&'a str>,
+    },
+    Table {
+        name: &'a str,
+        if_match: Option<&'a str>,
+        if_none_match: Option<&'a str>,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReplicationEntry {
@@ -267,6 +279,17 @@ impl ReplicationLog {
         catalog: &Catalog,
         operations: Vec<OperationIr>,
     ) -> Result<ReplicationEntry, ReplicationError> {
+        self.propose_with_catalog_preconditions(catalog, operations, None, None)
+    }
+
+    /// Proposes one entry while checking the catalog representation preconditions.
+    pub fn propose_with_catalog_preconditions(
+        &mut self,
+        catalog: &Catalog,
+        operations: Vec<OperationIr>,
+        if_match: Option<&str>,
+        if_none_match: Option<&str>,
+    ) -> Result<ReplicationEntry, ReplicationError> {
         let current_transaction_id = current_transaction_id(catalog)?;
         self.ensure_catalog_position(current_transaction_id)?;
         let (_, schema_tag) = catalog
@@ -279,7 +302,38 @@ impl ReplicationLog {
             schema_tag,
             operations,
         )?;
-        self.apply_new(catalog, entry.clone())?;
+        self.apply_new_with_catalog_preconditions(catalog, entry.clone(), if_match, if_none_match)?;
+        Ok(entry)
+    }
+
+    /// Proposes one entry while checking the representation of one named table.
+    pub fn propose_with_table_preconditions(
+        &mut self,
+        catalog: &Catalog,
+        table_name: &str,
+        operations: Vec<OperationIr>,
+        if_match: Option<&str>,
+        if_none_match: Option<&str>,
+    ) -> Result<ReplicationEntry, ReplicationError> {
+        let current_transaction_id = current_transaction_id(catalog)?;
+        self.ensure_catalog_position(current_transaction_id)?;
+        let (_, schema_tag) = catalog
+            .schema_representation()
+            .map_err(ReplicationError::Catalog)?;
+        let entry = ReplicationEntry::new(
+            self.term,
+            next(self.last_index(), "index")?,
+            next(self.last_transaction_id(), "transaction_id")?,
+            schema_tag,
+            operations,
+        )?;
+        self.apply_new_with_table_preconditions(
+            catalog,
+            table_name,
+            entry.clone(),
+            if_match,
+            if_none_match,
+        )?;
         Ok(entry)
     }
 
@@ -361,6 +415,51 @@ impl ReplicationLog {
         catalog: &Catalog,
         entry: ReplicationEntry,
     ) -> Result<ApplyOutcome, ReplicationError> {
+        self.apply_new_with_preconditions(catalog, entry, None)
+    }
+
+    fn apply_new_with_catalog_preconditions(
+        &mut self,
+        catalog: &Catalog,
+        entry: ReplicationEntry,
+        if_match: Option<&str>,
+        if_none_match: Option<&str>,
+    ) -> Result<ApplyOutcome, ReplicationError> {
+        self.apply_new_with_preconditions(
+            catalog,
+            entry,
+            Some(CommitPreconditions::Catalog {
+                if_match,
+                if_none_match,
+            }),
+        )
+    }
+
+    fn apply_new_with_table_preconditions(
+        &mut self,
+        catalog: &Catalog,
+        table_name: &str,
+        entry: ReplicationEntry,
+        if_match: Option<&str>,
+        if_none_match: Option<&str>,
+    ) -> Result<ApplyOutcome, ReplicationError> {
+        self.apply_new_with_preconditions(
+            catalog,
+            entry,
+            Some(CommitPreconditions::Table {
+                name: table_name,
+                if_match,
+                if_none_match,
+            }),
+        )
+    }
+
+    fn apply_new_with_preconditions(
+        &mut self,
+        catalog: &Catalog,
+        entry: ReplicationEntry,
+        preconditions: Option<CommitPreconditions<'_>>,
+    ) -> Result<ApplyOutcome, ReplicationError> {
         let expected_index = next(self.last_index(), "index")?;
         if entry.index != expected_index {
             return Err(ReplicationError::IndexGap {
@@ -399,14 +498,38 @@ impl ReplicationLog {
         };
         let mut next_log = self.clone();
         next_log.entries.push(entry.clone());
-        let transaction_id = catalog
-            .commit_operations_with_sidecar(
+        let transaction_id = match preconditions {
+            Some(CommitPreconditions::Catalog {
+                if_match,
+                if_none_match,
+            }) => catalog.commit_operations_with_preconditions_and_sidecar(
+                &entry.operations,
+                if_match,
+                if_none_match,
+                REPLICATION_SIDECAR_NAME,
+                expected_sidecar,
+                next_log.to_sidecar_bytes()?,
+            ),
+            Some(CommitPreconditions::Table {
+                name,
+                if_match,
+                if_none_match,
+            }) => catalog.commit_operations_with_sidecar_and_table_preconditions(
+                &entry.operations,
+                name,
+                (if_match, if_none_match),
+                REPLICATION_SIDECAR_NAME,
+                expected_sidecar,
+                next_log.to_sidecar_bytes()?,
+            ),
+            None => catalog.commit_operations_with_sidecar(
                 &entry.operations,
                 REPLICATION_SIDECAR_NAME,
                 expected_sidecar,
                 next_log.to_sidecar_bytes()?,
-            )
-            .map_err(ReplicationError::Commit)?;
+            ),
+        }
+        .map_err(ReplicationError::Commit)?;
         if transaction_id != entry.transaction_id {
             return Err(ReplicationError::Invalid(format!(
                 "catalog committed transaction {transaction_id}, expected {}",

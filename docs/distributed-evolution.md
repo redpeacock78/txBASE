@@ -121,11 +121,11 @@ bodies use the existing 64 MiB encoded-payload bound. Invalid documents return
 `409`; storage failures return `500`. Responses identify the transport version
 and, for apply operations, the resulting index and transaction ID.
 
-This is a delivery boundary, not a leader-election protocol. The ordinary
-catalog mutation routes do not automatically append to `ReplicationLog`, and
-the transport has no authentication, TLS, streaming, retry queue, backpressure,
-quorum, or authority discovery. An embedding authority must construct and
-deliver entries or snapshots explicitly until that wiring is designed.
+This is a delivery boundary, not a leader-election protocol.
+The default `authority` role captures `/transaction` and named-table mutation routes in the same catalog journal commit as `TXRP` state and rechecks table ETags before commit.
+The `follower` role reports its role through `status`, rejects direct catalog mutations with `409`, and still accepts replication delivery.
+The transport has no authentication, TLS, streaming, retry queue, backpressure,
+quorum, or authority discovery.
 
 ## 4. Co-location before distributed joins
 
@@ -163,12 +163,13 @@ The local slice defines the following initial contracts:
 - follower reads: a caller can read a retained catalog image at an applied log transaction;
 - snapshot recovery: a follower can install one validated catalog image atomically and resume at its next log position;
 - transport: the catalog server accepts versioned entry and snapshot JSON through bounded HTTP routes with explicit conflict statuses;
+- authority capture: the default authority role journals `/transaction` and named-table mutations with `TXRP` state, while the follower role rejects direct catalog mutations;
 - deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
 
 The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
-- authority integration for ordinary catalog writes, authentication, and authority-coordinated log truncation;
+- authentication and authority-coordinated log truncation;
 - observability for lag and transport state;
 - quorum and network failure behavior.
 
@@ -188,18 +189,17 @@ The initial local replication slice is complete because it has:
 - partition-gap, serialized-log recovery, term, and schema-tag tests;
 - snapshot round-trip, installation, resume, stale-image, and conflict tests;
 - bounded HTTP status, entry delivery, duplicate delivery, snapshot installation, and export tests;
+- default authority capture, table-ETag recheck, and follower read-only role tests;
 - explicit write consistency: only the next catalog transaction can commit;
 - a leader/follower fixture that fails and recovers without external infrastructure.
 
-Quorum replication, authority integration for ordinary catalog writes, full
-MVCC coordination, distributed follower-read guarantees, and distributed
+Quorum replication, full MVCC coordination, distributed follower-read guarantees, and distributed
 partitioning remain future work.
 
 ## 7. Explicit non-goals
 
 This document does not promise Raft, quorum, multi-region writes, global
-transactions, automatic authority capture of catalog writes, networked log
-truncation, distributed follower-read guarantees, or automatic partition
+transactions, networked log truncation, distributed follower-read guarantees, or automatic partition
 balancing.
 
 Those choices require the authority and recovery contracts above.
@@ -215,7 +215,8 @@ It does not select Raft for txBASE and does not define the future txBASE log, sc
 
 The current repository has a local entry/replay implementation, a versioned
 snapshot installation primitive, a journaled `TXRP` sidecar, bounded HTTP
-delivery routes, and a bounded historical follower-read primitive, but no
-consensus, quorum, automatic authority capture, distributed follower-read
-guarantee, or distributed-join implementation.
+delivery routes, default authority capture for catalog mutations, a read-only
+follower role, and a bounded historical follower-read primitive, but no
+consensus, quorum, distributed follower-read guarantee, or distributed-join
+implementation.
 Those statements remain design constraints rather than compatibility claims.

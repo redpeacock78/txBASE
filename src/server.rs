@@ -7,6 +7,7 @@ use tiny_http::{Method, Request, Response, Server};
 
 mod body;
 mod catalog;
+mod catalog_mutation;
 mod catalog_transaction;
 mod cdc;
 mod etag;
@@ -23,6 +24,12 @@ mod transaction;
 const MAX_BODY: usize = crate::MAX_JSON_INPUT_BYTES;
 const JSON_MERGE_PATCH_MEDIA_TYPE: &str = "application/merge-patch+json";
 const JSON_PATCH_MEDIA_TYPE: &str = "application/json-patch+json";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CatalogReplicationRole {
+    Authority,
+    Follower,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum PatchMediaType {
@@ -92,7 +99,21 @@ pub fn serve_catalog_with_replication_term(
     bind: &str,
     replication_term: u64,
 ) -> Result<(), String> {
-    catalog::serve(root, bind, replication_term)
+    serve_catalog_with_replication_config(
+        root,
+        bind,
+        replication_term,
+        CatalogReplicationRole::Authority,
+    )
+}
+
+pub fn serve_catalog_with_replication_config(
+    root: impl AsRef<Path>,
+    bind: &str,
+    replication_term: u64,
+    role: CatalogReplicationRole,
+) -> Result<(), String> {
+    catalog::serve(root, bind, replication_term, role)
 }
 
 fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {

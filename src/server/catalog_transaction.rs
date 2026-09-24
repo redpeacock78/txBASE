@@ -1,10 +1,20 @@
 use super::{HttpResponse, error, etag, header, json_response, read_json_body, request_header};
 use crate::catalog::{Catalog, CatalogTransactionError};
+use crate::replication::{ReplicationError, ReplicationLog};
 use crate::xbase::OperationBatch;
 use serde_json::json;
 use tiny_http::Request;
 
+#[cfg(test)]
 pub(super) fn response(request: &mut Request, catalog: &Catalog) -> HttpResponse {
+    response_with_replication(request, catalog, None)
+}
+
+pub(super) fn response_with_replication(
+    request: &mut Request,
+    catalog: &Catalog,
+    replication: Option<&mut ReplicationLog>,
+) -> HttpResponse {
     if catalog.is_historical() {
         return json_response(
             405,
@@ -43,17 +53,33 @@ pub(super) fn response(request: &mut Request, catalog: &Catalog) -> HttpResponse
         }
     };
 
-    match catalog.commit_operations_with_preconditions(
-        &transaction.operations,
-        if_match.as_deref(),
-        if_none_match.as_deref(),
-    ) {
+    let operation_count = transaction.operations.len();
+    let operations = transaction.operations;
+    let result = match replication {
+        Some(replication) => replication
+            .propose_with_catalog_preconditions(
+                catalog,
+                operations,
+                if_match.as_deref(),
+                if_none_match.as_deref(),
+            )
+            .map(|entry| entry.transaction_id)
+            .map_err(CommitError::Replication),
+        None => catalog
+            .commit_operations_with_preconditions(
+                &operations,
+                if_match.as_deref(),
+                if_none_match.as_deref(),
+            )
+            .map_err(CommitError::Catalog),
+    };
+    match result {
         Ok(transaction_id) => {
             let response = json_response(
                 200,
                 json!({
                     "committed": true,
-                    "operations": transaction.operations.len(),
+                    "operations": operation_count,
                     "transaction_id": transaction_id,
                 }),
                 false,
@@ -71,21 +97,35 @@ pub(super) fn response(request: &mut Request, catalog: &Catalog) -> HttpResponse
                 ),
             }
         }
-        Err(CatalogTransactionError::PreconditionFailed { tag }) => etag::with_tag(
-            json_response(
-                412,
-                error(
-                    "precondition_failed",
-                    "If-Match or If-None-Match does not permit the current catalog representation",
+        Err(error) => commit_error_response(error),
+    }
+}
+
+enum CommitError {
+    Catalog(CatalogTransactionError),
+    Replication(ReplicationError),
+}
+
+fn commit_error_response(commit_error: CommitError) -> HttpResponse {
+    match commit_error {
+        CommitError::Replication(error) => super::replication::replication_error_response(error),
+        CommitError::Catalog(CatalogTransactionError::PreconditionFailed { tag }) => {
+            etag::with_tag(
+                json_response(
+                    412,
+                    error(
+                        "precondition_failed",
+                        "If-Match or If-None-Match does not permit the current catalog representation",
+                    ),
+                    false,
                 ),
-                false,
-            ),
-            &tag,
-        ),
-        Err(CatalogTransactionError::Invalid(message)) => {
+                &tag,
+            )
+        }
+        CommitError::Catalog(CatalogTransactionError::Invalid(message)) => {
             json_response(422, error("invalid_transaction", &message), false)
         }
-        Err(CatalogTransactionError::TableSetChanged) => json_response(
+        CommitError::Catalog(CatalogTransactionError::TableSetChanged) => json_response(
             409,
             error(
                 "catalog_changed",
@@ -93,23 +133,27 @@ pub(super) fn response(request: &mut Request, catalog: &Catalog) -> HttpResponse
             ),
             false,
         ),
-        Err(CatalogTransactionError::SidecarPreconditionFailed { .. }) => json_response(
-            409,
-            error(
-                "catalog_changed",
-                "a catalog sidecar changed during the transaction",
-            ),
-            false,
-        ),
-        Err(CatalogTransactionError::TransactionPreconditionFailed { .. }) => json_response(
-            409,
-            error(
-                "catalog_changed",
-                "the catalog position changed during the transaction",
-            ),
-            false,
-        ),
-        Err(CatalogTransactionError::Catalog(catalog_error)) => json_response(
+        CommitError::Catalog(CatalogTransactionError::SidecarPreconditionFailed { .. }) => {
+            json_response(
+                409,
+                error(
+                    "catalog_changed",
+                    "a catalog sidecar changed during the transaction",
+                ),
+                false,
+            )
+        }
+        CommitError::Catalog(CatalogTransactionError::TransactionPreconditionFailed { .. }) => {
+            json_response(
+                409,
+                error(
+                    "catalog_changed",
+                    "the catalog position changed during the transaction",
+                ),
+                false,
+            )
+        }
+        CommitError::Catalog(CatalogTransactionError::Catalog(catalog_error)) => json_response(
             500,
             error("catalog_error", &catalog_error.to_string()),
             false,

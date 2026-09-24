@@ -1,15 +1,19 @@
+use super::CatalogReplicationRole;
+use super::records::get_response;
+#[cfg(test)]
 use super::records::{
-    delete_response_with_validator, get_response, post_response_at_with_validator,
-    update_response_with_validator,
+    delete_response_with_validator, post_response_at_with_validator, update_response_with_validator,
 };
 use super::{
     HttpResponse, error, etag, header, json_response, options_response, query_response_at,
     query_result_response, read_json_body,
 };
 use crate::catalog::{Catalog, CatalogError};
+#[cfg(test)]
 use crate::dbf::DbfTable;
 use crate::query::join::{self, JoinError};
 use serde_json::Value;
+#[cfg(test)]
 use std::collections::BTreeMap;
 use std::path::Path;
 use tiny_http::{Method, Request, Server};
@@ -18,6 +22,7 @@ pub(super) fn serve(
     root: impl AsRef<Path>,
     bind: &str,
     replication_term: u64,
+    role: CatalogReplicationRole,
 ) -> Result<(), String> {
     let mut catalog =
         Catalog::from_path(root).map_err(|error| format!("cannot open catalog: {error}"))?;
@@ -26,7 +31,7 @@ pub(super) fn serve(
     let server = Server::http(bind).map_err(|error| format!("cannot bind {bind}: {error}"))?;
     eprintln!("listening on http://{bind}");
     for request in server.incoming_requests() {
-        handle_request(request, &mut catalog, &mut replication);
+        handle_request(request, &mut catalog, &mut replication, role);
     }
     Ok(())
 }
@@ -35,15 +40,20 @@ fn handle_request(
     mut request: Request,
     catalog: &mut Catalog,
     replication: &mut crate::replication::ReplicationLog,
+    role: CatalogReplicationRole,
 ) {
     let url = request.url().to_owned();
     let path = url.split('?').next().unwrap_or("/").to_owned();
     let response = if request.method().as_str() == "OPTIONS" {
         options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY")
     } else if let Some(response) =
-        super::replication::response(&mut request, &path, catalog, replication)
+        super::replication::response(&mut request, &path, catalog, replication, role)
     {
         response
+    } else if role == CatalogReplicationRole::Follower
+        && is_catalog_mutation(request.method(), &path)
+    {
+        super::replication::follower_read_only_response()
     } else if matches!(request.method(), Method::Get | Method::Head) && path == "/cdc" {
         super::cdc::catalog_response(&url, catalog)
     } else {
@@ -66,13 +76,17 @@ fn handle_request(
                 } else if request.method().as_str() == "QUERY" && record_route(&path).is_some() {
                     table_query_response(&mut request, &path, catalog)
                 } else if matches!(request.method(), Method::Post) && path == "/transaction" {
-                    super::catalog_transaction::response(&mut request, catalog)
+                    super::catalog_transaction::response_with_replication(
+                        &mut request,
+                        catalog,
+                        Some(replication),
+                    )
                 } else if matches!(
                     request.method(),
                     Method::Post | Method::Put | Method::Patch | Method::Delete
                 ) && record_route(&path).is_some()
                 {
-                    table_mutation_response(&mut request, &path, catalog)
+                    super::catalog_mutation::response(&mut request, &path, catalog, replication)
                 } else {
                     json_response(
                         405,
@@ -168,6 +182,7 @@ pub(super) fn table_query_response(
     }
 }
 
+#[cfg(test)]
 pub(super) fn table_mutation_response(
     request: &mut Request,
     path: &str,
@@ -364,7 +379,7 @@ fn snapshot_error_response(catalog_error: CatalogError) -> HttpResponse {
     }
 }
 
-fn record_route(path: &str) -> Option<(&str, String)> {
+pub(super) fn record_route(path: &str) -> Option<(&str, String)> {
     let segments = path.strip_prefix('/')?.split('/').collect::<Vec<_>>();
     match segments.as_slice() {
         [table, "records"] if !table.is_empty() => Some((table, String::from("/records"))),
@@ -400,6 +415,13 @@ pub(super) fn schema_response(request: &Request, catalog: &Catalog) -> HttpRespo
             false,
         ),
     }
+}
+
+fn is_catalog_mutation(method: &Method, path: &str) -> bool {
+    matches!(
+        method,
+        Method::Post | Method::Put | Method::Patch | Method::Delete
+    ) && (path == "/transaction" || record_route(path).is_some())
 }
 
 pub(super) fn join_response(request: &mut Request, catalog: &Catalog) -> HttpResponse {

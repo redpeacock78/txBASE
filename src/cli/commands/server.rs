@@ -25,6 +25,7 @@ pub(crate) fn serve_catalog(mut args: impl Iterator<Item = String>) -> Result<()
     );
     let mut bind = String::from("127.0.0.1:8080");
     let mut replication_term = 1;
+    let mut replication_role = server::CatalogReplicationRole::Authority;
     while let Some(option) = args.next() {
         match option.as_str() {
             "--bind" => bind = args.next().ok_or("--bind requires an address")?,
@@ -37,8 +38,20 @@ pub(crate) fn serve_catalog(mut args: impl Iterator<Item = String>) -> Result<()
                     return Err("--replication-term must be positive".into());
                 }
             }
+            "--replication-role" => {
+                replication_role = match args
+                    .next()
+                    .ok_or("--replication-role requires authority or follower")?
+                    .as_str()
+                {
+                    "authority" => server::CatalogReplicationRole::Authority,
+                    "follower" => server::CatalogReplicationRole::Follower,
+                    role => return Err(format!("unsupported --replication-role: {role}").into()),
+                };
+            }
             _ => return Err(format!("unknown option: {option}").into()),
         }
     }
-    server::serve_catalog_with_replication_term(&path, &bind, replication_term).map_err(Into::into)
+    server::serve_catalog_with_replication_config(&path, &bind, replication_term, replication_role)
+        .map_err(Into::into)
 }

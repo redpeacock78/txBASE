@@ -66,7 +66,7 @@ The following table is the current command contract.
 | `txbase backup SOURCE DEST` | Validates and copies a DBF with its supported memo, schema, CDC, state, MVCC, and valid index sidecars. |
 | `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as the source. |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | Starts the single-table HTTP server. |
-| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM]` | Starts the catalog HTTP server and its bounded replication delivery routes. `TERM` is a positive fixed local replication term and defaults to `1`. |
+| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | Starts the catalog HTTP server and its bounded replication delivery routes. The default `authority` role captures `/transaction` and named-table mutation routes in the catalog journal and `TXRP` sidecar; `follower` rejects direct catalog mutations with `409` while accepting replication delivery. `TERM` is a positive fixed local replication term and defaults to `1`. |
 
 ## Option ownership
 
@@ -75,6 +75,7 @@ The following table is the current command contract.
 - `--schema` belongs only to `xbf export`.
 - `--bind` belongs only to `serve` and `serve-catalog`.
 - `--replication-term` belongs only to `serve-catalog` and selects its positive fixed local replication term.
+- `--replication-role` belongs only to `serve-catalog`; `authority` is the default write role, while `follower` rejects direct catalog mutations and accepts replication delivery.
 - `--after` belongs only to `cdc` and `cdc catalog`.
 - `--keep` belongs to table and catalog MVCC garbage collection; `--keep-rows` belongs only to table MVCC garbage collection.
 - `index build-compound` accepts `1` or `asc`, and `-1` or `desc`, for each field direction.
