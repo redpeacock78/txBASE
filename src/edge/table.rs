@@ -3,7 +3,7 @@ use super::protocol::{
     CommitResult, MANIFEST_VERSION, Manifest, PENDING_VERSION, PendingCommit,
     history_with_generation, manifest_history, snapshot_generation, validate_namespace,
 };
-use crate::xbf::{XbfLimits, XbfTable, decode_with_limits, encode};
+use crate::xbf::{XbfLimits, XbfTable, decode_with_limits, encode_with_limits};
 use std::collections::BTreeSet;
 
 pub struct ObjectTable<S> {
@@ -116,7 +116,7 @@ impl<S: ObjectStore> ObjectTable<S> {
 
     pub fn commit(&self, table: &XbfTable) -> Result<CommitResult, ObjectStoreError> {
         self.recover()?;
-        let snapshot = encode(table)?;
+        let snapshot = encode_with_limits(table, &self.limits)?;
         let (expected_bytes, current) = self.current_manifest()?;
         if let Some(manifest) = &current {
             self.validate_manifest_root(manifest)?;

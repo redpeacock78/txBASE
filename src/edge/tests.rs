@@ -2,7 +2,7 @@ use super::{
     AsyncObjectStore, AsyncObjectTable, CommitResult, FilesystemObjectStore, Manifest,
     MemoryObjectStore, ObjectStore, ObjectStoreError, ObjectTable, SyncObjectStoreAdapter,
 };
-use crate::xbf::{XbfField, XbfRecord, XbfTable, XbfType, XbfValue, encode};
+use crate::xbf::{XbfField, XbfLimits, XbfRecord, XbfTable, XbfType, XbfValue, encode};
 use serde_json::json;
 use std::env;
 use std::path::PathBuf;
@@ -101,6 +101,25 @@ fn compare_and_swap_rejects_concurrent_writers_and_allows_idempotent_retry() {
         Err(ObjectStoreError::Conflict(_))
     ));
     assert_eq!(first_writer.read().unwrap(), Some(first));
+}
+
+#[test]
+fn object_table_enforces_encode_limits_before_publication() {
+    let store = MemoryObjectStore::new();
+    let snapshot = table(0, "Alice");
+    let max_file_size = encode(&snapshot).unwrap().len() - 1;
+    let object_table = ObjectTable::new(store.clone(), "users")
+        .unwrap()
+        .with_limits(XbfLimits {
+            max_file_size,
+            ..XbfLimits::default()
+        });
+
+    assert!(matches!(
+        object_table.commit(&snapshot),
+        Err(ObjectStoreError::Invalid(message)) if message.contains("encoded XBF file exceeds")
+    ));
+    assert!(store.list("users/").unwrap().is_empty());
 }
 
 #[test]
@@ -369,6 +388,25 @@ fn async_object_table_reuses_generation_commit_and_retention_contracts() {
     );
     assert_eq!(block_on(object_table.read_at(0)).unwrap(), None);
     assert_eq!(block_on(object_table.read()).unwrap(), Some(second));
+}
+
+#[test]
+fn async_object_table_enforces_encode_limits_before_publication() {
+    let store = MemoryObjectStore::new();
+    let snapshot = table(0, "Alice");
+    let max_file_size = encode(&snapshot).unwrap().len() - 1;
+    let object_table = AsyncObjectTable::new(SyncObjectStoreAdapter::new(store.clone()), "users")
+        .unwrap()
+        .with_limits(XbfLimits {
+            max_file_size,
+            ..XbfLimits::default()
+        });
+
+    assert!(matches!(
+        block_on(object_table.commit(&snapshot)),
+        Err(ObjectStoreError::Invalid(message)) if message.contains("encoded XBF file exceeds")
+    ));
+    assert!(store.list("users/").unwrap().is_empty());
 }
 
 #[test]

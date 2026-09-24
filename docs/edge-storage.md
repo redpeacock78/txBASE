@@ -21,6 +21,7 @@ The filesystem backend is a local durable adapter and does not claim cloud-provi
 `AsyncObjectStore` defines the same five primitive operations as a runtime-neutral future boundary.
 `SyncObjectStoreAdapter` exposes the existing synchronous stores through already-ready futures, so native tests can exercise the asynchronous contract without selecting an executor.
 `AsyncObjectTable` reuses the manifest, generation, recovery, retention, and orphan-cleanup rules through that future boundary.
+`with_limits` applies the configured XBF limits to both snapshot encoding before publication and snapshot decoding during reads.
 The synchronous adapter does not make filesystem I/O non-blocking, but it exercises the same high-level protocol without selecting an executor.
 
 A remote object-store adapter can implement `AsyncObjectStore` directly without changing the XBF snapshot or generation rules.
@@ -125,6 +126,8 @@ A remote adapter still needs to define:
 These concerns do not belong in `MemoryObjectStore` or in the XBF codec.
 
 `FilesystemObjectStore` supplies a local persistence fixture for those tests, but its lock file and filesystem durability behavior are not a substitute for a remote service's consistency contract.
+
+The local and asynchronous object-table tests also verify that an encode-limit failure happens before the snapshot or pending WAL object is published.
 
 The remote adapter may implement `ObjectStore` for a blocking native client or `AsyncObjectStore` for a host-managed client.
 The high-level asynchronous manifest protocol covers commit, recovery, retention, and conditional publication.
