@@ -18,12 +18,70 @@ pub struct QueryStream<'table, 'request> {
 pub struct QuerySnapshotStream<'request> {
     table: DbfTable,
     request: &'request QueryRequest,
+    state: SnapshotStreamState,
+}
+
+pub(crate) struct OwnedQuerySnapshotStream {
+    table: DbfTable,
+    request: QueryRequest,
+    state: SnapshotStreamState,
+}
+
+struct SnapshotStreamState {
     position: usize,
     skip: u64,
     skipped: u64,
     limit: Option<u64>,
     yielded: u64,
     done: bool,
+}
+
+impl SnapshotStreamState {
+    fn new(request: &QueryRequest) -> Self {
+        Self {
+            position: 0,
+            skip: request.skip.unwrap_or_default(),
+            skipped: 0,
+            limit: request.limit,
+            yielded: 0,
+            done: false,
+        }
+    }
+
+    fn next(
+        &mut self,
+        table: &DbfTable,
+        request: &QueryRequest,
+    ) -> Option<Result<Value, QueryError>> {
+        if self.done || self.limit.is_some_and(|limit| self.yielded >= limit) {
+            self.done = true;
+            return None;
+        }
+        loop {
+            let Some(record) = table.records().get(self.position) else {
+                self.done = true;
+                return None;
+            };
+            self.position += 1;
+            if record.deleted {
+                continue;
+            }
+            match matches_filter(&record.values, &request.filter) {
+                Ok(false) => continue,
+                Err(error) => {
+                    self.done = true;
+                    return Some(Err(error));
+                }
+                Ok(true) => {}
+            }
+            if self.skipped < self.skip {
+                self.skipped += 1;
+                continue;
+            }
+            self.yielded += 1;
+            return Some(Ok(project(record, &request.projection)));
+        }
+    }
 }
 
 pub struct BoundedQueryStream {
@@ -54,12 +112,19 @@ pub fn stream_query_snapshot<'request>(
     Ok(QuerySnapshotStream {
         table: table.clone(),
         request,
-        position: 0,
-        skip: request.skip.unwrap_or_default(),
-        skipped: 0,
-        limit: request.limit,
-        yielded: 0,
-        done: false,
+        state: SnapshotStreamState::new(request),
+    })
+}
+
+pub(crate) fn stream_query_snapshot_owned(
+    table: &DbfTable,
+    request: &QueryRequest,
+) -> Result<OwnedQuerySnapshotStream, QueryError> {
+    validate_stream_request(request)?;
+    Ok(OwnedQuerySnapshotStream {
+        table: table.clone(),
+        request: request.clone(),
+        state: SnapshotStreamState::new(request),
     })
 }
 
@@ -143,34 +208,15 @@ impl<'request> Iterator for QuerySnapshotStream<'request> {
     type Item = Result<Value, QueryError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.done || self.limit.is_some_and(|limit| self.yielded >= limit) {
-            self.done = true;
-            return None;
-        }
-        loop {
-            let Some(record) = self.table.records().get(self.position) else {
-                self.done = true;
-                return None;
-            };
-            self.position += 1;
-            if record.deleted {
-                continue;
-            }
-            match matches_filter(&record.values, &self.request.filter) {
-                Ok(false) => continue,
-                Err(error) => {
-                    self.done = true;
-                    return Some(Err(error));
-                }
-                Ok(true) => {}
-            }
-            if self.skipped < self.skip {
-                self.skipped += 1;
-                continue;
-            }
-            self.yielded += 1;
-            return Some(Ok(project(record, &self.request.projection)));
-        }
+        self.state.next(&self.table, self.request)
+    }
+}
+
+impl Iterator for OwnedQuerySnapshotStream {
+    type Item = Result<Value, QueryError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.state.next(&self.table, &self.request)
     }
 }
 

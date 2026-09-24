@@ -72,7 +72,19 @@ The native threaded adapter is one concrete host implementation.
 
 It does not make the filesystem channel non-blocking, add resume tokens, or define a remote storage protocol.
 
-Worker and WASI adapters still need their own scheduling, timeout, cancellation, transport, and asynchronous-storage fixtures.
+The Worker-compatible Web Streams adapter supplies pull scheduling, bounded queueing, NDJSON transport chunks, and `AbortSignal` cancellation for the in-memory WASM query snapshot.
+The WASI runtime adapter and asynchronous storage-backed query streams still need their own host contracts and fixtures.
+
+## 5. Worker Web Streams adapter
+
+`createWorkerQueryStream` wraps the WASM `WasmQueryStream` in a standard `ReadableStream`.
+Each `pull` advances the snapshot by at most one record and enqueues one UTF-8 NDJSON chunk.
+The positive `queueSize` high-water mark delegates demand control to the Web Streams queue.
+
+The adapter propagates reader cancellation and an `AbortSignal` to `WasmQueryStream.cancel`.
+Malformed query input, unsupported controls, and lifecycle failures remain errors; they are not converted into an empty result.
+
+The full boundary, error categories, and deterministic generated-wrapper fixture are documented in [Worker query stream adapter](worker-query-stream.md).
 
 ## Primary references and scope
 

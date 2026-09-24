@@ -72,7 +72,19 @@ executor、ワーカーランタイム、ネットワークプロトコル、ス
 
 ファイルシステムのチャネルを非ブロッキングに変えたり、resume tokenを追加したり、リモートストレージのプロトコルを定義したりはしません。
 
-ワーカーとWASIのアダプターには、スケジューリング、タイムアウト、キャンセル、転送、非同期ストレージについて、個別のフィクスチャがまだ必要です。
+Worker互換のWeb Streamsアダプターは、インメモリWASMクエリスナップショットに対して、pullスケジューリング、有界キュー、NDJSON転送チャンク、`AbortSignal`キャンセルを提供します。
+WASIランタイムアダプターと非同期ストレージを使うクエリストリームには、個別のホスト契約とfixtureがまだ必要です。
+
+## 5. Worker Web Streamsアダプター
+
+`createWorkerQueryStream`は、WASMの`WasmQueryStream`を標準の`ReadableStream`でラップします。
+各`pull`はスナップショットを最大1レコードだけ進め、UTF-8のNDJSONチャンクを1つキューへ追加します。
+正の`queueSize`ハイウォーターマークによって、Web Streamsのキューへ需要制御を委譲します。
+
+アダプターは、readerのキャンセルと`AbortSignal`を`WasmQueryStream.cancel`へ伝えます。
+不正なクエリ入力、対応しない制御、ライフサイクルエラーはエラーとして伝播し、空の結果へ変換しません。
+
+詳細な境界、エラー分類、生成ラッパーを使う決定的なfixtureは、[Workerクエリストリームアダプター](worker-query-stream.md)に記載します。
 
 ## 一次資料と適用範囲
 

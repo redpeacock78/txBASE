@@ -29,3 +29,11 @@ impl<'request> AsyncQueryStream for QuerySnapshotStream<'request> {
         Poll::Ready(self.as_mut().get_mut().next())
     }
 }
+
+impl AsyncQueryStream for super::OwnedQuerySnapshotStream {
+    type Item = Result<Value, QueryError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Poll::Ready(self.as_mut().get_mut().next())
+    }
+}

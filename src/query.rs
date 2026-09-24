@@ -50,6 +50,9 @@ pub use stream_async::AsyncQueryStream;
 pub use stream_thread::{ThreadedQueryStream, stream_query_threaded};
 pub(crate) use validation::validate_filter;
 
+pub(crate) use stream::OwnedQuerySnapshotStream;
+pub(crate) use stream::stream_query_snapshot_owned;
+
 #[cfg(test)]
 use crate::query_path::field_value;
 #[cfg(test)]

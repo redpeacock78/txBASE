@@ -45,6 +45,7 @@ Research and future work do not imply an implemented feature.
 
 - [WASM and worker host boundary](wasm.md)
 - [Worker Fetch object-store adapter](worker-object-store.md)
+- [Worker query stream adapter](worker-query-stream.md)
 - [Distributed evolution](distributed-evolution.md)
 
 ## File-granularity rule

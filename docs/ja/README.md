@@ -43,6 +43,7 @@
 
 - [WASMとワーカーのホスト境界](wasm.md)
 - [Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)
+- [Workerクエリストリームアダプター](worker-query-stream.md)
 - [分散化の進化](distributed-evolution.md)
 
 ## ファイル粒度の規則

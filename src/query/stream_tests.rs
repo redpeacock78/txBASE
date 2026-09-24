@@ -119,6 +119,19 @@ fn snapshot_stream_is_independent_of_later_table_mutations() {
 }
 
 #[test]
+fn owned_snapshot_stream_applies_skip_and_limit_without_borrowing_request() {
+    let table = table_with_two_active_records();
+    let request = parse(br#"{"projection":{"NAME":1},"skip":1,"limit":1}"#).unwrap();
+    let mut stream = stream_query_snapshot_owned(&table, &request).unwrap();
+
+    assert_eq!(
+        stream.next().unwrap().unwrap(),
+        serde_json::json!({"NAME": "Bob"})
+    );
+    assert!(stream.next().is_none());
+}
+
+#[test]
 fn bounded_snapshot_stream_keeps_a_fixed_snapshot() {
     let mut table = table_with_two_active_records();
     let request = parse(br#"{"projection":{"NAME":1}}"#).unwrap();

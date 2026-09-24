@@ -6,8 +6,9 @@ The repository now contains a host-independent DBF core slice, a
 runtime-neutral asynchronous object-store boundary, and a JavaScript host
 adapter for asynchronous XBF object-table commits. It also contains a
 Worker-compatible Fetch transport adapter with explicit timeout and
-cancellation mapping. Worker and WASI-specific query-stream runtime adapters
-remain future work.
+cancellation mapping. It also contains a Worker-compatible Web Streams query
+adapter with bounded pull scheduling and `AbortSignal` cancellation. WASI-specific
+query-stream runtime adapters remain future work.
 
 ## 0. Current implementation slice
 
@@ -26,6 +27,9 @@ Its versioned boundary currently provides:
   `MAX_JSON_INPUT_BYTES` limit, currently 1 MiB, before deserialization;
 - `open_dbf` and `snapshot` for byte-in/byte-out DBF state;
 - `query_json` for the existing bounded query document;
+- `query_stream_json` for a snapshot-owned stream that supports the existing
+  filter, projection, skip, and limit controls and returns one JSON record per
+  pull;
 - `apply_operation_json` for the existing `POST`, `PUT`, `PATCH`, and `DELETE`
   operation IR;
 - `apply_operations_json` for the same operation IR in the bounded
@@ -50,6 +54,11 @@ Its versioned boundary currently provides:
   host error mapping;
 - a pinned Node.js Web Fetch fixture that exercises the Worker transport
   through the generated WASM wrapper, including timeout and cancellation;
+- a `createWorkerQueryStream` adapter that exposes the WASM snapshot stream as
+  a bounded Web `ReadableStream` of NDJSON chunks, with reader cancellation and
+  `AbortSignal` lifecycle handling;
+- a pinned Node.js Web Streams fixture that exercises backpressure-shaped pull
+  scheduling, snapshot stability, invalid controls, and cancellation;
 - a CI `wasm32-unknown-unknown` release build and wrapper smoke check.
 
 The core does not write files, access a network, schedule tasks, or commit a
@@ -101,6 +110,12 @@ Its in-memory implementations complete immediately; a worker or WASI host must s
 The native `ThreadedQueryStream` adapter supplies bounded scheduling, wake-up, backpressure, and drop cancellation outside `wasm32`.
 
 It is a native host implementation of the shared contract and does not change the WASM ABI or provide worker/WASI host services.
+
+The Worker-compatible `createWorkerQueryStream` adapter uses the Web Streams
+pull boundary instead of a Rust executor. It advances the WASM snapshot by at
+most one record per pull, applies a positive queue high-water mark, emits
+UTF-8 NDJSON chunks, and maps reader or `AbortSignal` cancellation to the
+WASM stream lifecycle.
 
 The object-store contract belongs below the shared table and transaction interfaces.
 The runtime-neutral `AsyncObjectStore` contract is implemented for the five primitive object operations.
@@ -157,6 +172,7 @@ The current core slice meets the following initial conditions:
 - a JavaScript host-backed asynchronous object-table fixture using the generated
   `wasm-bindgen` wrapper;
 - a Worker-compatible Fetch object-store adapter and deterministic HTTP fixture;
+- a Worker-compatible Web Streams query adapter and deterministic Node.js fixture;
 - explicit malformed-input errors at the byte and JSON boundaries;
 - a Node.js host smoke test for the generated `wasm-bindgen` wrapper.
 
@@ -164,7 +180,8 @@ The following conditions remain before calling a deployed worker or WASI host
 complete:
 
 - one smoke test in the selected worker or WASI runtime;
-- host-specific query-stream scheduling, backpressure, and lifecycle behavior;
+- a WASI-specific query-stream scheduler, backpressure, and lifecycle contract;
+- asynchronous-storage-backed query streams with host-specific timeout and retry behavior;
 - a provider-specific consistency and retry contract when remote storage is selected.
 
 Until then, the Worker Fetch transport is a current generic host boundary, and
@@ -196,6 +213,7 @@ The Component Model and the Cloudflare Workers and Node.js pages are implementat
 The repository has a WASM core implementation, a generated-wrapper Node.js
 smoke check, a JavaScript host-backed asynchronous object-table fixture, a
 Worker-compatible Fetch object-store adapter and smoke fixture, and
-runtime-neutral asynchronous object-store and object-table contracts.
-It does not claim that a deployed worker or WASI runtime, host-specific
+runtime-neutral asynchronous object-store and object-table contracts. It also
+has a Worker-compatible Web Streams query adapter and smoke fixture.
+It does not claim that a deployed worker or WASI runtime, WASI-specific
 query-stream lifecycle policy, or a native recovery path is already supported.

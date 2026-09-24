@@ -10,6 +10,7 @@ pub const ABI_VERSION: u16 = 1;
 pub enum WasmError {
     Database(DbfError),
     Query(QueryError),
+    Cancelled,
     InvalidJson(serde_json::Error),
     InvalidOperation(String),
     Serialization(serde_json::Error),
@@ -20,6 +21,7 @@ impl Display for WasmError {
         match self {
             Self::Database(error) => write!(formatter, "WASM database error: {error}"),
             Self::Query(error) => write!(formatter, "WASM query error: {error}"),
+            Self::Cancelled => write!(formatter, "WASM query stream was cancelled"),
             Self::InvalidJson(error) => write!(formatter, "invalid WASM operation JSON: {error}"),
             Self::InvalidOperation(message) => {
                 write!(formatter, "invalid WASM operation: {message}")
@@ -43,6 +45,36 @@ impl From<QueryError> for WasmError {
     }
 }
 
+pub struct WasmQueryStream {
+    stream: query::OwnedQuerySnapshotStream,
+    cancelled: bool,
+}
+
+impl WasmQueryStream {
+    fn new(stream: query::OwnedQuerySnapshotStream) -> Self {
+        Self {
+            stream,
+            cancelled: false,
+        }
+    }
+
+    pub fn next_json(&mut self) -> Result<Option<String>, WasmError> {
+        if self.cancelled {
+            return Err(WasmError::Cancelled);
+        }
+        self.stream
+            .next()
+            .map(|item| item.map_err(WasmError::Query))
+            .transpose()?
+            .map(|value| serde_json::to_string(&value).map_err(WasmError::Serialization))
+            .transpose()
+    }
+
+    pub fn cancel(&mut self) {
+        self.cancelled = true;
+    }
+}
+
 pub struct WasmCore {
     table: DbfTable,
 }
@@ -62,6 +94,12 @@ impl WasmCore {
         let request = query::parse(body)?;
         let records = query::execute_query(&self.table, &request)?;
         serde_json::to_vec(&records).map_err(WasmError::Serialization)
+    }
+
+    pub fn query_stream_json(&self, body: &[u8]) -> Result<WasmQueryStream, WasmError> {
+        let request = query::parse(body)?;
+        let stream = query::stream_query_snapshot_owned(&self.table, &request)?;
+        Ok(WasmQueryStream::new(stream))
     }
 
     pub fn apply_operation_json(&mut self, body: &[u8]) -> Result<Vec<u8>, WasmError> {
@@ -106,12 +144,17 @@ fn validate_json_input_size(body: &[u8]) -> Result<(), WasmError> {
 
 #[cfg(target_arch = "wasm32")]
 mod bindings {
-    use super::{ABI_VERSION, WasmCore, WasmError};
+    use super::{ABI_VERSION, WasmCore, WasmError, WasmQueryStream as CoreQueryStream};
     use wasm_bindgen::prelude::*;
 
     #[wasm_bindgen]
     pub struct WasmDatabase {
         core: WasmCore,
+    }
+
+    #[wasm_bindgen]
+    pub struct WasmQueryStream {
+        core: CoreQueryStream,
     }
 
     #[wasm_bindgen]
@@ -135,12 +178,33 @@ mod bindings {
             self.core.query_json(body).map_err(to_js_error)
         }
 
+        pub fn query_stream_json(&self, body: &[u8]) -> Result<WasmQueryStream, JsValue> {
+            self.core
+                .query_stream_json(body)
+                .map(|core| WasmQueryStream { core })
+                .map_err(to_js_error)
+        }
+
         pub fn apply_operation_json(&mut self, body: &[u8]) -> Result<Vec<u8>, JsValue> {
             self.core.apply_operation_json(body).map_err(to_js_error)
         }
 
         pub fn apply_operations_json(&mut self, body: &[u8]) -> Result<Vec<u8>, JsValue> {
             self.core.apply_operations_json(body).map_err(to_js_error)
+        }
+    }
+
+    #[wasm_bindgen]
+    impl WasmQueryStream {
+        pub fn next_json(&mut self) -> Result<JsValue, JsValue> {
+            self.core
+                .next_json()
+                .map(|value| value.map(JsValue::from_str).unwrap_or(JsValue::NULL))
+                .map_err(to_js_error)
+        }
+
+        pub fn cancel(&mut self) {
+            self.core.cancel();
         }
     }
 
@@ -179,6 +243,39 @@ mod tests {
         core.apply_operation_json(&operation).unwrap();
         let rows: Vec<Value> = serde_json::from_slice(&core.query_json(b"{}").unwrap()).unwrap();
         assert_eq!(rows[0]["NAME"], "wasm");
+    }
+
+    #[test]
+    fn wasm_core_query_stream_keeps_a_snapshot_and_emits_one_json_record() {
+        let mut core = WasmCore::open_dbf(&fixture()).unwrap();
+        let query = serde_json::to_vec(&json!({"projection": {"NAME": 1}})).unwrap();
+        let mut stream = core.query_stream_json(&query).unwrap();
+
+        let operation = serde_json::to_vec(&json!({
+            "method": "PATCH",
+            "path": "/records/1",
+            "body": {"NAME": "changed-after-stream-start"}
+        }))
+        .unwrap();
+        core.apply_operation_json(&operation).unwrap();
+
+        assert_eq!(
+            stream.next_json().unwrap(),
+            Some(r#"{"NAME":"Alice"}"#.into())
+        );
+        assert_eq!(stream.next_json().unwrap(), None);
+    }
+
+    #[test]
+    fn wasm_core_query_stream_rejects_blocking_controls_and_supports_cancel() {
+        let core = WasmCore::open_dbf(&fixture()).unwrap();
+        let sorted = serde_json::to_vec(&json!({"sort": {"ID": 1}})).unwrap();
+        assert!(core.query_stream_json(&sorted).is_err());
+
+        let query = serde_json::to_vec(&json!({})).unwrap();
+        let mut stream = core.query_stream_json(&query).unwrap();
+        stream.cancel();
+        assert!(matches!(stream.next_json(), Err(WasmError::Cancelled)));
     }
 
     #[test]

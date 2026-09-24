@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | dBASE と Visual FoxPro のファイル構造 | [DBF 互換性](dbf-compatibility.md) | 現在の対応と将来のエンコーディング作業 |
 | クエリ文書、述語、カーソル、ストリーム | [クエリモデル](query-model.md) | 現在のサブセット |
-| ランタイム非依存の非同期クエリストリーム | [非同期クエリストリーム](async-streaming.md) | 現在のポーリング境界とネイティブスレッドアダプター、将来のワーカーまたはWASIアダプター |
+| ランタイム非依存の非同期クエリストリーム | [非同期クエリストリーム](async-streaming.md)と[Workerクエリストリームアダプター](worker-query-stream.md) | 現在のポーリング境界、ネイティブスレッドアダプター、Worker互換Web Streamsアダプター、将来のWASIおよび非同期ストレージアダプター |
 | 有界集約契約 | [集約モデル](aggregation.md) | 現在のサブセット |
 | 有界ローカル結合契約 | [結合モデル](joins.md)と[カタログ](catalog.md) | 現在の境界 |
 | MongoDB の述語とクエリ計画 | [クエリ計画](query-planning.md) | 現在のサブセットと参照資料 |
@@ -33,7 +33,7 @@
 | 外部セカンダリインデックスのライフサイクル | [インデックス](indexes.md) | 現在のサイドカー保守、スカラーおよび複合キーの等値、複合等値プレフィックス候補、複合等値プレフィックス範囲候補、ヒストグラムによる範囲順序、有界なUnicode照合付き順序キー、順序プレフィックス、混在方向の複合プレフィックスソート、等値プレフィックス候補選択、一様統計による等値候補の順序付け、単独インデックスと積集合のコスト選択、レコード読み取り数、レコードページ読み取り、フィルター評価数、走査、インデックスページ読み取り、ソート作業の決定的な行相当の説明フィールド、将来のロケール対応CJK照合とより精密な物理モデル |
 | CJK、インデックス、XBF、ストレージ、並行性 | [ロードマップ](roadmap.md) | 現在の境界と将来の作業 |
 | エッジとオブジェクトストレージのコミット | [エッジストレージ](edge-storage.md) | 現在のローカル境界と将来のクラウド作業 |
-| WASMとワーカーのホスト境界 | [WASM](wasm.md) | ホスト非依存コアとJavaScriptのPromiseベース非同期XBFアダプターは現在、ワーカーまたはWASIアダプターは将来 |
+| WASMとワーカーのホスト境界 | [WASM](wasm.md)、[Workerクエリストリームアダプター](worker-query-stream.md)、[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md) | ホスト非依存コア、PromiseベースXBFアダプター、Worker互換Web Streamsクエリアダプター、汎用Fetchアダプターは現在、デプロイ済みWorker、WASI、プロバイダー固有アダプターは将来 |
 | 分散レプリケーションと権威 | [分散化の進化](distributed-evolution.md) | 現在はジャーナル化された`TXRP`サイドカー永続化、現在と保持済みの検証済みカタログスナップショットの出力、suffixを保つ権威側ログ圧縮、単調なフォロワー適用位置確認と最小indexによる圧縮制御、ローカルでの原子的なインストール、適用済み位置に限定した過去時点フォロワー読み取り、連続したエントリバッチの検証と順序付き受信、有界なHTTP status、連続したエントリ範囲、単一エントリ、スナップショット、適用位置確認の配送、任意選択のRFC 6750 Bearer認証、`/transaction`と名前付きテーブル更新の既定`authority`捕捉を含むプロセス内のバージョン付きエントリと再生の境界を実装し、`follower`ロールは直接のカタログ更新を拒否する。TLS、クォーラム、コンセンサス、分散フォロワー読み取りの保証は将来 |
 
 ## 調査方法
@@ -56,7 +56,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 | --- | --- | --- | --- |
 | dBASEとVisual FoxProのフォーマット資料 | dBASEのページはベンダー所有です。Visual FoxProのページはベンダーのヘルプを保存またはミラーしたものであり、現在の標準レジストリではありません。 | パーサー、memo読み取り、コードページ処理、フィールド幅規則は、フィクスチャでカバーする文書化済みサブセットだけを実装します。未対応形式はエラーのままであり、FoxPro全体の互換性は主張しません。 | フォーマットと互換性の詳細は[DBF互換性](dbf-compatibility.md)に置きます。ミラー資料の注意書きはこのインデックスに残し、互換性の主張ごとにフィクスチャを要求します。 |
 | MongoDBマニュアル | 公式製品文書です。 | クエリ、インデックス、集約、結合の文書は語彙と一部の動作を借りますが、txBASE固有の有界性を追加します。MongoDBのwire、プランナー、パイプライン互換性は主張しません。 | 演算子の意味と比較語彙は、クエリ、集約、結合、インデックスの文書に残します。未実装のMongoDB動作を現在の契約へ取り込みません。 |
-| Rust標準ライブラリのタスク文書 | 公式Rust API文書です。 | `AsyncQueryStream`境界は、executorを選択せず、ランタイム互換性を主張せずに`Context`、`Poll`、`Waker`、`Pin`のタスクモデルを再利用します。ネイティブの`ThreadedQueryStream`アダプターは、有界の標準ライブラリチャネルでこの契約を適用し、ワーカーまたはWASIのアダプターはホスト固有のままです。 | ポーリング契約とホストアダプターの責務は[非同期クエリストリーム](async-streaming.md)に置き、txBASEのクエリ意味論は[クエリモデル](query-model.md)に置きます。 |
+| Rust標準ライブラリのタスク文書 | 公式Rust API文書です。 | `AsyncQueryStream`境界は、executorを選択せず、ランタイム互換性を主張せずに`Context`、`Poll`、`Waker`、`Pin`のタスクモデルを再利用します。ネイティブの`ThreadedQueryStream`アダプターは、有界の標準ライブラリチャネルでこの契約を適用し、Worker Web Streamsアダプターは別のJavaScript pull境界を提供します。WASIアダプターはホスト固有のままです。 | ポーリング契約とホストアダプターの責務は[非同期クエリストリーム](async-streaming.md)と[Workerクエリストリームアダプター](worker-query-stream.md)に置き、txBASEのクエリ意味論は[クエリモデル](query-model.md)に置きます。 |
 | [Unicode Standard Annex #15](https://www.unicode.org/reports/tr15/)と[Rustの`char`大文字小文字API](https://doc.rust-lang.org/std/primitive.char.html) | Unicodeの規範的仕様と公式Rust API文書です。 | NFKCソートキーはUnicodeの互換性を扱う正規化仕様を使い、小文字化キーはRustのロケール非依存な文字変換を使います。txBASEが公開するのはこの2つの有界なソートキー形式だけであり、ロケール対応の辞書順や完全な照合互換性は主張しません。 | 受け付けるソートキー形式とインデックス計画の境界は[クエリモデル](query-model.md)と[インデックス](indexes.md)に置き、資料の分類はここに残します。 |
 | FirestoreとRealtime Databaseの文書 | 公式製品文書です。 | Firebase文書はアーキテクチャ参照だけです。txBASEはFirebaseのトランザクション、オフラインキュー、セキュリティルール、イベント同期を実装しません。 | 比較は[Firebaseモデル](firebase-model.md)に残し、DBF、HTTP、トランザクション契約へ持ち込みません。 |
 | SQLite文書 | 公式プロジェクト文書です。 | 制約語彙、WALとアトミックコミットの根拠、クエリ計画語彙、テスト品質の実践を参照します。txBASEはDBFサイドカーと独自WALを使い、SQLiteのファイル、SQL、永続性互換性を主張しません。 | 根拠はスキーマ、MVCC、クエリ計画、テストの文書に置き、txBASEの動作は別に記述します。 |
@@ -65,8 +65,9 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 | Gitのコマンドラインインターフェース文書 | CLI設計の参照に使う公式プロジェクト文書です。 | txBASEの明示的なサブコマンドとオプションの形だけに影響します。Gitのコマンド群、リポジトリモデル、オプションの意味はコピーしません。 | 設計判断は[CLIコマンド体系の設計](cli-design.md)に置き、コマンド契約は[CLIコマンドリファレンス](cli.md)に置きます。MVCCやストレージの契約には置きません。 |
 | RFC 9110、RFC 5789、RFC 10008、RFC 6750 | IETFの標準化過程にある仕様です。 | HTTPメソッドの安全性、PATCHの意味、QUERYの安全性と冪等性、Bearer認証ヘッダーをHTTP契約へ反映します。txBASEは対応メディアタイプ、応答形状、範囲上限、ルート上限、環境変数で選択するトークン境界を別に定義します。 | 規範的なHTTP意味論は[HTTPの意味](http-semantics.md)に置き、txBASE固有の制約は実装契約のそばに置きます。 |
 | POSIXの`rename()`と`fsync()` | The Open Groupの仕様です。 | Unixコードはrenameによる置換と`sync_all`を使います。Windowsには別の置換経路があるため、POSIXのディレクトリ永続性保証と同一とは記述しません。 | ファイルシステムの永続性の前提は永続化とXBFの文書に置き、Unix限定であることを明記します。 |
-| WebAssembly、WASI、Component Model | 標準仕様または標準化中の仕様です。ホスト資料は実装参照です。 | リポジトリにはバージョン付きホスト非依存DBFコア、生成した`wasm-bindgen` Node.jsラッパー、Promiseベースの非同期XBFオブジェクトテーブルアダプター、汎用Worker互換Fetchオブジェクトストレージアダプターがあります。CIはABI、スナップショットの往復、4種類の更新操作、原子的なバッチのロールバック、オブジェクト公開、復旧、保持、ホストエラー変換、HTTP条件付き公開、タイムアウト、キャンセルを検査します。デプロイ済みワーカーまたはWASIランタイムアダプターと、ホスト固有のクエリストリーム方針は今後の作業です。 | コアABIと汎用転送境界は[WASM](wasm.md)と[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)に置きます。プロバイダー固有の保証はプロバイダーアダプターの文書に置きます。 |
-| Fetch、DOM、Cloudflare Workersのホスト文書 | FetchとDOMはWebプラットフォーム仕様であり、Cloudflare Workersの文書は公式ホスト実装の参照です。 | Workerアダプターは`fetch`、`URL`、`Headers`、`AbortController`、Web Crypto、条件付きHTTPリクエスト、リクエストコンテキストのタイマーを使います。リポジトリはNode.jsで汎用Web APIの形を検査しますが、デプロイ済みCloudflareまたはWASIランタイムは主張しません。 | 転送契約とエラー対応付けは[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)に置き、ホストのデプロイとプロバイダー動作は汎用txBASE契約の外側に置きます。 |
+| WebAssembly、WASI、Component Model | 標準仕様または標準化中の仕様です。ホスト資料は実装参照です。 | リポジトリにはバージョン付きホスト非依存DBFコア、生成した`wasm-bindgen` Node.jsラッパー、Promiseベースの非同期XBFオブジェクトテーブルアダプター、汎用Worker互換Fetchオブジェクトストレージアダプター、Worker互換Web Streamsクエリアダプターがあります。CIはABI、スナップショットの往復、4種類の更新操作、原子的なバッチのロールバック、オブジェクト公開、復旧、保持、ホストエラー変換、HTTP条件付き公開、タイムアウト、キャンセル、有界クエリチャンク、ストリームキャンセルを検査します。デプロイ済みWorkerまたはWASIランタイムアダプターは今後の作業です。 | コアABIとホスト境界は[WASM](wasm.md)、[Workerクエリストリームアダプター](worker-query-stream.md)、[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)に置きます。プロバイダー固有の保証はプロバイダーアダプターの文書に置きます。 |
+| WHATWG Streams、DOM、Cloudflare Workersのストリーム文書 | WHATWG仕様はWebプラットフォーム資料であり、Cloudflare Workersの文書は公式ホスト実装の参照です。 | WorkerクエリアダプターはWASMのスナップショットストリームに対してpull型`ReadableStream`、正のハイウォーターマーク、UTF-8のNDJSONチャンク、readerキャンセル、`AbortSignal`キャンセルを使います。リポジトリはNode.jsで汎用Web APIの形を検査しますが、デプロイ済みCloudflareまたはWASIランタイムは主張しません。 | キュー、pull、キャンセル、チャンク形式は[Workerクエリストリームアダプター](worker-query-stream.md)に置き、共有クエリ制御は[クエリモデル](query-model.md)に置きます。 |
+| Fetch、DOM、Cloudflare Workersのホスト文書 | FetchとDOMはWebプラットフォーム仕様であり、Cloudflare Workersの文書は公式ホスト実装の参照です。 | Workerオブジェクトストレージアダプターは`fetch`、`URL`、`Headers`、`AbortController`、Web Crypto、条件付きHTTPリクエスト、リクエストコンテキストのタイマーを使います。リポジトリはNode.jsで汎用Web APIの形を検査しますが、デプロイ済みCloudflareまたはWASIランタイムは主張しません。 | オブジェクト転送契約とエラー対応付けは[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)に置き、ホストのデプロイとプロバイダー動作は汎用txBASE契約の外側に置きます。 |
 | Raft論文とRaftプロジェクト資料 | 論文とプロジェクトの一次資料です。 | リポジトリ所有の`ReplicationEntry`/`ReplicationLog`/`ReplicationSnapshot`スライスは、現在は固定termのプロセス内単一writerを選択し、カタログ更新、ローカルスナップショットインストール、またはsuffixを保つローカル圧縮とともに`TXRP`位置をジャーナル化し、ローカルの最小index安全制御のために単調なフォロワー適用位置を記録し、過去時点の読み取りを適用済み位置に限定し、status、連続したエントリ範囲、エントリ、スナップショット、適用位置確認を有界なHTTPで配送します。Raftは権威の候補にとどまり、クォーラムと分散実行はありません。 | ローカルのエントリ、再生、スナップショット、圧縮、フォロワー適用位置、`TXRP`、過去時点読み取り、HTTP配送の契約は[分散化の進化](distributed-evolution.md)に置き、Raftは現在の実装依存ではなく将来候補として扱います。 |
 | XBF v1形式草案 | このリポジトリが所有する仕様草案です。外部向けの互換性標準ではありません。 | 現在のコーデック、エッジ、世代検査付きWALのテストは草案を実装契約として検査します。外部リーダーでの原子的な公開が証明されるまでは草案のままです。 | バイト形式と受け入れ条件は[XBF v1草案](xbf.md)に置き、外部標準のようには扱いません。 |
 | `encoding_rs` APIと固定した`dbf`互換性表 | 依存ライブラリのAPI文書と第三者実装の参照であり、エンコーディング標準ではありません。 | Rustのコーデック動作とlegacy aliasの特定に使います。互換性の根拠は第三者の表ではなく、固定したバイトフィクスチャです。 | [DBF互換性](dbf-compatibility.md)の実装補助資料として残し、規範的なフォーマット資料にはしません。 |
@@ -194,8 +195,11 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 - [Cloudflare Workersのfetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
 - [Cloudflare WorkersのWeb標準](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)
 - [Cloudflare WorkersのRequest `AbortSignal`](https://developers.cloudflare.com/workers/runtime-apis/request/)
+- [WHATWG Streams Standard](https://streams.spec.whatwg.org/)
+- [Cloudflare Workers Streams](https://developers.cloudflare.com/workers/runtime-apis/streams/)
+- [Cloudflare Workers `ReadableStream`](https://developers.cloudflare.com/workers/runtime-apis/streams/readablestream/)
 - [Fetch Standard](https://fetch.spec.whatwg.org/)
-- [DOM Standardの`AbortController`](https://dom.spec.whatwg.org/#interface-abortcontroller)
+- [DOM Standardの`AbortSignal`](https://dom.spec.whatwg.org/#interface-AbortSignal)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
 
 ### 分散システム

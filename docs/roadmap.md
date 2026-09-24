@@ -65,6 +65,7 @@ The repository currently provides:
 - A runtime-neutral `AsyncObjectStore` primitive contract, `AsyncObjectTable` manifest protocol, and synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
 - A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A Worker-compatible Fetch object-store adapter with conditional HTTP publication, strong SHA-256 ETags, bounded request timeouts, explicit `AbortSignal` cancellation mapping, and a deterministic WASM-backed HTTP fixture.
+- A Worker-compatible Web Streams query adapter that exposes the WASM snapshot stream as bounded NDJSON chunks with pull-based backpressure and `AbortSignal` cancellation, plus a deterministic generated-wrapper fixture.
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, `ReplicationSnapshot`, and `ReplicationProgress` JSON formats, journaled `TXRP` sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, monotonic follower-progress acknowledgement with minimum-index coordinated compaction and restart re-registration, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded entry-batch validation and ordered receiver application, bounded HTTP entry, contiguous entry-range, snapshot, and progress delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
@@ -72,7 +73,7 @@ The repository currently provides:
 The baseline intentionally does not include the following:
 
 - Filesystem- and cache-aware merge join costing.
-- Worker/WASI-specific query-stream scheduling, transport backpressure, cancellation lifecycle, and asynchronous local-storage semantics.
+- WASI-specific query-stream scheduling, asynchronous-storage-backed query streams, and host-specific lifecycle semantics beyond the current Worker Web Streams adapter.
 - Predicate-level locking and distributed serializable coordination.
 - Aggregation stages or accumulators beyond bounded input `$match`, `$unwind` with its documented top-level options, `$set`/`$addFields` with its documented expression subset, `$project`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, `$group`, `$bucket`, bounded scalar-expression `$bucketAuto` with finite numeric results, and bounded scalar-expression `$sortByCount` with bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
@@ -89,7 +90,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - Schema introspection.
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
-- Worker/WASI-specific `AsyncQueryStream` implementations and provider-specific asynchronous object-table adapters.
+- WASI-specific `AsyncQueryStream` implementations, asynchronous-storage-backed query streams, and provider-specific asynchronous object-table adapters.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
 - Read-only WAL inspection.
@@ -141,8 +142,11 @@ responses over this stream.
 owned in-memory streams implement it with immediate polls.
 The native `query::stream_query_threaded` adapter supplies non-blocking polling, bounded producer
 backpressure, waker notification, and worker cancellation on drop.
-Worker/WASI timeout, transport, cancellation, and asynchronous-storage behavior remain host-specific,
-as does the asynchronous object-table adapter for a worker or WASI host.
+The Worker-compatible Web Streams adapter now supplies pull scheduling, bounded
+NDJSON chunks, reader cancellation, and `AbortSignal` lifecycle handling for a
+WASM snapshot stream. WASI scheduling and asynchronous-storage-backed query
+streams remain host-specific, as does the asynchronous object-table adapter for
+a provider-backed worker or WASI host.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 
@@ -345,7 +349,10 @@ The CI gate loads the generated `wasm-bindgen` wrapper from Node.js and verifies
 The same gate verifies asynchronous object publication, compare-and-swap recovery, historical reads, retention, orphan cleanup, and tagged host-error mapping.
 The native `ThreadedQueryStream` adapter is available outside `wasm32` and does not change the WASM ABI.
 The WASM slice now supplies generic Fetch timeout and cancellation mapping through the Worker adapter.
-It does not yet supply host-specific query-stream scheduling, a deployed worker or WASI runtime adapter, or a provider-specific object-store adapter.
+The Worker-compatible Web Streams query adapter supplies bounded pull scheduling,
+NDJSON chunks, and `AbortSignal` cancellation through `src/worker-query-stream.mjs`.
+It does not yet supply a WASI runtime adapter, asynchronous-storage-backed query
+streams, a deployed worker fixture, or a provider-specific object-store adapter.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 
