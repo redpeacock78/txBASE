@@ -14,6 +14,7 @@ mod journal;
 mod mvcc;
 mod read_transaction;
 mod serializable;
+mod snapshot;
 mod transaction;
 
 pub use cdc::{CatalogChangeEvent, CatalogTableChange};
@@ -65,6 +66,7 @@ pub enum CatalogTransactionError {
     Invalid(String),
     PreconditionFailed { tag: String },
     SidecarPreconditionFailed { name: String },
+    TransactionPreconditionFailed { expected: u64, actual: u64 },
     TableSetChanged,
     Catalog(CatalogError),
 }
@@ -79,6 +81,10 @@ impl Display for CatalogTransactionError {
             Self::SidecarPreconditionFailed { name } => write!(
                 formatter,
                 "catalog transaction sidecar precondition failed: {name}"
+            ),
+            Self::TransactionPreconditionFailed { expected, actual } => write!(
+                formatter,
+                "catalog transaction position precondition failed: expected {expected}, got {actual}"
             ),
             Self::TableSetChanged => {
                 write!(
@@ -97,6 +103,7 @@ impl Error for CatalogTransactionError {
             Self::Invalid(_)
             | Self::PreconditionFailed { .. }
             | Self::SidecarPreconditionFailed { .. }
+            | Self::TransactionPreconditionFailed { .. }
             | Self::TableSetChanged => None,
             Self::Catalog(error) => Some(error),
         }

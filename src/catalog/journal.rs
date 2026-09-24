@@ -80,9 +80,23 @@ pub(crate) fn read_transaction_id_locked(root: &Path) -> Result<Option<u64>, Cat
     decode_transaction_id(&bytes).map(Some)
 }
 
-pub(crate) fn commit(root: &Path, mut changes: Vec<FileChange>) -> Result<u64, CatalogError> {
+pub(crate) fn commit(root: &Path, changes: Vec<FileChange>) -> Result<u64, CatalogError> {
     if changes.is_empty() {
         return Ok(read_transaction_id_locked(root)?.unwrap_or(0));
+    }
+    let transaction_id = next_transaction_id_locked(root)?;
+    commit_at(root, transaction_id, changes)
+}
+
+pub(crate) fn commit_at(
+    root: &Path,
+    transaction_id: u64,
+    mut changes: Vec<FileChange>,
+) -> Result<u64, CatalogError> {
+    if transaction_id == 0 {
+        return Err(CatalogError::Invalid(
+            "catalog transaction ID must be positive".into(),
+        ));
     }
     let journal = root.join(JOURNAL_DIR);
     if journal.exists() {
@@ -93,7 +107,16 @@ pub(crate) fn commit(root: &Path, mut changes: Vec<FileChange>) -> Result<u64, C
 
     let state_path = root.join(TRANSACTION_STATE);
     let state_before = read_optional(&state_path)?;
-    let transaction_id = next_transaction_id(state_before.as_deref())?;
+    let current_transaction_id = state_before
+        .as_deref()
+        .map(decode_transaction_id)
+        .transpose()?
+        .unwrap_or(0);
+    if transaction_id <= current_transaction_id {
+        return Err(CatalogError::Invalid(format!(
+            "catalog transaction ID {transaction_id} is not newer than {current_transaction_id}"
+        )));
+    }
     changes.push(FileChange {
         target: state_path,
         before: state_before,

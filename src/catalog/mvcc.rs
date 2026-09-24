@@ -109,6 +109,24 @@ pub(crate) fn snapshot_at(root: &Path, transaction_id: u64) -> Result<Snapshot, 
         })
 }
 
+pub(crate) fn snapshot_bytes(root: &Path, transaction_id: u64) -> Result<Vec<u8>, CatalogError> {
+    encode_single_snapshot(&snapshot_at(root, transaction_id)?)
+}
+
+pub(crate) fn decode_single_snapshot(bytes: &[u8]) -> Result<Snapshot, CatalogError> {
+    let mut snapshots = decode(bytes)?;
+    if snapshots.len() != 1 {
+        return Err(CatalogError::Invalid(
+            "catalog snapshot payload must contain exactly one snapshot".into(),
+        ));
+    }
+    Ok(snapshots.remove(0))
+}
+
+pub(crate) fn encode_single_snapshot(snapshot: &Snapshot) -> Result<Vec<u8>, CatalogError> {
+    encode(std::slice::from_ref(snapshot))
+}
+
 pub(crate) fn validate(root: &Path) -> Result<(), CatalogError> {
     let _ = read_history(root)?;
     Ok(())

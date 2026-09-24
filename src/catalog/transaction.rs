@@ -350,7 +350,7 @@ fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, CatalogError> {
     }
 }
 
-fn sidecar_path(root: &Path, name: &str) -> Result<PathBuf, CatalogError> {
+pub(super) fn sidecar_path(root: &Path, name: &str) -> Result<PathBuf, CatalogError> {
     let path = Path::new(name);
     if !matches!(path.components().next(), Some(Component::Normal(_)))
         || path.components().count() != 1

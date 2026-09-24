@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
+mod snapshot;
+pub use snapshot::ReplicationSnapshot;
+
 pub const REPLICATION_ENTRY_VERSION: u16 = 1;
 pub const REPLICATION_LOG_VERSION: u16 = 1;
 pub const REPLICATION_SIDECAR_NAME: &str = ".txbase.replication";
@@ -453,6 +456,8 @@ impl ReplicationLog {
 pub enum ApplyOutcome {
     Applied { index: u64, transaction_id: u64 },
     Duplicate { index: u64, transaction_id: u64 },
+    SnapshotInstalled { index: u64, transaction_id: u64 },
+    SnapshotDuplicate { index: u64, transaction_id: u64 },
 }
 
 #[derive(Debug)]
@@ -496,6 +501,17 @@ pub enum ReplicationError {
     ReadHistoryUnavailable {
         requested: u64,
         base_transaction_id: u64,
+    },
+    SnapshotStale {
+        requested: u64,
+        current: u64,
+    },
+    SnapshotConflict {
+        transaction_id: u64,
+    },
+    SnapshotInstallRace {
+        expected: u64,
+        actual: u64,
     },
 }
 
@@ -558,6 +574,18 @@ impl Display for ReplicationError {
             } => write!(
                 formatter,
                 "follower read transaction {requested} is unavailable at log base transaction {base_transaction_id}"
+            ),
+            Self::SnapshotStale { requested, current } => write!(
+                formatter,
+                "replication snapshot transaction {requested} is not newer than catalog transaction {current}"
+            ),
+            Self::SnapshotConflict { transaction_id } => write!(
+                formatter,
+                "replication snapshot conflicts with catalog transaction {transaction_id}"
+            ),
+            Self::SnapshotInstallRace { expected, actual } => write!(
+                formatter,
+                "replication snapshot install raced with catalog transaction {expected} becoming {actual}"
             ),
         }
     }

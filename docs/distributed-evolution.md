@@ -3,8 +3,8 @@
 This document isolates the replication and distributed-database boundary.
 
 txBASE now has a local, process-scoped replication slice. It defines the
-versioned entry and single-authority replay contract, but it is not network
-replication or consensus.
+versioned entry, single-authority replay, and transport-independent snapshot
+installation contracts, but it is not network replication or consensus.
 
 ## 1. Prerequisites
 
@@ -78,6 +78,28 @@ matches the live catalog. `read_applied` reads the latest such image.
 These methods define a local historical follower-read primitive; they do not
 provide leases, linearizability, quorum freshness, or network transport.
 
+### Snapshot installation
+
+`ReplicationSnapshot` version 1 contains the fixed term, last log index, last
+catalog transaction ID, catalog representation tag, and one encoded catalog
+MVCC image. `ReplicationLog::snapshot` captures the current catalog image
+under the catalog read lock and validates its schema tag before returning the
+transport-independent value. The encoded catalog payload is limited to 64 MiB.
+
+`ReplicationLog::install_snapshot` validates the version, positions, schema,
+and term before changing local state. It replaces DBF, memo, and schema files
+through the catalog journal, resets catalog MVCC history to the installed base,
+clears catalog CDC and table-local transient MVCC, CDC, WAL, state, and index
+sidecars, and journals the matching empty `TXRP` position in the same commit.
+The in-memory log then resumes at the snapshot's next index and transaction.
+
+Installing the same image is an acknowledged duplicate. Older images,
+conflicting images at the same transaction, sidecar divergence, and a catalog
+that changed during installation are rejected without publishing a partial
+replacement. This is a local recovery primitive; snapshot transport, log
+truncation policy, and authority coordination remain future distributed
+contracts.
+
 ## 4. Co-location before distributed joins
 
 Distributed relational support should first favor co-location.
@@ -112,13 +134,13 @@ The local slice defines the following initial contracts:
 - schema version: the catalog representation tag must match before commit;
 - recovery: a follower retries a missing prefix, and the journaled `TXRP` log can resume after process restart;
 - follower reads: a caller can read a retained catalog image at an applied log transaction;
+- snapshot recovery: a follower can install one validated catalog image atomically and resume at its next log position;
 - deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
 
 The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
-- snapshot installation and follower-read consistency;
-- partial replication recovery after log truncation;
+- networked snapshot transfer and authority-coordinated log truncation;
 - observability for lag and transport state;
 - quorum and network failure behavior.
 
@@ -132,18 +154,22 @@ The initial local replication slice is complete because it has:
 - the versioned `ReplicationEntry` and `ReplicationLog` formats;
 - the journaled `TXRP` sidecar with term and catalog-position checks;
 - the local historical follower-read boundary with applied-position checks;
+- versioned snapshot export and atomic installation with stale, conflicting, and concurrent-change rejection;
+- catalog-history compaction and `TXRP` base-position recovery after snapshot installation;
 - deterministic replay, duplicate-delivery, conflict, and ordering tests;
 - partition-gap, serialized-log recovery, term, and schema-tag tests;
+- snapshot round-trip, installation, resume, stale-image, and conflict tests;
 - explicit write consistency: only the next catalog transaction can commit;
 - a leader/follower fixture that fails and recovers without external infrastructure.
 
-Network replication, full MVCC coordination, snapshot installation, distributed
-follower-read guarantees, and distributed partitioning remain future work.
+Network replication, full MVCC coordination, networked snapshot transfer,
+distributed follower-read guarantees, and distributed partitioning remain
+future work.
 
 ## 7. Explicit non-goals
 
 This document does not promise Raft, quorum, multi-region writes, global
-transactions, log truncation or snapshot installation, distributed
+transactions, networked log truncation or snapshot transfer, distributed
 follower-read guarantees, or automatic partition balancing.
 
 Those choices require the authority and recovery contracts above.
@@ -156,8 +182,9 @@ Those choices require the authority and recovery contracts above.
 The Raft paper is a candidate protocol reference for the authority step in the progression.
 It does not select Raft for txBASE and does not define the future txBASE log, schema, or recovery format.
 
-The current repository has a local entry/replay implementation, a journaled
-`TXRP` sidecar, and a bounded historical follower-read primitive, but no
-network transport, consensus, quorum, distributed follower-read guarantee, or
-distributed-join implementation.
+The current repository has a local entry/replay implementation, a versioned
+snapshot installation primitive, a journaled `TXRP` sidecar, and a bounded
+historical follower-read primitive, but no network transport, consensus,
+quorum, distributed follower-read guarantee, or distributed-join
+implementation.
 Those statements remain design constraints rather than compatibility claims.

@@ -34,7 +34,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - A native threaded asynchronous query-stream adapter with bounded backpressure and drop cancellation.
 - A committed single-table change-data-capture sidecar with WAL recovery and an inspection CLI.
 - A committed catalog change-data-capture sidecar with atomic multi-table events and an inspection CLI.
-- A process-local fixed-term replication log with a journaled `TXRP` sidecar, restart position checks, and bounded historical follower reads.
+- A process-local fixed-term replication log with journaled `TXRP` sidecar state, validated catalog snapshots, atomic local snapshot installation, restart position checks, and bounded historical follower reads.
 - An opt-in coarse-grained serializable transaction boundary for one DBF table.
 - An opt-in coarse-grained serializable transaction boundary for a catalog's discovered tables.
 
@@ -309,7 +309,7 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 
 The current implementation prioritizes bounded, recoverable local operations over an unbounded database server.
 
-It also includes a process-local fixed-term replication entry and replay boundary over the catalog journal, with a journaled `TXRP` sidecar and bounded historical follower reads; network transport, quorum, consensus, snapshot installation, and distributed follower-read guarantees remain outside the current slice.
+It also includes a process-local fixed-term replication entry, replay, and snapshot-installation boundary over the catalog journal, with a journaled `TXRP` sidecar and bounded historical follower reads; network transport, quorum, consensus, networked snapshot transfer, and distributed follower-read guarantees remain outside the current slice.
 
 The roadmap still leaves the following areas as future work:
 
@@ -322,7 +322,7 @@ The roadmap still leaves the following areas as future work:
 - Strict multi-file reader atomicity for XBF export.
 - Cloud object-storage adapters and retention policy.
 - Worker/WASI runtime adapters and asynchronous WASM storage.
-- Networked replication, quorum or consensus, snapshot installation, follower reads, and distributed partitioning.
+- Networked replication, quorum or consensus, networked snapshot transfer, distributed follower reads, and distributed partitioning.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance conditions and [docs/research.md](docs/research.md) for the source and fixture policy.
 

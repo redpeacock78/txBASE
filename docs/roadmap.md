@@ -66,7 +66,7 @@ The repository currently provides:
 - A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
-- A process-local single-authority replication boundary with versioned `ReplicationEntry` and `ReplicationLog` JSON formats, journaled `TXRP` sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, and deterministic leader/follower fixtures without external infrastructure.
+- A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, and `ReplicationSnapshot` JSON formats, journaled `TXRP` sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, and deterministic leader/follower fixtures without external infrastructure.
 
 The baseline intentionally does not include the following:
 
@@ -77,7 +77,7 @@ The baseline intentionally does not include the following:
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Cloud object-storage adapters and retention policy.
-- Network transport, quorum or consensus, snapshot installation, follower reads, and distributed partitioning.
+- Network transport, quorum or consensus, networked snapshot transfer, distributed follower reads, and distributed partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -359,7 +359,11 @@ It journals the `TXRP` replication position with the catalog mutation and can
 reopen that position after a process restart.
 It also exposes historical follower reads only at positions covered by the
 log and retained by catalog MVCC.
-It is a replay and contract boundary, not a network or consensus feature.
+It also exports a versioned `ReplicationSnapshot` and installs it through one
+catalog-journal commit: the catalog image becomes the new MVCC base, stale
+table-local state sidecars are cleared, and the empty `TXRP` position resumes
+at the snapshot's next index and transaction.
+It is a replay and local recovery boundary, not a network or consensus feature.
 
 ### Candidate scope
 
@@ -367,13 +371,13 @@ It is a replay and contract boundary, not a network or consensus feature.
 - Persistent WAL history beyond the current table, catalog, and `TXRP` sidecars.
 - Networked replication.
 - Raft or another explicitly selected authority protocol.
-- Snapshot installation.
+- Networked snapshot transfer and authority-coordinated log truncation.
 - Distributed follower-read guarantees.
 - Distributed partitioning.
 
 The remaining distributed features require quorum or consensus authority,
 network conflict semantics, schema-version handling, log truncation and
-snapshot installation, recovery procedures, transport observability, and
+networked snapshot transfer, recovery procedures, transport observability, and
 follower-read guarantees.
 
 No consensus or multi-region feature is implied by the current exclusive table lock.
