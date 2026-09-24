@@ -430,13 +430,7 @@ impl ReplicationLog {
         if let Ok(offset) = usize::try_from(offset) {
             if let Some(existing) = self.entries.get(offset) {
                 if existing == &entry {
-                    let actual = current_transaction_id(catalog)?;
-                    if actual != entry.transaction_id {
-                        return Err(ReplicationError::CatalogStateMismatch {
-                            expected: entry.transaction_id,
-                            actual,
-                        });
-                    }
+                    self.ensure_catalog_position(current_transaction_id(catalog)?)?;
                     return Ok(ApplyOutcome::Duplicate {
                         index: entry.index,
                         transaction_id: entry.transaction_id,
