@@ -2,9 +2,10 @@
 
 This document isolates the WASM and edge-runtime boundary.
 
-The repository now contains a host-independent DBF core slice and a
-runtime-neutral asynchronous object-store boundary. Worker and
-host-specific asynchronous-storage adapters remain future work.
+The repository now contains a host-independent DBF core slice, a
+runtime-neutral asynchronous object-store boundary, and a JavaScript host
+adapter for asynchronous XBF object-table commits. Worker and WASI-specific
+runtime adapters remain future work.
 
 ## 0. Current implementation slice
 
@@ -35,6 +36,13 @@ Its versioned boundary currently provides:
 - a pinned Node.js `wasm-bindgen` smoke test that loads the generated wrapper,
   checks the ABI version and snapshot round trip, exercises all four mutation
   methods, and verifies atomic batch rollback;
+- a `WasmObjectTable` adapter that accepts a JavaScript object-store host,
+  bridges Promise-returning `get`, `putIfAbsent`, `compareAndSwap`, `delete`,
+  and `list` methods to `AsyncObjectStore`, and exposes XBF read, commit,
+  recovery, historical-read, retention, and orphan-cleanup methods;
+- a pinned Node.js host fixture that exercises compare-and-swap publication,
+  a failed WAL cleanup followed by recovery, historical reads, retention, and
+  host error mapping;
 - a CI `wasm32-unknown-unknown` release build and wrapper smoke check.
 
 The core does not write files, access a network, schedule tasks, or commit a
@@ -92,6 +100,16 @@ The runtime-neutral `AsyncObjectStore` contract is implemented for the five prim
 `AsyncObjectTable` reuses the manifest, generation, recovery, retention, and conditional-publication contract through those operations.
 Neither boundary selects an executor or turns blocking filesystem calls into non-blocking work.
 
+The `wasm-bindgen` JavaScript adapter uses the same five operations as a host
+object whose methods return Promises.
+`get` resolves to a `Uint8Array` or `null`; `list` resolves to string keys; the
+other methods resolve to `undefined`.
+Host rejection objects may provide `code` values `invalid`, `conflict`,
+`missing`, or `unavailable`; the adapter maps them to the shared
+`ObjectStoreError` categories and maps untagged rejection to `unavailable`.
+The adapter requires the host to provide its own timeout, cancellation, retry,
+and transport policy.
+
 ## 4. Target hosts
 
 The same core could eventually run behind:
@@ -129,6 +147,8 @@ The current core slice meets the following initial conditions:
 - one native host fixture;
 - identical query and mutation implementation paths across native and WASM;
 - an asynchronous object-table fixture using the runtime-neutral store contract;
+- a JavaScript host-backed asynchronous object-table fixture using the generated
+  `wasm-bindgen` wrapper;
 - explicit malformed-input errors at the byte and JSON boundaries;
 - a Node.js host smoke test for the generated `wasm-bindgen` wrapper.
 
@@ -154,8 +174,14 @@ Those would be separate products and would obscure the shared core contract.
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
 - [wasm-bindgen guide](https://rustwasm.github.io/docs/wasm-bindgen/)
+- [`wasm-bindgen-futures` API](https://docs.rs/wasm-bindgen-futures/latest/wasm_bindgen_futures/)
+- [`js-sys` `Function::apply` API](https://docs.rs/js-sys/latest/js_sys/struct.Function.html)
 
 The WebAssembly and WASI specifications define the core module and host-interface vocabulary.
 The Component Model and the Cloudflare Workers and Node.js pages are implementation references for possible hosts, not txBASE compatibility commitments.
 
-The repository has a WASM core implementation, a generated-wrapper Node.js smoke check, and runtime-neutral asynchronous object-store and object-table contracts, but it does not claim that a worker or WASI runtime, host-specific asynchronous persistence, or native recovery path is already supported.
+The repository has a WASM core implementation, a generated-wrapper Node.js
+smoke check, a JavaScript host-backed asynchronous object-table fixture, and
+runtime-neutral asynchronous object-store and object-table contracts.
+It does not claim that a worker or WASI runtime, host-specific timeout and
+cancellation policy, or a native recovery path is already supported.

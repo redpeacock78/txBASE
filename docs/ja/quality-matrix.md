@@ -28,7 +28,9 @@ cargo test --all-targets --all-features
 ```
 
 ネイティブのワークフローはUbuntu、macOS、Windowsでこのゲートを実行します。
-別のUbuntu WASMジョブは`cargo build --locked --lib --target wasm32-unknown-unknown --release`を実行し、`wasm-bindgen-cli` `0.2.128`でNode.jsラッパーを生成し、`node tests/wasm_smoke.mjs target/wasm-bindgen`を実行します。
+別のUbuntu WASMジョブは`cargo build --locked --lib --target wasm32-unknown-unknown --release`を実行します。
+`wasm-bindgen-cli` `0.2.128`でNode.jsラッパーを生成します。
+生成したラッパーに対して`node tests/wasm_smoke.mjs target/wasm-bindgen`と`node tests/wasm_edge_smoke.mjs target/wasm-bindgen`を実行します。
 
 ## 現在の契約
 
@@ -112,6 +114,7 @@ cargo test --all-targets --all-features
 | QRY-010 | 公開クエリおよび結合JSONパーサーが、デシリアライズ前に共有する1 MiBの入力上限を超える文書を拒否する。 | `src/lib.rs`; `src/query.rs`; `src/query/join/mod.rs`; `src/query/tests.rs`; `src/query/join_tests.rs`; `docs/ja/query-model.md`; `docs/ja/joins.md` | `rejects_a_query_document_over_the_shared_input_limit`; `rejects_a_join_document_over_the_shared_input_limit` | Boundary |
 | WASM-002 | ホスト非依存WASMコアが、解析前に共有する1 MiBの入力上限を超えるJSON入力を拒否し、DBFスナップショットを変更しない。 | `src/lib.rs`; `src/wasm.rs`; `docs/ja/wasm.md` | `wasm_core_rejects_oversized_json_inputs_without_mutation` | Boundary |
 | WASM-003 | `wasm-bindgen`が生成したCI release artifactを固定Node.jsホストから読み込み、ABIバージョン1を返し、DBFスナップショットを往復し、4種類の更新操作を実行し、共有DBFコアで原子的なバッチのロールバックを検証できる。 | `Cargo.toml`; `.github/workflows/ci.yml`; `tests/wasm_smoke.mjs`; `docs/ja/wasm.md` | `cargo build --locked --lib --target wasm32-unknown-unknown --release`; `wasm-bindgen --target nodejs`; `node tests/wasm_smoke.mjs target/wasm-bindgen` | Current |
+| WASM-004 | 生成した`wasm-bindgen`ラッパーが、JavaScriptホスト接続型の非同期XBFオブジェクトテーブルを公開し、5つのPromiseベースのオブジェクトストレージ操作によるcompare-and-swap公開、失敗したWAL削除の復旧、過去世代読み取り、世代数による保持、孤立オブジェクト削除、タグ付きホストエラー変換を維持する。 | `src/wasm_edge.rs`; `src/edge/object_store_async.rs`; `src/edge/store.rs`; `.github/workflows/ci.yml`; `tests/wasm_edge_smoke.mjs`; `docs/ja/wasm.md`; `docs/ja/edge-storage.md` | `node tests/wasm_edge_smoke.mjs target/wasm-bindgen` | Boundary |
 | HTTP-009 | HTTPのJSONリクエスト本文が共有する1 MiBの入力境界に制限され、解析または永続化の前に`413 Payload Too Large`を返す。 | `src/lib.rs`; `src/server.rs`; `src/server/body.rs`; `src/server/tests/query_tests.rs`; `docs/ja/http-semantics.md` | `query_endpoint_rejects_an_oversized_json_body_before_parsing` | Boundary |
 | QRY-011 | `$expr`と入力用`$set`/`$addFields`が、フィールド参照、リテラル、nullフォールバック、文字列結合、ロケールに依存しないUnicodeの大文字と小文字の変換、有界な数値式について1つのスカラー式ASTと評価器を共有する。型が合わない値は表面ごとの規則に従って不一致または`null`になり、計算した文字列は1 MiBまでである。 | `src/query/expression.rs`; `src/query/expression/numeric.rs`; `src/query/aggregation_plan/set.rs`; `src/query/aggregation/input.rs`; `src/query/field_expression_tests.rs`; `src/query/aggregation_tests/input_stage_tests.rs`; `docs/ja/query-model.md`; `docs/ja/aggregation.md` | `compares_string_scalar_expression_results`; `string_scalar_expressions_support_null_fallback_and_literal_values`; `sets_string_scalar_expressions_before_matching_and_grouping`; `rejects_unsupported_or_malformed_expr` | Boundary |
 

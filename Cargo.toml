@@ -25,4 +25,6 @@ fs2 = "0.4"
 tiny_http = "0.12"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
 wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"

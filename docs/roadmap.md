@@ -63,6 +63,7 @@ The repository currently provides:
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection, index-sidecar recovery, and DBF-read recovery.
 - A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and single-operation or atomic-batch mutation contracts, a `wasm-bindgen` wrapper, and a pinned Node.js wrapper smoke test in the `wasm32-unknown-unknown` CI gate.
 - A runtime-neutral `AsyncObjectStore` primitive contract, `AsyncObjectTable` manifest protocol, and synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
+- A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
 
@@ -336,8 +337,9 @@ The remaining cloud boundary needs a consistency contract, service-specific rete
 
 The current WASM slice exposes DBF bytes, query execution, and record mutation through the shared implementation.
 The repository's edge-storage slice also defines the five object-store primitives and the manifest protocol through runtime-neutral contracts.
-Those contracts are host-adapter inputs, not methods exposed by the current WASM ABI.
+`WasmObjectTable` now exposes those contracts to a JavaScript host through the generated `wasm-bindgen` ABI.
 The CI gate loads the generated `wasm-bindgen` wrapper from Node.js and verifies the ABI version, snapshot round trip, all four mutation methods, and atomic batch rollback.
+The same gate verifies asynchronous object publication, compare-and-swap recovery, historical reads, retention, orphan cleanup, and tagged host-error mapping.
 The native `ThreadedQueryStream` adapter is available outside `wasm32` and does not change the WASM ABI.
 The WASM slice does not yet supply host-specific timeout and cancellation mapping, a remote object-store adapter, or a worker or WASI runtime adapter.
 

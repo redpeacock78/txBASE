@@ -2,8 +2,8 @@
 
 この文書では、WASMとエッジランタイムの境界を分離して記述します。
 
-リポジトリには、ホストから独立したDBFコアのスライスと、ランタイムから独立した非同期オブジェクトストレージ境界があります。
-ワーカーとホスト固有の非同期ストレージアダプターは今後の作業です。
+リポジトリには、ホスト非依存DBFコアのスライス、ランタイム非依存の非同期オブジェクトストレージ境界、非同期XBFオブジェクトテーブルのcommit用JavaScriptホストアダプターがあります。
+ワーカーとWASI固有のランタイムアダプターは今後の作業です。
 
 ## 0. 現在の実装スライス
 
@@ -25,6 +25,8 @@ WASMはパスとbodyの検証を二重に実装しません。
 - `wasm32`で同じメソッドを公開する`wasm-bindgen`の`WasmDatabase`ラッパー。
 - ネイティブ契約テスト。
 - 生成したラッパーを読み込み、ABIバージョンとスナップショットの往復を検査し、4種類の更新操作と原子的なバッチのロールバックを検査する、固定したNode.js `wasm-bindgen`スモークテスト。
+- JavaScriptのオブジェクトストレージホストを受け取り、Promiseを返す`get`、`putIfAbsent`、`compareAndSwap`、`delete`、`list`を`AsyncObjectStore`へ接続し、XBFの読み取り、commit、復旧、過去世代読み取り、保持、孤立オブジェクト削除を公開する`WasmObjectTable`アダプター。
+- compare-and-swap公開、WALクリーンアップ失敗後の復旧、過去世代読み取り、保持、ホストエラー変換を検査する固定Node.jsホストフィクスチャ。
 - CIでの`wasm32-unknown-unknown` release buildとラッパースモーク検査。
 
 コアはファイル書き込み、ネットワークアクセス、タスクのスケジューリング、トランザクションのコミットを行いません。
@@ -81,6 +83,11 @@ WASM境界は、対応する範囲で既存のDBFとXBFのコーデックを再�
 `AsyncObjectTable`は、その操作を通じてマニフェスト、世代、復旧、保持、条件付き公開の契約を再利用します。
 どちらの境界もexecutorを選択せず、ブロッキングなファイルシステム呼び出しを非ブロッキングにも変換しません。
 
+`wasm-bindgen`のJavaScriptアダプターは、Promiseを返すホストオブジェクトに同じ5つの操作を委譲します。
+`get`は`Uint8Array`または`null`を、`list`は文字列キーを、その他の操作は`undefined`を解決します。
+ホストの拒否オブジェクトは`invalid`、`conflict`、`missing`、`unavailable`の`code`を指定でき、アダプターは共有する`ObjectStoreError`の分類へ変換します。
+codeのない拒否は`unavailable`になり、タイムアウト、キャンセル、再試行、転送の方針はホストが提供します。
+
 ## 4. 対象ホスト
 
 同じコアは、将来的に次のホストの背後で実行できます。
@@ -118,6 +125,7 @@ WASM境界は、対応する範囲で既存のDBFとXBFのコーデックを再�
 - ネイティブホストのフィクスチャが1つある。
 - ネイティブ経路とWASM経路が同じクエリと更新の実装経路を使う。
 - ランタイムから独立したストレージ契約を使う非同期テーブルフィクスチャが1つある。
+- 生成した`wasm-bindgen`ラッパーを使うJavaScriptホスト接続型の非同期オブジェクトテーブルフィクスチャが1つある。
 - バイト列とJSONの境界で不正入力エラーを明示的に扱う。
 - 生成した`wasm-bindgen`ラッパーをNode.jsから検査するスモークテストがある。
 
@@ -143,8 +151,10 @@ WASM境界は、対応する範囲で既存のDBFとXBFのコーデックを再�
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
 - [wasm-bindgenガイド](https://rustwasm.github.io/docs/wasm-bindgen/)
+- [`wasm-bindgen-futures` API](https://docs.rs/wasm-bindgen-futures/latest/wasm_bindgen_futures/)
+- [`js-sys`の`Function::apply` API](https://docs.rs/js-sys/latest/js_sys/struct.Function.html)
 
 WebAssemblyとWASIの仕様は、コアモジュールとホストインターフェースの語彙を定義します。
 Component Model、Cloudflare Workers、Node.jsの資料は候補ホストの実装参照であり、txBASEの互換性を約束するものではありません。
 
-リポジトリにはWASMコアの実装、生成ラッパーのNode.jsスモーク検査、ランタイムから独立した非同期オブジェクトストレージとテーブルの契約がありますが、ワーカーまたはWASIランタイム、ホスト固有の非同期永続化、ネイティブの復旧経路をすでにサポートするとは主張しません。
+リポジトリにはWASMコアの実装、生成ラッパーのNode.jsスモーク検査、ランタイムから独立した非同期オブジェクトストレージとテーブルの契約、JavaScriptホストアダプターがありますが、ワーカーまたはWASIランタイム、ホスト固有の非同期永続化、ネイティブの復旧経路をすでにサポートするとは主張しません。

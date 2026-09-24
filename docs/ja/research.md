@@ -33,7 +33,7 @@
 | 外部セカンダリインデックスのライフサイクル | [インデックス](indexes.md) | 現在のサイドカー保守、スカラーおよび複合キーの等値、複合等値プレフィックス候補、複合等値プレフィックス範囲候補、ヒストグラムによる範囲順序、順序プレフィックス、混在方向の複合プレフィックスソート、等値プレフィックス候補選択、一様統計による等値候補の順序付け、単独インデックスと積集合のコスト選択、レコード読み取り数、レコードページ読み取り、フィルター評価数、走査、インデックスページ読み取り、ソート作業の決定的な行相当の説明フィールド、将来のより精密な物理モデル |
 | CJK、インデックス、XBF、ストレージ、並行性 | [ロードマップ](roadmap.md) | 現在の境界と将来の作業 |
 | エッジとオブジェクトストレージのコミット | [エッジストレージ](edge-storage.md) | 現在のローカル境界と将来のクラウド作業 |
-| WASMとワーカーのホスト境界 | [WASM](wasm.md) | ホスト非依存コアは現在、ホストアダプターは将来 |
+| WASMとワーカーのホスト境界 | [WASM](wasm.md) | ホスト非依存コアとJavaScriptのPromiseベース非同期XBFアダプターは現在、ワーカーまたはWASIアダプターは将来 |
 | 分散レプリケーションと権威 | [分散化の進化](distributed-evolution.md) | 将来のアーキテクチャ |
 
 ## 調査方法
@@ -64,7 +64,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 | Gitのコマンドラインインターフェース文書 | CLI設計の参照に使う公式プロジェクト文書です。 | txBASEの明示的なサブコマンドとオプションの形だけに影響します。Gitのコマンド群、リポジトリモデル、オプションの意味はコピーしません。 | 設計判断は[CLIコマンド設計](cli.md)に置き、MVCCやストレージの契約には置きません。 |
 | RFC 9110、RFC 5789、RFC 10008 | IETFの標準化過程にある仕様です。 | HTTPメソッドの安全性、PATCHの意味、QUERYの安全性と冪等性をHTTP契約へ反映します。txBASEは対応メディアタイプ、応答形状、範囲上限、ルート上限を別に定義します。 | 規範的なHTTP意味論は[HTTPの意味](http-semantics.md)に置き、txBASE固有の制約は実装契約のそばに置きます。 |
 | POSIXの`rename()`と`fsync()` | The Open Groupの仕様です。 | Unixコードはrenameによる置換と`sync_all`を使います。Windowsには別の置換経路があるため、POSIXのディレクトリ永続性保証と同一とは記述しません。 | ファイルシステムの永続性の前提は永続化とXBFの文書に置き、Unix限定であることを明記します。 |
-| WebAssembly、WASI、Component Model | 標準仕様または標準化中の仕様です。ホスト資料は実装参照です。 | リポジトリにはバージョン付きホスト非依存DBFコアと、生成した`wasm-bindgen` Node.jsラッパーを読み込み、ABI、スナップショットの往復、4種類の更新操作、原子的なバッチのロールバックを実行するCIスモーク検査があります。ワーカーまたはWASIのランタイムアダプターと非同期ストレージは今後の作業です。 | コアABIとホスト境界の判断は[WASM](wasm.md)に置きます。ホスト固有の資料は、そのホストのアダプターとスモークテストを追加した時点で追記します。 |
+| WebAssembly、WASI、Component Model | 標準仕様または標準化中の仕様です。ホスト資料は実装参照です。 | リポジトリにはバージョン付きホスト非依存DBFコア、生成した`wasm-bindgen` Node.jsラッパー、Promiseベースの非同期XBFオブジェクトテーブルアダプターがあります。CIはABI、スナップショットの往復、4種類の更新操作、原子的なバッチのロールバック、オブジェクト公開、復旧、保持、ホストエラー変換を検査します。ワーカーまたはWASIのランタイムアダプターとホスト固有の方針は今後の作業です。 | コアABIとホスト境界の判断は[WASM](wasm.md)に置きます。ワーカーまたはWASIアダプターとスモークテストを追加した時点で、ホスト固有の一次資料を追記します。 |
 | Raft論文とRaftプロジェクト資料 | 論文とプロジェクトの一次資料です。 | 分散化の進行で候補プロトコルを検討するために使いますが、txBASEがRaftを採用したことやレプリケーションを実装済みであることは意味しません。 | 候補の権威プロトコルは[分散化の進化](distributed-evolution.md)に置き、採用後のログと復旧契約を別途定義します。 |
 | XBF v1形式草案 | このリポジトリが所有する仕様草案です。外部向けの互換性標準ではありません。 | 現在のコーデック、エッジ、世代検査付きWALのテストは草案を実装契約として検査します。外部リーダーでの原子的な公開が証明されるまでは草案のままです。 | バイト形式と受け入れ条件は[XBF v1草案](xbf.md)に置き、外部標準のようには扱いません。 |
 | `encoding_rs` APIと固定した`dbf`互換性表 | 依存ライブラリのAPI文書と第三者実装の参照であり、エンコーディング標準ではありません。 | Rustのコーデック動作とlegacy aliasの特定に使います。互換性の根拠は第三者の表ではなく、固定したバイトフィクスチャです。 | [DBF互換性](dbf-compatibility.md)の実装補助資料として残し、規範的なフォーマット資料にはしません。 |
@@ -183,6 +183,8 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 
 - [WebAssemblyコア仕様](https://webassembly.github.io/spec/core/)
 - [wasm-bindgenガイド](https://rustwasm.github.io/docs/wasm-bindgen/)
+- [`wasm-bindgen-futures` API](https://docs.rs/wasm-bindgen-futures/latest/wasm_bindgen_futures/)
+- [`js-sys`の`Function::apply` API](https://docs.rs/js-sys/latest/js_sys/struct.Function.html)
 - [WASI](https://wasi.dev/)
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)

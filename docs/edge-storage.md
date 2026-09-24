@@ -24,6 +24,11 @@ The filesystem backend is a local durable adapter and does not claim cloud-provi
 `with_limits` applies the configured XBF limits to both snapshot encoding before publication and snapshot decoding during reads.
 The synchronous adapter does not make filesystem I/O non-blocking, but it exercises the same high-level protocol without selecting an executor.
 
+On `wasm32`, `WasmObjectTable` wraps the same asynchronous table protocol for a JavaScript host object.
+The host supplies Promise-returning `get`, `putIfAbsent`, `compareAndSwap`, `delete`, and `list` methods.
+The adapter exposes XBF bytes, manifest inspection, commit, historical reads, recovery, retention, and orphan cleanup through the generated `wasm-bindgen` wrapper.
+It maps tagged host rejection codes to the shared object-store error categories, while timeout, cancellation, retry, and transport policy remain host responsibilities.
+
 A remote object-store adapter can implement `AsyncObjectStore` directly without changing the XBF snapshot or generation rules.
 
 ## 2. Manifest schema
@@ -131,11 +136,11 @@ The local and asynchronous object-table tests also verify that an encode-limit f
 
 The remote adapter may implement `ObjectStore` for a blocking native client or `AsyncObjectStore` for a host-managed client.
 The high-level asynchronous manifest protocol covers commit, recovery, retention, and conditional publication.
-Timeout and cancellation mapping remain host responsibilities until a worker or WASI adapter defines them.
+The JavaScript WASM adapter supplies one host-managed fixture for this protocol; timeout and cancellation mapping remain host responsibilities until a worker or WASI adapter defines them.
 
 ## 7. Explicit non-goals
 
-This slice does not promise an R2 adapter, a specific cloud vendor, host-specific timeout and cancellation mapping, multi-region consensus, automatic background garbage collection, immutable page splitting, or WASM hosting.
+This slice does not promise an R2 adapter, a specific cloud vendor, worker or WASI timeout and cancellation mapping, multi-region consensus, automatic background garbage collection, immutable page splitting, or a cloud-backed WASM host.
 
 Those features can reuse the manifest and generation contract after their host-specific failure behavior has a deterministic test.
 
