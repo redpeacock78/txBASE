@@ -1,4 +1,5 @@
 use super::{XbfError, XbfLimits, XbfTable, decode_with_limits, encode_with_limits};
+use crate::dbf::TableLock;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -12,6 +13,7 @@ pub fn read_path_with_limits(
     limits: &XbfLimits,
 ) -> Result<XbfTable, XbfError> {
     let path = path.as_ref();
+    let _lock = TableLock::acquire(path)?;
     super::wal::recover_path_with_limits(path, limits)?;
     read_path_without_recovery_with_limits(path, limits)
 }
@@ -34,7 +36,10 @@ pub fn write_path_with_limits(
     limits: &XbfLimits,
 ) -> Result<(), XbfError> {
     let bytes = encode_with_limits(table, limits)?;
-    write_encoded_path(path.as_ref(), &bytes)
+    let path = path.as_ref();
+    let _lock = TableLock::acquire(path)?;
+    super::wal::recover_path_with_limits(path, limits)?;
+    write_encoded_path(path, &bytes)
 }
 
 pub(super) fn write_encoded_path(path: &Path, bytes: &[u8]) -> Result<(), XbfError> {

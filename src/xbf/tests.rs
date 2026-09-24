@@ -1,6 +1,6 @@
 use super::{
     XbfField, XbfLimits, XbfRecord, XbfTable, XbfType, XbfValue, decode, decode_with_limits,
-    encode, encode_with_limits, read_path, recover_path, write_path,
+    encode, encode_with_limits, read_path, recover_path, save_with_wal, write_path,
 };
 use crate::transaction::{FileWal, Wal};
 use std::fs;
@@ -334,6 +334,27 @@ fn writes_and_reads_a_durable_snapshot_path() {
 }
 
 #[test]
+fn saves_a_newer_snapshot_through_the_xbf_wal_boundary() {
+    let path = snapshot_test_path("save-with-wal");
+    let wal_path = path.with_extension("xwl");
+    let lock_path = path.with_extension("txbase.lock");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&lock_path);
+    let base = fixture();
+    let mut target = fixture();
+    target.generation = base.generation + 1;
+    write_path(&path, &base).unwrap();
+
+    save_with_wal(&path, &target).unwrap();
+
+    assert_eq!(read_path(&path).unwrap(), target);
+    assert!(!wal_path.exists());
+    fs::remove_file(&path).unwrap();
+    fs::remove_file(&lock_path).unwrap();
+}
+
+#[test]
 fn recovers_a_generation_checked_full_snapshot_wal() {
     let path = snapshot_test_path("recovery");
     let wal_path = path.with_extension("xwl");
@@ -390,6 +411,78 @@ fn reading_a_snapshot_recovers_a_pending_wal() {
 }
 
 #[test]
+fn direct_snapshot_write_recovers_a_pending_wal_before_replacing_it() {
+    let path = snapshot_test_path("direct-write-recovery");
+    let wal_path = path.with_extension("xwl");
+    let lock_path = path.with_extension("txbase.lock");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&lock_path);
+    let base = fixture();
+    let mut pending = fixture();
+    pending.generation = base.generation + 1;
+    let mut replacement = fixture();
+    replacement.generation = base.generation + 2;
+    write_path(&path, &base).unwrap();
+
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(
+        &super::wal::encode_record(
+            base.generation,
+            pending.generation,
+            &encode(&pending).unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    write_path(&path, &replacement).unwrap();
+
+    assert_eq!(read_path(&path).unwrap(), replacement);
+    assert!(!wal_path.exists());
+    fs::remove_file(&path).unwrap();
+    fs::remove_file(&lock_path).unwrap();
+}
+
+#[test]
+fn direct_snapshot_write_preserves_a_generation_conflict() {
+    let path = snapshot_test_path("direct-write-conflict");
+    let wal_path = path.with_extension("xwl");
+    let lock_path = path.with_extension("txbase.lock");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&lock_path);
+    let base = fixture();
+    let mut pending = fixture();
+    pending.generation = base.generation + 1;
+    let mut replacement = fixture();
+    replacement.generation = base.generation + 2;
+    write_path(&path, &base).unwrap();
+
+    let mut wal = FileWal::open(&wal_path).unwrap();
+    wal.append(
+        &super::wal::encode_record(
+            base.generation - 1,
+            pending.generation,
+            &encode(&pending).unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    wal.sync().unwrap();
+    drop(wal);
+
+    assert!(write_path(&path, &replacement).is_err());
+    assert_eq!(read_path_without_recovery(&path), base);
+    assert!(wal_path.exists());
+    fs::remove_file(&path).unwrap();
+    fs::remove_file(&wal_path).unwrap();
+    fs::remove_file(&lock_path).unwrap();
+}
+
+#[test]
 fn rejects_a_generation_mismatched_xbf_wal() {
     let path = snapshot_test_path("mismatch");
     let wal_path = path.with_extension("xwl");
@@ -423,6 +516,10 @@ fn rejects_a_generation_mismatched_xbf_wal() {
 fn rejects_xbf_wal_records_over_the_file_wal_limit() {
     assert!(super::wal::validate_record_size(crate::transaction::MAX_WAL_RECORD_SIZE + 1).is_err());
     assert!(super::wal::validate_record_size(crate::transaction::MAX_WAL_RECORD_SIZE).is_ok());
+}
+
+fn read_path_without_recovery(path: &std::path::Path) -> XbfTable {
+    super::persistence::read_path_without_recovery_with_limits(path, &XbfLimits::default()).unwrap()
 }
 
 fn snapshot_test_path(name: &str) -> PathBuf {

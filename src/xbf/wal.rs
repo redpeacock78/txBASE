@@ -1,6 +1,7 @@
 use super::checksum::crc32c;
 use super::persistence::{read_path_without_recovery_with_limits, write_encoded_path};
 use super::{XbfError, XbfLimits, XbfTable, decode_with_limits, encode};
+use crate::dbf::TableLock;
 use crate::transaction::{FileWal, MAX_WAL_RECORD_SIZE, Wal};
 use std::fs;
 use std::path::Path;
@@ -11,7 +12,8 @@ const RECORD_HEADER_SIZE: usize = 40;
 
 pub fn save_with_wal(path: impl AsRef<Path>, table: &XbfTable) -> Result<(), XbfError> {
     let path = path.as_ref();
-    recover_path(path)?;
+    let _lock = TableLock::acquire(path)?;
+    recover_path_with_limits(path, &XbfLimits::default())?;
     let base_generation = current_generation(path, &XbfLimits::default())?;
     if table.generation <= base_generation {
         return Err(XbfError::Invalid(format!(
@@ -34,6 +36,8 @@ pub fn save_with_wal(path: impl AsRef<Path>, table: &XbfTable) -> Result<(), Xbf
 }
 
 pub fn recover_path(path: impl AsRef<Path>) -> Result<bool, XbfError> {
+    let path = path.as_ref();
+    let _lock = TableLock::acquire(path)?;
     recover_path_with_limits(path, &XbfLimits::default())
 }
 

@@ -17,6 +17,11 @@ The full-snapshot `.xwl` path records base and target generations and rejects a
 generation mismatch during recovery.
 `read_path` and `read_path_with_limits` recover a pending `.xwl` before decoding,
 so normal snapshot loads and CLI commands do not observe an older generation.
+Path-based reads, direct writes, and WAL saves share the exclusive `*.txbase.lock`
+for the XBF path.
+`write_path` also recovers a pending `.xwl` before replacing the snapshot, while
+`save_with_wal` holds the same lock across recovery, WAL publication, snapshot
+replacement, and WAL cleanup.
 The bounded `to_dbf` helper exports representable tables to an in-memory DBF
 table; it does not claim full DBF schema or type compatibility.
 `to_dbf_with_schema` additionally returns a `txbase-schema` JSON value that
@@ -70,6 +75,7 @@ For a table named `users`, the initial file set is:
 ```text
 users.xbf       durable snapshot
 users.xwl       optional transaction log
+users.txbase.lock  cooperating txBASE path lock
 users.xidx      optional external index sidecar
 ```
 
@@ -239,6 +245,9 @@ The optional `.xwl` log may contain the existing txBASE operation IR and snapsho
 
 The current library provides `save_with_wal` and `recover_path` for a full-snapshot record.
 Recovery validates the embedded snapshot before applying it, accepts an already-installed target generation idempotently, and rejects a different current generation.
+All path-based XBF reads and writes use the same exclusive `*.txbase.lock`.
+Direct `write_path` calls recover a pending `.xwl` before replacement, and
+`save_with_wal` keeps the lock from recovery through WAL cleanup.
 The WAL record, including its XBF-specific header, must fit the transaction layer's 16 MiB record limit.
 `write_path` can still persist a larger snapshot within the ordinary XBF file limit, but `save_with_wal` rejects an oversized WAL record before creating the `.xwl` file.
 
