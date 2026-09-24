@@ -2,7 +2,7 @@ use indexmap::IndexMap;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
-use super::super::expression::NumericExpression;
+use super::super::expression::{NumericExpression, ScalarExpression};
 
 #[derive(Debug, Clone)]
 pub struct GroupSpec {
@@ -48,13 +48,7 @@ pub struct UnwindSpec {
     pub preserve_null_and_empty: bool,
 }
 
-#[derive(Debug, Clone)]
-pub enum SetExpression {
-    Field(String),
-    Literal(Value),
-    Numeric(NumericExpression),
-    IfNull(Box<SetExpression>, Box<SetExpression>),
-}
+pub type SetExpression = ScalarExpression;
 
 #[derive(Debug, Clone)]
 pub enum InputStage {

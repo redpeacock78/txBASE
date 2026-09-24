@@ -1,8 +1,7 @@
 use super::super::{QueryError, aggregation_plan, matches_filter};
 use super::MAX_UNWOUND_RECORDS;
 use crate::dbf::DbfRecord;
-use crate::query::expression::evaluate_numeric;
-use crate::query_path::field_value;
+use crate::query::expression::evaluate_scalar;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
@@ -139,35 +138,11 @@ fn set_record(
 ) -> Result<DbfRecord, QueryError> {
     let source = record.values.clone();
     for (field, expression) in expressions {
-        let value =
-            evaluate_set_expression(&source, expression, &format!("aggregate.$set.{field}"))?;
+        let value = evaluate_scalar(&source, expression, &format!("aggregate.$set.{field}"))?
+            .unwrap_or(Value::Null);
         record.values.insert(field.clone(), value);
     }
     Ok(record)
-}
-
-fn evaluate_set_expression(
-    values: &Map<String, Value>,
-    expression: &aggregation_plan::SetExpression,
-    path: &str,
-) -> Result<Value, QueryError> {
-    match expression {
-        aggregation_plan::SetExpression::Field(field) => {
-            Ok(field_value(values, field).unwrap_or(Value::Null))
-        }
-        aggregation_plan::SetExpression::Literal(value) => Ok(value.clone()),
-        aggregation_plan::SetExpression::Numeric(expression) => {
-            Ok(evaluate_numeric(values, expression, path)?.unwrap_or(Value::Null))
-        }
-        aggregation_plan::SetExpression::IfNull(first, fallback) => {
-            let value = evaluate_set_expression(values, first, &format!("{path}.$ifNull[0]"))?;
-            if value.is_null() {
-                evaluate_set_expression(values, fallback, &format!("{path}.$ifNull[1]"))
-            } else {
-                Ok(value)
-            }
-        }
-    }
 }
 
 fn skip_records<T>(records: &mut Vec<T>, skip: u64) {

@@ -206,6 +206,50 @@ fn add_fields_alias_sets_input_fields() {
 }
 
 #[test]
+fn sets_string_scalar_expressions_before_matching_and_grouping() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"FIRST": "Alice", "LAST": "Smith"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"FIRST": "Bob"}).as_object().unwrap().clone(),
+    };
+    let records = [&first, &second];
+    let stages = vec![
+        json!({
+            "$set": {
+                "DISPLAY": {"$concat": [
+                    {"$toUpper": "$FIRST"},
+                    " ",
+                    {"$ifNull": ["$LAST", {"$literal": "UNKNOWN"}]}
+                ]}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+        json!({"$group": {
+            "_id": null,
+            "display": {"$push": "$DISPLAY"}
+        }})
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({"_id": null, "display": ["ALICE Smith", "BOB UNKNOWN"]})]
+    );
+}
+
+#[test]
 fn projects_input_fields_before_distinct() {
     let first = DbfRecord {
         number: 1,

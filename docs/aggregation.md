@@ -43,11 +43,15 @@ Input `$skip` and `$limit` discard or truncate records before the terminal stage
 
 `$set` and `$addFields` are aliases for one bounded input stage that preserves existing fields and computes named top-level fields before later stages.
 
-Each computed field accepts a scalar literal, a field reference including a dotted path, `$literal`, `$ifNull` with exactly two operands, or the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions.
+Each computed field accepts a scalar literal, a field reference including a dotted path, `$literal`, `$ifNull` with exactly two operands, `$concat` with at least two string expressions, `$toLower`, `$toUpper`, or the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions.
 
 All expressions in one stage read the record as it entered that stage, so one computed field cannot depend on another field computed in the same stage.
 
-Missing field references and missing or nonnumeric numeric results become `null`; `$ifNull` treats missing and explicit `null` as null and evaluates its fallback in that case.
+Missing field references, missing or nonnumeric numeric results, and missing, null, or non-string string results become `null`; `$ifNull` treats missing and explicit `null` as null and evaluates its fallback in that case.
+
+`$concat` preserves operand order and returns `null` when any operand is missing, `null`, or not a string. `$toLower` and `$toUpper` use locale-independent Unicode case conversion.
+
+The shared scalar-expression evaluator is used by `$set`/`$addFields` and `$expr`. Computed string results are capped at 1 MiB.
 
 An existing top-level field is overwritten, while dotted output field names and array literals outside `$literal` remain unsupported.
 
@@ -246,7 +250,7 @@ Additional grouping, bucket, bucket-auto, sort-by-count, count, or distinct stag
 
 After `$group`, `$bucket`, `$bucketAuto`, or `$sortByCount`, stages after the group-output `$limit` remain unsupported.
 
-`$expr`, `$sum`, and `$avg` operands are supported only in the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` forms described in the query model.
+`$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp` operands remain numeric-only. `$expr` also accepts the shared scalar `$literal`, `$ifNull`, `$concat`, `$toLower`, and `$toUpper` forms described in the query model.
 
 Broader expression evaluation remains unsupported.
 
@@ -280,4 +284,7 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 - [MongoDB `$addFields` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)
 - [MongoDB `$ifNull` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ifnull/)
 - [MongoDB `$literal` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/literal/)
+- [MongoDB `$concat` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/concat/)
+- [MongoDB `$toLower` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/tolower/)
+- [MongoDB `$toUpper` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/toupper/)
 - [MongoDB `$unwind` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

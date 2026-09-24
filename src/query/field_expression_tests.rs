@@ -81,6 +81,71 @@ fn compares_absolute_expression_results() {
 }
 
 #[test]
+fn compares_string_scalar_expression_results() {
+    let values = json!({
+        "FIRST": "Alice",
+        "LAST": "Smith",
+        "UPPER_DISPLAY": "ALICE SMITH",
+        "LOWER_DISPLAY": "alice smith"
+    });
+    let filter = json!({
+        "$expr": {"$and": [
+            {"$eq": [
+                {"$concat": [
+                    {"$toUpper": "$FIRST"},
+                    " ",
+                    {"$toUpper": "$LAST"}
+                ]},
+                "$UPPER_DISPLAY"
+            ]},
+            {"$eq": [
+                {"$concat": [
+                    {"$toLower": "$FIRST"},
+                    " ",
+                    {"$toLower": "$LAST"}
+                ]},
+                "$LOWER_DISPLAY"
+            ]}
+        ]}
+    });
+
+    assert!(matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap());
+}
+
+#[test]
+fn string_scalar_expressions_support_null_fallback_and_literal_values() {
+    let values = json!({"DISPLAY": "unknown!"});
+    let filter = json!({
+        "$expr": {"$eq": [
+            {"$concat": [
+                {"$ifNull": ["$MISSING", "unknown"]},
+                {"$literal": "!"}
+            ]},
+            "$DISPLAY"
+        ]}
+    });
+
+    assert!(matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap());
+}
+
+#[test]
+fn rejects_string_scalar_results_over_the_shared_expression_limit() {
+    let values = json!({
+        "VALUE": "x".repeat(crate::MAX_JSON_INPUT_BYTES)
+    });
+    let filter = json!({
+        "$expr": {"$eq": [
+            {"$concat": ["$VALUE", "x"]},
+            "never"
+        ]}
+    });
+
+    let error =
+        matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap_err();
+    assert!(error.to_string().contains("result exceeds"));
+}
+
+#[test]
 fn compares_multiplication_expression_results() {
     let values = json!({
         "PRICE": 12,
@@ -206,4 +271,7 @@ fn rejects_unsupported_or_malformed_expr() {
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$mod":["$A",true]},1]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$abs":true},1]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$abs":["$A"]},1]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$concat":["$A"]},"x"]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$toLower":["$A","$B"]},"x"]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$toUpper":true},"x"]}}}"#).is_err());
 }

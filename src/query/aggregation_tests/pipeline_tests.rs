@@ -209,7 +209,7 @@ fn rejects_unsupported_aggregation_combinations() {
         br#"{"aggregate":[{"$group":{"_id":null}},{"$unwind":"$TAGS"}]}"#.as_slice(),
         br#"{"aggregate":[{"$set":{}},{"$count":"total"}]}"#.as_slice(),
         br#"{"aggregate":[{"$set":{"TOTAL.VALUE":1}},{"$count":"total"}]}"#.as_slice(),
-        br#"{"aggregate":[{"$set":{"TOTAL":{"$concat":["$A","$B"]}}},{"$count":"total"}]}"#.as_slice(),
+        br#"{"aggregate":[{"$set":{"TOTAL":{"$unknown":["$A","$B"]}}},{"$count":"total"}]}"#.as_slice(),
         br#"{"aggregate":[{"$set":{"TOTAL":{"$ifNull":["$A"]}}},{"$count":"total"}]}"#.as_slice(),
         br#"{"aggregate":[{"$set":{"TOTAL":[]}}, {"$count":"total"}]}"#.as_slice(),
         br#"{"aggregate":[{"$set":{"TOTAL":1}},{"$addFields":{"OTHER":2}},{"$count":"total"}]}"#.as_slice(),

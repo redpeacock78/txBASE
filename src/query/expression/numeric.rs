@@ -35,10 +35,6 @@ impl NumericOperator {
     }
 }
 
-pub fn validate_operand(operand: &Value, path: &str) -> Result<(), QueryError> {
-    parse_numeric_operand(operand, path).map(|_| ())
-}
-
 pub fn parse_numeric_operand(operand: &Value, path: &str) -> Result<NumericExpression, QueryError> {
     if let Some(reference) = operand.as_str().and_then(|value| value.strip_prefix('$')) {
         if reference.is_empty() {
@@ -101,22 +97,6 @@ pub fn parse_numeric_operand(operand: &Value, path: &str) -> Result<NumericExpre
             &format!("{path}.{}[1]", operator.as_str()),
         )?),
     })
-}
-
-pub fn resolve_operand(
-    values: &Map<String, Value>,
-    operand: &Value,
-) -> Result<Option<Value>, QueryError> {
-    let Some(reference) = operand.as_str().and_then(|value| value.strip_prefix('$')) else {
-        if operand.is_object() {
-            let expression = parse_numeric_operand(operand, "filter.$expr")?;
-            return evaluate_numeric(values, &expression, "filter.$expr");
-        }
-        return Ok(Some(operand.clone()));
-    };
-    Ok((!reference.is_empty())
-        .then(|| field_value(values, reference))
-        .flatten())
 }
 
 pub fn evaluate_numeric(

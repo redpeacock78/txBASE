@@ -43,13 +43,17 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 `$set`と`$addFields`は同じ意味を持つ別名であり、既存フィールドを保ったまま、後続ステージの前に名前付きトップレベルフィールドを計算する有界な入力ステージです。
 
-計算フィールドは、スカラーリテラル、ドット区切りを含むフィールド参照、`$literal`、オペランドをちょうど2つ持つ`$ifNull`、または有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`式を受け付けます。
+計算フィールドは、スカラーリテラル、ドット区切りを含むフィールド参照、`$literal`、オペランドをちょうど2つ持つ`$ifNull`、2つ以上の文字列式を持つ`$concat`、`$toLower`、`$toUpper`、または有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`式を受け付けます。
 
 同じステージのすべての式はステージ入力時点のレコードを参照するため、同じステージで計算したフィールドを別の計算フィールドから参照できません。
 
-欠損フィールド参照と、欠損または数値以外になった数値式の結果は`null`になります。
+欠損フィールド参照、欠損または数値以外になった数値式の結果、欠損、null、または文字列以外になった文字列式の結果は`null`になります。
 
 `$ifNull`は欠損と明示的な`null`をnullとして扱い、その場合にフォールバックを評価します。
+
+`$concat`はオペランド順を保ち、いずれかのオペランドが欠損、`null`、または文字列以外の場合は`null`を返します。`$toLower`と`$toUpper`はロケールに依存しないUnicodeの大文字と小文字の変換を使います。
+
+共有スカラー式評価器を`$set`/`$addFields`と`$expr`で使います。計算した文字列の結果は1 MiBまでです。
 
 既存のトップレベルフィールドは上書きしますが、ドット区切りの出力フィールド名と`$literal`の外側にある配列リテラルは未サポートです。
 
@@ -258,7 +262,7 @@ distinct出力は10,000値までです。
 
 `$group`、`$bucket`、`$bucketAuto`、または`$sortByCount`の後では、グループ出力用の`$limit`より後のステージは未サポートです。
 
-`$expr`、`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`のオペランドは、クエリモデルで説明する有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`の形式だけをサポートします。
+`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`のオペランドは数値だけをサポートします。`$expr`は、クエリモデルで説明する共有スカラー`$literal`、`$ifNull`、`$concat`、`$toLower`、`$toUpper`形式も受け付けます。
 
 より広い式評価は未サポートです。
 
@@ -294,4 +298,7 @@ txBASEはMongoDBの完全なパイプライン互換性を主張せず、その�
 - [MongoDB の`$addFields`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)
 - [MongoDB の`$ifNull`式演算子](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ifnull/)
 - [MongoDB の`$literal`式演算子](https://www.mongodb.com/docs/manual/reference/operator/aggregation/literal/)
+- [MongoDB の`$concat`式演算子](https://www.mongodb.com/docs/manual/reference/operator/aggregation/concat/)
+- [MongoDB の`$toLower`式演算子](https://www.mongodb.com/docs/manual/reference/operator/aggregation/tolower/)
+- [MongoDB の`$toUpper`式演算子](https://www.mongodb.com/docs/manual/reference/operator/aggregation/toupper/)
 - [MongoDB の`$unwind`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

@@ -186,7 +186,7 @@ The complete boundary is documented in [asynchronous query streaming](async-stre
 | Membership | `$in`, `$nin` | Match a value against a list of candidate values |
 | Array | `$all`, `$elemMatch`, `$size` | Match array contents, one array element's conditions, or exact array length |
 | Logical | `$and`, `$or`, `$not` | Compose or invert predicate documents |
-| Expression | `$expr` | Compare scalar literals, field references, or bounded numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` expressions from the same record |
+| Expression | `$expr` | Compare scalar literals, field references, `$literal`, two-operand `$ifNull`, bounded string `$concat`/`$toLower`/`$toUpper`, or bounded numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` expressions from the same record |
 
 An empty `$and` matches every record.
 
@@ -212,6 +212,18 @@ These choices are tested in `src/query/tests.rs` and `src/query/malformed_tests.
 
 `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` accept exactly two numeric literals, field references, or nested numeric expressions.
 
+`$literal` returns its operand without treating a string beginning with `$` as a field reference.
+
+`$ifNull` accepts exactly two scalar expressions and evaluates the second when the first is missing or explicitly `null`.
+
+`$concat` accepts at least two scalar expressions. Every resolved operand must be a string; a missing, `null`, or non-string operand makes the comparison not match.
+
+`$toLower` and `$toUpper` accept one scalar expression that resolves to a string and apply locale-independent Unicode case conversion.
+
+The shared scalar-expression evaluator is used by `$expr` and aggregation `$set`/`$addFields`, so both surfaces have the same field, literal, null-fallback, string, and numeric-expression semantics.
+
+Computed string results are limited to 1 MiB. Exceeding that limit is a query error rather than an unbounded allocation.
+
 Integer results remain JSON integers when they fit.
 
 Mixed or fractional results must be finite JSON numbers.
@@ -222,7 +234,7 @@ Division by zero is rejected.
 
 Modulo by zero is rejected.
 
-Missing or nonnumeric field operands make the comparison not match.
+Missing, `null`, non-string, or nonnumeric field operands make the comparison not match when the selected expression requires another type.
 
 Integer overflow and non-finite results are rejected.
 
