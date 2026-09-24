@@ -71,8 +71,8 @@ assert.equal(await table.recover(), 1);
 const committed = JSON.parse(await table.commit_xbf(xbf));
 assert.deepEqual(committed, { status: "already_committed", generation: 0 });
 assert.deepEqual([...await table.read_xbf()], [...xbf]);
-assert.deepEqual([...await table.read_xbf_at(0)], [...xbf]);
-assert.equal(await table.read_xbf_at(1), null);
+assert.deepEqual([...await table.read_xbf_at(0n)], [...xbf]);
+assert.equal(await table.read_xbf_at(1n), null);
 
 host.objects.set("users/snapshots/999.xbf", new Uint8Array([0xff]));
 assert.deepEqual(JSON.parse(await table.cleanup_orphans()), ["users/snapshots/999.xbf"]);
