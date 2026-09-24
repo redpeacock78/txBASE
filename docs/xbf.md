@@ -344,9 +344,9 @@ This prevents XBF from becoming a second unrelated database implementation.
 The draft codec, snapshot writer, and generation-checked full-snapshot WAL currently have a deterministic fixture
 covering every non-reserved v1 type, corruption checks, constraint checks,
 explicit size limits, a malformed-header corpus, deterministic malformed
-section, directory, UTF-8, and payload cases, and a sync-and-reload path
-round trip. Before XBF is advertised as a complete supported format, the
-repository still needs:
+section, schema metadata, directory metadata, UTF-8, NULL, fixed-width, and
+JSON payload cases, and a sync-and-reload path round trip. Before XBF is
+advertised as a complete supported format, the repository still needs:
 
 - A strict externally visible atomic snapshot contract for legacy readers. The
   current `TXSE` protocol and txBASE path-reader lock boundary provide
