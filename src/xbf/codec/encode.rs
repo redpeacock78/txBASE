@@ -32,14 +32,28 @@ pub fn encode_with_limits(table: &XbfTable, limits: &XbfLimits) -> Result<Vec<u8
         .len()
         .checked_mul(DIRECTORY_ENTRY_SIZE)
         .ok_or_else(|| XbfError::Invalid("record directory length overflows".into()))?;
-    let mut directory = Vec::with_capacity(directory_length);
-    let mut data = Vec::new();
+    check_section_size(directory_length, limits, "record directory")?;
     let schema_offset = HEADER_SIZE;
     let directory_offset = checked_add(schema_offset, schema.len(), "schema section")?;
     let data_offset = checked_add(directory_offset, directory_length, "record directory")?;
+    if data_offset > limits.max_file_size {
+        return Err(XbfError::Invalid(
+            "encoded XBF file exceeds the configured limit".into(),
+        ));
+    }
+    let mut directory = Vec::with_capacity(directory_length);
+    let mut data = Vec::new();
 
     for record in &table.records {
         let payload = encode_record(&table.fields, record, limits)?;
+        let next_data_length = checked_add(data.len(), payload.len(), "record data")?;
+        check_section_size(next_data_length, limits, "record data")?;
+        let next_file_size = checked_add(data_offset, next_data_length, "XBF file")?;
+        if next_file_size > limits.max_file_size {
+            return Err(XbfError::Invalid(
+                "encoded XBF file exceeds the configured limit".into(),
+            ));
+        }
         let offset = checked_add(data_offset, data.len(), "record data")?;
         push_u64(&mut directory, u64_from_usize(offset, "record offset")?);
         push_u64(

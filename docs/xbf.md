@@ -237,6 +237,9 @@ An invalid snapshot must not be replaced by a best-effort rewrite.
 
 The codec exposes explicit limits for file, section, record, field-name, and value sizes.
 
+The encoder checks the fixed header, schema, and directory footprint before building record data, then checks each record against both section and file limits before extending its buffers.
+The decoder applies the corresponding section, record, value, field, record-count, and file checks before allocating decoded collections.
+
 ## 8. Generations and transaction log
 
 `generation` identifies the committed snapshot generation.

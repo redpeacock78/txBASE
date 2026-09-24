@@ -115,6 +115,10 @@ fn fixture() -> XbfTable {
     }
 }
 
+fn get_u64(bytes: &[u8], offset: usize) -> u64 {
+    u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap())
+}
+
 #[test]
 fn round_trips_a_fixture_with_every_v1_value_type() {
     let table = fixture();
@@ -237,6 +241,34 @@ fn enforces_explicit_size_limits_for_encoding_and_decoding() {
             "encoder accepted a table over an explicit limit"
         );
     }
+}
+
+#[test]
+fn rejects_file_and_section_limits_while_building_record_data() {
+    let mut table = fixture();
+    table.records = vec![table.records[0].clone(); 64];
+    let encoded = encode(&table).unwrap();
+    let directory_offset = get_u64(&encoded, 36) as usize;
+    let data_offset = get_u64(&encoded, 56) as usize;
+    let first_record_length = get_u64(&encoded, directory_offset + 8) as usize;
+    let data_length = get_u64(&encoded, 64) as usize;
+    let schema_length = get_u64(&encoded, 24) as usize;
+    let directory_length = get_u64(&encoded, 44) as usize;
+
+    let file_limited = XbfLimits {
+        max_file_size: data_offset + first_record_length,
+        ..XbfLimits::default()
+    };
+    let error = encode_with_limits(&table, &file_limited).unwrap_err();
+    assert!(error.to_string().contains("encoded XBF file exceeds"));
+
+    assert!(data_length > schema_length.max(directory_length));
+    let section_limited = XbfLimits {
+        max_section_size: data_length - 1,
+        ..XbfLimits::default()
+    };
+    let error = encode_with_limits(&table, &section_limited).unwrap_err();
+    assert!(error.to_string().contains("record data section exceeds"));
 }
 
 #[test]
