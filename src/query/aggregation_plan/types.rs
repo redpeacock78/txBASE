@@ -7,6 +7,7 @@ use super::super::expression::{NumericExpression, ScalarExpression};
 #[derive(Debug, Clone)]
 pub struct GroupSpec {
     pub key_field: Option<String>,
+    pub key_expression: Option<super::super::expression::ScalarExpression>,
     pub accumulators: Vec<AccumulatorSpec>,
 }
 
@@ -17,7 +18,7 @@ pub struct AggregationPlan {
     pub group: Option<GroupSpec>,
     pub bucket: Option<BucketSpec>,
     pub bucket_auto: Option<BucketAutoSpec>,
-    pub sort_by_count: Option<String>,
+    pub sort_by_count: Option<super::super::expression::ScalarExpression>,
     pub count: Option<String>,
     pub distinct: Option<String>,
     pub projection: Option<BTreeMap<String, i8>>,

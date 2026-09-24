@@ -123,7 +123,7 @@ When `output` is present, it uses the same bounded accumulator forms as `$group`
 
 The stage materializes at most 10,000 numeric input values, does not spill to disk, and rejects the MongoDB `granularity` option until a txBASE-owned boundary-series contract exists.
 
-`$sortByCount` groups records by a field reference and emits the grouping value as `_id` with a `count`, ordered by `count` descending:
+`$sortByCount` groups records by one bounded scalar expression and emits the grouping value as `_id` with a `count`, ordered by `count` descending:
 
 ```json
 {
@@ -131,7 +131,22 @@ The stage materializes at most 10,000 numeric input values, does not spill to di
 }
 ```
 
-The txBASE subset accepts one field reference only; arbitrary expressions and document literals remain unsupported.
+The expression can be a field reference, scalar literal, `$literal`, `$ifNull`, `$concat`, `$toLower`, `$toUpper`, or the bounded numeric expression subset used by `$expr` and `$set`.
+
+It is evaluated for each input record.
+Missing or null expression results form the `null` group.
+
+For example, this groups case variants together:
+
+```json
+{
+  "$sortByCount": {"$toUpper": "$COUNTRY"}
+}
+```
+
+Unsupported expression operators remain rejected.
+
+`$literal` follows the shared expression semantics and can carry a JSON value without interpreting it as an operator.
 
 Missing and explicit `null` field values share one group.
 
@@ -256,7 +271,7 @@ Broader expression evaluation remains unsupported.
 
 MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as `$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).
 
-MongoDB documents `$sortByCount` as a grouping stage that is equivalent to `$group` followed by a descending `$sort` on `count`; txBASE keeps that behavior while limiting the group expression to one field reference.
+MongoDB documents `$sortByCount` as a grouping stage that is equivalent to `$group` followed by a descending `$sort` on `count`; txBASE keeps that behavior while limiting the group expression to the shared bounded scalar-expression subset.
 
 MongoDB documents `$bucketAuto` as a stage that derives boundaries to distribute input documents across a requested number of buckets; txBASE implements the numeric field-reference subset with explicit value and granularity limits.
 

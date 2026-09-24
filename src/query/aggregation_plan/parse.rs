@@ -1,4 +1,5 @@
 use super::super::QueryError;
+use super::super::expression::ScalarExpression;
 use super::types::{AggregationPlan, InputStage};
 use serde_json::{Map, Value};
 
@@ -42,7 +43,7 @@ struct Parser {
     group: Option<super::types::GroupSpec>,
     bucket: Option<super::types::BucketSpec>,
     bucket_auto: Option<super::types::BucketAutoSpec>,
-    sort_by_count: Option<String>,
+    sort_by_count: Option<ScalarExpression>,
     count: Option<String>,
     distinct: Option<String>,
     projection: Option<std::collections::BTreeMap<String, i8>>,

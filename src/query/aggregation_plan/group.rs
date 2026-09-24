@@ -21,6 +21,7 @@ pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
 
     Ok(GroupSpec {
         key_field,
+        key_expression: None,
         accumulators: parse_accumulators(definition, "$group")?,
     })
 }

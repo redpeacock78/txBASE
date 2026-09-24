@@ -134,7 +134,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 MongoDBの`granularity`オプションは、txBASE独自の境界系列の契約を定義するまで拒否します。
 
-`$sortByCount`はフィールド参照ごとにレコードをグループ化し、グループ値を`_id`、件数を`count`として、`count`の降順で出力します。
+`$sortByCount`は1つの有界なスカラー式でレコードをグループ化し、グループ値を`_id`、件数を`count`として、`count`の降順で出力します。
 
 ```json
 {
@@ -142,7 +142,23 @@ MongoDBの`granularity`オプションは、txBASE独自の境界系列の契約
 }
 ```
 
-txBASEのサブセットが受け付けるのは1つのフィールド参照だけであり、任意の式とドキュメントリテラルは未サポートです。
+式には、フィールド参照、スカラーリテラル、`$literal`、`$ifNull`、`$concat`、`$toLower`、`$toUpper`、または`$expr`と`$set`で使う有界な数値式を指定できます。
+
+式は各入力レコードに対して評価します。
+
+欠損またはnullの式の結果は、`null`グループになります。
+
+たとえば、次の指定は大文字と小文字の違う値をまとめます。
+
+```json
+{
+  "$sortByCount": {"$toUpper": "$COUNTRY"}
+}
+```
+
+未サポートの式演算子は引き続き拒否します。
+
+`$literal`は共有する式の規則に従い、演算子として解釈せずにJSON値を保持できます。
 
 欠損したフィールドと明示的な`null`は同じグループになります。
 
@@ -268,7 +284,7 @@ distinct出力は10,000値までです。
 
 MongoDBは`$group`をブロッキングステージとして説明し、[$count と $sum を含む集約ステージの仕様](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)を定義しています。
 
-MongoDBは`$sortByCount`を、`$group`の後に`count`の降順ソートを続ける処理と同等のグループ化ステージとして説明しています。txBASEはこの動作を保ちつつ、グループ化式を1つのフィールド参照に制限します。
+MongoDBは`$sortByCount`を、`$group`の後に`count`の降順ソートを続ける処理と同等のグループ化ステージとして説明しています。txBASEはこの動作を保ちつつ、グループ化式を共有する有界なスカラー式サブセットに制限します。
 
 MongoDBは`$bucketAuto`を、入力文書を指定した数のバケットへ分配する境界を導出するステージとして説明しています。
 

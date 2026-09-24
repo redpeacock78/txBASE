@@ -71,11 +71,44 @@ fn sort_by_count_applies_input_and_group_output_stages() {
 }
 
 #[test]
+fn sort_by_count_evaluates_a_scalar_expression_per_record() {
+    let records = [
+        record(1, json!({"COUNTRY": "jp"})),
+        record(2, json!({"COUNTRY": "JP"})),
+        record(3, json!({})),
+    ];
+    let stages = vec![
+        json!({
+            "$sortByCount": {
+                "$ifNull": [{"$toUpper": "$COUNTRY"}, "UNKNOWN"]
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records.iter().collect::<Vec<_>>(), &stages).unwrap(),
+        vec![
+            json!({"_id": "JP", "count": 2}),
+            json!({"_id": "UNKNOWN", "count": 1}),
+        ]
+    );
+}
+
+#[test]
 fn rejects_unsupported_sort_by_count_forms_and_combinations() {
     let records = [record(1, json!({"COUNTRY": "JP"}))];
     for stages in [
         vec![
-            json!({"$sortByCount": "COUNTRY"})
+            json!({"$sortByCount": {"$concat": ["$COUNTRY"]}})
+                .as_object()
+                .unwrap()
+                .clone(),
+        ],
+        vec![
+            json!({"$sortByCount": {"$unknown": "$COUNTRY"}})
                 .as_object()
                 .unwrap()
                 .clone(),

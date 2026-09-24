@@ -1,4 +1,5 @@
 use super::super::QueryError;
+use super::super::expression::{ScalarExpression, parse_scalar_operand};
 use super::field_reference;
 use super::types::UnwindSpec;
 use indexmap::IndexMap;
@@ -108,13 +109,11 @@ pub(super) fn parse_distinct(value: &Value, index: usize) -> Result<String, Quer
     field_reference(field, &format!("aggregate stage {index}.$distinct"))
 }
 
-pub(super) fn parse_sort_by_count(value: &Value, index: usize) -> Result<String, QueryError> {
-    let Some(field) = value.as_str() else {
-        return Err(QueryError::Invalid(format!(
-            "aggregate stage {index}.$sortByCount must be a field reference"
-        )));
-    };
-    field_reference(field, &format!("aggregate stage {index}.$sortByCount"))
+pub(super) fn parse_sort_by_count(
+    value: &Value,
+    index: usize,
+) -> Result<ScalarExpression, QueryError> {
+    parse_scalar_operand(value, &format!("aggregate stage {index}.$sortByCount"))
 }
 
 pub(super) fn parse_projection(

@@ -46,6 +46,7 @@ pub(super) fn parse_bucket_auto(value: &Value, index: usize) -> Result<BucketAut
     let output = match object.get("output") {
         None => GroupSpec {
             key_field: None,
+            key_expression: None,
             accumulators: vec![AccumulatorSpec {
                 name: String::from("count"),
                 kind: AccumulatorKind::Count,
@@ -64,6 +65,7 @@ pub(super) fn parse_bucket_auto(value: &Value, index: usize) -> Result<BucketAut
             }
             GroupSpec {
                 key_field: None,
+                key_expression: None,
                 accumulators: parse_accumulators(
                     output,
                     &format!("aggregate stage {index}.$bucketAuto.output"),

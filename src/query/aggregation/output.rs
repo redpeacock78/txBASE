@@ -49,8 +49,8 @@ pub(super) fn execute_materialized<'a>(
         return super::bucket_auto::execute(records, bucket_auto, plan);
     }
 
-    if let Some(field) = &plan.sort_by_count {
-        return super::sort_by_count::execute(records, field, plan);
+    if let Some(expression) = &plan.sort_by_count {
+        return super::sort_by_count::execute(records, expression, plan);
     }
 
     let spec = plan
@@ -68,7 +68,7 @@ pub(super) fn execute_group<'a>(
 ) -> Result<Vec<Value>, QueryError> {
     let mut groups = BTreeMap::<String, accumulators::GroupState>::new();
     let mut collected_values = 0;
-    if spec.key_field.is_none() {
+    if spec.key_field.is_none() && spec.key_expression.is_none() {
         groups.insert(
             String::from("null"),
             accumulators::new_group(Value::Null, spec),
@@ -76,13 +76,19 @@ pub(super) fn execute_group<'a>(
     }
 
     for record in records {
-        let key = spec
-            .key_field
-            .as_deref()
-            .map(|field| {
+        let key = match (&spec.key_field, &spec.key_expression) {
+            (Some(field), None) => {
                 crate::query_path::field_value(&record.values, field).unwrap_or(Value::Null)
-            })
-            .unwrap_or(Value::Null);
+            }
+            (None, Some(expression)) => crate::query::expression::evaluate_scalar(
+                &record.values,
+                expression,
+                "$sortByCount",
+            )?
+            .unwrap_or(Value::Null),
+            (None, None) => Value::Null,
+            (Some(_), Some(_)) => unreachable!("group key has both field and expression"),
+        };
         let encoded_key = serde_json::to_string(&key)
             .map_err(|error| QueryError::Invalid(format!("group key encoding failed: {error}")))?;
         if !groups.contains_key(&encoded_key) {
