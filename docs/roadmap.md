@@ -335,8 +335,9 @@ The filesystem backend persists the same contract under one directory with exclu
 The remaining cloud boundary needs a consistency contract, service-specific retention and orphan-page cleanup policy, retry behavior, and a remote adapter fixture.
 
 The current WASM slice exposes DBF bytes, query execution, and record mutation through the shared implementation.
-The current slice also exposes the five object-store primitives and the manifest protocol through runtime-neutral future contracts.
-The CI gate loads the generated `wasm-bindgen` wrapper from Node.js and verifies the ABI version, query, single-operation mutation, and atomic batch mutation.
+The repository's edge-storage slice also defines the five object-store primitives and the manifest protocol through runtime-neutral contracts.
+Those contracts are host-adapter inputs, not methods exposed by the current WASM ABI.
+The CI gate loads the generated `wasm-bindgen` wrapper from Node.js and verifies the ABI version, snapshot round trip, all four mutation methods, and atomic batch rollback.
 The native `ThreadedQueryStream` adapter is available outside `wasm32` and does not change the WASM ABI.
 The WASM slice does not yet supply host-specific timeout and cancellation mapping, a remote object-store adapter, or a worker or WASI runtime adapter.
 

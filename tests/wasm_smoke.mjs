@@ -23,20 +23,42 @@ function decodeJson(bytes) {
   return JSON.parse(Buffer.from(bytes).toString("utf8"));
 }
 
+function assertError(callback, fragment) {
+  assert.throws(callback, (error) => String(error).includes(fragment));
+}
+
 assert.equal(WasmDatabase.abi_version(), 1);
 
-const database = new WasmDatabase(fixture());
+const initial = fixture();
+const database = new WasmDatabase(initial);
+assert.deepEqual([...database.snapshot()], [...initial]);
 assert.equal(decodeJson(database.query_json(jsonBytes({}))).length, 1);
 
 database.apply_operation_json(
   jsonBytes({
-    method: "PATCH",
+    method: "PUT",
     path: "/records/1",
-    body: { NAME: "wasm-node" },
+    body: { ID: 1, NAME: "wasm-put", AGE: 31, ACTIVE: true },
   }),
 );
 let rows = decodeJson(database.query_json(jsonBytes({})));
-assert.equal(rows[0].NAME, "wasm-node");
+assert.equal(rows[0].NAME, "wasm-put");
+
+database.apply_operation_json(
+  jsonBytes({
+    method: "POST",
+    path: "/records",
+    body: { ID: 2, NAME: "wasm-post", AGE: 42, ACTIVE: true },
+  }),
+);
+database.apply_operation_json(
+  jsonBytes({
+    method: "DELETE",
+    path: "/records/2",
+  }),
+);
+rows = decodeJson(database.query_json(jsonBytes({})));
+assert.deepEqual(rows.map((row) => row.NAME), ["wasm-put"]);
 
 database.apply_operations_json(
   jsonBytes({
@@ -49,7 +71,7 @@ database.apply_operations_json(
       {
         method: "POST",
         path: "/records",
-        body: { ID: 3, NAME: "second", AGE: 42, ACTIVE: true },
+        body: { ID: 3, NAME: "wasm-post-batch", AGE: 42, ACTIVE: true },
       },
     ],
   }),
@@ -57,7 +79,33 @@ database.apply_operations_json(
 rows = decodeJson(database.query_json(jsonBytes({ sort: { ID: 1 } })));
 assert.deepEqual(
   rows.map((row) => row.NAME),
-  ["wasm-batch", "second"],
+  ["wasm-batch", "wasm-post-batch"],
+);
+
+const beforeFailedBatch = [...database.snapshot()];
+assertError(
+  () =>
+    database.apply_operations_json(
+      jsonBytes({
+        operations: [
+          {
+            method: "PATCH",
+            path: "/records/1",
+            body: { NAME: "must-not-publish" },
+          },
+          { method: "DELETE", path: "/records/0" },
+        ],
+      }),
+    ),
+  "operation record id must be positive",
+);
+assert.deepEqual([...database.snapshot()], beforeFailedBatch);
+
+const restored = new WasmDatabase(database.snapshot());
+rows = decodeJson(restored.query_json(jsonBytes({ sort: { ID: 1 } })));
+assert.deepEqual(
+  rows.map((row) => row.NAME),
+  ["wasm-batch", "wasm-post-batch"],
 );
 
 console.log("wasm-bindgen Node smoke passed");

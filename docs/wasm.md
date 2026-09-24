@@ -33,8 +33,8 @@ Its versioned boundary currently provides:
 - a `wasm-bindgen` `WasmDatabase` wrapper on `wasm32` with the same methods;
 - native contract tests;
 - a pinned Node.js `wasm-bindgen` smoke test that loads the generated wrapper,
-  checks the ABI version, executes a query, applies one mutation, and applies
-  an atomic batch;
+  checks the ABI version and snapshot round trip, exercises all four mutation
+  methods, and verifies atomic batch rollback;
 - a CI `wasm32-unknown-unknown` release build and wrapper smoke check.
 
 The core does not write files, access a network, schedule tasks, or commit a
