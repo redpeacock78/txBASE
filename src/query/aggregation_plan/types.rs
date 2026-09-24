@@ -16,6 +16,7 @@ pub struct AggregationPlan {
     pub group_matches: Vec<Map<String, Value>>,
     pub group: Option<GroupSpec>,
     pub bucket: Option<BucketSpec>,
+    pub bucket_auto: Option<BucketAutoSpec>,
     pub sort_by_count: Option<String>,
     pub count: Option<String>,
     pub distinct: Option<String>,
@@ -30,6 +31,13 @@ pub struct BucketSpec {
     pub group_by: String,
     pub boundaries: Vec<Value>,
     pub default: Option<Value>,
+    pub output: GroupSpec,
+}
+
+#[derive(Debug, Clone)]
+pub struct BucketAutoSpec {
+    pub group_by: String,
+    pub buckets: usize,
     pub output: GroupSpec,
 }
 

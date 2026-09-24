@@ -3,12 +3,15 @@ use crate::dbf::DbfRecord;
 use serde_json::{Map, Value};
 
 mod accumulators;
+mod bucket_auto;
 mod input;
 mod output;
 mod sort_by_count;
 mod standard_deviation;
 
 pub(super) const MAX_GROUPS: usize = 10_000;
+// ponytail: cap bucketAuto's sort materialization; add a streaming quantile sketch only if larger reports are required.
+pub(super) const MAX_BUCKET_AUTO_VALUES: usize = 10_000;
 // ponytail: bound expanded input rows at the existing query scale; add streaming or spill-to-disk only if larger reports become required.
 pub(super) const MAX_UNWOUND_RECORDS: usize = 10_000;
 // ponytail: bound distinct materialization at the existing query scale; add spill-to-disk only if larger reports become required.

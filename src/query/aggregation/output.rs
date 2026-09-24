@@ -45,6 +45,10 @@ pub(super) fn execute_materialized<'a>(
         return execute_bucket(records, bucket, plan);
     }
 
+    if let Some(bucket_auto) = &plan.bucket_auto {
+        return super::bucket_auto::execute(records, bucket_auto, plan);
+    }
+
     if let Some(field) = &plan.sort_by_count {
         return super::sort_by_count::execute(records, field, plan);
     }
@@ -170,7 +174,7 @@ fn bucket_assignment(
     Ok((bucket.boundaries.len() - 1, default.clone()))
 }
 
-fn finish_group_output(
+pub(super) fn finish_group_output(
     mut output: Vec<Value>,
     plan: &aggregation_plan::AggregationPlan,
 ) -> Result<Vec<Value>, QueryError> {

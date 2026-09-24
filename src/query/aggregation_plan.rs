@@ -1,6 +1,7 @@
 use super::{QueryError, QueryRequest};
 
 mod bucket;
+mod bucket_auto;
 mod group;
 mod parse;
 mod set;
@@ -9,8 +10,8 @@ mod types;
 
 pub(super) use parse::parse;
 pub(super) use types::{
-    AccumulatorKind, AccumulatorSpec, AggregationPlan, BucketSpec, GroupSpec, InputStage,
-    SetExpression, UnwindSpec,
+    AccumulatorKind, AccumulatorSpec, AggregationPlan, BucketAutoSpec, BucketSpec, GroupSpec,
+    InputStage, SetExpression, UnwindSpec,
 };
 
 pub(super) const MAX_BUCKETS: usize = 10_000;

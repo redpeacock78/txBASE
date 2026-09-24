@@ -6,7 +6,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 ## 1. 有界集約
 
-クエリ文書には、`filter`と0個以上の先行`$match`ステージの後に、終端`$count`、終端`$distinct`、ブロッキングな`$group`、ブロッキングな`$bucket`、または`$sortByCount`を1つ置けます。
+クエリ文書には、`filter`と0個以上の先行`$match`ステージの後に、終端`$count`、終端`$distinct`、ブロッキングな`$group`、ブロッキングな`$bucket`、ブロッキングな`$bucketAuto`、または`$sortByCount`を1つ置けます。
 
 ```json
 {
@@ -23,7 +23,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 }
 ```
 
-入力部分は、0個以上の`$match`と`$unwind`、合計で最大1つの入力用`$set`または`$addFields`、入力用の`$project`、`$sort`、`$skip`、`$limit`をそれぞれ最大1つ受け付け、その後に終端`$count`、終端`$distinct`、`$group`、`$bucket`、または`$sortByCount`を1つ受け付けます。
+入力部分は、0個以上の`$match`と`$unwind`、合計で最大1つの入力用`$set`または`$addFields`、入力用の`$project`、`$sort`、`$skip`、`$limit`をそれぞれ最大1つ受け付け、その後に終端`$count`、終端`$distinct`、`$group`、`$bucket`、`$bucketAuto`、または`$sortByCount`を1つ受け付けます。
 
 入力ステージはパイプラインに記載した順序で実行します。
 
@@ -57,7 +57,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 入力形式が受け付ける包含または除外の値は`0`と`1`だけであり、計算プロジェクション式、空の指定、包含と除外の混在は未サポートです。
 
-プロジェクションは次のステージの前に具体化されるため、後続の`$match`、`$group`、`$bucket`、`$count`、`$distinct`はプロジェクション後のフィールドだけを参照します。
+プロジェクションは次のステージの前に具体化されるため、後続の`$match`、`$group`、`$bucket`、`$bucketAuto`、`$count`、`$distinct`はプロジェクション後のフィールドだけを参照します。
 
 配列フィールドに対する`$unwind`は、入力配列の順序で要素ごとに入力レコードのコピーを1つ出力し、対象フィールドを要素で置き換えます。
 
@@ -68,7 +68,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 `null`でない配列以外のフィールドは、1要素配列へ変換せず集約を拒否します。
 
-保持されたレコードを含むすべての`$unwind`出力レコード数の合計は、`$count`、`$distinct`、`$group`、または`$bucket`の前に10,000件までに制限します。
+保持されたレコードを含むすべての`$unwind`出力レコード数の合計は、`$count`、`$distinct`、`$group`、`$bucket`、または`$bucketAuto`の前に10,000件までに制限します。
 
 ドット区切りのフィールドパス、`path`と同じ`includeArrayIndex`名、その他の拡張された`$unwind`形式は未サポートです。
 
@@ -97,6 +97,39 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 空バケットは出力せず、defaultバケットは範囲バケットの後に出力します。
 
+`$bucketAuto`は入力値から数値範囲を導出し、指定した数のバケットへ異なる値をおおむね均等に分配します。
+
+```json
+{
+  "$bucketAuto": {
+    "groupBy": "$AGE",
+    "buckets": 2
+  }
+}
+```
+
+`groupBy`は1つのフィールド参照でなければならず、`buckets`は1以上10,000以下の整数でなければなりません。
+
+実装は有限な数値をソートし、その異なる値を指定数以下の空でないバケットへ分割します。
+
+バケットのアキュムレータには、入力レコードの順序を使います。
+
+`$bucketAuto`にはdefaultバケットがないため、`groupBy`の欠損、null、数値以外の値は集約を拒否します。
+
+各出力の`_id`は数値境界を持つ`min`と`max`のオブジェクトです。
+
+最後のバケットを除く上端は排他的であり、最後のバケットの上端は包括的です。
+
+入力の異なる数値が指定数より少ない場合、出力するバケットも少なくなります。
+
+`output`を省略すると、`$bucketAuto`は`count`アキュムレータを出力します。
+
+`output`を指定した場合は、`$group`および`$bucket`と同じ有界なアキュムレータ形式を使います。
+
+このステージが具体化する数値入力は10,000件までであり、ディスクへ退避しません。
+
+MongoDBの`granularity`オプションは、txBASE独自の境界系列の契約を定義するまで拒否します。
+
 `$sortByCount`はフィールド参照ごとにレコードをグループ化し、グループ値を`_id`、件数を`count`として、`count`の降順で出力します。
 
 ```json
@@ -120,7 +153,7 @@ txBASEのサブセットが受け付けるのは1つのフィールド参照だ�
 
 範囲は10,000個までであり、ディスクへ退避せず、`$push`と`$addToSet`に対する10,000値の具体化上限を共有します。
 
-グループ、バケット、または`$sortByCount`の出力には0個以上の`$match`を置けます。
+グループ、バケット、`$bucketAuto`、または`$sortByCount`の出力には0個以上の`$match`を置けます。
 その後に任意の`$project`を1つ、最後の`$sort`、`$skip`、`$limit`をそれぞれ最大1つ置けます。
 
 `_id`は`null`または1つのドット区切りフィールド参照です。
@@ -133,11 +166,11 @@ txBASEのサブセットが受け付けるのは1つのフィールド参照だ�
 
 フィルターはグループ化またはバケット化より前に実行します。
 
-結果は`$group`または`$bucket`が生成した`_id`と名前付きアキュムレータフィールド、または`$sortByCount`が生成した`_id`と`count`を持つJSONオブジェクトの配列です。
+結果は`$group`、`$bucket`、または`$bucketAuto`が生成した`_id`と名前付きアキュムレータフィールド、または`$sortByCount`が生成した`_id`と`count`を持つJSONオブジェクトの配列です。
 
 `$project`はクエリのプロジェクション規則を再利用してグループまたはバケット出力のフィールドを包含または除外します。
 
-`$project`は`$group`、`$bucket`、または`$sortByCount`の後、`$sort`、`$skip`、または`$limit`の前に置く必要があります。
+`$project`は`$group`、`$bucket`、`$bucketAuto`、または`$sortByCount`の後、`$sort`、`$skip`、または`$limit`の前に置く必要があります。
 
 包含と除外は混在できません。
 
@@ -191,7 +224,7 @@ txBASEのサブセットが受け付けるのは1つのフィールド参照だ�
 
 すべての`$push`と`$addToSet`がマテリアライズする値の合計は10,000件に制限されます。
 
-10,000を超えるグループ、`$sortByCount`のグループ、またはバケット範囲は拒否し、集約とトップレベルの`sort`、`projection`、`skip`、`limit`、cursorページングの併用も拒否します。
+10,000を超えるグループ、`$sortByCount`のグループ、バケット範囲、または`$bucketAuto`の入力値は拒否し、集約とトップレベルの`sort`、`projection`、`skip`、`limit`、cursorページングの併用も拒否します。
 
 `$sort`がない場合のグループまたはバケット出力順は契約に含めませんが、現在の実装は決定的なキー順または境界順で出力します。
 
@@ -203,13 +236,13 @@ txBASEのサブセットが受け付けるのは1つのフィールド参照だ�
 
 `$skip`は0以上の整数を受け付け、ソート後かつ`$limit`の前に、具体化されたグループ結果を指定件数だけ破棄します。
 
-`$skip`は`$group`または`$bucket`の後、任意の`$project`または`$sort`の後、`$limit`の前に置く必要があります。
+`$skip`は`$group`、`$bucket`、または`$bucketAuto`の後、任意の`$project`または`$sort`の後、`$limit`の前に置く必要があります。
 
 `$match`ステージはトップレベルの`filter`と同じ述語規則を使います。
 
-入力に対する`$match`ステージは`$group`、`$bucket`、`$sortByCount`、`$count`、`$distinct`より前に置く必要があります。
+入力に対する`$match`ステージは`$group`、`$bucket`、`$bucketAuto`、`$sortByCount`、`$count`、`$distinct`より前に置く必要があります。
 
-グループ、バケット、または`$sortByCount`出力に対する`$match`ステージは`$group`、`$bucket`、または`$sortByCount`の後、`$project`、`$sort`、`$skip`、`$limit`より前に置く必要があります。
+グループ、バケット、`$bucketAuto`、または`$sortByCount`出力に対する`$match`ステージは`$group`、`$bucket`、`$bucketAuto`、または`$sortByCount`の後、`$project`、`$sort`、`$skip`、`$limit`より前に置く必要があります。
 
 `$count`は名前付きの0以上の整数フィールドを1つ持つ文書を返し、一致するレコードがない場合も0を返します。
 
@@ -221,9 +254,9 @@ txBASEのサブセットが受け付けるのは1つのフィールド参照だ�
 
 distinct出力は10,000値までです。
 
-追加のgroup、bucket、sort-by-count、count、distinctステージは未サポートです。
+追加のgroup、bucket、bucket-auto、sort-by-count、count、distinctステージは未サポートです。
 
-`$group`、`$bucket`、または`$sortByCount`の後では、グループ出力用の`$limit`より後のステージは未サポートです。
+`$group`、`$bucket`、`$bucketAuto`、または`$sortByCount`の後では、グループ出力用の`$limit`より後のステージは未サポートです。
 
 `$expr`、`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`のオペランドは、クエリモデルで説明する有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`の形式だけをサポートします。
 
@@ -232,6 +265,10 @@ distinct出力は10,000値までです。
 MongoDBは`$group`をブロッキングステージとして説明し、[$count と $sum を含む集約ステージの仕様](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)を定義しています。
 
 MongoDBは`$sortByCount`を、`$group`の後に`count`の降順ソートを続ける処理と同等のグループ化ステージとして説明しています。txBASEはこの動作を保ちつつ、グループ化式を1つのフィールド参照に制限します。
+
+MongoDBは`$bucketAuto`を、入力文書を指定した数のバケットへ分配する境界を導出するステージとして説明しています。
+
+txBASEは数値のフィールド参照に限定したサブセットを実装し、入力値と`granularity`に上限を設けます。
 
 txBASEはMongoDBの完全なパイプライン互換性を主張せず、その別個の[`$count`ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)を有界なステージとして表現します。
 
@@ -250,6 +287,7 @@ txBASEはMongoDBの完全なパイプライン互換性を主張せず、その�
 - [MongoDB の`$stdDevSamp`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB の`$count`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB の`$bucket`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucket/)
+- [MongoDB の`$bucketAuto`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucketAuto/)
 - [MongoDB の`$sortByCount`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sortByCount/)
 - [MongoDB の`$project`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB の`$set`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)
