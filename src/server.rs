@@ -177,7 +177,7 @@ fn query_response_with_path(
         }
     };
     let result = match dbf_path {
-        Some(dbf_path) => query::execute_query_at_page(table, dbf_path, &query),
+        Some(dbf_path) => query::execute_query_consistent_at_page(dbf_path, &query),
         None => query::execute_query_page(table, &query),
     };
     match result {

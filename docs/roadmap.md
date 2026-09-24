@@ -72,7 +72,7 @@ The baseline intentionally does not include the following:
 - Predicate-level locking and distributed serializable coordination.
 - Aggregation stages or accumulators beyond bounded input `$match`, `$unwind` with its documented top-level options, `$set`/`$addFields` with its documented expression subset, `$project`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, `$group`, `$bucket`, numeric field-reference `$bucketAuto`, and field-reference `$sortByCount` with bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
-- Strict multi-file reader atomicity for XBF export.
+- Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Cloud object-storage adapters and retention policy.
 - Distributed replication.
 
@@ -287,7 +287,13 @@ An override must be visible in schema or command output so a reader can reproduc
 
 XBF is a separately versioned native format, not a silent DBF extension.
 
-The v1 wire contract is drafted in [XBF v1 format draft](xbf.md). A bounded codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, representability reporting, durable snapshot path, generation-checked full-snapshot WAL recovery, and a journaled `TXSE` schema-preserving file export exist for that draft. `TXSE` records base bytes, recovers interrupted DBF/schema/memo-sidecar/transaction-state/index replacement on the next DBF read, validates the target index before replacement, and rejects external target changes. Strict multi-file reader atomicity and cloud object-storage commit semantics remain future work.
+The v1 wire contract is drafted in [XBF v1 format draft](xbf.md). A bounded codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, representability reporting, durable snapshot path, generation-checked full-snapshot WAL recovery, and a journaled `TXSE` schema-preserving file export exist for that draft. `TXSE` records base bytes, recovers interrupted DBF/schema/memo-sidecar/transaction-state/index replacement on the next DBF read, validates the target index before replacement, and rejects external target changes.
+
+Path-aware single-table `QUERY /records` and `/explain` now finish normal DBF recovery, hold a shared table lock while reloading DBF, memo, and schema, and validate the index against that same table image.
+
+This closes the txBASE-reader consistency boundary; a legacy reader that ignores the lock remains outside it.
+
+Strict multi-file reader atomicity for legacy readers and cloud object-storage commit semantics remain future work.
 
 The proposed magic is `TXBF`.
 

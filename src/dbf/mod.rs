@@ -122,6 +122,13 @@ pub(crate) fn load_path_with_lock_held(path: &Path) -> Result<DbfTable, DbfError
     DbfTable::load_path_with_encoding(path, None)
 }
 
+pub(crate) fn load_consistent_path(path: &Path) -> Result<(DbfTable, TableReadLock), DbfError> {
+    DbfTable::from_path(path)?;
+    let lock = TableReadLock::acquire(path)?;
+    let table = load_path_with_lock_held(path)?;
+    Ok((table, lock))
+}
+
 pub(crate) fn recover_path_with_lock_held(path: &Path) -> Result<bool, DbfError> {
     let wal_recovered = DbfTable::recover_wal_with_encoding(path, None)?;
     let export_recovered = schema_export::recover_schema_export_locked(path)?;

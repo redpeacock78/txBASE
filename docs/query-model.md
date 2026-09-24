@@ -86,6 +86,18 @@ Reusing a cursor after a table change returns an invalid-query error instead of 
 
 This is a cursor snapshot-consistency boundary; historical table snapshots are defined separately in [MVCC and historical snapshots](mvcc.md).
 
+Path-aware single-table `QUERY /records` and `/explain` requests use a txBASE reader boundary.
+
+Before execution, the reader lets the normal DBF recovery path finish, acquires the shared table lock, reloads the DBF, memo, and schema files while holding it, and validates an index sidecar against that table image.
+
+Writers use the exclusive table lock, so cooperating txBASE readers do not combine a table image with an index from another committed generation.
+
+This is a txBASE-reader guarantee.
+
+It does not make a flat DBF and its sidecars physically atomic for legacy readers that ignore the lock.
+
+The in-memory query APIs and `QUERY /records/stream` keep their supplied-table and snapshot-stream contracts.
+
 The old page is not retained for later readers.
 
 Legacy numeric physical cursors and version-1 sorted cursors remain accepted without a snapshot tag for compatibility.

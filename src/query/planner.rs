@@ -84,20 +84,39 @@ pub(super) fn choose(dbf_path: &Path, request: &QueryRequest) -> PlannedAccess {
     let Ok(index_file) = IndexFile::load(dbf_path) else {
         return table_scan();
     };
+    choose_from_index(&index_file, request)
+}
+
+pub(super) fn choose_with_table(
+    dbf_path: &Path,
+    table: &crate::dbf::DbfTable,
+    request: &QueryRequest,
+) -> PlannedAccess {
+    // The caller holds the table read lock, so do not reacquire the exclusive lock in load().
+    if request.collation.is_some() {
+        return table_scan();
+    }
+    let Ok(index_file) = IndexFile::load_with_table(dbf_path, table) else {
+        return table_scan();
+    };
+    choose_from_index(&index_file, request)
+}
+
+fn choose_from_index(index_file: &IndexFile, request: &QueryRequest) -> PlannedAccess {
     let active_record_count = index_file.active_record_count();
     let mut candidates = vec![table_scan()];
-    candidates.extend(choose_equality(&index_file, request));
-    if let Some(access) = choose_range(&index_file, request, active_record_count) {
+    candidates.extend(choose_equality(index_file, request));
+    if let Some(access) = choose_range(index_file, request, active_record_count) {
         candidates.push(access);
     }
-    if let Some(access) = choose_ordered(&index_file, request) {
+    if let Some(access) = choose_ordered(index_file, request) {
         candidates.push(access);
     }
 
     candidates
         .into_iter()
         .min_by_key(|access| {
-            let cost = cost::selection_cost(access, &index_file, active_record_count, request);
+            let cost = cost::selection_cost(access, index_file, active_record_count, request);
             let is_equality_prefix =
                 matches!(&access.plan, QueryPlan::CompoundEqualityPrefixIndex { .. });
             (cost, is_equality_prefix)
@@ -115,6 +134,28 @@ pub(super) fn explain(dbf_path: &Path, request: &QueryRequest) -> QueryExplanati
             request,
         )
     });
+    QueryExplanation {
+        plan: access.plan,
+        cost,
+    }
+}
+
+pub(super) fn explain_with_table(
+    dbf_path: &Path,
+    table: &crate::dbf::DbfTable,
+    request: &QueryRequest,
+) -> QueryExplanation {
+    let access = choose_with_table(dbf_path, table, request);
+    let cost = IndexFile::load_with_table(dbf_path, table)
+        .ok()
+        .map(|index_file| {
+            cost::estimated_cost(
+                &access,
+                &index_file,
+                index_file.active_record_count(),
+                request,
+            )
+        });
     QueryExplanation {
         plan: access.plan,
         cost,

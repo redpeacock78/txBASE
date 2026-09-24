@@ -23,7 +23,7 @@ fn response_with_path(request: &mut Request, dbf_path: Option<&Path>) -> HttpRes
         }
     };
     let explanation = match dbf_path {
-        Some(dbf_path) => query::explain_query_details_at(dbf_path, &query),
+        Some(dbf_path) => query::explain_query_details_consistent_at(dbf_path, &query),
         None => Ok(query::QueryExplanation {
             plan: query::QueryPlan::TableScan,
             cost: None,

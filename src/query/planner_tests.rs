@@ -159,6 +159,59 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
 }
 
 #[test]
+fn consistent_path_queries_reload_the_table_used_by_the_index() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-query-consistent-read-{}.dbf",
+        std::process::id()
+    ));
+    let sidecar = crate::index::sidecar_path(&path);
+    let lock = path.with_extension("txbase.lock");
+    let wal = path.with_extension("txbase.wal");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&sidecar);
+    let _ = fs::remove_file(&lock);
+    let _ = fs::remove_file(&wal);
+
+    let mut bytes = include_str!("../../tests/fixtures/users.dbf.hex")
+        .split_whitespace()
+        .map(|token| u8::from_str_radix(token, 16).unwrap())
+        .collect::<Vec<_>>();
+    bytes[179] = b' ';
+    fs::write(&path, &bytes).unwrap();
+    IndexFile::build(&path, vec![IndexDefinition::named("by_age", "AGE")])
+        .unwrap()
+        .save(&path)
+        .unwrap();
+
+    let mut changed = bytes;
+    changed[176..178].copy_from_slice(b"42");
+    fs::write(&path, &changed).unwrap();
+    IndexFile::build(&path, vec![IndexDefinition::named("by_age", "AGE")])
+        .unwrap()
+        .save(&path)
+        .unwrap();
+
+    let request = parse(br#"{"filter":{"AGE":42}}"#).unwrap();
+    let page = execute_query_consistent_at_page(&path, &request).unwrap();
+    assert_eq!(page.records.len(), 1);
+    assert_eq!(page.records[0]["AGE"], 42);
+    assert_eq!(
+        explain_query_details_consistent_at(&path, &request)
+            .unwrap()
+            .plan,
+        QueryPlan::EqualityIndex {
+            name: "by_age".into(),
+            field: "AGE".into(),
+        }
+    );
+
+    fs::remove_file(sidecar).unwrap();
+    fs::remove_file(path).unwrap();
+    let _ = fs::remove_file(lock);
+    let _ = fs::remove_file(wal);
+}
+
+#[test]
 fn orders_equality_intersection_by_index_statistics() {
     let path = std::env::temp_dir().join(format!(
         "txbase-query-planner-selectivity-{}.dbf",

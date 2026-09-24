@@ -32,6 +32,12 @@ replacement. Recovery rejects a target changed by another writer instead of over
 is a crash-recovery and conflict-detection boundary; it does not claim that external legacy
 readers observe all files as one physically atomic snapshot.
 
+The txBASE path reader now uses a shared table lock while reloading the DBF, memo, and schema files and validating an index sidecar for path-aware single-table `QUERY /records` and `/explain` requests.
+
+This keeps cooperating txBASE readers from combining a table image with an index from another committed generation.
+
+It does not provide physical multi-file atomicity to legacy readers that ignore the txBASE lock.
+
 The codec is intentionally kept in the format layer. It does not add a second
 query or HTTP implementation.
 
@@ -343,8 +349,9 @@ round trip. Before XBF is advertised as a complete supported format, the
 repository still needs:
 
 - A strict externally visible atomic snapshot contract for legacy readers. The
-  current `TXSE` protocol provides txBASE-reader preflight, recoverability, and
-  conflict detection, but it deliberately does not make a flat DBF plus
+  current `TXSE` protocol and txBASE path-reader lock boundary provide
+  preflight, recoverability, conflict detection, and consistent reads for
+  cooperating txBASE readers, but they deliberately do not make a flat DBF plus
   multiple sidecars physically atomic to a reader that ignores the txBASE lock.
 
 Until those gates exist, XBF remains a draft and is not advertised as a supported format.

@@ -6,6 +6,7 @@ use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
+use std::path::Path;
 
 mod aggregation;
 mod aggregation_plan;
@@ -153,6 +154,21 @@ pub fn execute_query_at_page(
     execute_query_with_records(table, request, access.records, access.ordered_prefix)
 }
 
+pub(crate) fn execute_query_consistent_at_page(
+    dbf_path: impl AsRef<Path>,
+    request: &QueryRequest,
+) -> Result<QueryPage, QueryError> {
+    validation::validate(request)?;
+    let dbf_path = dbf_path.as_ref();
+    let (table, _lock) = crate::dbf::load_consistent_path(dbf_path)
+        .map_err(|error| QueryError::Invalid(format!("cannot read table: {error}")))?;
+    if pagination::is_physical_page(request) {
+        return pagination::execute_physical_page(&table, request);
+    }
+    let access = planner::choose_with_table(dbf_path, &table, request);
+    execute_query_with_records(&table, request, access.records, access.ordered_prefix)
+}
+
 pub fn explain_query_at(
     dbf_path: impl AsRef<std::path::Path>,
     request: &QueryRequest,
@@ -176,6 +192,23 @@ pub fn explain_query_details_at(
         });
     }
     Ok(planner::explain(dbf_path.as_ref(), request))
+}
+
+pub(crate) fn explain_query_details_consistent_at(
+    dbf_path: impl AsRef<Path>,
+    request: &QueryRequest,
+) -> Result<QueryExplanation, QueryError> {
+    validation::validate(request)?;
+    if pagination::is_physical_page(request) {
+        return Ok(QueryExplanation {
+            plan: QueryPlan::TableScan,
+            cost: None,
+        });
+    }
+    let dbf_path = dbf_path.as_ref();
+    let (table, _lock) = crate::dbf::load_consistent_path(dbf_path)
+        .map_err(|error| QueryError::Invalid(format!("cannot read table: {error}")))?;
+    Ok(planner::explain_with_table(dbf_path, &table, request))
 }
 
 fn execute_query_with_records(
