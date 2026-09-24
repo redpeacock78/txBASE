@@ -1,8 +1,6 @@
 use super::group::parse_accumulators;
-use super::{
-    AccumulatorKind, AccumulatorSpec, BucketAutoSpec, GroupSpec, MAX_BUCKETS, QueryError,
-    field_reference,
-};
+use super::{AccumulatorKind, AccumulatorSpec, BucketAutoSpec, GroupSpec, MAX_BUCKETS, QueryError};
+use crate::query::expression::parse_scalar_operand;
 use serde_json::Value;
 
 pub(super) fn parse_bucket_auto(value: &Value, index: usize) -> Result<BucketAutoSpec, QueryError> {
@@ -19,15 +17,12 @@ pub(super) fn parse_bucket_auto(value: &Value, index: usize) -> Result<BucketAut
         }
     }
 
-    let group_by = object
-        .get("groupBy")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            QueryError::Invalid(format!(
-                "aggregate stage {index}.$bucketAuto.groupBy must be a field reference"
-            ))
-        })?;
-    let group_by = field_reference(
+    let group_by = object.get("groupBy").ok_or_else(|| {
+        QueryError::Invalid(format!(
+            "aggregate stage {index}.$bucketAuto.groupBy must be a scalar expression"
+        ))
+    })?;
+    let group_by = parse_scalar_operand(
         group_by,
         &format!("aggregate stage {index}.$bucketAuto.groupBy"),
     )?;
@@ -45,7 +40,6 @@ pub(super) fn parse_bucket_auto(value: &Value, index: usize) -> Result<BucketAut
 
     let output = match object.get("output") {
         None => GroupSpec {
-            key_field: None,
             key_expression: None,
             accumulators: vec![AccumulatorSpec {
                 name: String::from("count"),
@@ -64,7 +58,6 @@ pub(super) fn parse_bucket_auto(value: &Value, index: usize) -> Result<BucketAut
                 )));
             }
             GroupSpec {
-                key_field: None,
                 key_expression: None,
                 accumulators: parse_accumulators(
                     output,

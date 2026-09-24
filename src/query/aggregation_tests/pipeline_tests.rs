@@ -39,6 +39,30 @@ fn missing_group_fields_share_the_null_group() {
 }
 
 #[test]
+fn groups_by_a_shared_scalar_expression() {
+    let table = table_with_two_active_records();
+    let request = crate::query::parse(
+        br#"{
+            "aggregate": [{
+                "$group": {
+                    "_id": {"$add": ["$AGE", 1]},
+                    "count": {"$count": {}}
+                }
+            }]
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        crate::query::execute_query(&table, &request).unwrap(),
+        vec![
+            json!({"_id": 8, "count": 1}),
+            json!({"_id": 30, "count": 1})
+        ]
+    );
+}
+
+#[test]
 fn filters_group_output_before_projection_and_sorting() {
     let table = table_with_two_active_records();
     let request = crate::query::parse(
@@ -174,6 +198,7 @@ fn rejects_unsupported_aggregation_combinations() {
         br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":true}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"total":{"$sum":{"$add":["$AGE",true]}}}}]}"#
             .as_slice(),
+        br#"{"aggregate":[{"$group":{"_id":{"$unknown":"$AGE"}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null,"average":{"$avg":"AGE"}}}]}"#.as_slice(),
         br#"{"aggregate":[{"$group":{"_id":null}},{"$project":{"_id":1}},{"$match":{}}]}"#
             .as_slice(),

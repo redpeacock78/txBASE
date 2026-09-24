@@ -10,7 +10,6 @@ pub(super) fn execute<'a>(
     plan: &aggregation_plan::AggregationPlan,
 ) -> Result<Vec<serde_json::Value>, QueryError> {
     let spec = aggregation_plan::GroupSpec {
-        key_field: None,
         key_expression: Some(expression.clone()),
         accumulators: vec![aggregation_plan::AccumulatorSpec {
             name: String::from("count"),
@@ -19,5 +18,5 @@ pub(super) fn execute<'a>(
     };
     let mut sort = IndexMap::new();
     sort.insert(String::from("count"), -1);
-    output::execute_group(records, &spec, plan, Some(&sort))
+    output::execute_group(records, &spec, plan, Some(&sort), "$sortByCount")
 }

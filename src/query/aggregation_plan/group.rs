@@ -1,5 +1,5 @@
 use super::{AccumulatorKind, AccumulatorSpec, GroupSpec, QueryError, field_reference};
-use crate::query::expression::parse_numeric_operand;
+use crate::query::expression::{parse_numeric_operand, parse_scalar_operand};
 use serde_json::{Map, Value};
 
 pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
@@ -9,19 +9,13 @@ pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
     let key = definition
         .get("_id")
         .ok_or_else(|| QueryError::Invalid("$group requires _id".into()))?;
-    let key_field = match key {
+    let key_expression = match key {
         Value::Null => None,
-        Value::String(value) => Some(field_reference(value, "$group._id")?),
-        _ => {
-            return Err(QueryError::Invalid(
-                "$group._id must be null or a field reference".into(),
-            ));
-        }
+        _ => Some(parse_scalar_operand(key, "$group._id")?),
     };
 
     Ok(GroupSpec {
-        key_field,
-        key_expression: None,
+        key_expression,
         accumulators: parse_accumulators(definition, "$group")?,
     })
 }

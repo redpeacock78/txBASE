@@ -89,11 +89,13 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 }
 ```
 
-`groupBy`は1つのフィールド参照でなければならず、`boundaries`は2つ以上の有限なJSON数値を昇順で重複なく含まなければなりません。
+`groupBy`は共有する有界なスカラー式のサブセットを受け付け、その結果は範囲分類に使える有限なJSON数値でなければなりません。
+
+`boundaries`は2つ以上の有限なJSON数値を、厳密な昇順で含まなければなりません。
 
 各範囲は下端を含み、上端を含みません。
 
-`groupBy`の値が欠損、null、数値以外、または範囲外の場合、`default`があればその値へ分類し、なければ集約を拒否します。
+`groupBy`の結果が欠損、null、数値以外、または範囲外の場合、`default`があればその値へ分類し、なければ集約を拒否します。
 
 空でない範囲ごとに1つの文書を出力し、`_id`には範囲の下端を設定します。
 
@@ -112,13 +114,17 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 }
 ```
 
-`groupBy`は1つのフィールド参照でなければならず、`buckets`は1以上10,000以下の整数でなければなりません。
+`groupBy`は共有する有界なスカラー式のサブセットを受け付け、その結果は有限なJSON数値でなければなりません。
+
+`buckets`は1以上10,000以下の整数でなければなりません。
+
+式は入力ステージの後、範囲を導出する前に、入力レコードごとに1回評価します。
 
 実装は有限な数値をソートし、その異なる値を指定数以下の空でないバケットへ分割します。
 
 バケットのアキュムレータには、入力レコードの順序を使います。
 
-`$bucketAuto`にはdefaultバケットがないため、`groupBy`の欠損、null、数値以外の値は集約を拒否します。
+`$bucketAuto`にはdefaultバケットがないため、`groupBy`の結果が欠損、null、数値以外の場合は集約を拒否します。
 
 各出力の`_id`は数値境界を持つ`min`と`max`のオブジェクトです。
 
@@ -176,7 +182,9 @@ MongoDBの`granularity`オプションは、txBASE独自の境界系列の契約
 グループ、バケット、`$bucketAuto`、または`$sortByCount`の出力には0個以上の`$match`を置けます。
 その後に任意の`$project`を1つ、最後の`$sort`、`$skip`、`$limit`をそれぞれ最大1つ置けます。
 
-`_id`は`null`または1つのドット区切りフィールド参照です。
+`_id`は`null`または共有する有界なスカラー式のサブセットです。
+
+式は入力レコードごとに1回評価し、結果が欠損またはnullの場合は`null`としてグループ化します。
 
 サポートするアキュムレータは`$count: {}`、数値の`$sum`、`$min: "$FIELD"`、`$max: "$FIELD"`、`$first: "$FIELD"`、`$last: "$FIELD"`、`$push: "$FIELD"`、`$addToSet: "$FIELD"`、および有限なJSON数値に対する数値の`$avg`、`$stdDevPop`、`$stdDevSamp`です。
 
@@ -256,7 +264,7 @@ MongoDBの`granularity`オプションは、txBASE独自の境界系列の契約
 
 `$skip`は0以上の整数を受け付け、ソート後かつ`$limit`の前に、具体化されたグループ結果を指定件数だけ破棄します。
 
-`$skip`は`$group`、`$bucket`、または`$bucketAuto`の後、任意の`$project`または`$sort`の後、`$limit`の前に置く必要があります。
+`$skip`は`$group`、`$bucket`、`$bucketAuto`、または`$sortByCount`の後、任意の`$project`または`$sort`の後、`$limit`の前に置く必要があります。
 
 `$match`ステージはトップレベルの`filter`と同じ述語規則を使います。
 
@@ -288,7 +296,7 @@ MongoDBは`$sortByCount`を、`$group`の後に`count`の降順ソートを続�
 
 MongoDBは`$bucketAuto`を、入力文書を指定した数のバケットへ分配する境界を導出するステージとして説明しています。
 
-txBASEは数値のフィールド参照に限定したサブセットを実装し、入力値と`granularity`に上限を設けます。
+txBASEは結果が数値になる共有スカラー式のサブセットを実装し、入力値と`granularity`に上限を設けます。
 
 txBASEはMongoDBの完全なパイプライン互換性を主張せず、その別個の[`$count`ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)を有界なステージとして表現します。
 

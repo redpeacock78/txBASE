@@ -57,7 +57,7 @@ pub(super) fn execute_materialized<'a>(
         .group
         .as_ref()
         .expect("validated aggregation has a group, bucket, sortByCount, or count stage");
-    execute_group(records, spec, plan, None)
+    execute_group(records, spec, plan, None, "$group._id")
 }
 
 pub(super) fn execute_group<'a>(
@@ -65,10 +65,11 @@ pub(super) fn execute_group<'a>(
     spec: &aggregation_plan::GroupSpec,
     plan: &aggregation_plan::AggregationPlan,
     built_in_sort: Option<&IndexMap<String, i8>>,
+    key_path: &str,
 ) -> Result<Vec<Value>, QueryError> {
     let mut groups = BTreeMap::<String, accumulators::GroupState>::new();
     let mut collected_values = 0;
-    if spec.key_field.is_none() && spec.key_expression.is_none() {
+    if spec.key_expression.is_none() {
         groups.insert(
             String::from("null"),
             accumulators::new_group(Value::Null, spec),
@@ -76,18 +77,11 @@ pub(super) fn execute_group<'a>(
     }
 
     for record in records {
-        let key = match (&spec.key_field, &spec.key_expression) {
-            (Some(field), None) => {
-                crate::query_path::field_value(&record.values, field).unwrap_or(Value::Null)
-            }
-            (None, Some(expression)) => crate::query::expression::evaluate_scalar(
-                &record.values,
-                expression,
-                "$sortByCount",
-            )?
-            .unwrap_or(Value::Null),
-            (None, None) => Value::Null,
-            (Some(_), Some(_)) => unreachable!("group key has both field and expression"),
+        let key = if let Some(expression) = &spec.key_expression {
+            crate::query::expression::evaluate_scalar(&record.values, expression, key_path)?
+                .unwrap_or(Value::Null)
+        } else {
+            Value::Null
         };
         let encoded_key = serde_json::to_string(&key)
             .map_err(|error| QueryError::Invalid(format!("group key encoding failed: {error}")))?;
@@ -149,7 +143,11 @@ fn bucket_assignment(
     record: &DbfRecord,
     bucket: &aggregation_plan::BucketSpec,
 ) -> Result<(usize, Value), QueryError> {
-    let value = crate::query_path::field_value(&record.values, &bucket.group_by);
+    let value = crate::query::expression::evaluate_scalar(
+        &record.values,
+        &bucket.group_by,
+        "$bucket.groupBy",
+    )?;
     let number = value
         .as_ref()
         .and_then(Value::as_number)
@@ -172,10 +170,10 @@ fn bucket_assignment(
     }
 
     let Some(default) = &bucket.default else {
-        return Err(QueryError::Invalid(format!(
-            "aggregate $bucket groupBy field {} is missing, non-numeric, or outside boundaries",
-            bucket.group_by
-        )));
+        return Err(QueryError::Invalid(
+            "aggregate $bucket groupBy expression is missing, non-numeric, or outside boundaries"
+                .to_string(),
+        ));
     };
     Ok((bucket.boundaries.len() - 1, default.clone()))
 }

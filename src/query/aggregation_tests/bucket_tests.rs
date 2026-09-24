@@ -77,6 +77,30 @@ fn bucket_defaults_to_count_and_supports_group_output_stages() {
 }
 
 #[test]
+fn bucket_evaluates_a_shared_scalar_expression() {
+    let records = [record(1, json!({"AGE": 7})), record(2, json!({"AGE": 29}))];
+    let stages = vec![
+        json!({
+            "$bucket": {
+                "groupBy": {"$add": ["$AGE", 1]},
+                "boundaries": [0, 20, 40]
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records.iter().collect::<Vec<_>>(), &stages).unwrap(),
+        vec![
+            json!({"_id": 0, "count": 1}),
+            json!({"_id": 20, "count": 1})
+        ]
+    );
+}
+
+#[test]
 fn rejects_invalid_bucket_boundaries_and_unmatched_values() {
     let records = [record(1, json!({"AGE": 7}))];
     let invalid_stages = [
@@ -88,6 +112,9 @@ fn rejects_invalid_bucket_boundaries_and_unmatched_values() {
         }),
         json!({
             "$bucket": {"groupBy": "$AGE", "boundaries": [0, 20], "output": {}}
+        }),
+        json!({
+            "$bucket": {"groupBy": {"$unknown": "$AGE"}, "boundaries": [0, 20]}
         }),
     ];
     for stage in invalid_stages {

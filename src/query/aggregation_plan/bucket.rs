@@ -1,6 +1,7 @@
 use super::group::parse_accumulators;
-use super::{AccumulatorKind, AccumulatorSpec, BucketSpec, GroupSpec, QueryError, field_reference};
+use super::{AccumulatorKind, AccumulatorSpec, BucketSpec, GroupSpec, QueryError};
 use crate::query::aggregation_plan::MAX_BUCKETS;
+use crate::query::expression::parse_scalar_operand;
 use serde_json::Value;
 
 pub(super) fn parse_bucket(value: &Value, index: usize) -> Result<BucketSpec, QueryError> {
@@ -18,15 +19,12 @@ pub(super) fn parse_bucket(value: &Value, index: usize) -> Result<BucketSpec, Qu
         }
     }
 
-    let group_by = object
-        .get("groupBy")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            QueryError::Invalid(format!(
-                "aggregate stage {index}.$bucket.groupBy must be a field reference"
-            ))
-        })?;
-    let group_by = field_reference(
+    let group_by = object.get("groupBy").ok_or_else(|| {
+        QueryError::Invalid(format!(
+            "aggregate stage {index}.$bucket.groupBy must be a scalar expression"
+        ))
+    })?;
+    let group_by = parse_scalar_operand(
         group_by,
         &format!("aggregate stage {index}.$bucket.groupBy"),
     )?;
@@ -73,7 +71,6 @@ pub(super) fn parse_bucket(value: &Value, index: usize) -> Result<BucketSpec, Qu
 
     let output = match object.get("output") {
         None => GroupSpec {
-            key_field: None,
             key_expression: None,
             accumulators: vec![AccumulatorSpec {
                 name: String::from("count"),
@@ -92,7 +89,6 @@ pub(super) fn parse_bucket(value: &Value, index: usize) -> Result<BucketSpec, Qu
                 )));
             }
             GroupSpec {
-                key_field: None,
                 key_expression: None,
                 accumulators: parse_accumulators(
                     output,

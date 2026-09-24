@@ -23,24 +23,27 @@ pub(super) fn execute<'a>(
     let mut input_records = Vec::new();
     let mut values = Vec::new();
     for record in records {
-        let value = crate::query_path::field_value(&record.values, &bucket.group_by);
+        let value = crate::query::expression::evaluate_scalar(
+            &record.values,
+            &bucket.group_by,
+            "$bucketAuto.groupBy",
+        )?;
         let Some(number) = value
             .as_ref()
             .and_then(Value::as_number)
             .and_then(|number| number.as_f64())
             .filter(|number| number.is_finite())
         else {
-            return Err(QueryError::Invalid(format!(
-                "aggregate $bucketAuto groupBy field {} is missing or non-numeric",
-                bucket.group_by
-            )));
+            return Err(QueryError::Invalid(
+                "aggregate $bucketAuto groupBy expression is missing or non-numeric".to_string(),
+            ));
         };
         if values.len() >= MAX_BUCKET_AUTO_VALUES {
             return Err(QueryError::Invalid(format!(
                 "aggregate $bucketAuto value count exceeds {MAX_BUCKET_AUTO_VALUES}"
             )));
         }
-        input_records.push(record);
+        input_records.push((record, number));
         values.push(BucketAutoValue {
             number,
             value: value.expect("validated bucketAuto value"),
@@ -98,10 +101,7 @@ pub(super) fn execute<'a>(
         .map(|range| Some(accumulators::new_group(range.key.clone(), &bucket.output)))
         .collect::<Vec<_>>();
     let mut collected_values = 0;
-    for record in input_records {
-        let number = crate::query_path::field_value(&record.values, &bucket.group_by)
-            .and_then(|value| value.as_number().and_then(|number| number.as_f64()))
-            .expect("bucketAuto input was validated");
+    for (record, number) in input_records {
         let bucket_index = ranges
             .iter()
             .position(|range| number < range.upper)

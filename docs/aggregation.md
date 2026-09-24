@@ -86,11 +86,13 @@ Dotted field paths, an `includeArrayIndex` name equal to `path`, and other exten
 }
 ```
 
-`groupBy` must be one field reference, and `boundaries` must contain at least two finite JSON numbers in strictly ascending order.
+`groupBy` accepts the shared bounded scalar-expression subset, and its result must be a finite JSON number for range assignment.
+
+`boundaries` must contain at least two finite JSON numbers in strictly ascending order.
 
 Each range includes its lower boundary and excludes its upper boundary.
 
-A missing, null, nonnumeric, or out-of-range `groupBy` value uses `default` when it is present; otherwise the aggregate is rejected.
+A missing, null, nonnumeric, or out-of-range `groupBy` result uses `default` when it is present; otherwise the aggregate is rejected.
 
 Each non-empty range produces one document whose `_id` is the range lower boundary, and a populated default bucket uses the default value as `_id`.
 
@@ -107,11 +109,13 @@ Empty buckets are omitted, and the default bucket is emitted after the range buc
 }
 ```
 
-`groupBy` must be one field reference, and `buckets` must be a positive integer no greater than 10,000.
+`groupBy` accepts the shared bounded scalar-expression subset, and its result must be a finite JSON number. `buckets` must be a positive integer no greater than 10,000.
+
+The expression is evaluated once per input record, after input stages and before range derivation.
 
 The implementation sorts finite numeric values, partitions their distinct values into at most the requested number of non-empty buckets, and preserves the original input order for bucket accumulators.
 
-Missing, null, and nonnumeric `groupBy` values reject the aggregate because `$bucketAuto` has no default bucket in this bounded contract.
+Missing, null, and nonnumeric `groupBy` results reject the aggregate because `$bucketAuto` has no default bucket in this bounded contract.
 
 Each output `_id` is an object with `min` and `max` numeric bounds; the upper bound is exclusive except for the final bucket, whose upper bound is inclusive.
 
@@ -163,7 +167,9 @@ The stage supports at most 10,000 ranges, does not spill to disk, and shares the
 
 Group, bucket, bucket-auto, or `$sortByCount` output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, at most one `$skip`, and at most one final `$limit` stage.
 
-`_id` is either `null` or one dotted field reference.
+`_id` is either `null` or one expression from the shared bounded scalar-expression subset.
+
+The expression is evaluated once per input record; a missing or null result is grouped as `null`.
 
 Supported accumulators are `$count: {}`, numeric `$sum`, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, `$last: "$FIELD"`, `$push: "$FIELD"`, and `$addToSet: "$FIELD"`, plus numeric `$avg`, `$stdDevPop`, and `$stdDevSamp` for finite JSON numbers.
 
@@ -243,7 +249,7 @@ Without `$sort`, group, bucket, or bucket-auto output order is not part of the c
 
 `$skip` accepts a non-negative integer and discards that many materialized group results after sorting and before `$limit`.
 
-`$skip` must appear after `$group`, `$bucket`, or `$bucketAuto` and any optional `$project` or `$sort`, and before `$limit`.
+`$skip` must appear after `$group`, `$bucket`, `$bucketAuto`, or `$sortByCount` and any optional `$project` or `$sort`, and before `$limit`.
 
 `$match` stages use the same predicate rules as top-level `filter`.
 
@@ -273,7 +279,7 @@ MongoDB documents `$group` as a blocking stage and specifies accumulator behavio
 
 MongoDB documents `$sortByCount` as a grouping stage that is equivalent to `$group` followed by a descending `$sort` on `count`; txBASE keeps that behavior while limiting the group expression to the shared bounded scalar-expression subset.
 
-MongoDB documents `$bucketAuto` as a stage that derives boundaries to distribute input documents across a requested number of buckets; txBASE implements the numeric field-reference subset with explicit value and granularity limits.
+MongoDB documents `$bucketAuto` as a stage that derives boundaries to distribute input documents across a requested number of buckets; txBASE implements the shared scalar-expression subset whose result is numeric, with explicit value and granularity limits.
 
 Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/) is represented by this bounded txBASE stage without claiming full MongoDB pipeline compatibility.
 

@@ -97,12 +97,42 @@ fn bucket_auto_emits_fewer_buckets_for_duplicate_values() {
 }
 
 #[test]
+fn bucket_auto_evaluates_a_shared_scalar_expression() {
+    let records = [
+        record(1, json!({"AGE": 7})),
+        record(2, json!({"AGE": 18})),
+        record(3, json!({"AGE": 29})),
+        record(4, json!({"AGE": 45})),
+    ];
+
+    assert_eq!(
+        execute(
+            &records,
+            &[json!({
+                "$bucketAuto": {
+                    "groupBy": {"$add": ["$AGE", 1]},
+                    "buckets": 2
+                }
+            })],
+        )
+        .unwrap(),
+        vec![
+            json!({"_id": {"min": 8, "max": 30}, "count": 2}),
+            json!({"_id": {"min": 30, "max": 46}, "count": 2}),
+        ]
+    );
+}
+
+#[test]
 fn bucket_auto_rejects_unsupported_or_non_numeric_input() {
     let records = [record(1, json!({"VALUE": "one"}))];
     for stage in [
         json!({"$bucketAuto": {"groupBy": "$VALUE", "buckets": 0}}),
         json!({"$bucketAuto": {"groupBy": "$VALUE", "buckets": 1, "granularity": "R10"}}),
         json!({"$bucketAuto": {"groupBy": "$VALUE", "buckets": 1, "output": {}}}),
+        json!({
+            "$bucketAuto": {"groupBy": {"$unknown": "$VALUE"}, "buckets": 1}
+        }),
     ] {
         assert!(execute(&records, &[stage]).is_err());
     }
