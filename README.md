@@ -231,7 +231,7 @@ The resulting binary is `target/release/txbase`.
 
 ### Quality gates
 
-CI runs the documentation checks on Ubuntu and the Rust checks on Ubuntu, macOS, and Windows:
+CI runs the documentation checks on Ubuntu, the generated-WASM Node.js smoke check on Ubuntu, and the Rust checks on Ubuntu, macOS, and Windows:
 
 ```bash
 bun install --frozen-lockfile
@@ -239,8 +239,16 @@ bun run lint:docs
 bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
-cargo check --lib --target wasm32-unknown-unknown
 cargo test --all-targets --all-features
+```
+
+The WASM CI job additionally builds the release artifact, generates its Node.js wrapper with `wasm-bindgen-cli` `0.2.128`, and runs:
+
+```bash
+cargo build --locked --lib --target wasm32-unknown-unknown --release
+cargo install wasm-bindgen-cli --version 0.2.128 --locked
+wasm-bindgen target/wasm32-unknown-unknown/release/txbase.wasm --target nodejs --out-dir target/wasm-bindgen
+node tests/wasm_smoke.mjs target/wasm-bindgen
 ```
 
 ### Repository layout

@@ -10,6 +10,9 @@ rust-version = "1.85"
 license = "MIT"
 description = "A small transactional dBASE-compatible database prototype"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 encoding_rs = "0.8"
 serde = { version = "1", features = ["derive"] }

@@ -31,7 +31,11 @@ Its versioned boundary currently provides:
   The shared `MAX_OPERATION_BATCH` limit is 1,000 operations, and oversized
   or empty batches are rejected before any operation is applied;
 - a `wasm-bindgen` `WasmDatabase` wrapper on `wasm32` with the same methods;
-- native contract tests and a CI `wasm32-unknown-unknown` library check.
+- native contract tests;
+- a pinned Node.js `wasm-bindgen` smoke test that loads the generated wrapper,
+  checks the ABI version, executes a query, applies one mutation, and applies
+  an atomic batch;
+- a CI `wasm32-unknown-unknown` release build and wrapper smoke check.
 
 The core does not write files, access a network, schedule tasks, or commit a
 transaction. The host must persist the returned snapshot and provide
@@ -125,7 +129,8 @@ The current core slice meets the following initial conditions:
 - one native host fixture;
 - identical query and mutation implementation paths across native and WASM;
 - an asynchronous object-table fixture using the runtime-neutral store contract;
-- explicit malformed-input errors at the byte and JSON boundaries.
+- explicit malformed-input errors at the byte and JSON boundaries;
+- a Node.js host smoke test for the generated `wasm-bindgen` wrapper.
 
 The following conditions remain before calling a worker or WASI host complete:
 
@@ -148,8 +153,9 @@ Those would be separate products and would obscure the shared core contract.
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
+- [wasm-bindgen guide](https://rustwasm.github.io/docs/wasm-bindgen/)
 
 The WebAssembly and WASI specifications define the core module and host-interface vocabulary.
 The Component Model and the Cloudflare Workers and Node.js pages are implementation references for possible hosts, not txBASE compatibility commitments.
 
-The repository has a WASM core implementation, target compile check, and runtime-neutral asynchronous object-store and object-table contracts, but it does not claim that a worker or WASI runtime, host-specific asynchronous persistence, or native recovery path is already supported.
+The repository has a WASM core implementation, a generated-wrapper Node.js smoke check, and runtime-neutral asynchronous object-store and object-table contracts, but it does not claim that a worker or WASI runtime, host-specific asynchronous persistence, or native recovery path is already supported.

@@ -222,7 +222,7 @@ cargo build --release
 
 ### 品質ゲート
 
-CIはUbuntuのdocsジョブでドキュメントを検査し、Ubuntu、macOS、WindowsのRustジョブで次のチェックを実行します。
+CIはUbuntuのdocsジョブでドキュメントを検査し、Ubuntuの生成WASM Node.jsスモーク検査を実行し、Ubuntu、macOS、WindowsのRustジョブで次のチェックを実行します。
 
 ```bash
 bun install --frozen-lockfile
@@ -230,8 +230,16 @@ bun run lint:docs
 bash scripts/check-doc-translations.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
-cargo check --lib --target wasm32-unknown-unknown
 cargo test --all-targets --all-features
+```
+
+WASMのCIジョブでは、release artifactを追加でビルドし、`wasm-bindgen-cli` `0.2.128`でNode.jsラッパーを生成して、次を実行します。
+
+```bash
+cargo build --locked --lib --target wasm32-unknown-unknown --release
+cargo install wasm-bindgen-cli --version 0.2.128 --locked
+wasm-bindgen target/wasm32-unknown-unknown/release/txbase.wasm --target nodejs --out-dir target/wasm-bindgen
+node tests/wasm_smoke.mjs target/wasm-bindgen
 ```
 
 ### リポジトリ構成

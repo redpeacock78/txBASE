@@ -23,7 +23,9 @@ WASMはパスとbodyの検証を二重に実装しません。
   すべての操作が成功した場合だけ、非公開コピーからスナップショットを公開する。
   共有する`MAX_OPERATION_BATCH`の上限は1,000操作であり、上限超過または空のバッチは操作を適用する前に拒否する。
 - `wasm32`で同じメソッドを公開する`wasm-bindgen`の`WasmDatabase`ラッパー。
-- ネイティブ契約テストと、CIでの`wasm32-unknown-unknown`ライブラリ検査。
+- ネイティブ契約テスト。
+- 生成したラッパーを読み込み、ABIバージョン、クエリ、単独更新、原子的なバッチを検査する、固定したNode.js `wasm-bindgen`スモークテスト。
+- CIでの`wasm32-unknown-unknown` release buildとラッパースモーク検査。
 
 コアはファイル書き込み、ネットワークアクセス、タスクのスケジューリング、トランザクションのコミットを行いません。
 ホストは、返されたスナップショットの永続化、直列化、再試行、並行性制御を提供しなければなりません。
@@ -117,6 +119,7 @@ WASM境界は、対応する範囲で既存のDBFとXBFのコーデックを再�
 - ネイティブ経路とWASM経路が同じクエリと更新の実装経路を使う。
 - ランタイムから独立したストレージ契約を使う非同期テーブルフィクスチャが1つある。
 - バイト列とJSONの境界で不正入力エラーを明示的に扱う。
+- 生成した`wasm-bindgen`ラッパーをNode.jsから検査するスモークテストがある。
 
 ワーカーまたはWASIホストを完了と呼ぶ前に、次の条件を満たします。
 
@@ -139,8 +142,9 @@ WASM境界は、対応する範囲で既存のDBFとXBFのコーデックを再�
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
+- [wasm-bindgenガイド](https://rustwasm.github.io/docs/wasm-bindgen/)
 
 WebAssemblyとWASIの仕様は、コアモジュールとホストインターフェースの語彙を定義します。
 Component Model、Cloudflare Workers、Node.jsの資料は候補ホストの実装参照であり、txBASEの互換性を約束するものではありません。
 
-リポジトリにはWASMコアの実装、ターゲットコンパイル検査、ランタイムから独立した非同期オブジェクトストレージとテーブルの契約がありますが、ワーカーまたはWASIランタイム、ホスト固有の非同期永続化、ネイティブの復旧経路をすでにサポートするとは主張しません。
+リポジトリにはWASMコアの実装、生成ラッパーのNode.jsスモーク検査、ランタイムから独立した非同期オブジェクトストレージとテーブルの契約がありますが、ワーカーまたはWASIランタイム、ホスト固有の非同期永続化、ネイティブの復旧経路をすでにサポートするとは主張しません。

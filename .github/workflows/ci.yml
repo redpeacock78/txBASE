@@ -24,7 +24,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - run: cargo check --lib --target wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - run: cargo build --locked --lib --target wasm32-unknown-unknown --release
+      - run: cargo install wasm-bindgen-cli --version 0.2.128 --locked
+      - run: wasm-bindgen target/wasm32-unknown-unknown/release/txbase.wasm --target nodejs --out-dir target/wasm-bindgen
+      - run: node tests/wasm_smoke.mjs target/wasm-bindgen
 
   test:
     name: test (${{ matrix.os }})
