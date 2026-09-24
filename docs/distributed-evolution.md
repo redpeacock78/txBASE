@@ -72,6 +72,12 @@ format version byte, and the validated `ReplicationLog` JSON payload.
 catalog transaction position, and bootstraps a missing sidecar only at the
 matching catalog position.
 
+`read_at` returns a retained `Catalog::from_path_at` image only when the
+requested transaction is covered by the applied log and the log position
+matches the live catalog. `read_applied` reads the latest such image.
+These methods define a local historical follower-read primitive; they do not
+provide leases, linearizability, quorum freshness, or network transport.
+
 ## 4. Co-location before distributed joins
 
 Distributed relational support should first favor co-location.
@@ -105,6 +111,7 @@ The local slice defines the following initial contracts:
 - conflict and retry: exact duplicates are acknowledged, conflicting duplicates and gaps are rejected;
 - schema version: the catalog representation tag must match before commit;
 - recovery: a follower retries a missing prefix, and the journaled `TXRP` log can resume after process restart;
+- follower reads: a caller can read a retained catalog image at an applied log transaction;
 - deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
 
 The following contracts remain open:
@@ -124,19 +131,20 @@ The initial local replication slice is complete because it has:
 - one selected local authority model: fixed-term single writer;
 - the versioned `ReplicationEntry` and `ReplicationLog` formats;
 - the journaled `TXRP` sidecar with term and catalog-position checks;
+- the local historical follower-read boundary with applied-position checks;
 - deterministic replay, duplicate-delivery, conflict, and ordering tests;
 - partition-gap, serialized-log recovery, term, and schema-tag tests;
 - explicit write consistency: only the next catalog transaction can commit;
 - a leader/follower fixture that fails and recovers without external infrastructure.
 
-Network replication, full MVCC coordination, snapshot installation, follower
-reads, and distributed partitioning remain future work.
+Network replication, full MVCC coordination, snapshot installation, distributed
+follower-read guarantees, and distributed partitioning remain future work.
 
 ## 7. Explicit non-goals
 
 This document does not promise Raft, quorum, multi-region writes, global
-transactions, log truncation or snapshot installation, or automatic partition
-balancing.
+transactions, log truncation or snapshot installation, distributed
+follower-read guarantees, or automatic partition balancing.
 
 Those choices require the authority and recovery contracts above.
 
@@ -148,7 +156,8 @@ Those choices require the authority and recovery contracts above.
 The Raft paper is a candidate protocol reference for the authority step in the progression.
 It does not select Raft for txBASE and does not define the future txBASE log, schema, or recovery format.
 
-The current repository has a local entry/replay implementation and a journaled
-`TXRP` sidecar, but no network transport, consensus, quorum, follower-read, or
+The current repository has a local entry/replay implementation, a journaled
+`TXRP` sidecar, and a bounded historical follower-read primitive, but no
+network transport, consensus, quorum, distributed follower-read guarantee, or
 distributed-join implementation.
 Those statements remain design constraints rather than compatibility claims.

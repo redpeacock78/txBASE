@@ -66,7 +66,7 @@ The repository currently provides:
 - A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
-- A process-local single-authority replication boundary with versioned `ReplicationEntry` and `ReplicationLog` JSON formats, journaled `TXRP` sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, and deterministic leader/follower fixtures without external infrastructure.
+- A process-local single-authority replication boundary with versioned `ReplicationEntry` and `ReplicationLog` JSON formats, journaled `TXRP` sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, and deterministic leader/follower fixtures without external infrastructure.
 
 The baseline intentionally does not include the following:
 
@@ -357,6 +357,8 @@ It selects a fixed-term, process-local single writer and reuses the existing
 catalog journal for atomic catalog transactions.
 It journals the `TXRP` replication position with the catalog mutation and can
 reopen that position after a process restart.
+It also exposes historical follower reads only at positions covered by the
+log and retained by catalog MVCC.
 It is a replay and contract boundary, not a network or consensus feature.
 
 ### Candidate scope
@@ -366,7 +368,7 @@ It is a replay and contract boundary, not a network or consensus feature.
 - Networked replication.
 - Raft or another explicitly selected authority protocol.
 - Snapshot installation.
-- Follower reads.
+- Distributed follower-read guarantees.
 - Distributed partitioning.
 
 The remaining distributed features require quorum or consensus authority,

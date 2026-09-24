@@ -149,6 +149,48 @@ impl ReplicationLog {
         &self.entries
     }
 
+    /// Reads a retained catalog snapshot at an already applied transaction.
+    ///
+    /// This is a local historical follower-read primitive. It does not claim
+    /// quorum, leases, linearizability, or network freshness.
+    pub fn read_at(
+        &self,
+        catalog: &Catalog,
+        transaction_id: u64,
+    ) -> Result<Catalog, ReplicationError> {
+        if transaction_id == 0 {
+            return Err(ReplicationError::Invalid(
+                "follower read transaction_id must be positive".into(),
+            ));
+        }
+        if transaction_id < self.base_transaction_id {
+            return Err(ReplicationError::ReadHistoryUnavailable {
+                requested: transaction_id,
+                base_transaction_id: self.base_transaction_id,
+            });
+        }
+        if transaction_id > self.last_transaction_id() {
+            return Err(ReplicationError::ReadUnavailable {
+                requested: transaction_id,
+                applied: self.last_transaction_id(),
+            });
+        }
+        self.ensure_catalog_position(current_transaction_id(catalog)?)?;
+        Catalog::from_path_at(catalog.root(), transaction_id).map_err(ReplicationError::Catalog)
+    }
+
+    /// Reads the latest catalog image covered by this local replication log.
+    pub fn read_applied(&self, catalog: &Catalog) -> Result<Catalog, ReplicationError> {
+        let transaction_id = current_transaction_id(catalog)?;
+        if transaction_id == 0 {
+            return Err(ReplicationError::ReadUnavailable {
+                requested: 1,
+                applied: 0,
+            });
+        }
+        self.read_at(catalog, transaction_id)
+    }
+
     /// Opens the durable replication log associated with a catalog.
     ///
     /// A missing sidecar bootstraps a log at the requested term. An existing
@@ -419,14 +461,42 @@ pub enum ReplicationError {
     Serialization(String),
     Catalog(CatalogError),
     Commit(CatalogTransactionError),
-    TermMismatch { expected: u64, actual: u64 },
-    IndexGap { expected: u64, actual: u64 },
-    TransactionGap { expected: u64, actual: u64 },
-    CatalogStateMismatch { expected: u64, actual: u64 },
-    SchemaMismatch { expected: String, actual: String },
-    HistoryUnavailable { index: u64, base_index: u64 },
-    ConflictingDuplicate { index: u64 },
+    TermMismatch {
+        expected: u64,
+        actual: u64,
+    },
+    IndexGap {
+        expected: u64,
+        actual: u64,
+    },
+    TransactionGap {
+        expected: u64,
+        actual: u64,
+    },
+    CatalogStateMismatch {
+        expected: u64,
+        actual: u64,
+    },
+    SchemaMismatch {
+        expected: String,
+        actual: String,
+    },
+    HistoryUnavailable {
+        index: u64,
+        base_index: u64,
+    },
+    ConflictingDuplicate {
+        index: u64,
+    },
     SidecarStateMismatch,
+    ReadUnavailable {
+        requested: u64,
+        applied: u64,
+    },
+    ReadHistoryUnavailable {
+        requested: u64,
+        base_transaction_id: u64,
+    },
 }
 
 impl Display for ReplicationError {
@@ -478,6 +548,17 @@ impl Display for ReplicationError {
                     "replication sidecar does not match the in-memory log"
                 )
             }
+            Self::ReadUnavailable { requested, applied } => write!(
+                formatter,
+                "follower read transaction {requested} is beyond applied transaction {applied}"
+            ),
+            Self::ReadHistoryUnavailable {
+                requested,
+                base_transaction_id,
+            } => write!(
+                formatter,
+                "follower read transaction {requested} is unavailable at log base transaction {base_transaction_id}"
+            ),
         }
     }
 }

@@ -237,6 +237,68 @@ fn malformed_txrp_sidecar_is_rejected_before_replay() {
 }
 
 #[test]
+fn local_follower_reads_are_limited_to_the_applied_log() {
+    let root = catalog_root("follower-read");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::open(&catalog, 1).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+    log.propose(&catalog, vec![post(4, "Dave")]).unwrap();
+
+    let first = log.read_at(&catalog, 1).unwrap();
+    assert!(
+        first
+            .open_table("users")
+            .unwrap()
+            .active_record(3)
+            .is_some()
+    );
+    assert!(
+        first
+            .open_table("users")
+            .unwrap()
+            .active_record(4)
+            .is_none()
+    );
+
+    let latest = log.read_applied(&catalog).unwrap();
+    assert!(
+        latest
+            .open_table("users")
+            .unwrap()
+            .active_record(4)
+            .is_some()
+    );
+    assert!(matches!(
+        log.read_at(&catalog, 3),
+        Err(ReplicationError::ReadUnavailable {
+            requested: 3,
+            applied: 2
+        })
+    ));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn follower_reads_reject_a_log_and_catalog_position_mismatch() {
+    let root = catalog_root("follower-read-state");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::open(&catalog, 1).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+    let restored = ReplicationLog::new(1).unwrap();
+
+    assert!(matches!(
+        restored.read_applied(&catalog),
+        Err(ReplicationError::CatalogStateMismatch {
+            expected: 0,
+            actual: 1
+        })
+    ));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn schema_and_term_mismatches_are_rejected_before_commit() {
     let root = catalog_root("validation");
     let catalog = Catalog::from_path(&root).unwrap();
