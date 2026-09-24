@@ -641,6 +641,10 @@ pub enum ReplicationError {
         requested: u64,
         base_transaction_id: u64,
     },
+    SnapshotUnavailable {
+        requested: u64,
+        applied: u64,
+    },
     SnapshotStale {
         requested: u64,
         current: u64,
@@ -713,6 +717,10 @@ impl Display for ReplicationError {
             } => write!(
                 formatter,
                 "follower read transaction {requested} is unavailable at log base transaction {base_transaction_id}"
+            ),
+            Self::SnapshotUnavailable { requested, applied } => write!(
+                formatter,
+                "replication snapshot index {requested} is beyond applied index {applied}"
             ),
             Self::SnapshotStale { requested, current } => write!(
                 formatter,

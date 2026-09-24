@@ -296,6 +296,7 @@ fn error_json(replication_error: &ReplicationError) -> serde_json::Value {
         ReplicationError::SidecarStateMismatch => "replication_sidecar_mismatch",
         ReplicationError::ReadUnavailable { .. }
         | ReplicationError::ReadHistoryUnavailable { .. } => "replication_read_unavailable",
+        ReplicationError::SnapshotUnavailable { .. } => "replication_snapshot_unavailable",
         ReplicationError::SnapshotStale { .. } => "replication_snapshot_stale",
         ReplicationError::SnapshotConflict { .. } => "replication_snapshot_conflict",
         ReplicationError::SnapshotInstallRace { .. } => "replication_snapshot_install_race",

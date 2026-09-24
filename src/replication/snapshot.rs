@@ -114,6 +114,131 @@ impl ReplicationLog {
         )
     }
 
+    /// Captures a retained catalog image at an applied log index.
+    pub fn snapshot_at(
+        &self,
+        catalog: &Catalog,
+        index: u64,
+    ) -> Result<ReplicationSnapshot, ReplicationError> {
+        self.validate()?;
+        self.ensure_catalog_position(super::current_transaction_id(catalog)?)?;
+        if index < self.base_index() {
+            return Err(ReplicationError::HistoryUnavailable {
+                index,
+                base_index: self.base_index(),
+            });
+        }
+        if index > self.last_index() {
+            return Err(ReplicationError::SnapshotUnavailable {
+                requested: index,
+                applied: self.last_index(),
+            });
+        }
+        let offset = index - self.base_index();
+        let transaction_id = self
+            .base_transaction_id()
+            .checked_add(offset)
+            .ok_or_else(|| ReplicationError::Invalid("snapshot transaction ID exhausted".into()))?;
+        if transaction_id == 0 {
+            return Err(ReplicationError::Invalid(
+                "cannot snapshot an empty catalog".into(),
+            ));
+        }
+        let catalog_bytes = catalog
+            .export_snapshot_at(transaction_id)
+            .map_err(ReplicationError::Catalog)?;
+        let (actual_transaction_id, schema_tag) =
+            Catalog::snapshot_metadata(&catalog_bytes).map_err(ReplicationError::Catalog)?;
+        if actual_transaction_id != transaction_id {
+            return Err(ReplicationError::TransactionGap {
+                expected: transaction_id,
+                actual: actual_transaction_id,
+            });
+        }
+        ReplicationSnapshot::new(
+            self.term(),
+            index,
+            transaction_id,
+            schema_tag,
+            catalog_bytes,
+        )
+    }
+
+    /// Compacts the local log through a validated snapshot while preserving its suffix.
+    pub fn compact_through(
+        &mut self,
+        catalog: &Catalog,
+        snapshot: ReplicationSnapshot,
+    ) -> Result<(), ReplicationError> {
+        snapshot.validate()?;
+        if snapshot.term != self.term() {
+            return Err(ReplicationError::TermMismatch {
+                expected: self.term(),
+                actual: snapshot.term,
+            });
+        }
+        self.validate()?;
+        self.ensure_catalog_position(super::current_transaction_id(catalog)?)?;
+        if snapshot.last_index <= self.base_index() {
+            return Err(ReplicationError::Invalid(
+                "snapshot must advance the replication log base".into(),
+            ));
+        }
+        if snapshot.last_index > self.last_index() {
+            return Err(ReplicationError::SnapshotUnavailable {
+                requested: snapshot.last_index,
+                applied: self.last_index(),
+            });
+        }
+        let offset = snapshot.last_index - self.base_index();
+        let expected_transaction_id = self
+            .base_transaction_id()
+            .checked_add(offset)
+            .ok_or_else(|| ReplicationError::Invalid("snapshot transaction ID exhausted".into()))?;
+        if snapshot.last_transaction_id != expected_transaction_id {
+            return Err(ReplicationError::TransactionGap {
+                expected: expected_transaction_id,
+                actual: snapshot.last_transaction_id,
+            });
+        }
+        let local_catalog = catalog
+            .export_snapshot_at(expected_transaction_id)
+            .map_err(ReplicationError::Catalog)?;
+        if local_catalog != snapshot.catalog {
+            return Err(ReplicationError::SnapshotConflict {
+                transaction_id: expected_transaction_id,
+            });
+        }
+
+        let expected_sidecar = self.to_sidecar_bytes()?;
+        let actual_sidecar = catalog
+            .read_sidecar_bytes(REPLICATION_SIDECAR_NAME)
+            .map_err(ReplicationError::Catalog)?;
+        if actual_sidecar.as_deref() != Some(expected_sidecar.as_slice()) {
+            return Err(ReplicationError::SidecarStateMismatch);
+        }
+        let offset = usize::try_from(offset)
+            .map_err(|_| ReplicationError::Invalid("replication log offset is too large".into()))?;
+        let next_log = ReplicationLog {
+            format_version: self.format_version,
+            term: self.term,
+            base_index: snapshot.last_index,
+            base_transaction_id: snapshot.last_transaction_id,
+            entries: self.entries[offset..].to_vec(),
+        };
+        next_log.validate()?;
+        let sidecar_after = next_log.to_sidecar_bytes()?;
+        catalog
+            .replace_sidecar_without_transaction(
+                REPLICATION_SIDECAR_NAME,
+                actual_sidecar,
+                sidecar_after,
+            )
+            .map_err(ReplicationError::Commit)?;
+        *self = next_log;
+        Ok(())
+    }
+
     /// Installs a retained catalog image and compacts the local log to its base position.
     pub fn install_snapshot(
         &mut self,

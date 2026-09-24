@@ -154,6 +154,71 @@ fn committed_journal_replays_the_complete_catalog_commit() {
 }
 
 #[test]
+fn metadata_only_journal_recovery_does_not_advance_catalog_transaction() {
+    for (phase, expected) in [
+        (Phase::Prepared, b"before".as_slice()),
+        (Phase::Committed, b"after".as_slice()),
+    ] {
+        let root = temporary_root();
+        fs::write(root.join(".txbase.replication"), b"after").unwrap();
+        let journal = root.join(JOURNAL_DIR);
+        fs::create_dir(&journal).unwrap();
+        fs::create_dir(journal.join("before")).unwrap();
+        fs::create_dir(journal.join("after")).unwrap();
+        write_synced(&journal.join("before/0"), b"before").unwrap();
+        write_synced(&journal.join("after/0"), b"after").unwrap();
+        write_manifest(
+            &journal,
+            &Manifest {
+                phase,
+                changes: vec![ManifestChange {
+                    target: ".txbase.replication".into(),
+                    before: Some("0".into()),
+                    after: Some("0".into()),
+                }],
+            },
+        )
+        .unwrap();
+
+        recover(&root).unwrap();
+
+        assert_eq!(
+            fs::read(root.join(".txbase.replication")).unwrap(),
+            expected
+        );
+        assert_eq!(read_transaction_id_locked(&root).unwrap(), None);
+        assert!(!root.join(JOURNAL_DIR).exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn commit_rejects_existing_journal_before_advancing_transaction() {
+    let root = temporary_root();
+    fs::write(root.join(TRANSACTION_STATE), transaction_state_bytes(7)).unwrap();
+    fs::create_dir(root.join(JOURNAL_DIR)).unwrap();
+
+    let error = commit_at(
+        &root,
+        8,
+        vec![FileChange {
+            target: root.join(".txbase.replication"),
+            before: None,
+            after: Some(b"after".to_vec()),
+        }],
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        CatalogError::Invalid(message) if message == "catalog transaction journal already exists"
+    ));
+    assert_eq!(read_transaction_id_locked(&root).unwrap(), Some(7));
+    assert!(!root.join(".txbase.replication").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn rejects_a_malformed_catalog_transaction_state() {
     let root = temporary_root();
     fs::write(root.join(TRANSACTION_STATE), b"not a catalog state").unwrap();

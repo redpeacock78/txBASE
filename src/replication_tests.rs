@@ -427,6 +427,94 @@ fn snapshot_installation_rejects_stale_and_conflicting_images() {
 }
 
 #[test]
+fn authority_compaction_preserves_suffix_and_reopens_without_advancing_catalog() {
+    let root = catalog_root("compaction");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::open(&catalog, 1).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+    log.propose(&catalog, vec![post(4, "Dave")]).unwrap();
+    log.propose(&catalog, vec![post(5, "Eve")]).unwrap();
+
+    let snapshot = log.snapshot_at(&catalog, 2).unwrap();
+    assert_eq!(snapshot.last_index, 2);
+    assert_eq!(snapshot.last_transaction_id, 2);
+    log.compact_through(&catalog, snapshot).unwrap();
+
+    assert_eq!(log.base_index(), 2);
+    assert_eq!(log.base_transaction_id(), 2);
+    assert_eq!(log.entries().len(), 1);
+    assert_eq!(log.entries()[0].index, 3);
+    assert_eq!(log.entries()[0].transaction_id, 3);
+    assert_eq!(catalog.transaction_id().unwrap(), Some(3));
+    assert!(matches!(
+        log.read_at(&catalog, 1),
+        Err(ReplicationError::ReadHistoryUnavailable {
+            requested: 1,
+            base_transaction_id: 2
+        })
+    ));
+    assert!(
+        log.read_at(&catalog, 2)
+            .unwrap()
+            .open_table("users")
+            .unwrap()
+            .active_record(4)
+            .is_some()
+    );
+
+    drop(log);
+    let mut reopened = ReplicationLog::open(&catalog, 1).unwrap();
+    assert_eq!(reopened.base_index(), 2);
+    assert_eq!(reopened.last_index(), 3);
+    let next = reopened.propose(&catalog, vec![post(6, "Frank")]).unwrap();
+    assert_eq!(next.index, 4);
+    assert_eq!(next.transaction_id, 4);
+    assert_eq!(catalog.transaction_id().unwrap(), Some(4));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn authority_compaction_rejects_unavailable_and_divergent_snapshots() {
+    let root = catalog_root("compaction-reject");
+    let conflict_root = catalog_root("compaction-conflict");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let conflict_catalog = Catalog::from_path(&conflict_root).unwrap();
+    let mut log = ReplicationLog::open(&catalog, 1).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+    log.propose(&catalog, vec![post(4, "Dave")]).unwrap();
+    log.propose(&catalog, vec![post(5, "Eve")]).unwrap();
+
+    assert!(matches!(
+        log.snapshot_at(&catalog, 4),
+        Err(ReplicationError::SnapshotUnavailable {
+            requested: 4,
+            applied: 3
+        })
+    ));
+
+    let mut conflict_log = ReplicationLog::open(&conflict_catalog, 1).unwrap();
+    conflict_log
+        .propose(&conflict_catalog, vec![post(3, "Mallory")])
+        .unwrap();
+    conflict_log
+        .propose(&conflict_catalog, vec![post(4, "Nina")])
+        .unwrap();
+    let conflicting = conflict_log.snapshot_at(&conflict_catalog, 2).unwrap();
+    let before = log.to_sidecar_bytes().unwrap();
+    assert!(matches!(
+        log.compact_through(&catalog, conflicting),
+        Err(ReplicationError::SnapshotConflict { transaction_id: 2 })
+    ));
+    assert_eq!(log.base_index(), 0);
+    assert_eq!(log.to_sidecar_bytes().unwrap(), before);
+    assert_eq!(catalog.transaction_id().unwrap(), Some(3));
+
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_dir_all(conflict_root).unwrap();
+}
+
+#[test]
 fn snapshot_install_rejects_a_stale_txrp_sidecar_without_mutating_catalog() {
     let leader_root = catalog_root("snapshot-sidecar-leader");
     let follower_root = catalog_root("snapshot-sidecar-follower");

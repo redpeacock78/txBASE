@@ -66,7 +66,7 @@ The repository currently provides:
 - A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
-- A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, and `ReplicationSnapshot` JSON formats, journaled `TXRP` sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded HTTP entry and snapshot delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
+- A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, and `ReplicationSnapshot` JSON formats, journaled `TXRP` sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded HTTP entry and snapshot delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
 
 The baseline intentionally does not include the following:
 
@@ -77,7 +77,7 @@ The baseline intentionally does not include the following:
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Cloud object-storage adapters and retention policy.
-- Quorum or consensus, authority-coordinated snapshot/log retention, distributed follower reads, and distributed partitioning.
+- Quorum or consensus, follower-watermark or quorum-coordinated snapshot/log retention, distributed follower reads, and distributed partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -367,13 +367,14 @@ The catalog server also exposes version 1 `status`, entry-delivery, snapshot-exp
 The default `authority` role routes `/transaction` and named-table mutations through the same catalog journal commit as `TXRP` state and rechecks table ETags before commit.
 The `follower` role reports its role through `status`, rejects direct catalog mutations with `409`, and still accepts replication delivery.
 Optional RFC 6750 Bearer authentication protects those four replication routes when `TXBASE_REPLICATION_TOKEN` is configured; TLS, quorum, consensus, and retry queues are not provided.
+The authority can export a retained snapshot at an applied index and compact the local `TXRP` prefix through that exact image while preserving the suffix and catalog transaction ID; follower-watermark coordination and quorum-safe truncation remain future work.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, and `TXRP` sidecars.
 - Raft or another explicitly selected authority protocol.
-- TLS, retry, backpressure, and authority-coordinated log truncation.
+- TLS, retry, backpressure, follower-watermark coordination, and quorum-safe log truncation.
 - Distributed follower-read guarantees.
 - Distributed partitioning.
 

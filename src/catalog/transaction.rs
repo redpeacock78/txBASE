@@ -1,5 +1,5 @@
 pub(crate) use super::journal::{CatalogReadLock, CatalogWriteLock, read_lock, write_lock};
-use super::journal::{FileChange, commit, next_transaction_id_locked};
+use super::journal::{FileChange, commit, commit_files, next_transaction_id_locked};
 use super::mvcc::{Snapshot, TableSnapshot};
 use super::{Catalog, CatalogError, CatalogTransactionError};
 use crate::dbf::DbfTable;
@@ -34,6 +34,42 @@ impl Catalog {
         let path = sidecar_path(&self.root, sidecar_name)?;
         let _lock = self.acquire_read_lock()?;
         read_optional(&path)
+    }
+
+    pub(crate) fn replace_sidecar_without_transaction(
+        &self,
+        sidecar_name: &str,
+        expected_sidecar: Option<Vec<u8>>,
+        sidecar_after: Vec<u8>,
+    ) -> Result<(), CatalogTransactionError> {
+        if self.is_historical() {
+            return Err(CatalogTransactionError::Invalid(
+                "historical catalog snapshots are read-only".into(),
+            ));
+        }
+        let _lock = self
+            .acquire_write_lock()
+            .map_err(CatalogTransactionError::Catalog)?;
+        let path =
+            sidecar_path(&self.root, sidecar_name).map_err(CatalogTransactionError::Catalog)?;
+        let actual = read_optional(&path).map_err(CatalogTransactionError::Catalog)?;
+        if actual != expected_sidecar {
+            return Err(CatalogTransactionError::SidecarPreconditionFailed {
+                name: sidecar_name.to_owned(),
+            });
+        }
+        if actual.as_deref() == Some(sidecar_after.as_slice()) {
+            return Ok(());
+        }
+        commit_files(
+            &self.root,
+            vec![FileChange {
+                target: path,
+                before: actual,
+                after: Some(sidecar_after),
+            }],
+        )
+        .map_err(CatalogTransactionError::Catalog)
     }
 
     pub(crate) fn commit_operations_with_preconditions(

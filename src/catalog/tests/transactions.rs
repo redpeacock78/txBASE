@@ -491,3 +491,49 @@ fn rejects_a_failed_named_transaction_without_persisting_earlier_tables() {
     );
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn sidecar_maintenance_is_atomic_without_advancing_catalog_transaction() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    let catalog = Catalog::from_path(&root).unwrap();
+
+    catalog
+        .replace_sidecar_without_transaction(".txbase.replication", None, b"version-1".to_vec())
+        .unwrap();
+    assert_eq!(catalog.transaction_id().unwrap(), None);
+    assert_eq!(
+        catalog.read_sidecar_bytes(".txbase.replication").unwrap(),
+        Some(b"version-1".to_vec())
+    );
+    assert!(!root.join(".txbase.catalog.txn").exists());
+
+    let error = catalog
+        .replace_sidecar_without_transaction(".txbase.replication", None, b"version-2".to_vec())
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        CatalogTransactionError::SidecarPreconditionFailed { name }
+            if name == ".txbase.replication"
+    ));
+    assert_eq!(catalog.transaction_id().unwrap(), None);
+    assert_eq!(
+        catalog.read_sidecar_bytes(".txbase.replication").unwrap(),
+        Some(b"version-1".to_vec())
+    );
+
+    catalog
+        .replace_sidecar_without_transaction(
+            ".txbase.replication",
+            Some(b"version-1".to_vec()),
+            b"version-2".to_vec(),
+        )
+        .unwrap();
+    assert_eq!(catalog.transaction_id().unwrap(), None);
+    assert_eq!(
+        catalog.read_sidecar_bytes(".txbase.replication").unwrap(),
+        Some(b"version-2".to_vec())
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}

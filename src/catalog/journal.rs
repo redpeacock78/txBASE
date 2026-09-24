@@ -98,8 +98,7 @@ pub(crate) fn commit_at(
             "catalog transaction ID must be positive".into(),
         ));
     }
-    let journal = root.join(JOURNAL_DIR);
-    if journal.exists() {
+    if root.join(JOURNAL_DIR).exists() {
         return Err(CatalogError::Invalid(
             "catalog transaction journal already exists".into(),
         ));
@@ -122,6 +121,23 @@ pub(crate) fn commit_at(
         before: state_before,
         after: Some(transaction_state_bytes(transaction_id)),
     });
+
+    commit_files(root, changes)?;
+    Ok(transaction_id)
+}
+
+/// Commits direct-child file changes through the catalog journal without
+/// advancing the catalog transaction ID.
+pub(crate) fn commit_files(root: &Path, changes: Vec<FileChange>) -> Result<(), CatalogError> {
+    if changes.is_empty() {
+        return Ok(());
+    }
+    let journal = root.join(JOURNAL_DIR);
+    if journal.exists() {
+        return Err(CatalogError::Invalid(
+            "catalog transaction journal already exists".into(),
+        ));
+    }
 
     let mut targets = BTreeSet::new();
     for change in &changes {
@@ -192,7 +208,7 @@ pub(crate) fn commit_at(
     result?;
     let _ = fs::remove_dir_all(&journal);
     sync_directory(root)?;
-    Ok(transaction_id)
+    Ok(())
 }
 
 fn next_transaction_id(state: Option<&[u8]>) -> Result<u64, CatalogError> {

@@ -99,9 +99,25 @@ The in-memory log then resumes at the snapshot's next index and transaction.
 Installing the same image is an acknowledged duplicate. Older images,
 conflicting images at the same transaction, sidecar divergence, and a catalog
 that changed during installation are rejected without publishing a partial
-replacement. This is a local recovery primitive; snapshot transport, log
-truncation policy, and authority coordination remain future distributed
-contracts.
+replacement. This is a local recovery primitive; networked snapshot transport
+and follower coordination remain future distributed contracts.
+
+### Authority-side log compaction
+
+`ReplicationLog::snapshot_at` exports a validated catalog image at any
+retained index covered by the applied log. `compact_through` accepts that image,
+verifies its term, position, schema, and exact local catalog bytes, and removes
+only the log prefix through the image. Entries after the image remain available
+for immediate replay.
+
+Compaction changes only the journaled `TXRP` sidecar. The catalog transaction ID
+does not advance, the catalog MVCC history is not silently garbage-collected,
+and reopening the catalog restores the new base position and retained suffix.
+Reads before the new base return an explicit history-unavailable error.
+
+The sidecar-only journal path gives one local authority a crash-recoverable
+retention primitive. It does not decide which followers have acknowledged a
+snapshot, establish a quorum, or expose networked log truncation.
 
 ### HTTP transport boundary
 
@@ -165,6 +181,7 @@ The local slice defines the following initial contracts:
 - recovery: a follower retries a missing prefix, and the journaled `TXRP` log can resume after process restart;
 - follower reads: a caller can read a retained catalog image at an applied log transaction;
 - snapshot recovery: a follower can install one validated catalog image atomically and resume at its next log position;
+- log retention: the local authority can compact through an exact retained snapshot without advancing the catalog transaction or losing the log suffix;
 - transport: the catalog server accepts versioned entry and snapshot JSON through bounded HTTP routes with explicit conflict statuses;
 - authority capture: the default authority role journals `/transaction` and named-table mutations with `TXRP` state, while the follower role rejects direct catalog mutations;
 - authentication: `TXBASE_REPLICATION_TOKEN` optionally protects the four replication routes with RFC 6750 Bearer credentials;
@@ -173,7 +190,7 @@ The local slice defines the following initial contracts:
 The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
-- TLS, streaming, retry, backpressure, and authority-coordinated log truncation;
+- TLS, streaming, retry, backpressure, follower-watermark coordination, and quorum-safe log truncation;
 - observability for lag and transport state;
 - quorum and network failure behavior.
 
@@ -192,13 +209,15 @@ The initial local replication slice is complete because it has:
 - deterministic replay, duplicate-delivery, conflict, and ordering tests;
 - partition-gap, serialized-log recovery, term, and schema-tag tests;
 - snapshot round-trip, installation, resume, stale-image, and conflict tests;
+- retained snapshot export, suffix-preserving log compaction, sidecar-only journal recovery, and compaction conflict tests;
 - bounded HTTP status, entry delivery, duplicate delivery, snapshot installation, and export tests;
 - default authority capture, table-ETag recheck, and follower read-only role tests;
 - explicit write consistency: only the next catalog transaction can commit;
 - a leader/follower fixture that fails and recovers without external infrastructure.
 
-Quorum replication, full MVCC coordination, distributed follower-read guarantees, and distributed
-partitioning remain future work.
+Quorum replication, follower-watermark coordination, full MVCC coordination,
+distributed follower-read guarantees, and distributed partitioning remain future
+work.
 
 ## 7. Explicit non-goals
 
