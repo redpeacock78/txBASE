@@ -54,7 +54,7 @@ database.apply_operation_json(
 database.apply_operation_json(
   jsonBytes({
     method: "DELETE",
-    path: "/records/2",
+    path: "/records/3",
   }),
 );
 rows = decodeJson(database.query_json(jsonBytes({})));
