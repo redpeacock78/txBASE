@@ -36,8 +36,8 @@ async function readRows(stream) {
 
 const database = new WasmDatabase(fixture());
 for (const [id, name] of [
-  [2, "stream-second"],
-  [3, "stream-third"],
+  [2, "second"],
+  [3, "third"],
 ]) {
   database.apply_operation_json(
     jsonBytes({
