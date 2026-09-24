@@ -56,17 +56,21 @@ applied to a different catalog image.
 
 `ReplicationLog` selects one fixed term as the local authority. `propose`
 commits a batch through the existing catalog journal and records it only after
-the commit succeeds. `receive` accepts only the next index and transaction ID,
-checks the term and representation tag, and then applies the same atomic
-catalog commit.
+the commit succeeds. It journals the next `TXRP` sidecar image in the same
+catalog transaction, so the catalog data and local replication position recover
+together. `receive` accepts only the next index and transaction ID, checks the
+term and representation tag, and then applies the same atomic catalog commit.
 
 The entry format defines duplicate delivery as a no-op when the complete entry
 matches. A conflicting duplicate, an index or transaction gap, a term mismatch,
 or an unavailable history prefix is rejected before a new commit.
 
-The log can be serialized and restored as JSON. The caller must persist those
-bytes with its own atomic file or object-store boundary; txBASE does not yet
-install a durable `TXRP` sidecar or a network transport.
+The in-memory JSON form remains available for transport-independent fixtures.
+The durable `TXRP` sidecar starts with the four-byte `TXRP` magic, a sidecar
+format version byte, and the validated `ReplicationLog` JSON payload.
+`ReplicationLog::open` loads that sidecar, checks the requested term and
+catalog transaction position, and bootstraps a missing sidecar only at the
+matching catalog position.
 
 ## 4. Co-location before distributed joins
 
@@ -100,7 +104,7 @@ The local slice defines the following initial contracts:
 - authority: one process-local writer and one fixed term; no quorum is claimed;
 - conflict and retry: exact duplicates are acknowledged, conflicting duplicates and gaps are rejected;
 - schema version: the catalog representation tag must match before commit;
-- recovery: a follower retries a missing prefix, and a serialized log can resume after process restart;
+- recovery: a follower retries a missing prefix, and the journaled `TXRP` log can resume after process restart;
 - deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
 
 The following contracts remain open:
@@ -119,18 +123,20 @@ The initial local replication slice is complete because it has:
 
 - one selected local authority model: fixed-term single writer;
 - the versioned `ReplicationEntry` and `ReplicationLog` formats;
+- the journaled `TXRP` sidecar with term and catalog-position checks;
 - deterministic replay, duplicate-delivery, conflict, and ordering tests;
 - partition-gap, serialized-log recovery, term, and schema-tag tests;
 - explicit write consistency: only the next catalog transaction can commit;
 - a leader/follower fixture that fails and recovers without external infrastructure.
 
-Network replication, full MVCC coordination, follower reads, and distributed
-partitioning remain future work.
+Network replication, full MVCC coordination, snapshot installation, follower
+reads, and distributed partitioning remain future work.
 
 ## 7. Explicit non-goals
 
 This document does not promise Raft, quorum, multi-region writes, global
-transactions, durable replication history, or automatic partition balancing.
+transactions, log truncation or snapshot installation, or automatic partition
+balancing.
 
 Those choices require the authority and recovery contracts above.
 
@@ -142,6 +148,7 @@ Those choices require the authority and recovery contracts above.
 The Raft paper is a candidate protocol reference for the authority step in the progression.
 It does not select Raft for txBASE and does not define the future txBASE log, schema, or recovery format.
 
-The current repository has a local entry/replay implementation but no network
-transport, consensus, quorum, follower-read, or distributed-join implementation.
+The current repository has a local entry/replay implementation and a journaled
+`TXRP` sidecar, but no network transport, consensus, quorum, follower-read, or
+distributed-join implementation.
 Those statements remain design constraints rather than compatibility claims.

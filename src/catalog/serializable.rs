@@ -113,7 +113,7 @@ impl CatalogTransaction {
         if current_table_set != expected_table_set {
             return Err(CatalogTransactionError::TableSetChanged);
         }
-        catalog.commit_loaded_tables_locked(before, tables, touched, true)
+        catalog.commit_loaded_tables_locked(before, tables, touched, true, Vec::new())
     }
 
     /// Discards the private image and releases all held locks.

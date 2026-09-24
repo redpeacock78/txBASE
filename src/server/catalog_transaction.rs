@@ -93,6 +93,14 @@ pub(super) fn response(request: &mut Request, catalog: &Catalog) -> HttpResponse
             ),
             false,
         ),
+        Err(CatalogTransactionError::SidecarPreconditionFailed { .. }) => json_response(
+            409,
+            error(
+                "catalog_changed",
+                "a catalog sidecar changed during the transaction",
+            ),
+            false,
+        ),
         Err(CatalogTransactionError::Catalog(catalog_error)) => json_response(
             500,
             error("catalog_error", &catalog_error.to_string()),

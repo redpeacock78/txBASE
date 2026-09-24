@@ -176,6 +176,67 @@ fn serialized_log_can_resume_after_restart() {
 }
 
 #[test]
+fn txrp_sidecar_reopens_and_continues_with_the_catalog() {
+    let root = catalog_root("durable");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::open(&catalog, 7).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+
+    let sidecar = fs::read(root.join(REPLICATION_SIDECAR_NAME)).unwrap();
+    assert!(sidecar.starts_with(b"TXRP\x01"));
+    assert_eq!(ReplicationLog::from_sidecar_bytes(&sidecar).unwrap(), log);
+
+    let reopened_catalog = Catalog::from_path(&root).unwrap();
+    let mut reopened = ReplicationLog::open(&reopened_catalog, 7).unwrap();
+    let entry = reopened
+        .propose(&reopened_catalog, vec![post(4, "Dave")])
+        .unwrap();
+    assert_eq!(entry.index, 2);
+    assert_eq!(entry.transaction_id, 2);
+    assert_eq!(reopened_catalog.transaction_id().unwrap(), Some(2));
+    assert_eq!(reopened.last_index(), 2);
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn stale_txrp_sidecar_rejects_a_new_catalog_commit() {
+    let root = catalog_root("sidecar-precondition");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::open(&catalog, 1).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+
+    let stale = ReplicationLog::new(1).unwrap().to_sidecar_bytes().unwrap();
+    fs::write(root.join(REPLICATION_SIDECAR_NAME), stale).unwrap();
+    assert!(matches!(
+        log.propose(&catalog, vec![post(4, "Dave")]),
+        Err(ReplicationError::SidecarStateMismatch)
+    ));
+    assert_eq!(catalog.transaction_id().unwrap(), Some(1));
+    assert!(
+        catalog
+            .open_table("users")
+            .unwrap()
+            .active_record(4)
+            .is_none()
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn malformed_txrp_sidecar_is_rejected_before_replay() {
+    let root = catalog_root("malformed-sidecar");
+    fs::write(root.join(REPLICATION_SIDECAR_NAME), b"not-txrp").unwrap();
+    let catalog = Catalog::from_path(&root).unwrap();
+
+    let error = ReplicationLog::open(&catalog, 1).unwrap_err();
+    assert!(error.to_string().contains("sidecar header is invalid"));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn schema_and_term_mismatches_are_rejected_before_commit() {
     let root = catalog_root("validation");
     let catalog = Catalog::from_path(&root).unwrap();

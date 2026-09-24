@@ -6,14 +6,58 @@ use crate::dbf::DbfTable;
 use crate::xbase::{OperationIr, OperationMethod};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
+
+struct SidecarChange {
+    name: String,
+    before: Option<Vec<u8>>,
+    after: Vec<u8>,
+}
 
 impl Catalog {
+    pub(crate) fn read_sidecar_bytes(
+        &self,
+        sidecar_name: &str,
+    ) -> Result<Option<Vec<u8>>, CatalogError> {
+        let path = sidecar_path(&self.root, sidecar_name)?;
+        let _lock = self.acquire_read_lock()?;
+        read_optional(&path)
+    }
+
     pub(crate) fn commit_operations_with_preconditions(
         &self,
         operations: &[OperationIr],
         if_match: Option<&str>,
         if_none_match: Option<&str>,
+    ) -> Result<u64, CatalogTransactionError> {
+        self.commit_operations_internal(operations, if_match, if_none_match, None)
+    }
+
+    pub(crate) fn commit_operations_with_sidecar(
+        &self,
+        operations: &[OperationIr],
+        sidecar_name: &str,
+        expected_sidecar: Option<Vec<u8>>,
+        sidecar_after: Vec<u8>,
+    ) -> Result<u64, CatalogTransactionError> {
+        self.commit_operations_internal(
+            operations,
+            None,
+            None,
+            Some(SidecarChange {
+                name: sidecar_name.to_owned(),
+                before: expected_sidecar,
+                after: sidecar_after,
+            }),
+        )
+    }
+
+    fn commit_operations_internal(
+        &self,
+        operations: &[OperationIr],
+        if_match: Option<&str>,
+        if_none_match: Option<&str>,
+        sidecar: Option<SidecarChange>,
     ) -> Result<u64, CatalogTransactionError> {
         if operations.is_empty() {
             return Err(CatalogTransactionError::Invalid(
@@ -28,6 +72,23 @@ impl Catalog {
         let _lock = self
             .acquire_write_lock()
             .map_err(CatalogTransactionError::Catalog)?;
+        let sidecar_change = sidecar
+            .map(|sidecar| {
+                let path = sidecar_path(&self.root, &sidecar.name)
+                    .map_err(CatalogTransactionError::Catalog)?;
+                let actual = read_optional(&path).map_err(CatalogTransactionError::Catalog)?;
+                if actual != sidecar.before {
+                    return Err(CatalogTransactionError::SidecarPreconditionFailed {
+                        name: sidecar.name,
+                    });
+                }
+                Ok(FileChange {
+                    target: path,
+                    before: actual,
+                    after: Some(sidecar.after),
+                })
+            })
+            .transpose()?;
         if if_match.is_some() || if_none_match.is_some() {
             let (_, tag) = self
                 .schema_representation_unlocked()
@@ -51,7 +112,13 @@ impl Catalog {
         for operation in operations {
             apply_operation_to_tables(self, &mut tables, &mut touched, operation)?;
         }
-        self.commit_loaded_tables_locked(before, tables, touched, false)
+        self.commit_loaded_tables_locked(
+            before,
+            tables,
+            touched,
+            false,
+            sidecar_change.into_iter().collect(),
+        )
     }
 }
 
@@ -104,6 +171,7 @@ impl Catalog {
         mut tables: BTreeMap<String, DbfTable>,
         mut touched: BTreeSet<String>,
         reuse_loaded_tables: bool,
+        extra_changes: Vec<FileChange>,
     ) -> Result<u64, CatalogTransactionError> {
         if touched.is_empty() {
             return super::journal::read_transaction_id_locked(&self.root)
@@ -238,6 +306,7 @@ impl Catalog {
             before: cdc_before,
             after: Some(cdc_after),
         });
+        changes.extend(extra_changes);
         commit(&self.root, changes).map_err(CatalogTransactionError::Catalog)
     }
 }
@@ -279,4 +348,16 @@ fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, CatalogError> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(CatalogError::Io(error)),
     }
+}
+
+fn sidecar_path(root: &Path, name: &str) -> Result<PathBuf, CatalogError> {
+    let path = Path::new(name);
+    if !matches!(path.components().next(), Some(Component::Normal(_)))
+        || path.components().count() != 1
+    {
+        return Err(CatalogError::Invalid(
+            "catalog sidecar name must be one direct child".into(),
+        ));
+    }
+    Ok(root.join(path))
 }

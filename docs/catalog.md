@@ -34,7 +34,10 @@ Only direct children are discovered.
 
 Table names are matched exactly by the public API.
 
-The catalog does not write a manifest, rename files, or claim ownership of sidecars.
+The catalog discovery layer does not write a manifest, rename files, or treat
+sidecars as table entries. A named catalog transaction may add one validated
+direct-child sidecar to the same journal; the local replication boundary uses
+that hook for its `TXRP` position.
 
 The `.txbase.catalog.mvcc` history is an internal versioned snapshot sidecar, not a table-discovery manifest.
 

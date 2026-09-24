@@ -34,6 +34,7 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - A native threaded asynchronous query-stream adapter with bounded backpressure and drop cancellation.
 - A committed single-table change-data-capture sidecar with WAL recovery and an inspection CLI.
 - A committed catalog change-data-capture sidecar with atomic multi-table events and an inspection CLI.
+- A process-local fixed-term replication log with a journaled `TXRP` sidecar and restart position checks.
 - An opt-in coarse-grained serializable transaction boundary for one DBF table.
 - An opt-in coarse-grained serializable transaction boundary for a catalog's discovered tables.
 
@@ -308,7 +309,7 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 
 The current implementation prioritizes bounded, recoverable local operations over an unbounded database server.
 
-It also includes a process-local fixed-term replication entry and replay boundary over the catalog journal; network transport, quorum, consensus, and follower reads remain outside the current slice.
+It also includes a process-local fixed-term replication entry and replay boundary over the catalog journal, with a journaled `TXRP` sidecar; network transport, quorum, consensus, snapshot installation, and follower reads remain outside the current slice.
 
 The roadmap still leaves the following areas as future work:
 

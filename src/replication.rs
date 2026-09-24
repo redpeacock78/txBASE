@@ -12,6 +12,9 @@ use std::fmt::{self, Display, Formatter};
 
 pub const REPLICATION_ENTRY_VERSION: u16 = 1;
 pub const REPLICATION_LOG_VERSION: u16 = 1;
+pub const REPLICATION_SIDECAR_NAME: &str = ".txbase.replication";
+const REPLICATION_SIDECAR_MAGIC: &[u8; 4] = b"TXRP";
+const REPLICATION_SIDECAR_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -146,6 +149,57 @@ impl ReplicationLog {
         &self.entries
     }
 
+    /// Opens the durable replication log associated with a catalog.
+    ///
+    /// A missing sidecar bootstraps a log at the requested term. An existing
+    /// sidecar must use that term and must end at the catalog transaction
+    /// position before it can accept another entry.
+    pub fn open(catalog: &Catalog, term: u64) -> Result<Self, ReplicationError> {
+        let bytes = catalog
+            .read_sidecar_bytes(REPLICATION_SIDECAR_NAME)
+            .map_err(ReplicationError::Catalog)?;
+        let log = match bytes {
+            Some(bytes) => Self::from_sidecar_bytes(&bytes)?,
+            None => Self::new(term)?,
+        };
+        if log.term != term {
+            return Err(ReplicationError::TermMismatch {
+                expected: term,
+                actual: log.term,
+            });
+        }
+        log.ensure_catalog_position(current_transaction_id(catalog)?)?;
+        Ok(log)
+    }
+
+    /// Encodes the journaled TXRP sidecar format.
+    pub fn to_sidecar_bytes(&self) -> Result<Vec<u8>, ReplicationError> {
+        let mut bytes = REPLICATION_SIDECAR_MAGIC.to_vec();
+        bytes.push(REPLICATION_SIDECAR_VERSION);
+        bytes.extend_from_slice(&self.to_json()?);
+        Ok(bytes)
+    }
+
+    /// Decodes and validates a journaled TXRP sidecar.
+    pub fn from_sidecar_bytes(bytes: &[u8]) -> Result<Self, ReplicationError> {
+        let Some(body) = bytes.strip_prefix(REPLICATION_SIDECAR_MAGIC) else {
+            return Err(ReplicationError::Invalid(
+                "replication sidecar header is invalid".into(),
+            ));
+        };
+        let Some((&version, payload)) = body.split_first() else {
+            return Err(ReplicationError::Invalid(
+                "replication sidecar header is truncated".into(),
+            ));
+        };
+        if version != REPLICATION_SIDECAR_VERSION {
+            return Err(ReplicationError::Invalid(format!(
+                "unsupported replication sidecar version: {version}"
+            )));
+        }
+        Self::from_json(payload)
+    }
+
     /// Proposes and commits one entry through the single local authority.
     pub fn propose(
         &mut self,
@@ -270,8 +324,27 @@ impl ReplicationLog {
                 actual: entry.schema_tag,
             });
         }
+        let actual_sidecar = catalog
+            .read_sidecar_bytes(REPLICATION_SIDECAR_NAME)
+            .map_err(ReplicationError::Catalog)?;
+        let expected_sidecar = match actual_sidecar {
+            Some(bytes) => {
+                if bytes != self.to_sidecar_bytes()? {
+                    return Err(ReplicationError::SidecarStateMismatch);
+                }
+                Some(bytes)
+            }
+            None => None,
+        };
+        let mut next_log = self.clone();
+        next_log.entries.push(entry.clone());
         let transaction_id = catalog
-            .commit_operations_with_preconditions(&entry.operations, None, None)
+            .commit_operations_with_sidecar(
+                &entry.operations,
+                REPLICATION_SIDECAR_NAME,
+                expected_sidecar,
+                next_log.to_sidecar_bytes()?,
+            )
             .map_err(ReplicationError::Commit)?;
         if transaction_id != entry.transaction_id {
             return Err(ReplicationError::Invalid(format!(
@@ -353,6 +426,7 @@ pub enum ReplicationError {
     SchemaMismatch { expected: String, actual: String },
     HistoryUnavailable { index: u64, base_index: u64 },
     ConflictingDuplicate { index: u64 },
+    SidecarStateMismatch,
 }
 
 impl Display for ReplicationError {
@@ -396,6 +470,12 @@ impl Display for ReplicationError {
                 write!(
                     formatter,
                     "conflicting duplicate replication entry at index {index}"
+                )
+            }
+            Self::SidecarStateMismatch => {
+                write!(
+                    formatter,
+                    "replication sidecar does not match the in-memory log"
                 )
             }
         }

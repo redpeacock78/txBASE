@@ -64,6 +64,7 @@ impl From<std::io::Error> for CatalogError {
 pub enum CatalogTransactionError {
     Invalid(String),
     PreconditionFailed { tag: String },
+    SidecarPreconditionFailed { name: String },
     TableSetChanged,
     Catalog(CatalogError),
 }
@@ -75,6 +76,10 @@ impl Display for CatalogTransactionError {
             Self::PreconditionFailed { .. } => {
                 write!(formatter, "catalog transaction precondition failed")
             }
+            Self::SidecarPreconditionFailed { name } => write!(
+                formatter,
+                "catalog transaction sidecar precondition failed: {name}"
+            ),
             Self::TableSetChanged => {
                 write!(
                     formatter,
@@ -89,7 +94,10 @@ impl Display for CatalogTransactionError {
 impl Error for CatalogTransactionError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Invalid(_) | Self::PreconditionFailed { .. } | Self::TableSetChanged => None,
+            Self::Invalid(_)
+            | Self::PreconditionFailed { .. }
+            | Self::SidecarPreconditionFailed { .. }
+            | Self::TableSetChanged => None,
             Self::Catalog(error) => Some(error),
         }
     }
