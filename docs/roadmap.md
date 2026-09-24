@@ -66,6 +66,7 @@ The repository currently provides:
 - A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
+- A process-local single-authority replication boundary with versioned `ReplicationEntry` and `ReplicationLog` JSON formats, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay, duplicate-delivery acknowledgement, conflict and gap rejection, and deterministic leader/follower fixtures without external infrastructure.
 
 The baseline intentionally does not include the following:
 
@@ -76,7 +77,7 @@ The baseline intentionally does not include the following:
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Cloud object-storage adapters and retention policy.
-- Distributed replication.
+- Network transport, quorum or consensus, snapshot installation, follower reads, and distributed partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -351,6 +352,11 @@ The detailed future boundaries are described in [edge storage](edge-storage.md) 
 
 Distributed behavior comes after the local and edge contracts are stable.
 
+The first local replication slice is implemented in `src/replication.rs`.
+It selects a fixed-term, process-local single writer and reuses the existing
+catalog journal for atomic catalog transactions.
+It is a replay and contract boundary, not a network or consensus feature.
+
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
@@ -361,7 +367,9 @@ Distributed behavior comes after the local and edge contracts are stable.
 - Follower reads.
 - Distributed partitioning.
 
-These features require an authority model, conflict semantics, schema-version handling, recovery procedures, and observability.
+The remaining distributed features require quorum or consensus authority,
+conflict semantics, schema-version handling, snapshot installation, recovery
+procedures, transport observability, and follower-read guarantees.
 
 No consensus or multi-region feature is implied by the current exclusive table lock.
 
@@ -397,6 +405,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Filesystem- and cache-aware merge planning, streaming join execution, aggregation, predicate-level serializable MVCC, durable XBF, cloud object-storage, or distributed code without a contract and end-to-end test.
+- Filesystem- and cache-aware merge planning, streaming join execution, aggregation, predicate-level serializable MVCC, durable XBF, cloud object-storage, networked replication, or consensus code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and filesystem- or cache-aware merge planning remain future work.

@@ -5,6 +5,8 @@ pub mod edge;
 pub mod index;
 pub mod query;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod replication;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod server;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod storage;

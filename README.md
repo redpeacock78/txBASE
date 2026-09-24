@@ -308,6 +308,8 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 
 The current implementation prioritizes bounded, recoverable local operations over an unbounded database server.
 
+It also includes a process-local fixed-term replication entry and replay boundary over the catalog journal; network transport, quorum, consensus, and follower reads remain outside the current slice.
+
 The roadmap still leaves the following areas as future work:
 
 - Worker/WASI-specific `AsyncQueryStream` timeout, transport, cancellation, and asynchronous-storage behavior.
@@ -319,7 +321,7 @@ The roadmap still leaves the following areas as future work:
 - Strict multi-file reader atomicity for XBF export.
 - Cloud object-storage adapters and retention policy.
 - Worker/WASI runtime adapters and asynchronous WASM storage.
-- Distributed replication.
+- Networked replication, quorum or consensus, snapshot installation, follower reads, and distributed partitioning.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance conditions and [docs/research.md](docs/research.md) for the source and fixture policy.
 

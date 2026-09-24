@@ -1,8 +1,10 @@
 # Distributed evolution
 
-This document isolates the future replication and distributed-database boundary.
+This document isolates the replication and distributed-database boundary.
 
-The design is not a current txBASE feature.
+txBASE now has a local, process-scoped replication slice. It defines the
+versioned entry and single-authority replay contract, but it is not network
+replication or consensus.
 
 ## 1. Prerequisites
 
@@ -11,6 +13,10 @@ Distributed behavior comes after the local transaction and edge-storage contract
 The current exclusive table lock does not imply consensus, replication, or multi-region behavior.
 
 The first requirement is a deterministic mutation representation whose recovery behavior is already tested locally.
+
+The current slice provides that boundary through `ReplicationEntry` and
+`ReplicationLog`. It reuses `OperationIr` and the catalog journal instead of
+introducing a second mutation engine.
 
 ## 2. Suggested progression
 
@@ -21,9 +27,9 @@ fine-grained WAL
       ↓
 deterministic mutation IR
       ↓
-single-writer correctness
+single-writer correctness (current local slice)
       ↓
-replicated log
+replicated log (current local replay slice)
       ↓
 Raft or another selected authority protocol
 ```
@@ -32,18 +38,35 @@ Each step needs a standalone contract before the next step depends on it.
 
 ## 3. Replication entries
 
-A future log entry could contain:
+A version 1 log entry contains:
 
 ```text
+version
 term
 index
 transaction ID
+catalog representation tag
 operation IR
 ```
 
-Replicating a logical mutation is preferable to copying complete DBF files when the operation and recovery contracts are stable.
+`ReplicationEntry` serializes this shape as JSON and rejects unknown fields,
+unsupported versions, read operations, empty batches, and non-positive
+positions. The catalog representation tag prevents an entry from being
+applied to a different catalog image.
 
-The entry format must define idempotency, ordering, duplicate delivery, rejection, and replay behavior.
+`ReplicationLog` selects one fixed term as the local authority. `propose`
+commits a batch through the existing catalog journal and records it only after
+the commit succeeds. `receive` accepts only the next index and transaction ID,
+checks the term and representation tag, and then applies the same atomic
+catalog commit.
+
+The entry format defines duplicate delivery as a no-op when the complete entry
+matches. A conflicting duplicate, an index or transaction gap, a term mismatch,
+or an unavailable history prefix is rejected before a new commit.
+
+The log can be serialized and restored as JSON. The caller must persist those
+bytes with its own atomic file or object-store boundary; txBASE does not yet
+install a durable `TXRP` sidecar or a network transport.
 
 ## 4. Co-location before distributed joins
 
@@ -72,34 +95,42 @@ True distributed joins and distributed transactions remain later features.
 
 ## 5. Required contracts
 
-Before implementation, this model must define:
+The local slice defines the following initial contracts:
 
-- the authority and quorum model;
-- conflict and retry semantics;
-- schema-version and migration behavior;
-- snapshot installation and follower-read rules;
-- recovery after partial replication;
-- observability for terms, indexes, generations, and lag;
-- deterministic local fixtures for partition and network failure.
+- authority: one process-local writer and one fixed term; no quorum is claimed;
+- conflict and retry: exact duplicates are acknowledged, conflicting duplicates and gaps are rejected;
+- schema version: the catalog representation tag must match before commit;
+- recovery: a follower retries a missing prefix, and a serialized log can resume after process restart;
+- deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
+
+The following contracts remain open:
+
+- schema migrations independent of the catalog representation tag;
+- snapshot installation and follower-read consistency;
+- partial replication recovery after log truncation;
+- observability for lag and transport state;
+- quorum and network failure behavior.
 
 Change data capture, persistent WAL history, and replication must share the same ordering contract.
 
 ## 6. Acceptance conditions
 
-An initial distributed slice is complete only when it has:
+The initial local replication slice is complete because it has:
 
-- one selected authority protocol;
-- a versioned replicated-entry format;
-- deterministic replay and duplicate-delivery tests;
-- partition, recovery, and schema-version tests;
-- explicit read and write consistency guarantees;
-- an end-to-end fixture that can fail without external infrastructure.
+- one selected local authority model: fixed-term single writer;
+- the versioned `ReplicationEntry` and `ReplicationLog` formats;
+- deterministic replay, duplicate-delivery, conflict, and ordering tests;
+- partition-gap, serialized-log recovery, term, and schema-tag tests;
+- explicit write consistency: only the next catalog transaction can commit;
+- a leader/follower fixture that fails and recovers without external infrastructure.
 
-Until then, replication, full MVCC, follower reads, and distributed partitioning remain future work.
+Network replication, full MVCC coordination, follower reads, and distributed
+partitioning remain future work.
 
 ## 7. Explicit non-goals
 
-This document does not promise Raft, multi-region writes, global transactions, or automatic partition balancing.
+This document does not promise Raft, quorum, multi-region writes, global
+transactions, durable replication history, or automatic partition balancing.
 
 Those choices require the authority and recovery contracts above.
 
@@ -111,4 +142,6 @@ Those choices require the authority and recovery contracts above.
 The Raft paper is a candidate protocol reference for the authority step in the progression.
 It does not select Raft for txBASE and does not define the future txBASE log, schema, or recovery format.
 
-The current repository has no replication or distributed execution implementation, so the partition, quorum, follower-read, and distributed-join statements above remain design constraints rather than compatibility claims.
+The current repository has a local entry/replay implementation but no network
+transport, consensus, quorum, follower-read, or distributed-join implementation.
+Those statements remain design constraints rather than compatibility claims.
