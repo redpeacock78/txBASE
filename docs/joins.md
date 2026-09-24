@@ -36,6 +36,11 @@ It accepts the relation shape from the roadmap and supports one or more equality
 
 `join.parse` validates this JSON, and `join::execute` loads named tables from a `Catalog`.
 
+The public join parser rejects documents larger than `MAX_JSON_INPUT_BYTES`, currently 1 MiB,
+before deserializing them.
+
+The HTTP catalog server rejects a larger request at its body boundary with `413 Payload Too Large`.
+
 The current join types are `inner`, `left`, `right`, `full`, `semi`, `anti`, and `cross`.
 
 The result is a flat JSON object whose keys use the `table.field` form.

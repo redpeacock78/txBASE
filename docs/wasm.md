@@ -19,6 +19,8 @@ validation implementation.
 Its versioned boundary currently provides:
 
 - `ABI_VERSION = 1`;
+- all public JSON methods reject inputs larger than the shared
+  `MAX_JSON_INPUT_BYTES` limit, currently 1 MiB, before deserialization;
 - `open_dbf` and `snapshot` for byte-in/byte-out DBF state;
 - `query_json` for the existing bounded query document;
 - `apply_operation_json` for the existing `POST`, `PUT`, `PATCH`, and `DELETE`

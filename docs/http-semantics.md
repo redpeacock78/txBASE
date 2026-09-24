@@ -71,6 +71,9 @@ The response does not authorize a method on a resource that its route rules woul
 
 Unknown fields, malformed JSON, unsupported update operators, and invalid field values are rejected before persistence.
 
+Every JSON request body is capped at `MAX_JSON_INPUT_BYTES`, currently 1 MiB, before parsing.
+The HTTP boundary returns `413 Payload Too Large` when the byte limit is exceeded.
+
 `DELETE` is a logical DBF deletion.
 
 ### Historical catalog reads

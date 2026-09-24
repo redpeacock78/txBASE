@@ -105,6 +105,12 @@ impl From<QueryError> for JoinError {
 }
 
 pub fn parse(body: &[u8]) -> Result<JoinRequest, JoinError> {
+    if body.len() > crate::MAX_JSON_INPUT_BYTES {
+        return Err(JoinError::Invalid(format!(
+            "join document exceeds {} bytes",
+            crate::MAX_JSON_INPUT_BYTES
+        )));
+    }
     let request = serde_json::from_slice::<JoinRequest>(body).map_err(JoinError::InvalidJson)?;
     validate(&request)?;
     Ok(request)

@@ -25,6 +25,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - 選択した従来型およびVisual FoxProフィールドのDBF解析と書き込み。
 - サポートする形式のDBTおよびFPT memoまたはバイナリサイドカー経路。
 - 比較、所属、論理、配列、フィールド式述語を含む有界なMongoDB風述語語彙によるJSONクエリ実行。
+- 公開クエリ、結合、WASMのJSON境界は、デシリアライズ前に共有する1 MiBの入力上限を超える文書を拒否し、HTTPは本文境界で`413 Payload Too Large`を返す。
 - 数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`オペランドを含む、フィールド間比較リーフ上の有界`$expr`論理木。ただしテーブルスキャンの参照経路に留まる。
 - 有界なJSON Merge PatchとJSON Patchによるレコード更新を含むHTTP `GET`、`QUERY`、`POST`、`PUT`、`PATCH`、`DELETE`ルート。
 - `TXOP`、`TXTI`、`TXDP`、`TXDB`、`TXDM`永続化経路を持つファイルまたはメモリWAL型。

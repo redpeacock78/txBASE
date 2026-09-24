@@ -65,6 +65,7 @@ impl WasmCore {
     }
 
     pub fn apply_operation_json(&mut self, body: &[u8]) -> Result<Vec<u8>, WasmError> {
+        validate_json_input_size(body)?;
         let operation =
             serde_json::from_slice::<OperationIr>(body).map_err(WasmError::InvalidJson)?;
         self.apply_operation(operation)?;
@@ -72,6 +73,7 @@ impl WasmCore {
     }
 
     pub fn apply_operations_json(&mut self, body: &[u8]) -> Result<Vec<u8>, WasmError> {
+        validate_json_input_size(body)?;
         let batch =
             serde_json::from_slice::<OperationBatch>(body).map_err(WasmError::InvalidJson)?;
         if batch.operations.is_empty() {
@@ -90,6 +92,16 @@ impl WasmCore {
     pub fn apply_operation(&mut self, operation: OperationIr) -> Result<(), WasmError> {
         self.table.apply_operation(&operation).map_err(Into::into)
     }
+}
+
+fn validate_json_input_size(body: &[u8]) -> Result<(), WasmError> {
+    if body.len() > crate::MAX_JSON_INPUT_BYTES {
+        return Err(WasmError::InvalidOperation(format!(
+            "JSON input exceeds {} bytes",
+            crate::MAX_JSON_INPUT_BYTES
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -140,6 +152,7 @@ mod bindings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::MAX_JSON_INPUT_BYTES;
     use crate::xbase::MAX_OPERATION_BATCH;
     use serde_json::{Value, json};
 
@@ -230,6 +243,25 @@ mod tests {
 
         let error = core.apply_operations_json(&body).unwrap_err();
         assert!(error.to_string().contains("operation count"));
+        assert_eq!(core.snapshot(), before);
+    }
+
+    #[test]
+    fn wasm_core_rejects_oversized_json_inputs_without_mutation() {
+        let mut core = WasmCore::open_dbf(&fixture()).unwrap();
+        let before = core.snapshot();
+        let body = vec![b' '; MAX_JSON_INPUT_BYTES + 1];
+
+        let operation_error = core.apply_operation_json(&body).unwrap_err();
+        assert!(operation_error.to_string().contains("JSON input exceeds"));
+        assert_eq!(core.snapshot(), before);
+
+        let batch_error = core.apply_operations_json(&body).unwrap_err();
+        assert!(batch_error.to_string().contains("JSON input exceeds"));
+        assert_eq!(core.snapshot(), before);
+
+        let query_error = core.query_json(&body).unwrap_err();
+        assert!(query_error.to_string().contains("query document exceeds"));
         assert_eq!(core.snapshot(), before);
     }
 }

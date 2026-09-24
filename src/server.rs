@@ -19,7 +19,7 @@ mod response;
 mod stream;
 mod transaction;
 
-const MAX_BODY: usize = 1024 * 1024;
+const MAX_BODY: usize = crate::MAX_JSON_INPUT_BYTES;
 const JSON_MERGE_PATCH_MEDIA_TYPE: &str = "application/merge-patch+json";
 const JSON_PATCH_MEDIA_TYPE: &str = "application/json-patch+json";
 

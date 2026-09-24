@@ -113,6 +113,12 @@ impl Display for QueryError {
 impl Error for QueryError {}
 
 pub fn parse(body: &[u8]) -> Result<QueryRequest, QueryError> {
+    if body.len() > crate::MAX_JSON_INPUT_BYTES {
+        return Err(QueryError::Invalid(format!(
+            "query document exceeds {} bytes",
+            crate::MAX_JSON_INPUT_BYTES
+        )));
+    }
     let request = serde_json::from_slice::<QueryRequest>(body).map_err(QueryError::InvalidJson)?;
     validation::validate(&request)?;
     Ok(request)

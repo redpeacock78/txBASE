@@ -36,6 +36,15 @@ fn query_endpoint_enforces_json_boundary_and_executes() {
 }
 
 #[test]
+fn query_endpoint_rejects_an_oversized_json_body_before_parsing() {
+    let body = Box::leak(" ".repeat(crate::MAX_JSON_INPUT_BYTES + 1).into_boxed_str());
+    let mut request = query_request(body, Some(JSON_QUERY_MEDIA_TYPE));
+    let table = DbfTable::from_bytes(&fixture()).unwrap();
+    let response = query_response(&mut request, "/records", &table);
+    assert_eq!(response.status_code(), StatusCode(413));
+}
+
+#[test]
 fn query_stream_endpoint_returns_chunked_ndjson() {
     let table = DbfTable::from_bytes(&fixture()).unwrap();
     let mut request =

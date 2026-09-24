@@ -15,3 +15,6 @@ pub mod xbf;
 
 mod json_order;
 mod query_path;
+
+/// Maximum size of a JSON request accepted by public parser boundaries.
+pub const MAX_JSON_INPUT_BYTES: usize = 1024 * 1024;

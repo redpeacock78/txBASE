@@ -15,6 +15,7 @@ WASMはパスとbodyの検証を二重に実装しません。
 現在のバージョン付き境界は次を提供します。
 
 - `ABI_VERSION = 1`。
+- すべての公開JSONメソッドは、デシリアライズ前に共有する`MAX_JSON_INPUT_BYTES`（現在は1 MiB）を超える入力を拒否する。
 - DBFバイト列を入出力する`open_dbf`と`snapshot`。
 - 既存の有界クエリ文書を受け取る`query_json`。
 - 既存の`POST`、`PUT`、`PATCH`、`DELETE`操作IRを受け取る`apply_operation_json`。

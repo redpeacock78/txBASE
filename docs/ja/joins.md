@@ -36,6 +36,10 @@ txBASEは、通常のクエリで使うJSONのフィールド規則とプロジ�
 
 `join.parse`はJSONを検証し、`join::execute`は`Catalog`から名前付きテーブルをロードします。
 
+公開結合パーサーは、デシリアライズする前に`MAX_JSON_INPUT_BYTES`（現在は1 MiB）を超える文書を拒否します。
+
+HTTPカタログサーバーは、大きすぎるリクエストを本文境界で`413 Payload Too Large`として拒否します。
+
 現在の結合型は`inner`、`left`、`right`、`full`、`semi`、`anti`、`cross`です。
 
 結果はキーを`table.field`形式で修飾したフラットなJSONオブジェクトです。

@@ -28,6 +28,13 @@ fn parses_query_shape() {
 }
 
 #[test]
+fn rejects_a_query_document_over_the_shared_input_limit() {
+    let body = vec![b' '; crate::MAX_JSON_INPUT_BYTES + 1];
+    let error = parse(&body).unwrap_err();
+    assert!(error.to_string().contains("query document exceeds"));
+}
+
+#[test]
 fn rejects_invalid_sort_direction() {
     let error = parse(br#"{"sort":{"age":2}}"#).unwrap_err();
     assert!(error.to_string().contains("must be 1 or -1"));

@@ -9,6 +9,15 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT_JOIN_ID: AtomicUsize = AtomicUsize::new(0);
 
+#[test]
+fn rejects_a_join_document_over_the_shared_input_limit() {
+    let body = vec![b' '; crate::MAX_JSON_INPUT_BYTES + 1];
+    let error = parse(&body).unwrap_err();
+    assert!(
+        matches!(error, JoinError::Invalid(message) if message.contains("join document exceeds"))
+    );
+}
+
 fn fixture() -> Vec<u8> {
     include_str!("../../tests/fixtures/users.dbf.hex")
         .split_whitespace()

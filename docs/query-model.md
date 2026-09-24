@@ -31,6 +31,12 @@ The top-level keys are validated.
 
 Unknown keys are rejected instead of ignored.
 
+Public JSON query parsers reject documents larger than `MAX_JSON_INPUT_BYTES`, currently 1 MiB,
+before deserializing them.
+
+The HTTP body reader returns `413 Payload Too Large` for a larger request, while direct Rust and
+WASM parser calls return an invalid-query error.
+
 `filter` defaults to a match-all filter.
 
 `sort` uses `1` for ascending order and `-1` for descending order.
