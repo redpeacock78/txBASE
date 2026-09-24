@@ -16,6 +16,29 @@ fn run_cli(args: &[&str]) -> Output {
 }
 
 #[test]
+fn cli_help_lists_the_command_families_and_unknown_commands_fail() {
+    let help = run_cli(&["--help"]);
+    assert!(help.status.success());
+    let help = String::from_utf8_lossy(&help.stdout);
+    for command in [
+        "txbase read",
+        "txbase schema apply",
+        "txbase cdc",
+        "txbase mvcc",
+        "txbase wal inspect",
+        "txbase xbf",
+        "txbase index",
+        "txbase serve",
+    ] {
+        assert!(help.contains(command), "help is missing {command}");
+    }
+
+    let unknown = run_cli(&["not-a-command"]);
+    assert!(!unknown.status.success());
+    assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown command"));
+}
+
+#[test]
 fn wal_inspect_cli_reports_a_torn_tail_without_mutating_the_file() {
     let path =
         std::env::temp_dir().join(format!("txbase-cli-wal-inspect-{}.wal", std::process::id()));

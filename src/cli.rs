@@ -39,7 +39,7 @@ pub(super) fn run() -> Result<(), Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage:\n  txbase read FILE [--encoding NAME]\n  txbase init FILE --field NAME:TYPE:LENGTH[:DECIMALS]...\n  txbase insert FILE JSON_OBJECT\n  txbase mvcc list FILE\n  txbase mvcc read FILE TRANSACTION_ID\n  txbase mvcc row FILE RECORD\n  txbase mvcc row-at FILE TRANSACTION_ID EPOCH RECORD\n  txbase schema FILE [--encoding NAME]\n  txbase verify FILE [--encoding NAME]\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase xbf import DBF XBF [--encoding NAME]\n  txbase xbf export XBF DBF [--schema]\n  txbase xbf report XBF\n  txbase index build FILE FIELD...\n  txbase index build-compound FILE NAME FIELD[:1|-1] FIELD[:1|-1]...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE [--encoding NAME]\n  txbase recall FILE RECORD [--encoding NAME]\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase serve FILE [--bind ADDRESS] [--encoding NAME]\n  txbase serve-catalog DIRECTORY [--bind ADDRESS]\n\nReads active DBF records as JSON. NAME accepts the supported CJK aliases and takes precedence over a schema sidecar override for that invocation. init creates a classic empty DBF from repeated field specifications, and insert appends one JSON object through the normal WAL path. mvcc list reports committed table snapshots, mvcc read loads one historical snapshot, mvcc row lists retained versions for a physical record, and mvcc row-at reads one retained row version. Schema, catalog, verification, and index commands inspect DBF files. xbf import writes a bounded XBF snapshot from a DBF; xbf export writes a representable XBF table as DBF, and --schema also writes its constraint sidecar; xbf report checks DBF representability without writing. Backup and restore copy a DBF with its detected memo, schema, transaction-state, MVCC, and valid index sidecars. The single-table server exposes GET /records, GET /records/{{id}}, QUERY /records, QUERY /explain, and JSON mutations. The catalog server exposes GET /catalog, GET/HEAD /{{table}}/records[/{{id}}], QUERY /{{table}}/records, QUERY /{{table}}/explain, and QUERY /join as bounded read-only routes."
+        "Usage:\n  txbase read FILE [--encoding NAME]\n  txbase init FILE --field NAME:TYPE:LENGTH[:DECIMALS]...\n  txbase insert FILE JSON_OBJECT\n  txbase mvcc list FILE\n  txbase mvcc read FILE TRANSACTION_ID\n  txbase mvcc row FILE RECORD\n  txbase mvcc row-at FILE TRANSACTION_ID EPOCH RECORD\n  txbase schema FILE [--encoding NAME]\n  txbase schema apply FILE SCHEMA_JSON\n  txbase verify FILE [--encoding NAME]\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase xbf import DBF XBF [--encoding NAME]\n  txbase xbf export XBF DBF [--schema]\n  txbase xbf report XBF\n  txbase index build FILE FIELD...\n  txbase index build-compound FILE NAME FIELD[:DIRECTION] FIELD[:DIRECTION]...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE [--encoding NAME]\n  txbase recall FILE RECORD [--encoding NAME]\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase serve FILE [--bind ADDRESS] [--encoding NAME]\n  txbase serve-catalog DIRECTORY [--bind ADDRESS]\n\nReads active DBF records as JSON. NAME accepts the supported CJK aliases and takes precedence over a schema sidecar override for that invocation. init creates a classic empty DBF from repeated field specifications, and insert appends one JSON object through the normal WAL path. mvcc list reports committed table snapshots, mvcc read loads one historical snapshot, mvcc row lists retained versions for a physical record, and mvcc row-at reads one retained row version. Schema, catalog, verification, and index commands inspect DBF files. xbf import writes a bounded XBF snapshot from a DBF; xbf export writes a representable XBF table as DBF, and --schema also writes its constraint sidecar; xbf report checks DBF representability without writing. Backup and restore copy a DBF with its detected memo, schema, transaction-state, MVCC, and valid index sidecars. The single-table server exposes GET /records, GET /records/{{id}}, QUERY /records, QUERY /explain, and JSON mutations. The catalog server exposes GET /catalog, GET/HEAD /{{table}}/records[/{{id}}], QUERY /{{table}}/records, QUERY /{{table}}/explain, and QUERY /join as bounded read-only routes."
     );
     println!(
         "\nHTTP CDC: GET/HEAD /cdc supports exclusive after and bounded limit cursors on both server surfaces."
@@ -49,7 +49,7 @@ fn print_help() {
     );
     println!("\nSchema metadata:\n  txbase schema apply FILE SCHEMA_JSON");
     println!(
-        "\nAdditional command:\n  txbase wal inspect WAL\n\nwal inspect reads a WAL without creating or truncating it and reports complete record lengths plus an incomplete final tail."
+        "\nWAL command:\n  txbase wal inspect WAL\n\nwal inspect reads a WAL without creating or truncating it and reports complete record lengths plus an incomplete final tail."
     );
     println!(
         "\nCDC reads committed row-change events in transaction order; the catalog form reads atomic multi-table events; --after returns only later transaction IDs."
@@ -96,4 +96,43 @@ pub(super) fn parse_compound_field(specification: &str) -> Result<(String, i8), 
         }
     };
     Ok((field.to_owned(), direction))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_compound_field, parse_encoding_option};
+
+    fn arguments<'a>(values: &'a [&'a str]) -> impl Iterator<Item = String> + 'a {
+        values.iter().map(|value| (*value).to_owned())
+    }
+
+    #[test]
+    fn parses_encoding_option_and_rejects_malformed_shapes() {
+        let mut args = arguments(&["--encoding", "gbk"]);
+        assert_eq!(
+            parse_encoding_option(&mut args).unwrap(),
+            Some(String::from("gbk"))
+        );
+        assert!(parse_encoding_option(&mut arguments(&["--encoding"])).is_err());
+        assert!(parse_encoding_option(&mut arguments(&["--wrong", "gbk"])).is_err());
+        assert!(parse_encoding_option(&mut arguments(&["--encoding", "gbk", "extra"])).is_err());
+    }
+
+    #[test]
+    fn parses_compound_field_directions_and_rejects_invalid_fields() {
+        assert_eq!(
+            parse_compound_field("NAME").unwrap(),
+            (String::from("NAME"), 1)
+        );
+        assert_eq!(
+            parse_compound_field("AGE:asc").unwrap(),
+            (String::from("AGE"), 1)
+        );
+        assert_eq!(
+            parse_compound_field("AGE:DESC").unwrap(),
+            (String::from("AGE"), -1)
+        );
+        assert!(parse_compound_field(":1").is_err());
+        assert!(parse_compound_field("AGE:sideways").is_err());
+    }
 }
