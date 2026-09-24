@@ -59,7 +59,7 @@ operation IR
 `receive`は次のindexとtransaction IDだけを受け付け、termと表現タグを検査してから、同じ原子的なカタログcommitを適用します。
 `receive_batch`は、1つの連続した`ReplicationEntryBatch`を検証して、含まれるエントリを順番に配送します。
 ページは転送境界であり、transaction境界ではありません。
-そのため、途中で失敗すると適用済みのエントリprefixが残る場合があります。
+そのため、途中で失敗すると適用済みのエントリprefixが残ります。
 再送時には、そのprefixを重複として安全に確認できます。
 
 エントリ形式では、同じ内容の重複配送をno-opとして扱います。
