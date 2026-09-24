@@ -25,7 +25,7 @@ fn table(generation: u64, names: &[&str]) -> XbfTable {
         fields: vec![XbfField {
             name: "NAME".into(),
             ty: XbfType::String,
-            nullable: false,
+            nullable: true,
             primary_key: false,
             unique: false,
         }],
@@ -215,7 +215,7 @@ fn async_object_query_stream_reports_nonrepresentable_xbf_values_once() {
         fields: vec![XbfField {
             name: "ID".into(),
             ty: XbfType::Uuid,
-            nullable: false,
+            nullable: true,
             primary_key: false,
             unique: false,
         }],
