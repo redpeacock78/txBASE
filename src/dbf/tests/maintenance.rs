@@ -356,6 +356,55 @@ fn copy_table_files_removes_an_old_destination_index_when_source_has_none() {
 }
 
 #[test]
+fn copy_table_files_removes_all_stale_destination_sidecars_when_source_has_none() {
+    let source = std::env::temp_dir().join(format!(
+        "txbase-maintenance-stale-sidecars-source-{}.dbf",
+        std::process::id()
+    ));
+    let destination = std::env::temp_dir().join(format!(
+        "txbase-maintenance-stale-sidecars-destination-{}.dbf",
+        std::process::id()
+    ));
+    remove_table_files(&source);
+    remove_table_files(&destination);
+
+    fs::write(&source, fixture()).unwrap();
+    fs::write(&destination, fixture()).unwrap();
+    for extension in [
+        "dbt",
+        "fpt",
+        "txschema.json",
+        "txbase.state",
+        "txidx",
+        "txbase.mvcc",
+        "txbase.cdc",
+    ] {
+        fs::write(destination.with_extension(extension), b"stale").unwrap();
+    }
+
+    copy_table_files(&source, &destination).unwrap();
+
+    for extension in [
+        "dbt",
+        "fpt",
+        "txschema.json",
+        "txbase.state",
+        "txidx",
+        "txbase.mvcc",
+        "txbase.cdc",
+    ] {
+        assert!(
+            !destination.with_extension(extension).exists(),
+            "{extension}"
+        );
+    }
+    DbfTable::from_path(&destination).unwrap().verify().unwrap();
+
+    remove_table_files(&source);
+    remove_table_files(&destination);
+}
+
+#[test]
 fn schema_json_is_valid_json_output() {
     let table = DbfTable::from_bytes(&fixture()).unwrap();
     let encoded = serde_json::to_vec(&table.schema_json()).unwrap();
