@@ -199,7 +199,11 @@ mod bindings {
         pub fn next_json(&mut self) -> Result<JsValue, JsValue> {
             self.core
                 .next_json()
-                .map(|value| value.map(JsValue::from_str).unwrap_or(JsValue::NULL))
+                .map(|value| {
+                    value
+                        .map(|value| JsValue::from_str(&value))
+                        .unwrap_or(JsValue::NULL)
+                })
                 .map_err(to_js_error)
         }
 
@@ -254,7 +258,7 @@ mod tests {
         let operation = serde_json::to_vec(&json!({
             "method": "PATCH",
             "path": "/records/1",
-            "body": {"NAME": "changed-after-stream-start"}
+            "body": {"NAME": "changed"}
         }))
         .unwrap();
         core.apply_operation_json(&operation).unwrap();
