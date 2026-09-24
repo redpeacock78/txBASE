@@ -6,7 +6,8 @@ use super::wal::{
     transaction_id_payload,
 };
 use super::{
-    DbfError, DbfTable, MemoFile, PersistedState, find_memo_path, save_bytes_to, transaction_error,
+    DbfError, DbfTable, MemoFile, PersistedState, find_memo_path, save_bytes_to,
+    sync_parent_directory, transaction_error,
 };
 use crate::transaction::{FileWal, Wal};
 use std::fs;
@@ -86,7 +87,7 @@ impl DbfTable {
         }
         let mut wal = FileWal::open(&wal_path).map_err(transaction_error)?;
         if wal.records().is_empty() {
-            finish_recovery(wal, &wal_path);
+            finish_recovery(wal, &wal_path)?;
             return Ok(false);
         }
         let index_payload = find_index_payload(&wal)?;
@@ -145,7 +146,7 @@ impl DbfTable {
                     super::cdc::append(path, event)?;
                 }
             }
-            finish_recovery(wal, &wal_path);
+            finish_recovery(wal, &wal_path)?;
             return Ok(true);
         }
 
@@ -158,7 +159,7 @@ impl DbfTable {
         });
         let Some(operation) = operation else {
             if transaction_id.is_some() {
-                finish_recovery(wal, &wal_path);
+                finish_recovery(wal, &wal_path)?;
             }
             return Ok(false);
         };
@@ -230,7 +231,7 @@ impl DbfTable {
             force_new_epoch,
         )?;
         super::cdc::append(path, &cdc_event)?;
-        finish_recovery(wal, &wal_path);
+        finish_recovery(wal, &wal_path)?;
         Ok(true)
     }
 }
@@ -261,9 +262,9 @@ fn persist_recovered_transaction_id(path: &Path, transaction_id: u64) -> Result<
     write_transaction_state(path, transaction_id)
 }
 
-fn finish_recovery(mut wal: FileWal, wal_path: &Path) {
-    if wal.clear().is_ok() {
-        drop(wal);
-        let _ = fs::remove_file(wal_path);
-    }
+fn finish_recovery(mut wal: FileWal, wal_path: &Path) -> Result<(), DbfError> {
+    wal.clear().map_err(transaction_error)?;
+    drop(wal);
+    fs::remove_file(wal_path)?;
+    sync_parent_directory(wal_path)
 }

@@ -131,6 +131,28 @@ fn discards_a_wal_with_a_torn_payload() {
 }
 
 #[test]
+fn removes_an_empty_wal_before_reading() {
+    let path =
+        std::env::temp_dir().join(format!("txbase-empty-recovery-{}.dbf", std::process::id()));
+    let wal_path = path.with_extension("txbase.wal");
+    let lock_path = path.with_extension("txbase.lock");
+    let original = fixture();
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&wal_path);
+    let _ = fs::remove_file(&lock_path);
+    fs::write(&path, &original).unwrap();
+    drop(FileWal::open(&wal_path).unwrap());
+
+    let recovered = DbfTable::from_path(&path).unwrap();
+
+    assert_eq!(recovered.to_bytes(), original);
+    assert!(!wal_path.exists());
+
+    fs::remove_file(path).unwrap();
+    fs::remove_file(lock_path).unwrap();
+}
+
+#[test]
 fn keeps_a_wal_with_a_malformed_index_snapshot() {
     let path = std::env::temp_dir().join(format!(
         "txbase-malformed-index-recovery-{}.dbf",
