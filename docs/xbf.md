@@ -114,7 +114,8 @@ Offsets and lengths are checked with overflow-safe arithmetic before any allocat
 
 An unknown major version is rejected.
 
-A newer minor version is accepted only when all feature flags are known and the reader can skip every declared section; otherwise it is rejected rather than silently downgraded.
+The current v1.0 reader rejects every minor version other than `0`.
+Forward-compatible minor-version reading is future work and must define how a reader skips every declared section before it is added; the current reader never silently downgrades an unknown version.
 
 ## 4. Schema section
 
