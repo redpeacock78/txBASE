@@ -30,7 +30,8 @@ Research and future work do not imply an implemented feature.
 
 ## Command-line interface
 
-- [CLI command design](cli.md)
+- [CLI command reference](cli.md)
+- [CLI command architecture](cli-design.md)
 
 ## Quality and research
 

@@ -77,7 +77,7 @@ The baseline intentionally does not include the following:
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Cloud object-storage adapters and retention policy.
-- Authentication, quorum or consensus, authority-coordinated snapshot/log retention, distributed follower reads, and distributed partitioning.
+- Quorum or consensus, authority-coordinated snapshot/log retention, distributed follower reads, and distributed partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -366,14 +366,14 @@ at the snapshot's next index and transaction.
 The catalog server also exposes version 1 `status`, entry-delivery, snapshot-export, and snapshot-install routes as bounded HTTP JSON.
 The default `authority` role routes `/transaction` and named-table mutations through the same catalog journal commit as `TXRP` state and rechecks table ETags before commit.
 The `follower` role reports its role through `status`, rejects direct catalog mutations with `409`, and still accepts replication delivery.
-Quorum, consensus, authentication, and retry queues are not provided.
+Optional RFC 6750 Bearer authentication protects those four replication routes when `TXBASE_REPLICATION_TOKEN` is configured; TLS, quorum, consensus, and retry queues are not provided.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, and `TXRP` sidecars.
 - Raft or another explicitly selected authority protocol.
-- Authentication, retry, backpressure, and authority-coordinated log truncation.
+- TLS, retry, backpressure, and authority-coordinated log truncation.
 - Distributed follower-read guarantees.
 - Distributed partitioning.
 

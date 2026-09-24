@@ -85,6 +85,16 @@ Malformed documents return `422`, term, position, schema, conflicting-duplicate,
 In the default `authority` role, `/transaction` and named-table mutation routes append their catalog change and `TXRP` state atomically.
 The `follower` role rejects direct catalog mutations with `409`; replication delivery remains available.
 
+### Replication authentication
+
+[RFC 6750](https://www.rfc-editor.org/rfc/rfc6750.html) defines the Bearer authorization scheme for HTTP requests.
+When `TXBASE_REPLICATION_TOKEN` is configured for `serve-catalog`, the four replication routes require `Authorization: Bearer <token>`.
+The configured value must be an ASCII `b64token`; txBASE validates it before the server starts and compares the received value without exposing it in an error response.
+Missing, malformed, or non-matching credentials return `401 Unauthorized` with `WWW-Authenticate: Bearer` and a JSON error code.
+The other catalog routes are not covered by this token boundary.
+When the environment variable is absent, the replication routes remain unauthenticated for local development compatibility.
+This is application-layer authentication only; the catalog server still does not provide TLS, so a bearer token must not be sent over an untrusted plain-HTTP network.
+
 `DELETE` is a logical DBF deletion.
 
 ### Historical catalog reads

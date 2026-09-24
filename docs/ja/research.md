@@ -34,7 +34,7 @@
 | CJK、インデックス、XBF、ストレージ、並行性 | [ロードマップ](roadmap.md) | 現在の境界と将来の作業 |
 | エッジとオブジェクトストレージのコミット | [エッジストレージ](edge-storage.md) | 現在のローカル境界と将来のクラウド作業 |
 | WASMとワーカーのホスト境界 | [WASM](wasm.md) | ホスト非依存コアとJavaScriptのPromiseベース非同期XBFアダプターは現在、ワーカーまたはWASIアダプターは将来 |
-| 分散レプリケーションと権威 | [分散化の進化](distributed-evolution.md) | 現在はジャーナル化された`TXRP`サイドカー永続化、検証済みカタログスナップショットの出力とローカルでの原子的なインストール、適用済み位置に限定した過去時点フォロワー読み取り、有界なHTTPエントリおよびスナップショット配送、`/transaction`と名前付きテーブル更新の既定`authority`捕捉を含むプロセス内のバージョン付きエントリと再生の境界を実装し、`follower`ロールは直接のカタログ更新を拒否する。クォーラム、コンセンサス、分散フォロワー読み取りの保証は将来 |
+| 分散レプリケーションと権威 | [分散化の進化](distributed-evolution.md) | 現在はジャーナル化された`TXRP`サイドカー永続化、検証済みカタログスナップショットの出力とローカルでの原子的なインストール、適用済み位置に限定した過去時点フォロワー読み取り、有界なHTTPエントリおよびスナップショット配送、任意選択のRFC 6750 Bearer認証、`/transaction`と名前付きテーブル更新の既定`authority`捕捉を含むプロセス内のバージョン付きエントリと再生の境界を実装し、`follower`ロールは直接のカタログ更新を拒否する。TLS、クォーラム、コンセンサス、分散フォロワー読み取りの保証は将来 |
 
 ## 調査方法
 
@@ -61,8 +61,8 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 | SQLite文書 | 公式プロジェクト文書です。 | 制約語彙、WALとアトミックコミットの根拠、クエリ計画語彙、テスト品質の実践を参照します。txBASEはDBFサイドカーと独自WALを使い、SQLiteのファイル、SQL、永続性互換性を主張しません。 | 根拠はスキーマ、MVCC、クエリ計画、テストの文書に置き、txBASEの動作は別に記述します。 |
 | PostgreSQLのトランザクション分離とMVCC文書 | 公式プロジェクト文書です。 | トランザクション、MVCC、カタログの文書で、既定のオプティミスティックな古い元データの検査と、テーブル集合の検証を伴う任意選択の粗粒度serializableテーブルまたはカタログロックを、未実装の述語単位および分散serializable保証から区別するために使います。 | 区別は[スナップショットトランザクション](transactions.md)、[MVCC](mvcc.md)、[カタログ](catalog.md)に置き、PostgreSQLの分離保証を現在の契約へコピーしません。 |
 | SQLiteセッション拡張とPostgreSQL論理デコード | 公式プロジェクト文書です。 | CDC文書は変更セットとコミット済みWAL利用者の語彙を参照しますが、単一テーブルcommit向けの`TXCD`と明示的な複数テーブルカタログcommit向けの`TXCC`という、物理レコードの状態差分サイドカーを定義します。利用者スロット、再生、レプリケーション互換性は提供しません。 | 外部資料との比較と範囲の境界は[変更データ取得](change-data-capture.md)に置き、DBFのcommit機構は[DBF互換性](dbf-compatibility.md)に、カタログジャーナル機構は[カタログ](catalog.md)に置きます。 |
-| Gitのコマンドラインインターフェース文書 | CLI設計の参照に使う公式プロジェクト文書です。 | txBASEの明示的なサブコマンドとオプションの形だけに影響します。Gitのコマンド群、リポジトリモデル、オプションの意味はコピーしません。 | 設計判断は[CLIコマンド設計](cli.md)に置き、MVCCやストレージの契約には置きません。 |
-| RFC 9110、RFC 5789、RFC 10008 | IETFの標準化過程にある仕様です。 | HTTPメソッドの安全性、PATCHの意味、QUERYの安全性と冪等性をHTTP契約へ反映します。txBASEは対応メディアタイプ、応答形状、範囲上限、ルート上限を別に定義します。 | 規範的なHTTP意味論は[HTTPの意味](http-semantics.md)に置き、txBASE固有の制約は実装契約のそばに置きます。 |
+| Gitのコマンドラインインターフェース文書 | CLI設計の参照に使う公式プロジェクト文書です。 | txBASEの明示的なサブコマンドとオプションの形だけに影響します。Gitのコマンド群、リポジトリモデル、オプションの意味はコピーしません。 | 設計判断は[CLIコマンド体系の設計](cli-design.md)に置き、コマンド契約は[CLIコマンドリファレンス](cli.md)に置きます。MVCCやストレージの契約には置きません。 |
+| RFC 9110、RFC 5789、RFC 10008、RFC 6750 | IETFの標準化過程にある仕様です。 | HTTPメソッドの安全性、PATCHの意味、QUERYの安全性と冪等性、Bearer認証ヘッダーをHTTP契約へ反映します。txBASEは対応メディアタイプ、応答形状、範囲上限、ルート上限、環境変数で選択するトークン境界を別に定義します。 | 規範的なHTTP意味論は[HTTPの意味](http-semantics.md)に置き、txBASE固有の制約は実装契約のそばに置きます。 |
 | POSIXの`rename()`と`fsync()` | The Open Groupの仕様です。 | Unixコードはrenameによる置換と`sync_all`を使います。Windowsには別の置換経路があるため、POSIXのディレクトリ永続性保証と同一とは記述しません。 | ファイルシステムの永続性の前提は永続化とXBFの文書に置き、Unix限定であることを明記します。 |
 | WebAssembly、WASI、Component Model | 標準仕様または標準化中の仕様です。ホスト資料は実装参照です。 | リポジトリにはバージョン付きホスト非依存DBFコア、生成した`wasm-bindgen` Node.jsラッパー、Promiseベースの非同期XBFオブジェクトテーブルアダプターがあります。CIはABI、スナップショットの往復、4種類の更新操作、原子的なバッチのロールバック、オブジェクト公開、復旧、保持、ホストエラー変換を検査します。ワーカーまたはWASIのランタイムアダプターとホスト固有の方針は今後の作業です。 | コアABIとホスト境界の判断は[WASM](wasm.md)に置きます。ワーカーまたはWASIアダプターとスモークテストを追加した時点で、ホスト固有の一次資料を追記します。 |
 | Raft論文とRaftプロジェクト資料 | 論文とプロジェクトの一次資料です。 | リポジトリ所有の`ReplicationEntry`/`ReplicationLog`/`ReplicationSnapshot`スライスは、現在は固定termのプロセス内単一writerを選択し、カタログ更新またはローカルスナップショットインストールとともに`TXRP`位置をジャーナル化し、過去時点の読み取りを適用済み位置に限定し、構築済みのエントリとスナップショットを有界なHTTPで配送します。Raftは権威の候補にとどまり、クォーラムと分散実行はありません。 | ローカルのエントリ、再生、スナップショット、`TXRP`、過去時点読み取り、HTTP配送の契約は[分散化の進化](distributed-evolution.md)に置き、Raftは現在の実装依存ではなく将来候補として扱います。 |
@@ -162,6 +162,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 - [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
 - [RFC 5789: PATCH Method](https://www.rfc-editor.org/rfc/rfc5789.html)
 - [RFC 10008: The HTTP QUERY Method](https://www.rfc-editor.org/rfc/rfc10008.html)
+- [RFC 6750: OAuth 2.0 Bearer Token Usage](https://www.rfc-editor.org/rfc/rfc6750.html)
 
 ### CLI設計
 

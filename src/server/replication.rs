@@ -1,6 +1,6 @@
 use super::{
     CatalogReplicationRole, HttpResponse, error, header, json_bytes_response, json_response,
-    read_json_body, read_json_body_with_limit,
+    read_json_body, read_json_body_with_limit, request_header,
 };
 use crate::catalog::{Catalog, CatalogTransactionError};
 use crate::replication::{
@@ -14,6 +14,7 @@ const STATUS_PATH: &str = "/replication/status";
 const SNAPSHOT_PATH: &str = "/replication/snapshot";
 const ENTRY_PATH: &str = "/replication/entry";
 
+#[cfg(test)]
 pub(super) fn response(
     request: &mut Request,
     path: &str,
@@ -21,8 +22,24 @@ pub(super) fn response(
     log: &mut ReplicationLog,
     role: CatalogReplicationRole,
 ) -> Option<HttpResponse> {
+    response_with_auth(request, path, catalog, log, role, None)
+}
+
+pub(super) fn response_with_auth(
+    request: &mut Request,
+    path: &str,
+    catalog: &mut Catalog,
+    log: &mut ReplicationLog,
+    role: CatalogReplicationRole,
+    replication_token: Option<&str>,
+) -> Option<HttpResponse> {
     if !path.starts_with("/replication/") {
         return None;
+    }
+    if let Some(expected_token) = replication_token {
+        if let Err(response) = authorize(request, expected_token) {
+            return Some(response);
+        }
     }
 
     Some(match (request.method(), path) {
@@ -40,6 +57,70 @@ pub(super) fn response(
         )
         .with_header(header("Allow", "GET, HEAD, POST")),
     })
+}
+
+fn authorize(request: &Request, expected_token: &str) -> Result<(), HttpResponse> {
+    let Some(value) = request_header(request, "Authorization") else {
+        return Err(unauthorized(
+            "replication_auth_required",
+            "replication routes require Authorization: Bearer <token>",
+        ));
+    };
+    let Some(token) = bearer_token(value) else {
+        return Err(unauthorized(
+            "replication_invalid_token",
+            "replication bearer token is invalid",
+        ));
+    };
+    if !constant_time_eq(token.as_bytes(), expected_token.as_bytes()) {
+        return Err(unauthorized(
+            "replication_invalid_token",
+            "replication bearer token is invalid",
+        ));
+    }
+    Ok(())
+}
+
+fn bearer_token(value: &str) -> Option<&str> {
+    let (scheme, token) = value.split_once(' ')?;
+    let token = token.trim_start_matches(' ');
+    if scheme.eq_ignore_ascii_case("Bearer") && is_valid_bearer_token(token) {
+        Some(token)
+    } else {
+        None
+    }
+}
+
+pub(super) fn is_valid_bearer_token(token: &str) -> bool {
+    let mut has_token_byte = false;
+    let mut padding = false;
+    for byte in token.bytes() {
+        match byte {
+            b'=' => padding = true,
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'+' | b'/'
+                if !padding =>
+            {
+                has_token_byte = true
+            }
+            _ => return false,
+        }
+    }
+    has_token_byte
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    let mut difference = left.len() ^ right.len();
+    for index in 0..left.len().max(right.len()) {
+        let left_byte = left.get(index).copied().unwrap_or(0);
+        let right_byte = right.get(index).copied().unwrap_or(0);
+        difference |= usize::from(left_byte ^ right_byte);
+    }
+    difference == 0
+}
+
+fn unauthorized(code: &str, message: &str) -> HttpResponse {
+    json_response(401, error(code, message), false)
+        .with_header(header("WWW-Authenticate", "Bearer"))
 }
 
 fn status(catalog: &Catalog, log: &ReplicationLog, role: CatalogReplicationRole) -> HttpResponse {

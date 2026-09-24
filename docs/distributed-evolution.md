@@ -124,8 +124,11 @@ and, for apply operations, the resulting index and transaction ID.
 This is a delivery boundary, not a leader-election protocol.
 The default `authority` role captures `/transaction` and named-table mutation routes in the same catalog journal commit as `TXRP` state and rechecks table ETags before commit.
 The `follower` role reports its role through `status`, rejects direct catalog mutations with `409`, and still accepts replication delivery.
-The transport has no authentication, TLS, streaming, retry queue, backpressure,
-quorum, or authority discovery.
+When `TXBASE_REPLICATION_TOKEN` is configured, the four replication routes require
+RFC 6750 Bearer authorization and return `401` with `WWW-Authenticate: Bearer`
+for missing or invalid credentials. Without that environment variable, the routes
+remain unauthenticated for local development compatibility. The transport still has
+no TLS, streaming, retry queue, backpressure, quorum, or authority discovery.
 
 ## 4. Co-location before distributed joins
 
@@ -164,12 +167,13 @@ The local slice defines the following initial contracts:
 - snapshot recovery: a follower can install one validated catalog image atomically and resume at its next log position;
 - transport: the catalog server accepts versioned entry and snapshot JSON through bounded HTTP routes with explicit conflict statuses;
 - authority capture: the default authority role journals `/transaction` and named-table mutations with `TXRP` state, while the follower role rejects direct catalog mutations;
+- authentication: `TXBASE_REPLICATION_TOKEN` optionally protects the four replication routes with RFC 6750 Bearer credentials;
 - deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
 
 The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
-- authentication and authority-coordinated log truncation;
+- TLS, streaming, retry, backpressure, and authority-coordinated log truncation;
 - observability for lag and transport state;
 - quorum and network failure behavior.
 

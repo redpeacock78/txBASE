@@ -29,9 +29,11 @@ fn cli_help_lists_the_command_families_and_unknown_commands_fail() {
         "txbase xbf",
         "txbase index",
         "txbase serve",
+        "txbase serve-catalog",
     ] {
         assert!(help.contains(command), "help is missing {command}");
     }
+    assert!(help.contains("--replication-role authority|follower"));
 
     let unknown = run_cli(&["not-a-command"]);
     assert!(!unknown.status.success());

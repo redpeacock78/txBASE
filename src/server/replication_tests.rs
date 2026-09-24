@@ -59,6 +59,14 @@ fn response_json(response: super::HttpResponse) -> Value {
     serde_json::from_slice(&body).unwrap()
 }
 
+fn response_header(response: &super::HttpResponse, name: &'static str) -> Option<String> {
+    response
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv(name))
+        .map(|header| header.value.as_str().to_owned())
+}
+
 #[test]
 fn replication_http_delivers_entries_idempotently_and_reports_status() {
     let leader_root = temporary_catalog("leader");
@@ -205,6 +213,83 @@ fn replication_http_rejects_unknown_entry_fields_before_commit() {
     assert_eq!(catalog.transaction_id().unwrap(), None);
 
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn replication_http_enforces_configured_bearer_token() {
+    let root = temporary_catalog("auth");
+    let mut catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::new(1).unwrap();
+
+    let mut missing = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/replication/status")
+        .into();
+    let response = super::replication::response_with_auth(
+        &mut missing,
+        "/replication/status",
+        &mut catalog,
+        &mut log,
+        CatalogReplicationRole::Authority,
+        Some("secret"),
+    )
+    .unwrap();
+    assert_eq!(response.status_code(), StatusCode(401));
+    assert_eq!(
+        response_header(&response, "WWW-Authenticate").as_deref(),
+        Some("Bearer")
+    );
+    assert_eq!(
+        response_json(response)["error"]["code"],
+        "replication_auth_required"
+    );
+
+    let mut invalid = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/replication/status")
+        .with_header(header("Authorization", "Bearer wrong"))
+        .into();
+    let response = super::replication::response_with_auth(
+        &mut invalid,
+        "/replication/status",
+        &mut catalog,
+        &mut log,
+        CatalogReplicationRole::Authority,
+        Some("secret"),
+    )
+    .unwrap();
+    assert_eq!(response.status_code(), StatusCode(401));
+    assert_eq!(
+        response_json(response)["error"]["code"],
+        "replication_invalid_token"
+    );
+
+    let mut authorized = TestRequest::new()
+        .with_method(Method::Get)
+        .with_path("/replication/status")
+        .with_header(header("Authorization", "Bearer secret"))
+        .into();
+    let response = super::replication::response_with_auth(
+        &mut authorized,
+        "/replication/status",
+        &mut catalog,
+        &mut log,
+        CatalogReplicationRole::Authority,
+        Some("secret"),
+    )
+    .unwrap();
+    assert_eq!(response.status_code(), StatusCode(200));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn bearer_tokens_follow_rfc6750_token_shape() {
+    assert!(super::replication::is_valid_bearer_token("mF_9.B5f-4.1JqM"));
+    assert!(super::replication::is_valid_bearer_token("secret=="));
+    assert!(!super::replication::is_valid_bearer_token(""));
+    assert!(!super::replication::is_valid_bearer_token("secret token"));
+    assert!(!super::replication::is_valid_bearer_token("=secret"));
 }
 
 #[test]

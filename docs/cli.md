@@ -1,6 +1,8 @@
-# CLI command design
+# CLI command reference
 
 The CLI is a stable inspection and maintenance boundary over the Rust APIs.
+
+The design decisions behind the command surface are recorded in [CLI command architecture](cli-design.md).
 
 It uses explicit subcommands so a command's read, write, recovery, or server responsibility is visible before a path is opened.
 
@@ -66,7 +68,7 @@ The following table is the current command contract.
 | `txbase backup SOURCE DEST` | Validates and copies a DBF with its supported memo, schema, CDC, state, MVCC, and valid index sidecars. |
 | `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as the source. |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | Starts the single-table HTTP server. |
-| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | Starts the catalog HTTP server and its bounded replication delivery routes. The default `authority` role captures `/transaction` and named-table mutation routes in the catalog journal and `TXRP` sidecar; `follower` rejects direct catalog mutations with `409` while accepting replication delivery. `TERM` is a positive fixed local replication term and defaults to `1`. |
+| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | Starts the catalog HTTP server and its bounded replication delivery routes. The default `authority` role captures `/transaction` and named-table mutation routes in the catalog journal and `TXRP` sidecar; `follower` rejects direct catalog mutations with `409` while accepting replication delivery. `TERM` is a positive fixed local replication term and defaults to `1`. When `TXBASE_REPLICATION_TOKEN` is set, the four replication routes require an RFC 6750 `Authorization: Bearer <token>` header. |
 
 ## Option ownership
 
@@ -76,6 +78,7 @@ The following table is the current command contract.
 - `--bind` belongs only to `serve` and `serve-catalog`.
 - `--replication-term` belongs only to `serve-catalog` and selects its positive fixed local replication term.
 - `--replication-role` belongs only to `serve-catalog`; `authority` is the default write role, while `follower` rejects direct catalog mutations and accepts replication delivery.
+- `TXBASE_REPLICATION_TOKEN` is an optional `serve-catalog` environment variable, not a CLI option; it protects the replication routes without exposing the token in the command line.
 - `--after` belongs only to `cdc` and `cdc catalog`.
 - `--keep` belongs to table and catalog MVCC garbage collection; `--keep-rows` belongs only to table MVCC garbage collection.
 - `index build-compound` accepts `1` or `asc`, and `-1` or `desc`, for each field direction.
@@ -131,21 +134,7 @@ The row history is stored in the same MVCC sidecar; the current DBF and full sna
 `pack` removes deleted physical records, renumbers survivors, compacts referenced DBT/FPT memo blocks, refreshes an existing index sidecar, and persists the DBF, memo, index, MVCC, transaction-state, and CDC changes through one WAL-backed boundary.
 `recall` restores one deleted record after schema validation through the normal persistence boundary.
 
-## Design rules
-
-- Read-oriented commands must state whether normal recovery can change on-disk state; `wal inspect` must remain non-mutating.
-- Mutation commands must reuse the DBF, catalog, or XBF lock and recovery path that owns the target.
-- A command that changes a sidecar without changing DBF bytes must say so explicitly in its help and topic document.
-- A new command belongs in the smallest responsibility group that matches its failure behavior and fixtures.
-- The CLI may expose a bounded repository-local subset; a familiar command name does not claim dBASE, MongoDB, Git, or SQLite compatibility.
-
-The command surface follows the explicit subcommand and option conventions described by the [Git command-line interface documentation](https://git-scm.com/docs/gitcli), but txBASE does not copy Git's command set, repository model, or option semantics.
-
 ## Scope
 
-This document defines the txBASE CLI surface and design rationale.
+This document defines the txBASE CLI surface and command contract.
 Database consistency, DBF compatibility, XBF recovery, MVCC retention, and HTTP semantics remain in their topic documents.
-
-## Primary reference
-
-- [Git command-line interface and conventions](https://git-scm.com/docs/gitcli)

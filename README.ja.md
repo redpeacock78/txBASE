@@ -88,7 +88,7 @@ curl -i -X QUERY \
 そのmerge経路を使えない場合、またはコストが高い場合は、有界なhash経路またはindex probe経路にフォールバックします。
 
 カタログサーバーは、バージョン付きで有界なレプリケーション配送のために、`GET /replication/status`、`GET /replication/snapshot`、`POST /replication/entry`、`POST /replication/snapshot`も公開します。
-既定の`authority` roleでは、`/transaction`と名前付きテーブルの更新ルートがレプリケーションエントリを構築し、対応する`TXRP`位置とカタログ更新を一緒にジャーナル化します。`--replication-role follower`は直接のカタログ更新を拒否し、レプリケーション配送で変更を受け付けます。クォーラム、コンセンサス、認証は提供しません。
+既定の`authority` roleでは、`/transaction`と名前付きテーブルの更新ルートがレプリケーションエントリを構築し、対応する`TXRP`位置とカタログ更新を一緒にジャーナル化します。`--replication-role follower`は直接のカタログ更新を拒否し、レプリケーション配送で変更を受け付けます。`TXBASE_REPLICATION_TOKEN`を設定すると、4つのレプリケーションルートにRFC 6750 Bearerトークンを要求できます。TLS、クォーラム、コンセンサスは提供しません。
 
 正確な境界は、[クエリモデル](docs/ja/query-model.md)、[集約モデル](docs/ja/aggregation.md)、[結合モデル](docs/ja/joins.md)、[クエリ計画](docs/ja/query-planning.md)を参照してください。
 

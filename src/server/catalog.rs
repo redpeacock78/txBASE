@@ -23,6 +23,7 @@ pub(super) fn serve(
     bind: &str,
     replication_term: u64,
     role: CatalogReplicationRole,
+    replication_token: Option<String>,
 ) -> Result<(), String> {
     let mut catalog =
         Catalog::from_path(root).map_err(|error| format!("cannot open catalog: {error}"))?;
@@ -31,7 +32,13 @@ pub(super) fn serve(
     let server = Server::http(bind).map_err(|error| format!("cannot bind {bind}: {error}"))?;
     eprintln!("listening on http://{bind}");
     for request in server.incoming_requests() {
-        handle_request(request, &mut catalog, &mut replication, role);
+        handle_request(
+            request,
+            &mut catalog,
+            &mut replication,
+            role,
+            replication_token.as_deref(),
+        );
     }
     Ok(())
 }
@@ -41,14 +48,20 @@ fn handle_request(
     catalog: &mut Catalog,
     replication: &mut crate::replication::ReplicationLog,
     role: CatalogReplicationRole,
+    replication_token: Option<&str>,
 ) {
     let url = request.url().to_owned();
     let path = url.split('?').next().unwrap_or("/").to_owned();
     let response = if request.method().as_str() == "OPTIONS" {
         options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY")
-    } else if let Some(response) =
-        super::replication::response(&mut request, &path, catalog, replication, role)
-    {
+    } else if let Some(response) = super::replication::response_with_auth(
+        &mut request,
+        &path,
+        catalog,
+        replication,
+        role,
+        replication_token,
+    ) {
         response
     } else if role == CatalogReplicationRole::Follower
         && is_catalog_mutation(request.method(), &path)

@@ -113,7 +113,26 @@ pub fn serve_catalog_with_replication_config(
     replication_term: u64,
     role: CatalogReplicationRole,
 ) -> Result<(), String> {
-    catalog::serve(root, bind, replication_term, role)
+    catalog::serve(
+        root,
+        bind,
+        replication_term,
+        role,
+        replication_token_from_env()?,
+    )
+}
+
+fn replication_token_from_env() -> Result<Option<String>, String> {
+    let Some(value) = std::env::var_os("TXBASE_REPLICATION_TOKEN") else {
+        return Ok(None);
+    };
+    let token = value
+        .to_str()
+        .ok_or_else(|| "TXBASE_REPLICATION_TOKEN must be valid UTF-8".to_owned())?;
+    if !replication::is_valid_bearer_token(token) {
+        return Err("TXBASE_REPLICATION_TOKEN must be an RFC 6750 bearer token".to_owned());
+    }
+    Ok(Some(token.to_owned()))
 }
 
 fn handle_request(mut request: Request, table: &mut DbfTable, dbf_path: &Path) {

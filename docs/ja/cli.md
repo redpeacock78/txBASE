@@ -1,6 +1,8 @@
-# CLIコマンド設計
+# CLIコマンドリファレンス
 
 CLIは、Rust APIの上にある検査と保守の境界です。
+
+コマンド体系の設計判断は[CLIコマンド体系の設計](cli-design.md)に記載します。
 
 パスを開く前に、コマンドの読み取り、書き込み、復旧、サーバーの責務が見えるよう、明示的なサブコマンドを使います。
 
@@ -67,7 +69,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 | `txbase backup SOURCE DEST` | DBFと対応するmemo、スキーマ、CDC、状態、MVCC、有効なインデックスサイドカーを検証してコピーする。 |
 | `txbase restore SOURCE DEST` | バックアップをソースとして、同じ検証済みコピー手順を使う。 |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | 単一テーブルHTTPサーバーを起動する。 |
-| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | カタログHTTPサーバーと有界なレプリケーション配送ルートを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、`follower`ロールは直接のカタログ更新を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。 |
+| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | カタログHTTPサーバーと有界なレプリケーション配送ルートを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、`follower`ロールは直接のカタログ更新を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。`TXBASE_REPLICATION_TOKEN`を設定した場合、4つのレプリケーションルートにはRFC 6750の`Authorization: Bearer <token>`ヘッダーが必要になる。 |
 
 ## オプションの所有範囲
 
@@ -77,6 +79,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 - `--bind`は`serve`と`serve-catalog`だけに属する。
 - `--replication-term`は`serve-catalog`だけに属し、正の固定ローカルtermを選択する。
 - `--replication-role`は`serve-catalog`だけに属し、既定の`authority`は書き込みロール、`follower`は直接のカタログ更新を拒否してレプリケーション配送を受け付ける。
+- `TXBASE_REPLICATION_TOKEN`は`serve-catalog`の任意の環境変数であり、CLIオプションではない。コマンドラインにトークンを露出させずにレプリケーションルートを保護する。
 - `--after`は`cdc`と`cdc catalog`だけに属する。
 - `--keep`はテーブルとカタログのMVCCガベージコレクションに属し、`--keep-rows`はテーブルMVCCガベージコレクションだけに属する。
 - `index build-compound`は、各フィールドの方向に`1`または`asc`、`-1`または`desc`を受け付ける。
@@ -138,22 +141,7 @@ HTTP契約は、[HTTPメソッドの意味](http-semantics.md)、[クエリモ�
 DBF、memo、インデックス、MVCC、トランザクション状態、CDCの変更は、1つのWAL付き境界で永続化します。
 `recall`はスキーマ検証後に削除済みレコード1件を復元し、通常の永続化境界を使います。
 
-## 設計規則
-
-- 読み取り指向のコマンドは、通常の復旧がディスク上の状態を変更し得るかを明記し、`wal inspect`は非更新のまま保つ。
-- 更新コマンドは、対象を所有するDBF、カタログ、XBFのロックと復旧経路を再利用しなければなりません。
-- DBFバイト列を変更せずにサイドカーを変更するコマンドは、ヘルプとトピック文書でそのことを明記しなければなりません。
-- 新しいコマンドは、失敗時の動作とフィクスチャに合う最小の責務グループへ置く。
-- CLIはリポジトリ固有の有界なサブセットを公開できる。馴染みのあるコマンド名だけで、dBASE、MongoDB、Git、SQLiteとの互換性を主張しない。
-
-コマンドの表面は、[Gitのコマンドラインインターフェース文書](https://git-scm.com/docs/gitcli)にある明示的なサブコマンドとオプションの規約を参考にしています。
-ただし、txBASEはGitのコマンド群、リポジトリモデル、オプションの意味をコピーしません。
-
 ## 範囲
 
-この文書は、txBASE CLIの表面と設計上の判断を定義します。
+この文書は、txBASE CLIの表面とコマンド契約を定義します。
 データベースの整合性、DBF互換性、XBF復旧、MVCC保持、HTTPの意味は、それぞれのトピック文書に残します。
-
-## 主な参照先
-
-- [Git command-line interface and conventions](https://git-scm.com/docs/gitcli)

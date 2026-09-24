@@ -98,7 +98,7 @@ Large direct equality joins can use fresh compatible ordered indexes for merge e
 The planner falls back to bounded hash or index-probe paths when that merge path is unavailable or more expensive.
 
 The catalog server also exposes `GET /replication/status`, `GET /replication/snapshot`, `POST /replication/entry`, and `POST /replication/snapshot` for versioned, bounded replication delivery.
-In the default `authority` role, `/transaction` and named-table mutation routes construct replication entries and journal the catalog change with the matching `TXRP` position. `--replication-role follower` rejects direct catalog mutations and accepts changes through replication delivery; quorum, consensus, and authentication are not provided.
+In the default `authority` role, `/transaction` and named-table mutation routes construct replication entries and journal the catalog change with the matching `TXRP` position. `--replication-role follower` rejects direct catalog mutations and accepts changes through replication delivery. Set `TXBASE_REPLICATION_TOKEN` to require an RFC 6750 Bearer token on the four replication routes; TLS, quorum, and consensus are not provided.
 
 See the [query model](docs/query-model.md), [aggregation model](docs/aggregation.md), [join model](docs/joins.md), and [query planning](docs/query-planning.md) for the exact boundary.
 
