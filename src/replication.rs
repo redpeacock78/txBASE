@@ -163,6 +163,7 @@ impl ReplicationLog {
                 "follower read transaction_id must be positive".into(),
             ));
         }
+        self.ensure_catalog_position(current_transaction_id(catalog)?)?;
         if transaction_id < self.base_transaction_id {
             return Err(ReplicationError::ReadHistoryUnavailable {
                 requested: transaction_id,
@@ -175,7 +176,6 @@ impl ReplicationLog {
                 applied: self.last_transaction_id(),
             });
         }
-        self.ensure_catalog_position(current_transaction_id(catalog)?)?;
         Catalog::from_path_at(catalog.root(), transaction_id).map_err(ReplicationError::Catalog)
     }
 
