@@ -8,8 +8,10 @@ adapter for asynchronous XBF object-table commits. It also contains a
 Worker-compatible Fetch transport adapter with explicit timeout and
 cancellation mapping. It also contains a Worker-compatible Web Streams query
 adapter with bounded pull scheduling and `AbortSignal` cancellation. A WASI 0.3
-CLI component also streams DBF queries through asynchronous stdout; production
-WASI storage integration remains future work.
+CLI component streams DBF and current or retained XBF queries through
+asynchronous stdout; the XBF path uses a read-only preopened filesystem store.
+Writable/provider-backed WASI storage, non-blocking filesystem I/O, and
+production host lifecycle behavior remain future work.
 
 ## 0. Current implementation slice
 
@@ -67,6 +69,9 @@ Its versioned boundary currently provides:
   generation streams as Promise-returning `WasmObjectQueryStream` values;
 - a pinned Node.js Web Streams fixture that exercises backpressure-shaped pull
   scheduling, snapshot stability, invalid controls, and cancellation;
+- a WASI CLI query stream that reads DBF files or current and retained
+  DBF-representable XBF snapshots through a read-only preopened filesystem
+  store; pending WAL recovery that needs writes fails before row output;
 - a CI `wasm32-unknown-unknown` release build and wrapper smoke check.
 
 The core does not write files, access a network, schedule tasks, or commit a
@@ -201,7 +206,8 @@ The CI workflow builds and runs the WASI CLI component on a pinned Wasmtime runt
 The following conditions remain before calling a deployed worker or production WASI host complete:
 
 - a smoke test against the selected deployed worker or production WASI host;
-- an `AsyncObjectStore`-backed WASI query stream for XBF snapshots;
+- writable or provider-backed WASI object-store adapters and genuinely
+  non-blocking storage I/O;
 - host-specific timeout, retry, and process-cancellation behavior for asynchronous query streams;
 - a provider-specific consistency and retry contract when remote storage is selected.
 
@@ -241,8 +247,10 @@ smoke check, a JavaScript host-backed asynchronous object-table fixture, a
 Worker-compatible Fetch object-store adapter and smoke fixture, and
 runtime-neutral asynchronous object-store and object-table contracts. It also
 has runtime-neutral and generated-wrapper query-stream adapters for
-DBF-representable current or retained XBF snapshots, plus a Worker-compatible
-Web Streams adapter, a WASI 0.3 CLI query-stream component, and a pinned
+DBF-representable current or retained XBF snapshots, a Worker-compatible Web
+Streams adapter, and a WASI 0.3 CLI component. The WASI component reads XBF
+snapshots through a read-only preopened filesystem adapter and has a pinned
 Wasmtime smoke check.
-It does not claim support for a deployed worker, production WASI object
-storage, provider-specific consistency or retry policy, or a native recovery path.
+It does not claim support for a deployed worker, writable or provider-backed
+WASI object storage, non-blocking WASI storage I/O, provider-specific consistency
+or retry policy, or a native recovery path.

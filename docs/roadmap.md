@@ -61,7 +61,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with scalar and compound equality, compound equality-prefix, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, bounded Unicode collated ordered keys, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB index and DBF page reads, and sort work with non-selective-index table-scan fallback, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, path-aware planning, and DBF/memo freshness checks.
 - Durable table-local row history stored with MVCC prepare/commit records, epoch-separated physical row IDs, retained row reads, baseline reconstruction during full-image GC, and optional independent per-row retention through `mvcc gc --keep-rows`.
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection, index-sidecar recovery, and DBF-read recovery.
-- A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and single-operation or atomic-batch mutation contracts, a `wasm-bindgen` wrapper, a pinned Node.js wrapper smoke test, and a WASI 0.3 CLI query-stream component with a pinned Wasmtime smoke check.
+- A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and single-operation or atomic-batch mutation contracts, a `wasm-bindgen` wrapper, a pinned Node.js wrapper smoke test, and a WASI 0.3 CLI query-stream component that reads DBF files and current or retained XBF snapshots through a read-only preopened filesystem store, with a pinned Wasmtime smoke check.
 - A runtime-neutral `AsyncObjectStore` primitive contract, `AsyncObjectTable` manifest protocol, and synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
 - A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A Worker-compatible Fetch object-store adapter with conditional HTTP publication, strong SHA-256 ETags, bounded request timeouts, explicit `AbortSignal` cancellation mapping, and a deterministic WASM-backed HTTP fixture.
@@ -75,7 +75,7 @@ The repository currently provides:
 The baseline intentionally does not include the following:
 
 - Filesystem- and cache-aware merge join costing.
-- Production WASI host lifecycle semantics and `AsyncObjectStore`-backed query streams beyond the current WASI 0.3 CLI component.
+- Production WASI host lifecycle semantics, writable or provider-backed object-store adapters, and genuinely non-blocking storage I/O beyond the current read-only filesystem adapter.
 - Predicate-level locking and distributed serializable coordination.
 - Aggregation stages or accumulators beyond bounded input `$match`, `$unwind` with its documented top-level options, `$set`/`$addFields` with its documented expression subset, `$project`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, `$group`, `$bucket`, bounded scalar-expression `$bucketAuto` with finite numeric results, and bounded scalar-expression `$sortByCount` with bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
@@ -92,7 +92,7 @@ This phase keeps the database local and makes its operational boundary useful be
 - Schema introspection.
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
-- Production WASI host lifecycle handling, XBF-backed asynchronous query streams, and provider-specific object-table adapters.
+- Production WASI host lifecycle handling, writable or provider-backed XBF object-table adapters, and genuinely non-blocking storage I/O.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
 - Read-only WAL inspection.
@@ -155,8 +155,12 @@ conversion contract, and delegating row delivery to the owned snapshot stream.
 current and retained-generation streams through the generated wrapper.
 The Worker adapter awaits snapshot loading before the first row; cancellation
 stops row delivery but does not abort an in-flight `AsyncObjectStore` future.
-WASI scheduling, host-specific lifecycle policy, and the asynchronous object-table
-adapter for a provider-backed worker or WASI host remain host-specific.
+The WASI CLI component also reads current or retained XBF snapshots through a
+read-only preopened filesystem store. It uses synchronous filesystem operations
+through `SyncObjectStoreAdapter`, loads the snapshot before row delivery, and
+fails before output when pending-WAL recovery needs a write. Writable or
+provider-backed WASI storage, non-blocking storage I/O, and host-specific
+lifecycle policy remain future work.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 
@@ -366,11 +370,15 @@ DBF-representable current and retained XBF snapshots through
 `AsyncObjectTable::query_stream` and `AsyncObjectTable::query_stream_at`.
 The generated `WasmObjectTable` wrapper and Worker adapter also expose these
 queries through Promise-based initialization.
-A WASI 0.3 CLI component now drives the shared `AsyncQueryStream`, reads one
-preopened DBF file, and writes NDJSON through asynchronous stdout with stream
-backpressure; a pinned Wasmtime CI smoke check covers that boundary.
-It does not provide XBF object-store loading, provider-specific storage
-semantics, or cancellation of in-flight storage I/O.
+A WASI 0.3 CLI component now drives the shared `AsyncQueryStream`, reads either
+a preopened DBF file or a current/retained XBF snapshot through a read-only
+preopened filesystem store, and writes NDJSON through asynchronous stdout with
+stream backpressure; a pinned Wasmtime CI smoke check covers both input paths.
+The XBF adapter uses synchronous filesystem operations, is not safe for
+concurrent writers, and fails before row output if pending-WAL recovery needs a
+write. Writable or provider-backed storage, non-blocking storage I/O,
+provider-specific semantics, and cancellation of in-flight storage I/O remain
+future work.
 Production WASI host integration and a deployed worker fixture remain future work.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
