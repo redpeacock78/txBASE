@@ -1,0 +1,30 @@
+[package]
+name = "txbase-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+txbase = { path = ".." }
+
+[[bin]]
+name = "query_json"
+path = "fuzz_targets/query_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "xbf_decode"
+path = "fuzz_targets/xbf_decode.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]
+resolver = "2"

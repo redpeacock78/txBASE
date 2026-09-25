@@ -16,6 +16,26 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint:docs
 
+  fuzz:
+    name: bounded-fuzz
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@nightly
+      - run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Prepare fuzz corpus
+        run: |
+          corpus_root="$RUNNER_TEMP/txbase-fuzz"
+          mkdir -p "$corpus_root/xbf" "$corpus_root/query_json"
+          xxd -r -p tests/fixtures/query-stream-users.xbf.hex > "$corpus_root/xbf/query-stream-users.xbf"
+          for seed in tests/corpus/xbf/*.hex; do
+            xxd -r -p "$seed" "$corpus_root/xbf/$(basename "$seed" .hex)"
+          done
+          cp fuzz/corpus/query_json/* "$corpus_root/query_json/"
+      - run: cargo fuzz run xbf_decode "$RUNNER_TEMP/txbase-fuzz/xbf" -- -runs=1000 -seed=1 -max_len=1048576 -timeout=10
+      - run: cargo fuzz run query_json "$RUNNER_TEMP/txbase-fuzz/query_json" -- -runs=1000 -seed=1 -max_len=1048576 -timeout=10
+
   wasm:
     name: wasm
     runs-on: ubuntu-24.04

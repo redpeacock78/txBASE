@@ -96,6 +96,10 @@ The property is no panic, bounded parsing, and a useful error or safe rejection.
 
 Malformed input must not cause an out-of-bounds read, a partial successful write, or an accidental WAL truncation beyond an incomplete final record.
 
+CI also runs coverage-guided `cargo-fuzz` targets for arbitrary XBF bytes and query JSON.
+The XBF corpus is decoded from the checked-in valid fixture and malformed hex corpus; query seeds are stored under `fuzz/corpus/query_json/`.
+Each target uses a fixed seed, 1,000 input runs, a 1 MiB maximum input, and a 10-second per-input timeout.
+
 ### Persistence and recovery tests
 
 Place failures at each boundary:
@@ -234,9 +238,12 @@ Wildcard examples remain descriptive and are not expanded by this check.
 
 This is the current green gate.
 
+The separate Ubuntu fuzz job installs `cargo-fuzz` 0.13.2 on nightly and runs both fuzz targets with the same fixed limits.
+The job has a 15-minute timeout that also bounds setup and compilation.
+
 It is intentionally smaller than SQLite's full release process.
 
-Long-running fuzz, soak, differential, and fault-injection jobs should be added only when their input, timeout, artifact, and failure-reproduction contracts are defined.
+Unbounded fuzz, soak, differential, and fault-injection jobs should be added only when their input, timeout, artifact, and failure-reproduction contracts are defined.
 
 ## 6. Proposed next checks
 
@@ -246,8 +253,7 @@ The order below keeps the feedback loop short:
 2. Add reference-model cases for multi-step mutation sequences.
 3. Extend malformed corpora and no-panic checks.
 4. Extend deterministic recovery tests for every WAL record kind and replacement boundary.
-5. Add bounded fuzz targets for parsers and query validation.
-6. Add differential checks only after a reference query evaluator exists.
+5. Add differential checks only after a reference query evaluator exists.
 
 No coverage percentage is a substitute for these contracts.
 
@@ -260,3 +266,5 @@ The matrix should be updated in the same change as a new format, query, persiste
 - [SQLite quality management](https://sqlite.org/qmplan.html)
 - [SQLite requirements](https://sqlite.org/requirements.html)
 - [SQLite limits](https://sqlite.org/limits.html)
+- [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz)
+- [libFuzzer options and corpus behavior](https://www.llvm.org/docs/LibFuzzer.html)

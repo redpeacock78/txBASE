@@ -1,0 +1,1 @@
+{"filter":{"age":{"$gte":18}},"sort":{"age":1},"projection":{"name":1},"limit":10}
