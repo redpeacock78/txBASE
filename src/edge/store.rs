@@ -85,6 +85,36 @@ pub trait AsyncObjectStore {
     ) -> AsyncObjectStoreFuture<'a, Result<Vec<String>, ObjectStoreError>>;
 }
 
+pub(super) fn put_if_absent_or_matching<S: ObjectStore>(
+    store: &S,
+    key: &str,
+    bytes: &[u8],
+) -> Result<(), ObjectStoreError> {
+    match store.put_if_absent(key, bytes) {
+        Ok(()) => Ok(()),
+        Err(error @ ObjectStoreError::Conflict(_)) => match store.get(key)? {
+            Some(existing) if existing.as_slice() == bytes => Ok(()),
+            _ => Err(error),
+        },
+        Err(error) => Err(error),
+    }
+}
+
+pub(super) async fn put_if_absent_or_matching_async<S: AsyncObjectStore>(
+    store: &S,
+    key: &str,
+    bytes: &[u8],
+) -> Result<(), ObjectStoreError> {
+    match store.put_if_absent(key, bytes).await {
+        Ok(()) => Ok(()),
+        Err(error @ ObjectStoreError::Conflict(_)) => match store.get(key).await? {
+            Some(existing) if existing.as_slice() == bytes => Ok(()),
+            _ => Err(error),
+        },
+        Err(error) => Err(error),
+    }
+}
+
 #[derive(Clone)]
 pub struct SyncObjectStoreAdapter<S> {
     inner: S,

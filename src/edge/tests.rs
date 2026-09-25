@@ -104,6 +104,38 @@ fn compare_and_swap_rejects_concurrent_writers_and_allows_idempotent_retry() {
 }
 
 #[test]
+fn commit_reuses_an_identical_orphan_snapshot_after_interruption() {
+    let store = MemoryObjectStore::new();
+    let pending = table(0, "Alice");
+    store
+        .put_if_absent("users/snapshots/0.xbf", &encode(&pending).unwrap())
+        .unwrap();
+    let object_table = ObjectTable::new(store, "users").unwrap();
+
+    assert_eq!(
+        object_table.commit(&pending).unwrap(),
+        CommitResult::Committed { generation: 0 }
+    );
+    assert_eq!(object_table.read().unwrap(), Some(pending));
+}
+
+#[test]
+fn commit_rejects_an_orphan_snapshot_with_different_bytes() {
+    let store = MemoryObjectStore::new();
+    let pending = table(0, "Alice");
+    store
+        .put_if_absent("users/snapshots/0.xbf", &encode(&table(0, "Bob")).unwrap())
+        .unwrap();
+    let object_table = ObjectTable::new(store, "users").unwrap();
+
+    assert!(matches!(
+        object_table.commit(&pending),
+        Err(ObjectStoreError::Conflict(_))
+    ));
+    assert!(object_table.manifest().unwrap().is_none());
+}
+
+#[test]
 fn object_table_enforces_encode_limits_before_publication() {
     let store = MemoryObjectStore::new();
     let snapshot = table(0, "Alice");
@@ -388,6 +420,22 @@ fn async_object_table_reuses_generation_commit_and_retention_contracts() {
     );
     assert_eq!(block_on(object_table.read_at(0)).unwrap(), None);
     assert_eq!(block_on(object_table.read()).unwrap(), Some(second));
+}
+
+#[test]
+fn async_commit_reuses_an_identical_orphan_snapshot_after_interruption() {
+    let store = MemoryObjectStore::new();
+    let pending = table(0, "Alice");
+    store
+        .put_if_absent("users/snapshots/0.xbf", &encode(&pending).unwrap())
+        .unwrap();
+    let object_table = AsyncObjectTable::new(SyncObjectStoreAdapter::new(store), "users").unwrap();
+
+    assert_eq!(
+        block_on(object_table.commit(&pending)).unwrap(),
+        CommitResult::Committed { generation: 0 }
+    );
+    assert_eq!(block_on(object_table.read()).unwrap(), Some(pending));
 }
 
 #[test]

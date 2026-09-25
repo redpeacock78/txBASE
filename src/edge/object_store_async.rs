@@ -1,4 +1,4 @@
-use super::super::store::{AsyncObjectStore, ObjectStoreError};
+use super::super::store::{AsyncObjectStore, ObjectStoreError, put_if_absent_or_matching_async};
 use super::protocol::{
     CommitResult, MANIFEST_VERSION, Manifest, PENDING_VERSION, PendingCommit,
     history_with_generation, manifest_history, snapshot_generation, validate_namespace,
@@ -148,7 +148,7 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
         }
 
         let root = self.snapshot_key(table.generation);
-        self.store.put_if_absent(&root, &snapshot).await?;
+        put_if_absent_or_matching_async(&self.store, &root, &snapshot).await?;
         let pending = PendingCommit {
             version: PENDING_VERSION,
             base_generation: current.as_ref().map(|manifest| manifest.generation),
@@ -157,9 +157,7 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
             wal_head: table.generation,
         };
         let wal_key = self.wal_key(table.generation);
-        self.store
-            .put_if_absent(&wal_key, &pending.to_bytes()?)
-            .await?;
+        put_if_absent_or_matching_async(&self.store, &wal_key, &pending.to_bytes()?).await?;
         let manifest = Manifest {
             version: MANIFEST_VERSION,
             generation: table.generation,

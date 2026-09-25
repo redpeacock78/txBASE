@@ -1,4 +1,4 @@
-use super::super::store::{ObjectStore, ObjectStoreError};
+use super::super::store::{ObjectStore, ObjectStoreError, put_if_absent_or_matching};
 use super::protocol::{
     CommitResult, MANIFEST_VERSION, Manifest, PENDING_VERSION, PendingCommit,
     history_with_generation, manifest_history, snapshot_generation, validate_namespace,
@@ -141,7 +141,7 @@ impl<S: ObjectStore> ObjectTable<S> {
         }
 
         let root = self.snapshot_key(table.generation);
-        self.store.put_if_absent(&root, &snapshot)?;
+        put_if_absent_or_matching(&self.store, &root, &snapshot)?;
         let pending = PendingCommit {
             version: PENDING_VERSION,
             base_generation: current.as_ref().map(|manifest| manifest.generation),
@@ -150,7 +150,7 @@ impl<S: ObjectStore> ObjectTable<S> {
             wal_head: table.generation,
         };
         let wal_key = self.wal_key(table.generation);
-        self.store.put_if_absent(&wal_key, &pending.to_bytes()?)?;
+        put_if_absent_or_matching(&self.store, &wal_key, &pending.to_bytes()?)?;
         let manifest = Manifest {
             version: MANIFEST_VERSION,
             generation: table.generation,

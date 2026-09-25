@@ -101,6 +101,9 @@ Two writers that publish different bytes for the same generation therefore produ
 
 Retrying the same generation with identical snapshot bytes returns `AlreadyCommitted`.
 
+If `put-if-absent` reports a conflict, the commit reuses the object only when its existing bytes match exactly.
+This lets a retry resume after snapshot publication but before WAL publication without overwriting immutable data.
+
 If publication fails after the snapshot and WAL objects exist, `ObjectTable::recover` validates the XBF generation and completes the manifest CAS when the recorded base generation is still current.
 
 If the manifest was published but WAL cleanup failed, recovery removes the already-applied WAL without applying the snapshot twice.
