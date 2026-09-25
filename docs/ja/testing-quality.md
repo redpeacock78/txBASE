@@ -244,6 +244,10 @@ cargo test --all-targets --all-features
 
 ワイルドカードを含む例は説明用として扱い、この検査では展開しません。
 
+UbuntuのMSRVジョブはRust 1.85.0を導入し、`cargo test --locked --all-targets --all-features`を実行します。
+この検査では、コミット済みロックファイルを使い、ネイティブターゲットと全機能が宣言済みの最小Rustバージョンで動くことを確認します。
+WASI 0.3のサンプルはRust 1.87以降を必要とするため、別のWASIコンポーネントジョブではstable Rustを使います。
+
 これが現在のgreen gateです。
 
 独立したUbuntuのファジングジョブは、nightlyで`cargo-fuzz` 0.13.2をインストールし、同じ上限で両方のファジング対象を実行します。
@@ -276,3 +280,5 @@ SQLiteの完全なリリースプロセスより意図的に小さくしてい�
 - [SQLite limits](https://sqlite.org/limits.html)
 - [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz)
 - [libFuzzerのオプションとコーパスの動作](https://www.llvm.org/docs/LibFuzzer.html)
+- [Cargoの`rust-version`フィールド](https://doc.rust-lang.org/cargo/reference/rust-version.html)
+- [dtolnay/rust-toolchain](https://github.com/dtolnay/rust-toolchain)

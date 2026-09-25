@@ -178,6 +178,11 @@ Second, POSIX durability language is limited to the Unix path; cross-platform re
 - [Rust `Poll`](https://doc.rust-lang.org/std/task/enum.Poll.html)
 - [Rust `Pin`](https://doc.rust-lang.org/std/pin/index.html)
 
+### Rust toolchain support
+
+- [Cargo `rust-version` field](https://doc.rust-lang.org/cargo/reference/rust-version.html)
+- [dtolnay/rust-toolchain](https://github.com/dtolnay/rust-toolchain)
+
 ### File-system commit primitives
 
 - [POSIX `rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)

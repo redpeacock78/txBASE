@@ -236,6 +236,10 @@ The documentation check also verifies that concrete `src/` and `tests/` paths wr
 
 Wildcard examples remain descriptive and are not expanded by this check.
 
+An Ubuntu MSRV job installs Rust 1.85.0 and runs `cargo test --locked --all-targets --all-features`.
+This verifies the declared minimum Rust version for native package targets and every feature against the committed lockfile.
+The separate WASI component job uses stable Rust because the WASI 0.3 example requires Rust 1.87 or later.
+
 This is the current green gate.
 
 The separate Ubuntu fuzz job installs `cargo-fuzz` 0.13.2 on nightly and runs both fuzz targets with the same fixed limits.
@@ -268,3 +272,5 @@ The matrix should be updated in the same change as a new format, query, persiste
 - [SQLite limits](https://sqlite.org/limits.html)
 - [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz)
 - [libFuzzer options and corpus behavior](https://www.llvm.org/docs/LibFuzzer.html)
+- [Cargo `rust-version` field](https://doc.rust-lang.org/cargo/reference/rust-version.html)
+- [dtolnay/rust-toolchain](https://github.com/dtolnay/rust-toolchain)

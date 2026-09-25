@@ -178,6 +178,11 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 - [Rustの`Poll`](https://doc.rust-lang.org/std/task/enum.Poll.html)
 - [Rustの`Pin`](https://doc.rust-lang.org/std/pin/index.html)
 
+### Rustツールチェーンのサポート
+
+- [Cargoの`rust-version`フィールド](https://doc.rust-lang.org/cargo/reference/rust-version.html)
+- [dtolnay/rust-toolchain](https://github.com/dtolnay/rust-toolchain)
+
 ### ファイルシステムのコミットプリミティブ
 
 - [POSIX `rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)

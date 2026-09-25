@@ -16,6 +16,14 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint:docs
 
+  msrv:
+    name: test (Rust 1.85.0)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - run: cargo test --locked --all-targets --all-features
+
   fuzz:
     name: bounded-fuzz
     runs-on: ubuntu-24.04
