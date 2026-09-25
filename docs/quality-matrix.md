@@ -28,13 +28,14 @@ cargo test --all-targets --all-features
 
 The native workflow runs that gate on Ubuntu, macOS, and Windows.
 The separate Ubuntu WASM job builds the release module and generates the Node.js wrapper with `wasm-bindgen-cli` `0.2.128`.
-It then runs four smoke checks against the generated wrapper:
+It pins Node.js `22.14.0` and runs five smoke checks against the generated wrapper:
 
 ```bash
 node tests/wasm_smoke.mjs target/wasm-bindgen
 node tests/wasm_edge_smoke.mjs target/wasm-bindgen
 node tests/wasm_worker_smoke.mjs target/wasm-bindgen
 node tests/wasm_r2_smoke.mjs target/wasm-bindgen
+node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 ```
 
 The module build command is `cargo build --locked --lib --target wasm32-unknown-unknown --release`.
