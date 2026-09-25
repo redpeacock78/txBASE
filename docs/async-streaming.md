@@ -55,7 +55,11 @@ The separate WASI query-stream component polls the shared in-memory `QueryStream
 
 `AsyncObjectTable::query_stream_at` selects one retained generation through the same asynchronous-storage boundary.
 
-Its first poll recovers and reads the selected committed XBF snapshot through `AsyncObjectStore`, converts that snapshot through the existing XBF-to-DBF export contract, and then delegates row delivery to the owned snapshot stream.
+Its first poll recovers and reads the selected committed XBF snapshot through `AsyncObjectStore`, then maps each live row directly into the shared JSON query contract without exporting the whole table to DBF.
+
+The complete XBF snapshot is still loaded and validated before the first row; row mapping and delivery happen as the stream is polled.
+
+DBF-compatible values retain their existing JSON representation, while XBF-only values follow the mappings in [XBF](xbf.md).
 
 The load may return `Pending` and must wake the caller through the future's host contract; after the load completes, rows come from a stable in-memory snapshot.
 
@@ -65,7 +69,7 @@ The adapter accepts the same filter, projection, skip, and limit controls as the
 
 Unsupported sort, aggregation, pagination, and cursor controls are rejected before the storage future is created.
 
-An absent current or retained snapshot, or an XBF snapshot that cannot be represented as DBF, is reported as one `QueryError` item and the stream then ends.
+An absent current or retained snapshot, a storage failure, or an invalid XBF snapshot is reported as one `QueryError` item and the stream then ends.
 
 ## 3. Host responsibilities
 
@@ -102,7 +106,7 @@ WASI scheduling and remote retry policy remain host-specific.
 `createWorkerQueryStream` wraps a synchronous or Promise-backed WASM query stream in a standard `ReadableStream`.
 It awaits asynchronous stream creation before the first row, then each `pull` advances the snapshot by at most one record and enqueues one UTF-8 NDJSON chunk.
 The positive `queueSize` high-water mark delegates demand control to the Web Streams queue.
-Object-table queries load and convert one whole XBF snapshot before streaming rows; they do not stream remote pages.
+Object-table queries load one whole XBF snapshot before streaming rows and map each row on demand; they do not stream remote pages.
 
 The adapter propagates reader cancellation and an `AbortSignal` to the active WASM query stream's `cancel()` method.
 Malformed query input, unsupported controls, and lifecycle failures remain errors; they are not converted into an empty result.

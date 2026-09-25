@@ -53,6 +53,7 @@ pub(crate) use validation::validate_filter;
 
 pub(crate) use stream::OwnedQuerySnapshotStream;
 pub(crate) use stream::stream_query_snapshot_owned;
+pub(crate) use stream::stream_xbf_snapshot_owned;
 
 #[cfg(test)]
 use crate::query_path::field_value;

@@ -34,11 +34,13 @@ The synchronous adapter does not make filesystem I/O non-blocking, but it exerci
 
 `AsyncObjectTable::query_stream_at(generation, request)` selects one retained committed generation through the same boundary.
 
-The first poll may be `Pending`; once loading completes, the stream owns a stable DBF-representable snapshot and accepts only filter, projection, skip, and limit controls.
+The first poll may be `Pending`; once loading completes, the stream owns a stable decoded XBF snapshot, maps its live rows directly into the shared JSON query contract, and accepts only filter, projection, skip, and limit controls.
+
+The whole snapshot is loaded before row delivery; DBF export constraints do not limit the XBF values available to queries.
 
 Unsupported stream controls are rejected before the asynchronous storage read starts.
 
-A missing current or retained snapshot, or an XBF value that the existing DBF export contract cannot represent, produces one query error item and then end-of-stream.
+A missing current or retained snapshot, a storage failure, or an invalid XBF snapshot produces one query error item and then end-of-stream.
 
 On `wasm32`, `WasmObjectTable` wraps the same asynchronous table protocol for a JavaScript host object.
 The host supplies Promise-returning `get`, `putIfAbsent`, `compareAndSwap`, `delete`, and `list` methods.

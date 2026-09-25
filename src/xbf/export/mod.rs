@@ -7,6 +7,8 @@ use std::path::Path;
 
 mod convert;
 
+pub(super) use convert::value_to_dbf;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct XbfExportIssue {
     pub record: Option<usize>,

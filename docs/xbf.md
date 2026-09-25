@@ -352,6 +352,19 @@ The query, mutation, planner, and HTTP layers should operate on the same interna
 
 Only the format layer should own byte layout, checksums, type conversion, and snapshot recovery.
 
+The asynchronous object-table query path maps live XBF rows into the shared JSON record contract without exporting the whole table to DBF.
+It loads and validates the complete XBF snapshot before yielding rows, so this path does not stream remote pages.
+The mapper preserves the existing JSON representation for values accepted by DBF queries and uses these representations for values DBF cannot represent:
+
+- UUID values become lowercase, hyphenated UUID strings.
+- JSON values remain nested JSON values.
+- Unsigned 64-bit values above `i64::MAX` remain exact JSON integers.
+- Non-finite `Float32` and `Float64` values become one-key objects containing their lowercase IEEE bit pattern under `$txbaseFloat32Bits` or `$txbaseFloat64Bits`.
+- `Date` values outside the DBF date range become signed days since the Unix epoch, and `Timestamp` values outside that range become signed milliseconds since the Unix epoch.
+- A `Signed64` field encoded with a 32-bit value becomes a signed JSON integer.
+
+Direct row mapping avoids DBF field-name and fixed-width export constraints; XBF validation still applies.
+
 This prevents XBF from becoming a second unrelated database implementation.
 
 ## 11. Implementation gates

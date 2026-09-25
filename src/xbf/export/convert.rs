@@ -192,7 +192,7 @@ fn variable_width(field: &XbfField, values: &[&XbfValue], binary: bool) -> Resul
     Ok(width as u8)
 }
 
-pub(super) fn value_to_dbf(field: &XbfField, value: &XbfValue) -> Result<Value, XbfError> {
+pub(in crate::xbf) fn value_to_dbf(field: &XbfField, value: &XbfValue) -> Result<Value, XbfError> {
     match (field.ty, value) {
         (_, XbfValue::Null) => Ok(Value::Null),
         (XbfType::Boolean, XbfValue::Boolean(value)) => Ok(Value::Bool(*value)),

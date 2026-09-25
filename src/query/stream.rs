@@ -1,7 +1,9 @@
 use super::{QueryError, QueryRequest, matches_filter};
 use crate::dbf::DbfTable;
-use crate::query_path::project;
-use serde_json::Value;
+use crate::query_path::{project, project_values};
+use crate::xbf::{XbfField, XbfTable, XbfValue};
+use serde_json::{Map, Value};
+use std::borrow::Cow;
 use std::sync::mpsc::{Receiver, sync_channel};
 use std::thread;
 
@@ -22,9 +24,59 @@ pub struct QuerySnapshotStream<'request> {
 }
 
 pub(crate) struct OwnedQuerySnapshotStream {
-    table: DbfTable,
+    table: SnapshotTable,
     request: QueryRequest,
     state: SnapshotStreamState,
+}
+
+enum SnapshotTable {
+    Dbf(DbfTable),
+    Xbf(XbfTable),
+}
+
+#[derive(Clone, Copy)]
+enum SnapshotQuerySource<'table> {
+    Dbf(&'table DbfTable),
+    Xbf(&'table XbfTable),
+}
+
+struct SnapshotQueryRow<'row> {
+    deleted: bool,
+    values: SnapshotQueryValues<'row>,
+}
+
+enum SnapshotQueryValues<'row> {
+    Dbf(&'row Map<String, Value>),
+    Xbf(&'row [XbfField], &'row [XbfValue]),
+}
+
+impl SnapshotQuerySource<'_> {
+    fn row(&self, position: usize) -> Option<SnapshotQueryRow<'_>> {
+        match self {
+            Self::Dbf(table) => table
+                .records()
+                .get(position)
+                .map(|record| SnapshotQueryRow {
+                    deleted: record.deleted,
+                    values: SnapshotQueryValues::Dbf(&record.values),
+                }),
+            Self::Xbf(table) => table.records.get(position).map(|record| SnapshotQueryRow {
+                deleted: record.deleted,
+                values: SnapshotQueryValues::Xbf(&table.fields, &record.values),
+            }),
+        }
+    }
+}
+
+impl<'row> SnapshotQueryValues<'row> {
+    fn into_map(self) -> Result<Cow<'row, Map<String, Value>>, QueryError> {
+        match self {
+            Self::Dbf(values) => Ok(Cow::Borrowed(values)),
+            Self::Xbf(fields, values) => crate::xbf::record_values(fields, values)
+                .map(Cow::Owned)
+                .map_err(|error| QueryError::Invalid(format!("cannot query XBF row: {error}"))),
+        }
+    }
 }
 
 struct SnapshotStreamState {
@@ -50,7 +102,7 @@ impl SnapshotStreamState {
 
     fn next(
         &mut self,
-        table: &DbfTable,
+        source: SnapshotQuerySource<'_>,
         request: &QueryRequest,
     ) -> Option<Result<Value, QueryError>> {
         if self.done || self.limit.is_some_and(|limit| self.yielded >= limit) {
@@ -58,7 +110,7 @@ impl SnapshotStreamState {
             return None;
         }
         loop {
-            let Some(record) = table.records().get(self.position) else {
+            let Some(record) = source.row(self.position) else {
                 self.done = true;
                 return None;
             };
@@ -66,7 +118,14 @@ impl SnapshotStreamState {
             if record.deleted {
                 continue;
             }
-            match matches_filter(&record.values, &request.filter) {
+            let values = match record.values.into_map() {
+                Ok(values) => values,
+                Err(error) => {
+                    self.done = true;
+                    return Some(Err(error));
+                }
+            };
+            match matches_filter(values.as_ref(), &request.filter) {
                 Ok(false) => continue,
                 Err(error) => {
                     self.done = true;
@@ -79,7 +138,7 @@ impl SnapshotStreamState {
                 continue;
             }
             self.yielded += 1;
-            return Some(Ok(project(record, &request.projection)));
+            return Some(Ok(project_values(values.as_ref(), &request.projection)));
         }
     }
 }
@@ -122,9 +181,21 @@ pub(crate) fn stream_query_snapshot_owned(
 ) -> Result<OwnedQuerySnapshotStream, QueryError> {
     validate_stream_request(request)?;
     Ok(OwnedQuerySnapshotStream {
-        table: table.clone(),
+        table: SnapshotTable::Dbf(table.clone()),
         request: request.clone(),
         state: SnapshotStreamState::new(request),
+    })
+}
+
+pub(crate) fn stream_xbf_snapshot_owned(
+    table: XbfTable,
+    request: QueryRequest,
+) -> Result<OwnedQuerySnapshotStream, QueryError> {
+    validate_stream_request(&request)?;
+    Ok(OwnedQuerySnapshotStream {
+        table: SnapshotTable::Xbf(table),
+        state: SnapshotStreamState::new(&request),
+        request,
     })
 }
 
@@ -208,7 +279,8 @@ impl<'request> Iterator for QuerySnapshotStream<'request> {
     type Item = Result<Value, QueryError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.state.next(&self.table, self.request)
+        self.state
+            .next(SnapshotQuerySource::Dbf(&self.table), self.request)
     }
 }
 
@@ -216,7 +288,11 @@ impl Iterator for OwnedQuerySnapshotStream {
     type Item = Result<Value, QueryError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.state.next(&self.table, &self.request)
+        let source = match &self.table {
+            SnapshotTable::Dbf(table) => SnapshotQuerySource::Dbf(table),
+            SnapshotTable::Xbf(table) => SnapshotQuerySource::Xbf(table),
+        };
+        self.state.next(source, &self.request)
     }
 }
 

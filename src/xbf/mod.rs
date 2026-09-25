@@ -3,11 +3,13 @@ mod codec;
 mod conversion;
 mod export;
 mod persistence;
+mod query;
 mod schema;
 mod values;
 mod wal;
 
 pub(crate) use checksum::crc32c;
+pub(crate) use query::record_values;
 
 #[cfg(test)]
 mod export_tests;

@@ -149,9 +149,11 @@ The Worker-compatible Web Streams adapter supplies pull scheduling, bounded
 NDJSON chunks, reader cancellation, and `AbortSignal` lifecycle handling for
 both in-memory WASM streams and Promise-backed object-table streams.
 `AsyncObjectTable::query_stream` supplies a runtime-neutral asynchronous-storage-backed
-query stream by recovering the current committed XBF snapshot, reusing the existing XBF-to-DBF
-conversion contract, and delegating row delivery to the owned snapshot stream.
+query stream by recovering the current committed XBF snapshot, mapping each live row directly
+into the shared JSON query contract, and reusing the owned snapshot stream without whole-table
+DBF export.
 `AsyncObjectTable::query_stream_at` applies the same contract to one retained generation.
+Both paths load and validate the complete XBF snapshot before row delivery; they do not stream remote pages.
 `WasmObjectTable.query_stream_json` and `query_stream_json_at` expose those same
 current and retained-generation streams through the generated wrapper.
 The Worker adapter awaits snapshot loading before the first row.
@@ -381,8 +383,9 @@ The WASM slice now supplies generic Fetch timeout and cancellation mapping throu
 The Worker-compatible Web Streams query adapter supplies bounded pull scheduling,
 NDJSON chunks, and `AbortSignal` cancellation through `src/worker-query-stream.mjs`.
 The runtime-neutral asynchronous-storage-backed query stream is implemented for
-DBF-representable current and retained XBF snapshots through
+current and retained XBF snapshots through
 `AsyncObjectTable::query_stream` and `AsyncObjectTable::query_stream_at`.
+It maps live rows directly into the shared JSON query contract, including XBF-only values, but still loads and validates the whole snapshot before row delivery.
 The generated `WasmObjectTable` wrapper and Worker adapter also expose these
 queries through Promise-based initialization.
 A WASI 0.3 CLI component now drives the shared `AsyncQueryStream`, reads either

@@ -168,8 +168,11 @@ HTTPサーバーは`/records/stream`と`/{table}/records/stream`をこのスト�
 ネイティブの`query::stream_query_threaded`アダプターは、ブロックしないポーリング、有界な生成側バックプレッシャー、waker通知、破棄時のワーカーキャンセルを提供します。
 
 Worker互換Web Streamsアダプターは、インメモリWASMストリームとPromiseを返すオブジェクトテーブルストリームの両方に、pullスケジューリング、有界NDJSONチャンク、readerのキャンセル、`AbortSignal`ライフサイクルを提供します。
-`AsyncObjectTable::query_stream`は、現在のコミット済みXBFスナップショットを復旧し、既存のXBFからDBFへの変換契約を再利用し、所有型スナップショットストリームへ行の配送を委譲する、ランタイム非依存の非同期ストレージ接続型クエリストリームを提供します。
+`AsyncObjectTable::query_stream`は、現在のコミット済みXBFスナップショットを復旧し、生存行を共有するJSONクエリ契約へ直接対応付ける、ランタイム非依存の非同期ストレージ接続型クエリストリームを提供します。
+テーブル全体をDBFへ出力せずに既存の所有型スナップショットストリームを再利用します。
 `AsyncObjectTable::query_stream_at`は、同じ契約を保持中の1つの世代へ適用します。
+どちらも行を返す前にXBFスナップショット全体を読み込んで検証します。
+リモートページをストリーミングするものではありません。
 `WasmObjectTable.query_stream_json`と`query_stream_json_at`は、現在世代と選択した保持世代のストリームを生成ラッパーから公開します。
 Workerアダプターは最初の行を返す前にスナップショットを読み込みます。
 シグナル対応の`WasmObjectTable`メソッドは、クエリ専用の`AbortSignal`をホスト操作へ渡します。
@@ -436,7 +439,8 @@ CIゲートは生成した`wasm-bindgen`ラッパーをNode.jsから読み込み
 ネイティブの`ThreadedQueryStream`アダプターは`wasm32`以外で利用でき、WASM ABIは変更しません。
 WASMスライスは、Workerアダプターを通じて汎用Fetchのタイムアウトとキャンセルの対応付けを提供します。
 Worker互換Web Streamsクエリアダプターは`src/worker-query-stream.mjs`に実装し、有界pullスケジューリング、NDJSONチャンク、`AbortSignal`キャンセルを提供します。
-ランタイム非依存の非同期ストレージ接続型クエリストリームは、`AsyncObjectTable::query_stream`と`AsyncObjectTable::query_stream_at`を通じて、DBFで表現できる現在または保持中のXBFスナップショット向けに実装済みです。
+ランタイム非依存の非同期ストレージ接続型クエリストリームは、`AsyncObjectTable::query_stream`と`AsyncObjectTable::query_stream_at`を通じて、現在または保持中のXBFスナップショットに実装済みです。
+生存行を共有するJSONクエリ契約へ直接対応付け、XBF固有の値も扱いますが、行を返す前にスナップショット全体を読み込んで検証します。
 生成済みの`WasmObjectTable`ラッパーとWorkerアダプターは、Promiseを介して同じクエリを公開します。
 WASI 0.3 CLIコンポーネントは共有する`AsyncQueryStream`を動かします。
 事前公開されたDBFファイルに加え、読み取り専用の事前公開filesystem storeにあるXBFスナップショットも読み込みます。

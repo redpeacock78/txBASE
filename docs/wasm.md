@@ -64,7 +64,8 @@ Its versioned boundary currently provides:
 - runtime-neutral `AsyncObjectTable::query_stream` and `query_stream_at` adapters
   that load the current or one retained committed XBF snapshot through
   `AsyncObjectStore` and reuse the existing filter, projection, skip, and limit
-  query-stream semantics after XBF-to-DBF conversion;
+  query-stream semantics while mapping live XBF rows directly into the shared
+  JSON contract without requiring DBF export;
 - generated-wrapper `WasmObjectTable.query_stream_json` and
   `query_stream_json_at` methods that expose those current and retained
   generation streams as Promise-returning `WasmObjectQueryStream` values, plus
@@ -72,7 +73,7 @@ Its versioned boundary currently provides:
 - a pinned Node.js Web Streams fixture that exercises backpressure-shaped pull
   scheduling, snapshot stability, invalid controls, and cancellation;
 - a WASI CLI query stream that reads DBF files or current and retained
-  DBF-representable XBF snapshots through a read-only preopened filesystem
+  XBF snapshots through a read-only preopened filesystem
   store; pending WAL recovery that needs writes fails before row output;
 - a CI `wasm32-unknown-unknown` release build and wrapper smoke check.
 
@@ -213,7 +214,7 @@ The current core slice meets the following initial conditions:
 - a Worker-compatible Web Streams query adapter and deterministic Node.js fixture;
 - a generated-wrapper query stream over current and retained XBF object-table snapshots;
 - runtime-neutral asynchronous-storage-backed query-stream adapters for current
-  and retained DBF-representable XBF snapshots;
+  and retained XBF snapshots, including XBF-only value mappings;
 - a WASI 0.3 CLI query-stream component and a pinned Wasmtime smoke test;
 - explicit malformed-input errors at the byte and JSON boundaries;
 - a Node.js host smoke test for the generated `wasm-bindgen` wrapper.
@@ -267,7 +268,7 @@ Worker-compatible Fetch adapter and smoke fixture, a Cloudflare R2 binding
 adapter and in-memory smoke fixture, and runtime-neutral asynchronous
 object-store and object-table contracts. It also
 has runtime-neutral and generated-wrapper query-stream adapters for
-DBF-representable current or retained XBF snapshots, a Worker-compatible Web
+current or retained XBF snapshots without requiring DBF export, a Worker-compatible Web
 Streams adapter, and a WASI 0.3 CLI component. The WASI component reads XBF
 snapshots through a read-only preopened filesystem adapter and has a pinned
 Wasmtime smoke check.

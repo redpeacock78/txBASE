@@ -56,10 +56,7 @@ async fn load_query_snapshot<S: AsyncObjectStore>(
                 QueryError::Invalid("async object table has no committed snapshot".into())
             })?,
     };
-    let table = snapshot
-        .to_dbf()
-        .map_err(|error| QueryError::Invalid(format!("cannot query XBF snapshot: {error}")))?;
-    query::stream_query_snapshot_owned(&table, &request)
+    query::stream_xbf_snapshot_owned(snapshot, request)
 }
 
 fn storage_query_error(error: ObjectStoreError) -> QueryError {

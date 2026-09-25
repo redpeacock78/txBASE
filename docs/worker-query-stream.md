@@ -10,8 +10,8 @@ It is a Worker-compatible host boundary, not a claim that txBASE has a deployed 
 
 `WasmObjectTable.query_stream_json(body)` returns a JavaScript `Promise` that resolves after the current committed XBF snapshot has been recovered and loaded.
 `WasmObjectTable.query_stream_json_at(generation, body)` selects one retained generation instead.
-Both methods return an owned `WasmObjectQueryStream` and use the same query parser, validation, XBF-to-DBF conversion, and row stream as the runtime-neutral async object-table API.
-An XBF snapshot that cannot be represented as DBF is rejected.
+Both methods return an owned `WasmObjectQueryStream` and use the same query parser, validation, direct XBF row mapping, and shared row stream as the runtime-neutral async object-table API.
+DBF export representability is not required for XBF queries; XBF-only JSON mappings are defined in [XBF](xbf.md).
 
 Each stream owns its table snapshot and validated query request.
 Later commits to either table do not change records already visible to that stream.
@@ -33,7 +33,7 @@ The adapter uses an underlying pull source.
 The adapter awaits a Promise-returning stream factory when needed, then each pull advances the WASM stream by at most one record and enqueues one chunk.
 The `queueSize` option is a positive safe integer high-water mark for the Web Streams queue and defaults to `1`.
 The adapter does not pre-materialize the result array.
-For object-store queries, the committed XBF snapshot is loaded and converted before the first row is emitted; row delivery is streamed, but remote snapshot reads are not page-streamed.
+For object-store queries, the complete committed XBF snapshot is loaded before the first row is emitted and rows are mapped on demand; remote snapshot reads are not page-streamed.
 
 The Web Streams consumer controls demand through `read()`, `pipeTo()`, or `Response` body consumption.
 When the consumer is slow, the underlying source is not pulled beyond the configured queue bound.

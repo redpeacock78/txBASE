@@ -36,10 +36,10 @@ WASMはパスとbodyの検証を二重に実装しません。
 - compare-and-swap公開、WALクリーンアップ失敗後の復旧、過去世代読み取り、保持、ホストエラー変換を検査する固定Node.jsホストフィクスチャ。
 - 生成したWASMラッパーを介してWorker転送を検査し、タイムアウトとキャンセルを含めてWeb Fetchを検証する固定Node.jsフィクスチャ。
 - WASMのスナップショットストリームを、有界なNDJSONチャンクのWeb `ReadableStream`として公開し、readerのキャンセルと`AbortSignal`のライフサイクルを処理する`createWorkerQueryStream`アダプター。スナップショット読み込み中のオブジェクトストレージ要求も中断する。
-- `AsyncObjectStore`を通じて現在または保持中のコミット済みXBFスナップショットを1つ読み取り、XBFからDBFへ変換した後、既存のfilter、projection、skip、limitのクエリストリーム意味論を再利用する、ランタイム非依存の`AsyncObjectTable::query_stream`と`query_stream_at`アダプター。
+- `AsyncObjectStore`を通じて現在または保持中のコミット済みXBFスナップショットを1つ読み取り、DBF出力を要求せずに生存行を共有するJSON契約へ直接対応付け、既存のfilter、projection、skip、limitの意味論を再利用する、ランタイム非依存の`AsyncObjectTable::query_stream`と`query_stream_at`アダプター。
 - 現在世代と保持世代のストリームをPromiseを返す`WasmObjectQueryStream`として公開する、生成済みラッパーの`WasmObjectTable.query_stream_json`と`query_stream_json_at`。クエリごとの`AbortSignal`をホスト操作へ渡すシグナル対応版も提供する。
 - backpressureを考慮したpullスケジューリング、スナップショットの安定性、不正な制御、キャンセルを検査する固定Node.js Web Streamsフィクスチャ。
-- DBFファイル、または読み取り専用の事前公開filesystem storeを介した現在・保持中のDBF表現可能なXBFスナップショットを読み込むWASI CLIクエリストリーム。
+- DBFファイル、または読み取り専用の事前公開filesystem storeを介した現在・保持中のXBFスナップショットを読み込むWASI CLIクエリストリーム。
   書き込みが必要な保留中WALの復旧は、行を出力する前に失敗する。
 - CIでの`wasm32-unknown-unknown` release buildとラッパースモーク検査。
 
@@ -159,7 +159,7 @@ Worker FetchアダプターはHTTP転送、タイムアウト、キャンセル�
 - Cloudflare R2バインディングアダプターと決定的なインメモリバインディングフィクスチャがある。
 - Worker互換のWeb Streamsクエリアダプターと決定的なNode.jsフィクスチャがある。
 - 現在または保持中のXBFオブジェクトテーブルスナップショットを対象にする、生成済みラッパーのクエリストリームがある。
-- 現在または保持中のDBFで表現できるXBFスナップショット向けに、ランタイム非依存の非同期ストレージ接続型クエリストリームアダプターがある。
+- 現在または保持中のXBFスナップショット向けに、DBF出力を要求しないランタイム非依存の非同期ストレージ接続型クエリストリームアダプターがある。
 - WASI 0.3 CLIコンポーネントと、固定したWasmtimeで実行するCIスモーク検査がある。
 - バイト列とJSONの境界で不正入力エラーを明示的に扱う。
 - 生成した`wasm-bindgen`ラッパーをNode.jsから検査するスモークテストがある。
@@ -207,6 +207,6 @@ WebAssemblyとWASIの仕様は、コアモジュールとホストインター�
 Component Model、Cloudflare Workers、Node.jsの資料は候補ホストの実装参照であり、txBASEの互換性を約束するものではありません。
 
 リポジトリにはWASMコアの実装、生成ラッパーのNode.jsスモーク検査、JavaScriptホスト接続型の非同期オブジェクトテーブルフィクスチャ、Worker互換Fetchアダプターとスモークフィクスチャ、Cloudflare R2バインディングアダプターとインメモリのスモークフィクスチャ、ランタイムから独立した非同期オブジェクトストレージとテーブルの契約があります。
-DBFで表現できる現在または保持中のXBFスナップショット向けに、ランタイム非依存と生成済みラッパーのクエリストリームアダプター、Worker互換Web Streamsアダプター、WASI 0.3 CLIコンポーネントを用意しています。
+現在または保持中のXBFスナップショット向けに、DBF出力を要求しないランタイム非依存と生成済みラッパーのクエリストリームアダプター、Worker互換Web Streamsアダプター、WASI 0.3 CLIコンポーネントを用意しています。
 WASIコンポーネントは読み取り専用の事前公開filesystem adapterを使い、固定したWasmtimeによるスモーク検査があります。
 デプロイ済みWorkerやR2サービスへの接続、書き込み可能なWASIオブジェクトストレージとWASI用プロバイダー接続型アダプター、ノンブロッキングなWASIストレージI/O、R2以外のプロバイダー統合、プロバイダー管理の保持や自動再試行はまだサポートしません。

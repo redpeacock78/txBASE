@@ -255,32 +255,96 @@ fn async_object_query_stream_preserves_pending_storage_future_boundary() {
 }
 
 #[test]
-fn async_object_query_stream_reports_nonrepresentable_xbf_values_once() {
+fn async_object_query_stream_queries_non_dbf_xbf_values() {
     let store = SyncObjectStoreAdapter::new(MemoryObjectStore::new());
     let object_table = AsyncObjectTable::new(store, "users").unwrap();
+    let fields = [
+        ("BOOL", XbfType::Boolean),
+        ("I32", XbfType::Signed32),
+        ("I64", XbfType::Signed64),
+        ("U64", XbfType::Unsigned64),
+        ("F32", XbfType::Float32),
+        ("F32_SPECIAL", XbfType::Float32),
+        ("F64", XbfType::Float64),
+        ("F64_SPECIAL", XbfType::Float64),
+        ("STRING", XbfType::String),
+        ("BYTES", XbfType::Bytes),
+        ("DATE", XbfType::Date),
+        ("DATE_OUTSIDE", XbfType::Date),
+        ("TIMESTAMP", XbfType::Timestamp),
+        ("TIMESTAMP_OUTSIDE", XbfType::Timestamp),
+        ("UUID", XbfType::Uuid),
+        ("JSON", XbfType::Json),
+        ("I64_SHORT", XbfType::Signed64),
+        ("NULL", XbfType::String),
+    ]
+    .into_iter()
+    .map(|(name, ty)| XbfField {
+        name: name.into(),
+        ty,
+        nullable: true,
+        primary_key: false,
+        unique: false,
+    })
+    .collect();
+    let long_text = "x".repeat(300);
     let snapshot = XbfTable {
         generation: 0,
-        fields: vec![XbfField {
-            name: "ID".into(),
-            ty: XbfType::Uuid,
-            nullable: true,
-            primary_key: false,
-            unique: false,
-        }],
+        fields,
         records: vec![XbfRecord {
             deleted: false,
-            values: vec![XbfValue::Uuid([0; 16])],
+            values: vec![
+                XbfValue::Boolean(true),
+                XbfValue::Signed32(-32),
+                XbfValue::Signed64(-64),
+                XbfValue::Unsigned64(u64::MAX),
+                XbfValue::Float32(1.5),
+                XbfValue::Float32(f32::from_bits(0x7fc0_0042)),
+                XbfValue::Float64(-2.5),
+                XbfValue::Float64(f64::NEG_INFINITY),
+                XbfValue::String(long_text.clone()),
+                XbfValue::Bytes(vec![0xab; 300]),
+                XbfValue::Date(0),
+                XbfValue::Date(i32::MAX),
+                XbfValue::Timestamp(0),
+                XbfValue::Timestamp(i64::MAX),
+                XbfValue::Uuid(std::array::from_fn(|index| index as u8)),
+                XbfValue::Json(json!({"nested": [true, 7]})),
+                XbfValue::Signed32(64),
+                XbfValue::Null,
+            ],
         }],
     };
+    assert!(snapshot.to_dbf().is_err());
     block_on(object_table.commit(&snapshot)).unwrap();
 
-    let mut stream = object_table.query_stream(QueryRequest::default()).unwrap();
+    let request = parse(br#"{"filter":{"UUID":{"$eq":"00010203-0405-0607-0809-0a0b0c0d0e0f"},"U64":{"$eq":18446744073709551615},"JSON":{"$eq":{"nested":[true,7]}}}}"#).unwrap();
+    let mut stream = object_table.query_stream(request).unwrap();
     let waker = Waker::noop();
     let mut context = Context::from_waker(waker);
+    let expected = json!({
+        "BOOL": true,
+        "I32": -32,
+        "I64": -64,
+        "U64": u64::MAX,
+        "F32": 1.5,
+        "F32_SPECIAL": {"$txbaseFloat32Bits": "7fc00042"},
+        "F64": -2.5,
+        "F64_SPECIAL": {"$txbaseFloat64Bits": "fff0000000000000"},
+        "STRING": long_text,
+        "BYTES": "ab".repeat(300),
+        "DATE": "19700101",
+        "DATE_OUTSIDE": i32::MAX,
+        "TIMESTAMP": "8c3d250000000000",
+        "TIMESTAMP_OUTSIDE": i64::MAX,
+        "UUID": "00010203-0405-0607-0809-0a0b0c0d0e0f",
+        "JSON": {"nested": [true, 7]},
+        "I64_SHORT": 64,
+        "NULL": null,
+    });
     assert!(matches!(
         AsyncQueryStream::poll_next(Pin::new(&mut stream), &mut context),
-        Poll::Ready(Some(Err(crate::query::QueryError::Invalid(message))))
-            if message.contains("cannot query XBF snapshot")
+        Poll::Ready(Some(Ok(value))) if value == expected
     ));
     assert!(matches!(
         AsyncQueryStream::poll_next(Pin::new(&mut stream), &mut context),
