@@ -15,6 +15,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 encoding_rs = "0.8"
+icu_collator = { version = "=2.1.1", default-features = false, features = ["compiled_data"] }
+icu_locale = { version = "=2.1.1", default-features = false, features = ["compiled_data"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 indexmap = { version = "2", features = ["serde"] }

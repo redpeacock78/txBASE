@@ -225,6 +225,38 @@ fn sorted_cursor_keeps_nfkc_collation_in_its_boundary() {
 }
 
 #[test]
+fn sorted_cursor_keeps_icu_collation_version_in_its_boundary() {
+    let table = table_with_two_active_records();
+    let request =
+        parse(br#"{"page_size":1,"sort":{"NAME":1},"collation":"icu4x-2.1.1-ja"}"#).unwrap();
+    let cursor = execute_query_page(&table, &request)
+        .unwrap()
+        .next_cursor
+        .expect("sorted page has a cursor");
+    let cursor_json: Value = serde_json::from_str(&cursor).unwrap();
+    assert_eq!(cursor_json["collation"], "icu4x-2.1.1-ja");
+
+    let next_request = parse(
+        serde_json::json!({
+            "page_size": 1,
+            "sort": {"NAME": 1},
+            "collation": "icu4x-2.1.1-ja",
+            "cursor": cursor,
+        })
+        .to_string()
+        .as_bytes(),
+    )
+    .unwrap();
+    assert_eq!(
+        execute_query_page(&table, &next_request)
+            .unwrap()
+            .records
+            .len(),
+        1
+    );
+}
+
+#[test]
 fn limit_caps_physical_cursor_without_advertising_an_extra_page() {
     let table = table_with_two_active_records();
     let page =

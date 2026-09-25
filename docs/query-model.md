@@ -41,8 +41,9 @@ WASM parser calls return an invalid-query error.
 
 `sort` uses `1` for ascending order and `-1` for descending order.
 
-The optional `collation` accepts `"unicode-lowercase"` and
-`"unicode-nfkc-lowercase"`.
+The optional `collation` accepts `"unicode-lowercase"`,
+`"unicode-nfkc-lowercase"`, `"icu4x-2.1.1-ja"`, `"icu4x-2.1.1-zh"`, and
+`"icu4x-2.1.1-ko"`.
 
 `unicode-lowercase` lowercases Unicode string sort keys before comparison.
 
@@ -50,7 +51,13 @@ The optional `collation` accepts `"unicode-lowercase"` and
 and then lowercases the resulting sort key. This makes compatibility-equivalent
 forms such as full-width Latin characters and half-width Katakana compare equal.
 
-Neither mode provides locale-specific Japanese, Chinese, or Korean dictionary order.
+The three `icu4x-2.1.1-*` values compare strings with ICU4X 2.1.1's default
+Japanese, Chinese, or Korean locale collator. The default options use tertiary
+strength. The version is part of the value so cursors and persisted index order
+cannot silently cross a later collation contract.
+
+The ICU4X modes provide the selected locale's collation, but do not claim full
+language-specific search or dictionary compatibility beyond those sort rules.
 
 Omitting it keeps the existing Unicode codepoint ordering.
 

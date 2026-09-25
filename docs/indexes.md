@@ -50,15 +50,19 @@ A version 4 compound definition may add a `directions` array with one `1` or `-1
 
 When `directions` is absent, every field is ascending for compatibility with older sidecars.
 
-An index definition may add `collation` with `unicode-lowercase` or `unicode-nfkc-lowercase`.
+An index definition may add `collation` with `unicode-lowercase`, `unicode-nfkc-lowercase`, or one of `icu4x-2.1.1-ja`, `icu4x-2.1.1-zh`, and `icu4x-2.1.1-ko`.
 
 ```json
 {"name": "by_name_ci", "field": "NAME", "collation": "unicode-lowercase"}
 ```
 
-A collated index stores the bounded normalized string keys used by the matching query sort.
+The ICU4X identifiers select the Japanese, Chinese, or Korean locale with ICU4X 2.1.1's default options.
 
-It provides ordered traversal only, because normalization can make distinct filter values share one index key.
+Unicode lowercase modes store normalized string keys; ICU4X modes retain the original strings and order them through the locale collator instead of persisting ICU sort keys.
+
+The versioned identifier binds persisted index order and sorted cursors to this collation contract. A future ICU4X or collation-data upgrade must use a new identifier and rebuild affected indexes.
+
+A collated index provides ordered traversal only, because collation or normalization can make distinct filter values compare equal.
 
 Exact equality and range candidate lookup therefore ignore collated indexes, and a query without the same collation never uses one for ordering.
 
@@ -112,11 +116,12 @@ Add per-field directions with `:1`, `:-1`, `:asc`, or `:desc`:
 txbase index build-compound path/to/users.dbf by_score_name SCORE:-1 NAME:1
 ```
 
-Build a case-insensitive ordered index with the supported locale-independent collation:
+Build an ordered index with a Unicode or ICU4X locale collation:
 
 ```bash
 txbase index build path/to/users.dbf NAME --collation unicode-lowercase
 txbase index build-compound path/to/users.dbf by_name_age NAME AGE --collation unicode-nfkc-lowercase
+txbase index build path/to/users.dbf NAME --collation icu4x-2.1.1-ja
 ```
 
 Verify the sidecar against the current DBF and memo bytes:
@@ -179,7 +184,7 @@ It depends on the file system honoring the file and directory sync operations us
 
 ## Current boundary
 
-The sidecar currently supports build, exact scalar and compound equality lookup, compound equality-prefix candidate lookup, range candidate lookup, compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, per-field-direction compound-key construction and prefix traversal, bounded Unicode collated ordered keys, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
+The sidecar currently supports build, exact scalar and compound equality lookup, compound equality-prefix candidate lookup, range candidate lookup, compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, per-field-direction compound-key construction and prefix traversal, Unicode-key and versioned ICU4X locale-collated ordered indexes, equality candidate intersection across multiple single-field indexes, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, stale detection, validation, rebuild, and WAL-backed refresh after normal persistence or recovery.
 
 DBF insert, update, logical delete, `PACK`, and `RECALL` refresh an existing sidecar when their DBF save completes normally.
 
@@ -252,15 +257,18 @@ It still materializes candidate record numbers and sorts them by physical DBF or
 
 Freshness validation still reads the DBF and memo bytes, and the query executor still materializes candidate record numbers, so this is not a claim of zero-copy or end-to-end index I/O.
 
-More precise physical I/O, locale-aware CJK collation, and cross-table index definitions or query planning require separate contracts.
+More precise physical I/O and cross-table index definitions or query planning require separate contracts.
 
-The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, collated ordered-key, logical-page cost, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs more precise physical modeling and cross-table index or planning contracts.
+The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, Unicode-key and ICU4X locale-collated ordered-index, logical-page cost, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs more precise physical modeling and cross-table index or planning contracts.
 
 ## Primary references and scope
 
 - [MongoDB query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
 - [MongoDB compound-index sort order](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
 - [MongoDB equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
+- [ICU4X 2.1.1 `Collator`](https://docs.rs/icu_collator/2.1.1/icu_collator/struct.Collator.html)
+- [ICU4X 2.1.1 `CollatorOptions`](https://docs.rs/icu_collator/2.1.1/icu_collator/options/struct.CollatorOptions.html)
 
 These sources provide planner vocabulary and compound-index ordering context only.
 The candidate bounds, local statistics, record-count cost model, and physical-order materialization are txBASE contracts, not MongoDB compatibility claims.
+ICU4X provides the locale-aware comparison API and default tertiary strength; txBASE defines the accepted locale identifiers, version binding, and index/cursor behavior.

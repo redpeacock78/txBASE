@@ -286,6 +286,14 @@ fn validates_the_bounded_collation_contract() {
         normalized_request.collation,
         Some(Collation::UnicodeNfkcLowercase)
     );
+    for (name, expected) in [
+        ("icu4x-2.1.1-ja", Collation::Icu4x211Ja),
+        ("icu4x-2.1.1-zh", Collation::Icu4x211Zh),
+        ("icu4x-2.1.1-ko", Collation::Icu4x211Ko),
+    ] {
+        let body = serde_json::json!({"sort": {"NAME": 1}, "collation": name}).to_string();
+        assert_eq!(parse(body.as_bytes()).unwrap().collation, Some(expected));
+    }
     assert!(parse(br#"{"collation":"unicode-lowercase"}"#).is_err());
     assert!(parse(br#"{"sort":{"NAME":1},"collation":"locale-aware"}"#).is_err());
 }

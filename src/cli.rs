@@ -45,7 +45,7 @@ fn print_help() {
         "Usage:\n  txbase read FILE [--encoding NAME]\n  txbase init FILE --field NAME:TYPE:LENGTH[:DECIMALS]...\n  txbase insert FILE JSON_OBJECT\n  txbase mvcc list FILE\n  txbase mvcc read FILE TRANSACTION_ID\n  txbase mvcc row FILE RECORD\n  txbase mvcc row-at FILE TRANSACTION_ID EPOCH RECORD\n  txbase schema FILE [--encoding NAME]\n  txbase schema apply FILE SCHEMA_JSON\n  txbase verify FILE [--encoding NAME]\n  txbase catalog DIRECTORY\n  txbase verify-catalog DIRECTORY\n  txbase xbf import DBF XBF [--encoding NAME]\n  txbase xbf export XBF DBF [--schema]\n  txbase xbf report XBF\n  txbase index build FILE FIELD...\n  txbase index build-compound FILE NAME FIELD[:DIRECTION] FIELD[:DIRECTION]...\n  txbase index verify FILE\n  txbase index rebuild FILE\n  txbase pack FILE [--encoding NAME]\n  txbase recall FILE RECORD [--encoding NAME]\n  txbase backup SOURCE DEST\n  txbase restore SOURCE DEST\n  txbase serve FILE [--bind ADDRESS] [--encoding NAME]\n  txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]\n\nReads active DBF records as JSON. NAME accepts the supported CJK aliases and takes precedence over a schema sidecar override for that invocation. init creates a classic empty DBF from repeated field specifications, and insert appends one JSON object through the normal WAL path. mvcc list reports committed table snapshots, mvcc read loads one historical snapshot, mvcc row lists retained versions for a physical record, and mvcc row-at reads one retained row version. Schema, catalog, verification, and index commands inspect DBF files. xbf import writes a bounded XBF snapshot from a DBF; xbf export writes a representable XBF table as DBF, and --schema also writes its constraint sidecar; xbf report checks DBF representability without writing. Backup and restore copy a DBF with its detected memo, schema, transaction-state, MVCC, and valid index sidecars. The single-table server exposes GET /records, GET /records/{{id}}, QUERY /records, QUERY /explain, and JSON mutations. The catalog server exposes GET /catalog, GET/HEAD /{{table}}/records[/{{id}}], QUERY /{{table}}/records, QUERY /{{table}}/explain, and QUERY /join as bounded read-only routes."
     );
     println!(
-        "\nIndex build options: append --collation unicode-lowercase or --collation unicode-nfkc-lowercase to index build/build-compound."
+        "\nIndex build options: append --collation unicode-lowercase, unicode-nfkc-lowercase, icu4x-2.1.1-ja, icu4x-2.1.1-zh, or icu4x-2.1.1-ko to index build/build-compound."
     );
     println!(
         "\nHTTP CDC: GET/HEAD /cdc supports exclusive after and bounded limit cursors on both server surfaces."
@@ -114,6 +114,9 @@ pub(super) fn parse_collation(value: &str) -> Result<Collation, Box<dyn Error>> 
     match value {
         "unicode-lowercase" => Ok(Collation::UnicodeLowercase),
         "unicode-nfkc-lowercase" => Ok(Collation::UnicodeNfkcLowercase),
+        "icu4x-2.1.1-ja" => Ok(Collation::Icu4x211Ja),
+        "icu4x-2.1.1-zh" => Ok(Collation::Icu4x211Zh),
+        "icu4x-2.1.1-ko" => Ok(Collation::Icu4x211Ko),
         _ => Err(format!("unsupported collation: {value}").into()),
     }
 }
@@ -165,6 +168,18 @@ mod tests {
         assert_eq!(
             parse_collation("unicode-nfkc-lowercase").unwrap(),
             txbase::Collation::UnicodeNfkcLowercase
+        );
+        assert_eq!(
+            parse_collation("icu4x-2.1.1-ja").unwrap(),
+            txbase::Collation::Icu4x211Ja
+        );
+        assert_eq!(
+            parse_collation("icu4x-2.1.1-zh").unwrap(),
+            txbase::Collation::Icu4x211Zh
+        );
+        assert_eq!(
+            parse_collation("icu4x-2.1.1-ko").unwrap(),
+            txbase::Collation::Icu4x211Ko
         );
         assert!(parse_collation("locale-aware").is_err());
     }

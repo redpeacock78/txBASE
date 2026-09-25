@@ -163,6 +163,31 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
         execute_query(&table, &collated_sort_request).unwrap()
     );
 
+    let locale_collated_sort_request =
+        parse(br#"{"sort":{"NAME":1},"collation":"icu4x-2.1.1-ja"}"#).unwrap();
+    IndexFile::build(
+        &path,
+        vec![
+            IndexDefinition::named("by_name_ja", "NAME")
+                .with_collation(crate::Collation::Icu4x211Ja),
+        ],
+    )
+    .unwrap()
+    .save(&path)
+    .unwrap();
+    assert_eq!(
+        explain_query_at(&path, &locale_collated_sort_request).unwrap(),
+        QueryPlan::OrderedIndex {
+            name: "by_name_ja".into(),
+            field: "NAME".into(),
+            direction: 1,
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &locale_collated_sort_request).unwrap(),
+        execute_query(&table, &locale_collated_sort_request).unwrap()
+    );
+
     fs::remove_file(&sidecar).unwrap();
     assert_eq!(
         explain_query_at(&path, &request).unwrap(),

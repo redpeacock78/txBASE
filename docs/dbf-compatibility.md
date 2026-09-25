@@ -171,10 +171,10 @@ declared-driver codecs plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP.
 Pinned DBF fixtures cover the four Visual FoxPro CJK driver IDs and the legacy dBASE `0x4d` driver
 ID, and round-trip their multibyte record values. Pinned explicit-codec byte fixtures cover DBF
 record decoding and write round-trips for all eight supported explicit codec names. Query sorting
-has bounded Unicode-lowercase and Unicode-NFKC-lowercase modes. The latter applies Unicode NFKC
-compatibility normalization before locale-independent lowercase, so compatibility-equivalent forms
-such as full-width Latin and half-width Katakana share a sort key. Locale-aware CJK collation and
-additional broader upstream CJK fixtures remain future work.
+has bounded Unicode-lowercase and Unicode-NFKC-lowercase modes plus versioned ICU4X 2.1.1
+Japanese, Chinese, and Korean locale collations. These sort rules are independent of the DBF
+codepage and do not claim full locale-specific compatibility. Additional broader upstream CJK
+collation fixtures remain future work.
 
 An upstream JavaDBF GBK fixture also covers three GBK-encoded CJK field names and 28 real records,
 including a read, mutation, and byte round-trip.
@@ -276,7 +276,8 @@ The following are not implemented by the current DBF layer:
 - OLE semantics and arbitrary external memo formats.
 - Complete Visual FoxPro expression or command compatibility.
 - Automatic merge and retry for concurrent writers.
-- Locale-aware CJK collation and full locale-specific ordering.
+- Locale collations beyond the supported ICU4X Japanese, Chinese, and Korean modes, and full
+  locale-specific ordering compatibility.
 
 These items require a contract, external fixtures, failure tests, and a clear ownership boundary before code is added.
 

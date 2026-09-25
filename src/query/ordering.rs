@@ -130,7 +130,7 @@ fn compare_values_with_collation(
 ) -> Option<Ordering> {
     match (left, right, collation) {
         (Value::String(left), Value::String(right), Some(collation)) => {
-            Some(collation.key(left).cmp(&collation.key(right)))
+            Some(collation.compare(left, right))
         }
         _ => compare_values(left, right),
     }

@@ -50,15 +50,21 @@
 
 `directions`がない場合は、古いサイドカーとの互換性のため全フィールドを昇順とします。
 
-インデックス定義には、`unicode-lowercase`または`unicode-nfkc-lowercase`を指定する`collation`を追加できます。
+インデックス定義の`collation`には、`unicode-lowercase`、`unicode-nfkc-lowercase`、または`icu4x-2.1.1-ja`、`icu4x-2.1.1-zh`、`icu4x-2.1.1-ko`のいずれかを指定できます。
 
 ```json
 {"name": "by_name_ci", "field": "NAME", "collation": "unicode-lowercase"}
 ```
 
-照合付きインデックスは、対応するクエリソートで使う有界な正規化済み文字列キーを保存します。
+ICU4Xの識別子は、ICU4X 2.1.1の既定オプションで日本語、中国語、韓国語のロケールを選びます。
 
-正規化によって異なるフィルター値が同じインデックスキーになるため、順序付き走査だけを提供します。
+Unicode小文字化モードは正規化済み文字列キーを保存します。
+ICU4Xモードは元の文字列を保持し、ICUのソートキーを永続化せず、ロケール照合器で順序を比較します。
+
+版付きの識別子によって、永続化するインデックス順とソートカーソルをこの照合契約に結び付けます。
+将来ICU4Xまたは照合データを更新する場合は、新しい識別子を使い、該当するインデックスを再構築します。
+
+照合や正規化によって異なるフィルター値が同値になることがあるため、照合付きインデックスは順序付き走査だけを提供します。
 
 完全一致と範囲の候補検索は照合付きインデックスを無視し、クエリの照合が一致しなければ順序付けにも使いません。
 
@@ -116,11 +122,12 @@ txbase index build-compound path/to/users.dbf by_name_age NAME AGE
 txbase index build-compound path/to/users.dbf by_score_name SCORE:-1 NAME:1
 ```
 
-対応するロケール非依存の照合で、大文字と小文字を区別しない順序付きインデックスを作成します。
+Unicode照合またはICU4Xロケール照合を使って順序付きインデックスを作成します。
 
 ```bash
 txbase index build path/to/users.dbf NAME --collation unicode-lowercase
 txbase index build-compound path/to/users.dbf by_name_age NAME AGE --collation unicode-nfkc-lowercase
+txbase index build path/to/users.dbf NAME --collation icu4x-2.1.1-ja
 ```
 
 現在のDBFとmemoバイト列に対してサイドカーを検証します。
@@ -185,7 +192,7 @@ DBF、memo、インデックスファイルを1つのファイルシステムren
 
 ## 現在の境界
 
-サイドカーは現在、作成、スカラーおよび複合キーの完全一致検索、複合等値プレフィックス候補検索、範囲候補検索、複合等値プレフィックス範囲候補検索、有界なUnicode照合付き順序キーをサポートします。
+サイドカーは現在、作成、スカラーおよび複合キーの完全一致検索、複合等値プレフィックス候補検索、範囲候補検索、複合等値プレフィックス範囲候補検索、Unicodeキーと版付きICU4Xロケール照合を使う順序付きインデックスをサポートします。
 さらに、ヒストグラムによる範囲順序推定、単一フィールドの順序付き走査、複数キーソートの順序プレフィックス走査、フィールド方向ごとの複合キー構築とプレフィックス走査もサポートします。
 複数単一フィールドインデックス間の等値候補の積集合、一様統計による等値候補の順序付け、単独インデックスと積集合のコスト選択、古さの検出、検証、再構築、通常の永続化または復旧後のWAL付き更新も対象です。
 
@@ -277,10 +284,10 @@ XBF入力からインデックスをコピーすることはありません。
 
 freshnessの検証では引き続きDBFとmemoのバイト列を読み取り、クエリ実行器も候補レコード番号を具体化するため、ゼロコピーやエンドツーエンドのindex I/Oを主張するものではありません。
 
-より精密な物理I/O、ロケール対応CJK照合、テーブル間インデックス定義またはクエリ計画には個別の契約が必要です。
+より精密な物理I/O、テーブル間インデックス定義またはクエリ計画には個別の契約が必要です。
 
 等値、等値積集合、統計順、ヒストグラム順の範囲、複合プレフィックス範囲、単一フィールド順のプランナーをテストします。
-順序プレフィックス、複合プレフィックス、照合付き順序キー、非選択的なインデックスのテーブルスキャンフォールバックも、更新、復旧、古いインデックス、再構築、DBFとインデックスのWAL対象動作と一緒にテストします。
+順序プレフィックス、複合プレフィックス、UnicodeキーおよびICU4Xロケール照合を使う順序付きインデックス、非選択的なインデックスのテーブルスキャンフォールバックも、更新、復旧、古いインデックス、再構築、DBFとインデックスのWAL対象動作と一緒にテストします。
 
 より広いインデックス対応には、より精密な物理モデルとテーブル間インデックスまたは計画の契約が必要です。
 
@@ -289,6 +296,10 @@ freshnessの検証では引き続きDBFとmemoのバイト列を読み取り、�
 - [MongoDBのクエリ最適化](https://www.mongodb.com/docs/manual/core/query-optimization/)
 - [MongoDBの複合インデックスのソート順](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
 - [MongoDBの等値、ソート、範囲の指針](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
+- [ICU4X 2.1.1 `Collator`](https://docs.rs/icu_collator/2.1.1/icu_collator/struct.Collator.html)
+- [ICU4X 2.1.1 `CollatorOptions`](https://docs.rs/icu_collator/2.1.1/icu_collator/options/struct.CollatorOptions.html)
 
 これらの資料は、プランナーの語彙と複合インデックスの順序を考える背景だけに使います。
 候補の上限、ローカル統計、レコード数によるコストモデル、物理順での具体化はtxBASEの契約であり、MongoDB互換性の主張ではありません。
+ICU4Xはロケール対応比較APIと既定の第3照合レベルを提供します。
+受け付けるロケール識別子、版の固定、インデックスとカーソルの動作はtxBASEの契約です。

@@ -57,8 +57,8 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 | `txbase mvcc catalog read DIRECTORY TRANSACTION_ID` | 過去のカタログスナップショットを1つ読み取り、テーブルとレコードを返す。 |
 | `txbase mvcc catalog gc DIRECTORY --keep COUNT` | 新しいカタログスナップショットを保持し、カタログMVCC履歴サイドカーだけを置き換える。 |
 | `txbase wal inspect WAL` | WALを作成も切り詰めもせずに読み取り、完全なレコードと不完全な末尾を表示する。 |
-| `txbase index build FILE FIELD... [--collation NAME]` | 指定したフィールド群のスカラーインデックスサイドカーを作成して永続化する。`NAME`には`unicode-lowercase`または`unicode-nfkc-lowercase`を指定でき、指定したソート照合向けの順序付きインデックスを作成する。 |
-| `txbase index build-compound FILE NAME FIELD[:DIRECTION]... [--collation NAME]` | 名前付き複合インデックスを1つ作成する。方向には昇順の`1`または`asc`、降順の`-1`または`desc`を指定する。`NAME`には同じ2つのロケール非依存な照合を指定できる。 |
+| `txbase index build FILE FIELD... [--collation NAME]` | 指定したフィールド群のスカラーインデックスサイドカーを作成して永続化する。`NAME`には`unicode-lowercase`、`unicode-nfkc-lowercase`、またはICU4X 2.1.1の日本語、中国語、韓国語識別子を指定でき、順序付きクエリに使う。 |
+| `txbase index build-compound FILE NAME FIELD[:DIRECTION]... [--collation NAME]` | 名前付き複合インデックスを1つ作成する。方向には昇順の`1`または`asc`、降順の`-1`または`desc`を指定する。`NAME`には同じ5つの照合を指定できる。 |
 | `txbase index verify FILE` | インデックスサイドカーを検証し、そのスキーマをJSONで表示する。 |
 | `txbase index rebuild FILE` | 現在のテーブルからインデックスサイドカーを再構築して永続化する。 |
 | `txbase xbf import DBF XBF [--encoding NAME]` | DBFを有界なXBFスナップショットへ変換する。 |
@@ -87,7 +87,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 - `--after`は`cdc`と`cdc catalog`だけに属する。
 - `--keep`はテーブルとカタログのMVCCガベージコレクションに属し、`--keep-rows`はテーブルMVCCガベージコレクションだけに属する。
 - `index build-compound`は、各フィールドの方向に`1`または`asc`、`-1`または`desc`を受け付ける。
-- `index build`と`index build-compound`は、順序付きクエリに使う`--collation unicode-lowercase`または`--collation unicode-nfkc-lowercase`を受け付ける。
+- `index build`と`index build-compound`は、順序付きクエリ向けに`--collation unicode-lowercase`、`--collation unicode-nfkc-lowercase`、`--collation icu4x-2.1.1-ja`、`--collation icu4x-2.1.1-zh`、`--collation icu4x-2.1.1-ko`を受け付ける。
 
 コマンドが正の値として指定するトランザクションID、epoch、レコード番号、保持件数には、正の値を指定しなければなりません。
 

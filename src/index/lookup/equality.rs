@@ -184,7 +184,12 @@ impl IndexFile {
             index
                 .entries
                 .binary_search_by(|entry| {
-                    ordering::compare_index_keys(&entry.key, &key, index.definition.directions())
+                    ordering::compare_index_keys(
+                        &entry.key,
+                        &key,
+                        index.definition.directions(),
+                        None,
+                    )
                 })
                 .ok()
                 .map(|position| index.entries[position].records.clone())

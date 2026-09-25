@@ -51,7 +51,7 @@ The repository currently provides:
 - Direct and chained equality-join cost models that compare hash and index-nested-loop paths with exact pre-filter key-cardinality estimates, materialized row-width work, logical input page reads, and logical index-sidecar page reads, plus ordered-merge paths for direct joins and eligible chained stages.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, the bounded local join, and `QUERY /join/stream` as joined-row NDJSON.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
-- Bounded `unicode-lowercase` and `unicode-nfkc-lowercase` sort collations with cursor-boundary validation and a safe table-scan fallback.
+- Bounded `unicode-lowercase` and `unicode-nfkc-lowercase` sort collations, plus versioned ICU4X 2.1.1 Japanese, Chinese, and Korean locale collations, with cursor-boundary validation and a safe table-scan fallback.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
 - A bounded thread-backed snapshot stream whose producer applies channel backpressure and stops when its consumer is dropped.
 - A runtime-neutral `AsyncQueryStream` polling boundary for long-lived query streams, immediate in-memory implementations, and a native `ThreadedQueryStream` adapter with bounded backpressure, waker notification, and drop cancellation.
@@ -122,7 +122,7 @@ current index sidecars.
 
 The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact scalar and compound equality, compound equality-prefix and range candidate lookup, equality-prefix compound range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB index and DBF page reads, and sort work with non-selective-index table-scan fallback, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support locale-aware CJK collation or cross-table index definitions.
+It does not yet support cross-table index definitions.
 
 The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
 
@@ -274,7 +274,6 @@ The phase must preserve DBF byte widths and reject ambiguous or unrepresentable 
 - Big5.
 - CP949 and EUC-KR.
 - Explicit encoding overrides.
-- Locale-aware CJK collation.
 - Additional upstream CJK fixtures.
 
 Every encoding needs a declared name, byte-width rule, round-trip fixture, invalid-byte behavior, and comparison policy.
@@ -292,8 +291,9 @@ and the legacy dBASE `0x4d` ID, and round-trip their multibyte record values. Al
 the complete legacy alias set. An upstream Visual FoxPro Windows-1251 fixture also
 round-trips Cyrillic record values. Pinned explicit-codec byte fixtures cover DBF record decoding
 and write round-trips for all eight supported explicit codec names. The query layer now has a bounded
-`unicode-lowercase` and `unicode-nfkc-lowercase` sort collations; locale-aware CJK collation and
-additional broader upstream CJK fixtures remain future work.
+`unicode-lowercase` and `unicode-nfkc-lowercase` sort collations, plus versioned ICU4X 2.1.1
+Japanese, Chinese, and Korean locale collations. Additional broader upstream CJK collation
+fixtures remain future work.
 
 An upstream JavaDBF GBK fixture now covers three GBK-encoded CJK field names and 28 real records,
 including a read, mutation, and byte round-trip.

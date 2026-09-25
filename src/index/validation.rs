@@ -41,8 +41,12 @@ pub(super) fn validate_shape(index_file: &IndexFile) -> Result<(), IndexError> {
             )?;
             let key = &entry.key;
             if previous_key.as_ref().is_some_and(|previous| {
-                ordering::compare_index_keys(previous, key, index.definition.directions())
-                    != std::cmp::Ordering::Less
+                ordering::compare_index_keys(
+                    previous,
+                    key,
+                    index.definition.directions(),
+                    index.definition.collation(),
+                ) != std::cmp::Ordering::Less
             }) {
                 return Err(IndexError::Invalid(format!(
                     "index {} entries are not sorted",
@@ -97,7 +101,12 @@ pub(super) fn validate_for_table(
             let Some(position) = index
                 .entries
                 .binary_search_by(|entry| {
-                    ordering::compare_index_keys(&entry.key, &key, &index.definition.directions)
+                    ordering::compare_index_keys(
+                        &entry.key,
+                        &key,
+                        &index.definition.directions,
+                        index.definition.collation(),
+                    )
                 })
                 .ok()
             else {
@@ -162,12 +171,23 @@ pub(super) fn build_indexes(
             .map(|(key, records)| IndexEntry { key, records })
             .collect::<Vec<_>>();
         entries.sort_by(|left, right| {
-            ordering::compare_index_keys(&left.key, &right.key, definition.directions())
+            ordering::compare_index_keys(
+                &left.key,
+                &right.key,
+                definition.directions(),
+                definition.collation(),
+            )
         });
         let mut merged = Vec::<IndexEntry>::with_capacity(entries.len());
         for mut entry in entries {
             if let Some(previous) = merged.last_mut() {
-                if ordering::compare_keys(&previous.key, &entry.key) == std::cmp::Ordering::Equal {
+                if ordering::compare_index_keys(
+                    &previous.key,
+                    &entry.key,
+                    definition.directions(),
+                    definition.collation(),
+                ) == std::cmp::Ordering::Equal
+                {
                     previous.records.append(&mut entry.records);
                     previous.records.sort_unstable();
                     continue;
