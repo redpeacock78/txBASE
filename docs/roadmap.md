@@ -69,7 +69,7 @@ The repository currently provides:
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, `ReplicationSnapshot`, and `ReplicationProgress` JSON formats, journaled `TXRP` data-plane and `TXRG` follower-progress sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, monotonic follower-progress acknowledgement with durable minimum-index coordinated compaction, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded entry-batch validation and ordered receiver application, bounded HTTP entry, contiguous entry-range, snapshot, and progress delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
-- A bounded `ReplicationHttpClient` that validates authority status, pulls contiguous entry pages or a current snapshot, applies them through the local ordered replay contract, and acknowledges follower progress over plain HTTP.
+- A bounded `ReplicationHttpClient` that validates authority status, pulls contiguous entry pages or a current snapshot, applies them through the local ordered replay contract, acknowledges follower progress over plain HTTP, and retries explicitly transient socket or HTTP failures within a bounded in-process policy.
 - A public `txbase replicate catch-up` command that opens a fixed-term follower catalog, resumes its journaled `TXRP` position, performs one bounded HTTP catch-up session, and reports the resulting progress as JSON.
 
 The baseline intentionally does not include the following:
@@ -80,7 +80,7 @@ The baseline intentionally does not include the following:
 - Aggregation stages or accumulators beyond bounded input `$match`, `$unwind` with its documented top-level options, `$set`/`$addFields` with its documented expression subset, `$project`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, `$group`, `$bucket`, bounded scalar-expression `$bucketAuto` with finite numeric results, and bounded scalar-expression `$sortByCount` with bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
-- Provider-specific cloud object-storage adapters, consistency guarantees, retention policy, and retry queues.
+- Provider-specific cloud object-storage adapters, consistency guarantees, retention policy, and durable retry queues.
 - Quorum or consensus, quorum-coordinated snapshot/log retention, distributed follower reads, and distributed partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
@@ -383,7 +383,7 @@ at the snapshot's next index and transaction.
 The catalog server also exposes version 1 `status`, contiguous entry-range delivery, single-entry delivery, snapshot-export, snapshot-install, and follower-progress routes as bounded HTTP JSON.
 The default `authority` role routes `/transaction` and named-table mutations through the same catalog journal commit as `TXRP` state and rechecks table ETags before commit.
 The `follower` role reports its role through `status`, rejects direct catalog mutations with `409`, and still accepts replication delivery.
-Optional RFC 6750 Bearer authentication protects the replication routes when `TXBASE_REPLICATION_TOKEN` is configured; TLS, quorum, consensus, and retry queues are not provided.
+Optional RFC 6750 Bearer authentication protects the replication routes when `TXBASE_REPLICATION_TOKEN` is configured; bounded in-process transient retries are provided, while TLS, quorum, consensus, and durable retry queues are not.
 The public `txbase replicate catch-up` command provides a one-shot operational
 client for the same routes and resumes an already persisted follower prefix.
 The authority can export a retained snapshot at an applied index and compact the local `TXRP` prefix through that exact image while preserving the suffix and catalog transaction ID.
@@ -396,7 +396,7 @@ index for coordinated compaction. Quorum-safe truncation remains future work.
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
 - Raft or another explicitly selected authority protocol.
-- TLS, retry, backpressure, quorum-safe log truncation, and authority discovery.
+- TLS, durable retry queues, backpressure, quorum-safe log truncation, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.
 
@@ -438,6 +438,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Filesystem- and cache-aware merge planning, streaming join execution, aggregation, predicate-level serializable MVCC, durable XBF, provider-specific cloud object-storage, TLS, retry queues, authority discovery, quorum, or consensus code without a contract and end-to-end test.
+- Filesystem- and cache-aware merge planning, streaming join execution, aggregation, predicate-level serializable MVCC, durable XBF, provider-specific cloud object-storage, TLS, durable retry queues, authority discovery, quorum, or consensus code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and filesystem- or cache-aware merge planning remain future work.

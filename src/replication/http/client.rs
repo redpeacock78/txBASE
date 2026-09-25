@@ -11,9 +11,53 @@ use crate::replication::{
 };
 use std::io::{self, Write};
 use std::net::{TcpStream, ToSocketAddrs};
+use std::thread;
 use std::time::Duration;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_RETRY_ATTEMPTS: usize = 8;
+const MAX_RETRY_BACKOFF: Duration = Duration::from_secs(30);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReplicationRetryPolicy {
+    max_attempts: usize,
+    initial_backoff: Duration,
+    max_backoff: Duration,
+}
+
+impl ReplicationRetryPolicy {
+    pub fn new(
+        max_attempts: usize,
+        initial_backoff: Duration,
+        max_backoff: Duration,
+    ) -> Result<Self, ReplicationHttpError> {
+        if !(1..=MAX_RETRY_ATTEMPTS).contains(&max_attempts) {
+            return Err(ReplicationHttpError::InvalidConfig(format!(
+                "retry attempts must be between 1 and {MAX_RETRY_ATTEMPTS}"
+            )));
+        }
+        if initial_backoff > max_backoff || max_backoff > MAX_RETRY_BACKOFF {
+            return Err(ReplicationHttpError::InvalidConfig(
+                "retry backoff must be ordered and at most 30 seconds".into(),
+            ));
+        }
+        Ok(Self {
+            max_attempts,
+            initial_backoff,
+            max_backoff,
+        })
+    }
+}
+
+impl Default for ReplicationRetryPolicy {
+    fn default() -> Self {
+        Self {
+            max_attempts: 3,
+            initial_backoff: Duration::from_millis(50),
+            max_backoff: Duration::from_secs(1),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ReplicationHttpClient {
@@ -23,14 +67,15 @@ pub struct ReplicationHttpClient {
     base_path: String,
     timeout: Duration,
     bearer_token: Option<String>,
+    retry_policy: ReplicationRetryPolicy,
 }
 
 impl ReplicationHttpClient {
     /// Creates a client for the existing HTTP replication routes.
     ///
-    /// Only plain http URLs are accepted. TLS, discovery, and retry queues
-    /// belong to the future consensus transport rather than this bounded
-    /// delivery client.
+    /// Only plain http URLs are accepted. TLS, discovery, and durable retry
+    /// queues belong to the future consensus transport rather than this
+    /// bounded delivery client.
     pub fn new(base_url: &str) -> Result<Self, ReplicationHttpError> {
         let (host, port, host_header, base_path) = parse_base_url(base_url)?;
         Ok(Self {
@@ -40,6 +85,7 @@ impl ReplicationHttpClient {
             base_path,
             timeout: DEFAULT_TIMEOUT,
             bearer_token: None,
+            retry_policy: ReplicationRetryPolicy::default(),
         })
     }
 
@@ -65,6 +111,11 @@ impl ReplicationHttpClient {
         }
         self.bearer_token = Some(token);
         Ok(self)
+    }
+
+    pub fn with_retry_policy(mut self, retry_policy: ReplicationRetryPolicy) -> Self {
+        self.retry_policy = retry_policy;
+        self
     }
 
     pub fn status(&self) -> Result<ReplicationHttpStatus, ReplicationHttpError> {
@@ -271,6 +322,33 @@ impl ReplicationHttpClient {
         body: Option<&[u8]>,
         max_response_body_bytes: usize,
     ) -> Result<Vec<u8>, ReplicationHttpError> {
+        let mut attempt = 1;
+        let mut backoff = self.retry_policy.initial_backoff;
+        loop {
+            match self.request_once(method, path, body, max_response_body_bytes) {
+                Ok(response) => return Ok(response),
+                Err(error) if attempt < self.retry_policy.max_attempts && error.is_retryable() => {
+                    if !backoff.is_zero() {
+                        thread::sleep(backoff);
+                    }
+                    attempt += 1;
+                    backoff = backoff
+                        .checked_mul(2)
+                        .unwrap_or(self.retry_policy.max_backoff)
+                        .min(self.retry_policy.max_backoff);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    fn request_once(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+        max_response_body_bytes: usize,
+    ) -> Result<Vec<u8>, ReplicationHttpError> {
         let target = self.target(path)?;
         let mut stream = self.connect()?;
         stream.set_read_timeout(Some(self.timeout))?;
@@ -332,6 +410,16 @@ impl ReplicationHttpClient {
             Ok(path.to_owned())
         } else {
             Ok(format!("{}{}", self.base_path, path))
+        }
+    }
+}
+
+impl ReplicationHttpError {
+    fn is_retryable(&self) -> bool {
+        match self {
+            Self::Io(_) => true,
+            Self::HttpStatus { status, .. } => matches!(*status, 408 | 429 | 500 | 502 | 503 | 504),
+            _ => false,
         }
     }
 }

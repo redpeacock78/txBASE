@@ -158,8 +158,8 @@ in the same catalog journal commit; a duplicate installation also removes
 stale progress state.
 
 This contract is a watermark safety check, not quorum or consensus.
-It has no membership configuration or lifecycle, lease, fencing token, network
-retry queue, or failure detector.
+It has no membership configuration or lifecycle, lease, fencing token, durable
+network retry queue, or failure detector.
 
 ### HTTP transport boundary
 
@@ -194,7 +194,7 @@ When `TXBASE_REPLICATION_TOKEN` is configured, the replication routes require
 RFC 6750 Bearer authorization and return `401` with `WWW-Authenticate: Bearer`
 for missing or invalid credentials. Without that environment variable, the routes
 remain unauthenticated for local development compatibility. The transport still has
-no TLS, streaming, retry queue, backpressure, quorum, or authority discovery.
+no TLS, streaming, durable retry queue, backpressure, quorum, or authority discovery.
 
 ### HTTP client
 
@@ -221,14 +221,22 @@ The public CLI exposes the same one-shot operation as
 `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID`.
 It opens the local catalog and `TXRP` sidecar, optionally reads
 `TXBASE_REPLICATION_TOKEN`, and prints the synchronization result as JSON.
-The command is intentionally not a daemon, scheduler, retry queue, or leader
+The command is intentionally not a daemon, scheduler, durable retry queue, or leader
 election process; invoke it again to resume a persisted prefix.
 
 The client uses HTTP/1.1 with `Connection: close`, explicit
 `Content-Length`, the existing `1 MiB` entry/progress and `64 MiB` snapshot
 limits, and no chunked decoding.
-It does not implement TLS, retry queues, streaming, backpressure, authority
-discovery, quorum, or consensus.
+Each request uses a bounded retry policy: three total attempts by default, an
+initial 50 millisecond delay, and exponential backoff capped at one second.
+Only socket I/O failures and HTTP `408`, `429`, `500`, `502`, `503`, or `504`
+are retried. Exact repeated entry, snapshot, and progress requests are safe
+under the delivery contracts; conflict responses and malformed responses are
+terminal. `ReplicationRetryPolicy` allows at most eight total attempts and a
+30-second backoff cap. This is an in-process request policy, not a durable
+retry queue.
+It does not implement TLS, streaming, backpressure, authority discovery,
+quorum, or consensus.
 
 ## 4. Co-location before distributed joins
 
@@ -270,12 +278,13 @@ The local slice defines the following initial contracts:
 - transport: the catalog server exposes bounded status and contiguous entry-range reads, accepts versioned entry, snapshot, and progress JSON through HTTP routes with explicit conflict statuses, and `ReplicationHttpClient::catch_up` connects those routes to local ordered replay;
 - authority capture: the default authority role journals `/transaction` and named-table mutations with `TXRP` state, while the follower role rejects direct catalog mutations;
 - authentication: `TXBASE_REPLICATION_TOKEN` optionally protects the replication routes with RFC 6750 Bearer credentials;
+- transport retry: `ReplicationHttpClient` retries bounded transient socket and HTTP failures, while exact replication POST duplicates remain safe and no durable retry queue is claimed;
 - deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
 
 The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
-- TLS, streaming, retry, backpressure, quorum-safe log truncation, and authority discovery;
+- TLS, streaming, durable retry queues, backpressure, quorum-safe log truncation, and authority discovery;
 - observability for lag and transport state;
 - quorum and network failure behavior.
 
@@ -297,6 +306,7 @@ The initial local replication slice is complete because it has:
 - retained snapshot export, suffix-preserving log compaction, sidecar-only journal recovery, and compaction conflict tests;
 - follower watermark monotonicity, bounded `TXRG` progress-sidecar persistence, restart restoration, malformed-sidecar rejection, minimum-index compaction gating, snapshot cleanup, and bounded HTTP progress tests;
 - bounded HTTP status, contiguous entry-range, entry delivery, duplicate delivery, snapshot installation, export, client parsing, authenticated requests, and one-shot catch-up tests;
+- bounded transient HTTP retry and terminal conflict no-retry tests;
 - default authority capture, table-ETag recheck, and follower read-only role tests;
 - explicit write consistency: only the next catalog transaction can commit;
 - a leader/follower fixture that fails and recovers without external infrastructure.
@@ -308,7 +318,7 @@ guarantees, and distributed partitioning remain future work.
 
 This document does not promise Raft, quorum, multi-region writes, global
 transactions, networked log truncation, distributed follower-read guarantees,
-automatic partition balancing, TLS, retry queues, or authority discovery.
+automatic partition balancing, TLS, durable retry queues, or authority discovery.
 
 Those choices require the authority and recovery contracts above.
 
@@ -323,7 +333,8 @@ It does not select Raft for txBASE and does not define the future txBASE log, sc
 
 The current repository has a local entry/replay implementation, a versioned
 snapshot installation primitive, journaled `TXRP` and `TXRG` sidecars, bounded HTTP
-status and contiguous entry-range delivery routes, a bounded HTTP client,
+status and contiguous entry-range delivery routes, a bounded HTTP client with
+transient-request retry,
 follower watermark acknowledgements, default authority capture for catalog
 mutations, a read-only follower role, and a bounded historical follower-read
 primitive, but no consensus, quorum, distributed follower-read guarantee, or

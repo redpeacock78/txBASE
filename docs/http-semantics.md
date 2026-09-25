@@ -315,7 +315,17 @@ with `at`; it does not create a long-lived transaction.
 
 The table lock serializes save paths, and a stale independently loaded table is rejected.
 
-Automatic network retry, request deduplication, and multi-writer merge are not implemented.
+General API routes do not provide automatic network retry, request deduplication,
+or multi-writer merge.
+
+The replication client is a separate exception with an explicit bounded policy.
+It retries socket I/O failures and HTTP `408`, `429`, `500`, `502`, `503`, or
+`504` responses for up to three total attempts by default. The replication
+entry, snapshot, and progress routes define exact duplicate acknowledgement,
+so the client can retry the same POST body without claiming exactly-once network
+delivery. Conflict responses and malformed responses are not retried.
+`ReplicationRetryPolicy` changes the bounded attempt and backoff limits; it does
+not create a durable retry queue.
 
 Clients must not infer exactly-once effects from a successful TCP exchange alone.
 

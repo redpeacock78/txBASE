@@ -17,7 +17,7 @@ pub use error::ReplicationError;
 pub use http::{
     ReplicationDeliveryOutcome, ReplicationDeliveryResponse, ReplicationHttpClient,
     ReplicationHttpError, ReplicationHttpStatus, ReplicationProgressResponse,
-    ReplicationProgressResponseOutcome, ReplicationSyncResult,
+    ReplicationProgressResponseOutcome, ReplicationRetryPolicy, ReplicationSyncResult,
 };
 pub use progress::{
     MAX_REPLICATION_FOLLOWERS, MAX_REPLICATION_PROGRESS_BYTES, REPLICATION_PROGRESS_SIDECAR_NAME,

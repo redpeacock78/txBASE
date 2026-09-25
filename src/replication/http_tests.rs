@@ -52,6 +52,25 @@ fn response(body: Vec<u8>) -> Vec<u8> {
     .collect()
 }
 
+fn error_response(status: u16, code: &str) -> Vec<u8> {
+    let body = json!({
+        "error": {
+            "code": code,
+            "message": "temporary replication failure"
+        }
+    })
+    .to_string()
+    .into_bytes();
+    format!(
+        "HTTP/1.1 {status} Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .into_bytes()
+    .into_iter()
+    .chain(body)
+    .collect()
+}
+
 fn spawn_sequence(responses: Vec<Vec<u8>>) -> (String, JoinHandle<Vec<String>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
@@ -115,6 +134,14 @@ fn client_validates_plain_http_configuration() {
             .with_bearer_token("secret\r\nX-Injected: yes"),
         Err(ReplicationHttpError::InvalidConfig(_))
     ));
+    assert!(matches!(
+        ReplicationRetryPolicy::new(0, Duration::ZERO, Duration::ZERO),
+        Err(ReplicationHttpError::InvalidConfig(_))
+    ));
+    assert!(matches!(
+        ReplicationRetryPolicy::new(2, Duration::from_secs(2), Duration::from_secs(1)),
+        Err(ReplicationHttpError::InvalidConfig(_))
+    ));
 }
 
 #[test]
@@ -142,6 +169,50 @@ fn client_reads_status_with_base_path_and_bearer_auth() {
     assert_eq!(received.term, 4);
     assert!(requests[0].starts_with("GET /api/replication/status HTTP/1.1\r\n"));
     assert!(requests[0].contains("\r\nAuthorization: Bearer secret\r\n"));
+}
+
+#[test]
+fn client_retries_transient_replication_status() {
+    let status = json!({
+        "transport_version": REPLICATION_TRANSPORT_VERSION,
+        "role": "authority",
+        "term": 4,
+        "base_index": 0,
+        "base_transaction_id": 0,
+        "last_index": 0,
+        "last_transaction_id": 0,
+        "follower_count": 0,
+        "safe_compaction_index": null,
+        "schema_tag": "schema-v1"
+    });
+    let (url, server) = spawn_sequence(vec![
+        error_response(503, "temporarily_unavailable"),
+        response(status.to_string().into_bytes()),
+    ]);
+    let client = ReplicationHttpClient::new(&url)
+        .unwrap()
+        .with_retry_policy(ReplicationRetryPolicy::new(2, Duration::ZERO, Duration::ZERO).unwrap());
+
+    assert_eq!(client.status().unwrap().term, 4);
+    assert_eq!(server.join().unwrap().len(), 2);
+}
+
+#[test]
+fn client_does_not_retry_terminal_replication_status() {
+    let (url, server) = spawn_sequence(vec![error_response(409, "conflict")]);
+    let client = ReplicationHttpClient::new(&url)
+        .unwrap()
+        .with_retry_policy(ReplicationRetryPolicy::new(2, Duration::ZERO, Duration::ZERO).unwrap());
+
+    assert!(matches!(
+        client.status(),
+        Err(ReplicationHttpError::HttpStatus {
+            status: 409,
+            code: Some(code),
+            ..
+        }) if code == "conflict"
+    ));
+    assert_eq!(server.join().unwrap().len(), 1);
 }
 
 #[test]
