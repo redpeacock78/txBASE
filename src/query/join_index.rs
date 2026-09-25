@@ -1,4 +1,5 @@
 use crate::catalog::Catalog;
+use crate::dbf::DbfTable;
 use crate::index::IndexFile;
 use serde_json::Map;
 
@@ -18,13 +19,14 @@ pub(super) struct OrderedIndex {
 pub(super) fn load_fields(
     catalog: &Catalog,
     table_name: &str,
+    table: &DbfTable,
     fields: &[String],
 ) -> Option<IndexFile> {
     if catalog.is_historical() {
         return None;
     }
     let path = catalog.table_path(table_name)?;
-    let index = IndexFile::load(path).ok()?;
+    let index = IndexFile::load_with_table(path, table).ok()?;
     let fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
     index.has_exact_fields(&fields).then_some(index)
 }
@@ -46,9 +48,10 @@ pub(super) fn equality_probe_cost(
 pub(super) fn load_ordered(
     catalog: &Catalog,
     table_name: &str,
+    table: &DbfTable,
     fields: &[String],
 ) -> Option<OrderedIndex> {
-    let index = load_fields(catalog, table_name, fields)?;
+    let index = load_fields(catalog, table_name, table, fields)?;
     ordered_from_index(&index, fields)
 }
 

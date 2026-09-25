@@ -36,7 +36,7 @@ pub(super) fn execute(
     request: &JoinRequest,
 ) -> Result<Vec<Value>, JoinError> {
     validate(request)?;
-    let initial = load_rows(source, &request.from)?;
+    let initial = load_rows(source, &request.from, None, None)?;
     let mut rows = initial.values;
     let mut row_page_reads = initial.page_reads;
     for spec in std::iter::once(&request.join).chain(request.joins.iter()) {
@@ -58,35 +58,50 @@ fn apply_stage(
     row_page_reads: usize,
     spec: &JoinSpec,
 ) -> Result<(Vec<Map<String, Value>>, usize), JoinError> {
-    let right = load_rows(source, &spec.table)?;
-    let (local_fields, foreign_fields) = stage_fields(spec);
-    let cost_input = if matches!(&spec.kind, JoinType::Cross) {
-        JoinCostInput::default()
-    } else {
-        JoinCostInput {
-            outer_page_reads: row_page_reads,
-            inner_page_reads: right.page_reads,
-            output_rows: estimate_join_rows(
-                &rows,
-                &right.values,
-                &local_fields,
-                &foreign_fields,
-                &spec.kind,
-            )?,
-            output_columns: output_columns(&rows, &right.values, &spec.kind),
-            ..JoinCostInput::default()
-        }
-    };
-    let rows = stages::apply(
+    let index_fields =
+        (!matches!(&spec.kind, JoinType::Cross | JoinType::Full)).then(|| stage_fields(spec).1);
+    let right = load_rows(
         source,
-        rows,
-        &right.values,
-        &right.numbers,
-        spec,
-        cost_input,
+        &spec.table,
+        index_fields.as_deref(),
+        Some(rows.len()),
     )?;
+    let cost_input = stage_cost_input(&rows, row_page_reads, &right, spec)?;
+    let plan = stages::plan(
+        rows.len(),
+        right.values.len(),
+        spec,
+        right.index,
+        cost_input,
+    );
+    let rows = stages::apply(rows, &right.values, &right.numbers, spec, plan)?;
     let page_reads = materialized_page_reads(&rows);
     Ok((rows, page_reads))
+}
+
+fn stage_cost_input(
+    left: &[Map<String, Value>],
+    row_page_reads: usize,
+    right: &cost::LoadedRows,
+    spec: &JoinSpec,
+) -> Result<JoinCostInput, JoinError> {
+    if matches!(&spec.kind, JoinType::Cross) {
+        return Ok(JoinCostInput::default());
+    }
+    let (local_fields, foreign_fields) = stage_fields(spec);
+    Ok(JoinCostInput {
+        outer_page_reads: row_page_reads,
+        inner_page_reads: right.page_reads,
+        output_rows: estimate_join_rows(
+            left,
+            &right.values,
+            &local_fields,
+            &foreign_fields,
+            &spec.kind,
+        )?,
+        output_columns: output_columns(left, &right.values, &spec.kind),
+        ..JoinCostInput::default()
+    })
 }
 
 fn validate_spec(spec: &JoinSpec, available: &[&str]) -> Result<(), JoinError> {

@@ -130,11 +130,18 @@ The streaming route captures only the referenced tables under one catalog read l
 
 The producer applies backpressure when the channel is full and stops when the consumer drops the stream.
 
-The table inputs and equality lookup map remain in memory; the route avoids collecting the complete final result vector.
+The route shares the materialized pipeline's bounded cost model and stage planner.
+Hash and nested-loop execution cover all seven join types; nested-loop emits candidate pairs directly, while hash retains one in-memory key map.
+Index-nested-loop probes the validated sidecar per left row for inner, left, semi, and anti stages.
+Ordered merge walks indexed key groups without collecting joined output rows for inner, left, right, semi, and anti stages; full joins use hash and cross joins use nested-loop.
+When an index-nested-loop plan would need buffered reordering to preserve right-major output, the stream uses the planner's non-index fallback.
+Current index sidecars are captured and validated against the same table images as the query before the catalog lock is released.
+The table inputs and selected index metadata remain in memory; the route avoids collecting the complete final result vector.
 
 For chained joins, stages before the final stage remain materialized under the existing 100,000-row cap, while the final stage emits incrementally.
 
-The streaming equality path uses an in-memory equality map and does not use current index sidecars or the cost-based index and merge planner.
+The streaming equality path uses the cost-based planner for its final stage; earlier chained stages continue to use the materialized pipeline planner.
+The planner still uses deterministic logical-page and in-memory-work estimates, not filesystem latency, cache state, or page reuse.
 
 Direct result limits remain after filtering, while a chained final-stage limit applies before its final filter.
 

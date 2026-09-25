@@ -10,7 +10,12 @@ pub(super) fn execute(
 ) -> Result<Vec<serde_json::Value>, JoinError> {
     let left_index = if context.large_join {
         context.current_catalog.and_then(|catalog| {
-            join_index::load_fields(catalog, &context.request.from, context.local_fields)
+            join_index::load_fields(
+                catalog,
+                &context.request.from,
+                context.left_table,
+                context.local_fields,
+            )
         })
     } else {
         None

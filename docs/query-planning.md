@@ -207,7 +207,7 @@ The following require separate public contracts:
 
 1. Full expression evaluation and more precise cost-based index choice with explicit missing, null, collation, and compound-range selectivity rules.
 2. Additional aggregation stages and accumulators beyond the current bounded aggregation contract, including extensions to `$group`, `$bucket`, and `$sortByCount`, and bounded-memory handling for their numeric expressions.
-3. Filesystem- and cache-aware merge planning, integration of streamed joins with the cost-based index and merge planner, and broader join semantics.
+3. Filesystem- and cache-aware merge planning and broader join semantics.
 4. Host-specific scheduling, backpressure, timeout, cancellation, and transport implementations for `AsyncQueryStream`.
 5. Differential tests against a small reference evaluator.
 

@@ -6,12 +6,14 @@ use super::super::super::{join_merge, join_nested, join_strategy};
 use super::super::{JoinError, JoinRequest, JoinType};
 use super::JoinSource;
 use crate::catalog::Catalog;
-use crate::dbf::DbfRecord;
+use crate::dbf::{DbfRecord, DbfTable};
 use serde_json::Value;
 
 pub(super) struct DirectJoinContext<'a> {
     pub(super) current_catalog: Option<&'a Catalog>,
     pub(super) large_join: bool,
+    pub(super) left_table: &'a DbfTable,
+    pub(super) right_table: &'a DbfTable,
     pub(super) left_records: &'a [&'a DbfRecord],
     pub(super) right_records: &'a [&'a DbfRecord],
     pub(super) request: &'a JoinRequest,
@@ -64,7 +66,12 @@ pub(super) fn execute<S: JoinSource>(
             > join_strategy::NESTED_LOOP_PAIR_LIMIT;
     let left_ordered = if large_join {
         current_catalog.and_then(|catalog| {
-            super::super::super::join_index::load_ordered(catalog, &request.from, &local_fields)
+            super::super::super::join_index::load_ordered(
+                catalog,
+                &request.from,
+                &left,
+                &local_fields,
+            )
         })
     } else {
         None
@@ -74,6 +81,7 @@ pub(super) fn execute<S: JoinSource>(
             super::super::super::join_index::load_ordered(
                 catalog,
                 &request.join.table,
+                &right,
                 &foreign_fields,
             )
         })
@@ -87,6 +95,8 @@ pub(super) fn execute<S: JoinSource>(
     let mut direct_context = DirectJoinContext {
         current_catalog,
         large_join,
+        left_table: &left,
+        right_table: &right,
         left_records: &left_records,
         right_records: &right_records,
         request,

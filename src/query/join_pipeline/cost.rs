@@ -1,5 +1,6 @@
 use super::super::join::{JoinError, JoinSource, JoinType};
 use super::{encoded_key, qualified_values};
+use crate::index::IndexFile;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
@@ -7,13 +8,25 @@ pub(super) struct LoadedRows {
     pub(super) values: Vec<Map<String, Value>>,
     pub(super) numbers: Vec<usize>,
     pub(super) page_reads: usize,
+    pub(super) index: Option<IndexFile>,
 }
 
 pub(super) fn load_rows(
     source: &dyn JoinSource,
     table_name: &str,
+    index_fields: Option<&[String]>,
+    outer_rows: Option<usize>,
 ) -> Result<LoadedRows, JoinError> {
     let table = source.open_table(table_name)?;
+    let active_rows = table.active_records().count();
+    let index = index_fields
+        .filter(|_| {
+            outer_rows.is_some_and(|count| {
+                count.saturating_mul(active_rows)
+                    > super::super::join_strategy::NESTED_LOOP_PAIR_LIMIT
+            })
+        })
+        .and_then(|fields| source.load_index_for_fields(table_name, &table, fields));
     let page_reads = table
         .byte_len()
         .div_ceil(crate::index::COST_PAGE_SIZE)
@@ -28,6 +41,7 @@ pub(super) fn load_rows(
         values,
         numbers,
         page_reads,
+        index,
     })
 }
 

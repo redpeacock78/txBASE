@@ -221,7 +221,10 @@ pipeline.
 Chained `full` stages use the bounded hash fallback rather than the direct ordered merge path.
 Eligible chained non-`full` stages can use an ordered merge by sorting the materialized intermediate rows, consuming the loaded rows of the new table through a fresh exact ordered index, and accounting for the bounded sort work.
 `QUERY /join/stream` snapshots only its referenced tables under one catalog read lock and emits the final stage through a bounded channel.
-It keeps the input tables and equality map in memory; earlier chained stages remain materialized under the existing 100,000-row cap, and the streaming equality path does not use index sidecars or the cost-based index and merge planner.
+Its final stage shares the bounded cost model and stage planner with materialized joins, while earlier chained stages continue to use the materialized pipeline.
+Hash and nested-loop execution cover all seven join types; index probes and ordered merge are used when they can preserve output order incrementally, with the planner's non-index fallback used when right-major output would otherwise require buffered reordering.
+Current index sidecars are validated against the captured table images before the catalog lock is released; the stream retains table inputs and selected strategy state in memory but does not collect the complete final result vector.
+Earlier chained stages remain materialized under the existing 100,000-row cap, and the planner does not model filesystem latency, cache state, or page reuse.
 Filesystem- and cache-aware merge planning and broader null or missing field semantics remain future work before adding broader query surfaces.
 
 Distributed joins and distributed transactions remain later features.

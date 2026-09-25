@@ -11,6 +11,128 @@ struct OrderedRow {
     key: Vec<Value>,
 }
 
+pub(in crate::query::join_pipeline) struct OrderedMergeRows {
+    kind: JoinType,
+    left_sorted: Vec<OrderedRow>,
+    right_sorted: Vec<OrderedRow>,
+    left_matches: Vec<Option<Range<usize>>>,
+    right_matches: Vec<Option<Range<usize>>>,
+    left_position: usize,
+    right_position: usize,
+    match_position: usize,
+}
+
+impl OrderedMergeRows {
+    pub(in crate::query::join_pipeline) fn new(
+        left: &[Map<String, Value>],
+        right: &[Map<String, Value>],
+        right_numbers: &[usize],
+        right_order: &[usize],
+        kind: JoinType,
+        local_fields: &[String],
+        foreign_fields: &[String],
+    ) -> Result<Self, JoinError> {
+        if matches!(&kind, JoinType::Full | JoinType::Cross) {
+            return Err(JoinError::Invalid(
+                "ordered merge does not support this join type".into(),
+            ));
+        }
+        if right.len() != right_numbers.len() {
+            return Err(JoinError::Invalid(
+                "join index row numbers do not match loaded rows".into(),
+            ));
+        }
+        let left_sorted = ordered_left(left, local_fields);
+        let right_sorted = ordered_right(right, right_numbers, right_order, foreign_fields)?;
+        let left_matches = matching_ranges(&left_sorted, &right_sorted, left.len());
+        let right_matches = matching_ranges(&right_sorted, &left_sorted, right.len());
+        Ok(Self {
+            kind,
+            left_sorted,
+            right_sorted,
+            left_matches,
+            right_matches,
+            left_position: 0,
+            right_position: 0,
+            match_position: 0,
+        })
+    }
+
+    pub(in crate::query::join_pipeline) fn next_pair(
+        &mut self,
+    ) -> Option<(Option<usize>, Option<usize>)> {
+        match &self.kind {
+            JoinType::Right => self.next_right_pair(),
+            JoinType::Inner | JoinType::Left | JoinType::Semi | JoinType::Anti => {
+                self.next_left_pair()
+            }
+            JoinType::Full | JoinType::Cross => unreachable!(),
+        }
+    }
+
+    fn next_left_pair(&mut self) -> Option<(Option<usize>, Option<usize>)> {
+        while self.left_position < self.left_matches.len() {
+            let left_position = self.left_position;
+            let matches = self.left_matches[left_position].as_ref();
+            match &self.kind {
+                JoinType::Semi => {
+                    self.left_position += 1;
+                    self.match_position = 0;
+                    if matches.is_some() {
+                        return Some((Some(left_position), None));
+                    }
+                }
+                JoinType::Anti => {
+                    self.left_position += 1;
+                    self.match_position = 0;
+                    if matches.is_none() {
+                        return Some((Some(left_position), None));
+                    }
+                }
+                JoinType::Inner | JoinType::Left => {
+                    if let Some(range) = matches {
+                        if self.match_position < range.end - range.start {
+                            let right_row = &self.right_sorted[range.start + self.match_position];
+                            self.match_position += 1;
+                            return Some((Some(left_position), Some(right_row.position)));
+                        }
+                        self.left_position += 1;
+                        self.match_position = 0;
+                    } else {
+                        self.left_position += 1;
+                        self.match_position = 0;
+                        if matches!(&self.kind, JoinType::Left) {
+                            return Some((Some(left_position), None));
+                        }
+                    }
+                }
+                JoinType::Right | JoinType::Full | JoinType::Cross => unreachable!(),
+            }
+        }
+        None
+    }
+
+    fn next_right_pair(&mut self) -> Option<(Option<usize>, Option<usize>)> {
+        while self.right_position < self.right_matches.len() {
+            let right_position = self.right_position;
+            if let Some(range) = self.right_matches[right_position].as_ref() {
+                if self.match_position < range.end - range.start {
+                    let left_row = &self.left_sorted[range.start + self.match_position];
+                    self.match_position += 1;
+                    return Some((Some(left_row.position), Some(right_position)));
+                }
+            } else {
+                self.right_position += 1;
+                self.match_position = 0;
+                return Some((None, Some(right_position)));
+            }
+            self.right_position += 1;
+            self.match_position = 0;
+        }
+        None
+    }
+}
+
 pub(super) fn execute(
     left: &[Map<String, Value>],
     right: &[Map<String, Value>],
@@ -20,80 +142,22 @@ pub(super) fn execute(
     local_fields: &[String],
     foreign_fields: &[String],
 ) -> Result<Vec<Map<String, Value>>, JoinError> {
-    if right.len() != right_numbers.len() {
-        return Err(JoinError::Invalid(
-            "join index row numbers do not match loaded rows".into(),
-        ));
-    }
-    let left_sorted = ordered_left(left, local_fields);
-    let right_sorted = ordered_right(right, right_numbers, right_order, foreign_fields)?;
-    let left_matches = matching_ranges(&left_sorted, &right_sorted, left.len());
-    let right_matches = matching_ranges(&right_sorted, &left_sorted, right.len());
-
+    let mut rows = OrderedMergeRows::new(
+        left,
+        right,
+        right_numbers,
+        right_order,
+        spec.kind.clone(),
+        local_fields,
+        foreign_fields,
+    )?;
     let mut output = Vec::new();
-    match &spec.kind {
-        JoinType::Inner => {
-            for (left_position, left_row) in left.iter().enumerate() {
-                if let Some(right_range) = left_matches[left_position].as_ref() {
-                    for right_row in &right_sorted[right_range.start..right_range.end] {
-                        push_combined(
-                            &mut output,
-                            Some(left_row),
-                            Some(&right[right_row.position]),
-                        )?;
-                    }
-                }
-            }
-        }
-        JoinType::Left => {
-            for (left_position, left_row) in left.iter().enumerate() {
-                if let Some(right_range) = left_matches[left_position].as_ref() {
-                    for right_row in &right_sorted[right_range.start..right_range.end] {
-                        push_combined(
-                            &mut output,
-                            Some(left_row),
-                            Some(&right[right_row.position]),
-                        )?;
-                    }
-                } else {
-                    push_combined(&mut output, Some(left_row), None)?;
-                }
-            }
-        }
-        JoinType::Semi => {
-            for (left_position, left_row) in left.iter().enumerate() {
-                if left_matches[left_position].is_some() {
-                    push_combined(&mut output, Some(left_row), None)?;
-                }
-            }
-        }
-        JoinType::Anti => {
-            for (left_position, left_row) in left.iter().enumerate() {
-                if left_matches[left_position].is_none() {
-                    push_combined(&mut output, Some(left_row), None)?;
-                }
-            }
-        }
-        JoinType::Right => {
-            for (right_position, right_row) in right.iter().enumerate() {
-                if let Some(left_range) = right_matches[right_position].as_ref() {
-                    for left_row in &left_sorted[left_range.start..left_range.end] {
-                        push_combined(
-                            &mut output,
-                            Some(&left[left_row.position]),
-                            Some(right_row),
-                        )?;
-                    }
-                } else {
-                    push_combined(&mut output, None, Some(right_row))?;
-                }
-            }
-        }
-        JoinType::Full | JoinType::Cross => {
-            return Err(JoinError::Invalid(
-                "ordered merge does not support this join type".into(),
-            ));
-        }
+    while let Some((left_position, right_position)) = rows.next_pair() {
+        push_combined(
+            &mut output,
+            left_position.map(|position| &left[position]),
+            right_position.map(|position| &right[position]),
+        )?;
     }
     Ok(output)
 }

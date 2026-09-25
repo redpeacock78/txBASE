@@ -3,6 +3,7 @@ use super::super::matches_filter;
 use super::{JoinError, JoinRequest, JoinType, MAX_JOIN_ROWS};
 use crate::catalog::{Catalog, CatalogReadTransaction};
 use crate::dbf::{DbfRecord, DbfTable};
+use crate::index::IndexFile;
 use crate::query_path::{field_value, project_values};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
@@ -20,6 +21,19 @@ pub(crate) trait JoinSource {
         Ok((self.open_table(left)?, self.open_table(right)?))
     }
     fn catalog(&self) -> Option<&Catalog>;
+
+    fn load_index_for_fields(
+        &self,
+        table_name: &str,
+        table: &DbfTable,
+        fields: &[String],
+    ) -> Option<IndexFile> {
+        if self.is_historical() {
+            return None;
+        }
+        let catalog = self.catalog()?;
+        super::super::join_index::load_fields(catalog, table_name, table, fields)
+    }
 }
 
 impl JoinSource for Catalog {

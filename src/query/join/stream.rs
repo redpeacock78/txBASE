@@ -1,6 +1,7 @@
 use super::{JoinError, JoinRequest, JoinSource};
 use crate::catalog::Catalog;
 use crate::dbf::DbfTable;
+use crate::index::IndexFile;
 use serde_json::Value;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -30,13 +31,44 @@ pub fn stream_query_bounded(
 
     let _lock = catalog.acquire_read_lock()?;
     let mut tables = BTreeMap::new();
+    let mut indexes = BTreeMap::new();
+    let index_fields = request
+        .joins
+        .iter()
+        .chain(std::iter::once(&request.join))
+        .filter(|spec| !matches!(&spec.kind, super::JoinType::Cross | super::JoinType::Full))
+        .filter_map(|spec| {
+            let prefix = format!("{}.", spec.table);
+            let fields = spec
+                .on
+                .values()
+                .map(|condition| {
+                    condition
+                        .equality
+                        .field
+                        .strip_prefix(&prefix)
+                        .map(str::to_owned)
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some((spec.table.clone(), fields))
+        })
+        .collect::<BTreeMap<_, _>>();
     for name in table_names {
-        tables.insert(name.clone(), catalog.open_table_unlocked(&name)?);
+        let table = catalog.open_table_unlocked(&name)?;
+        if !catalog.is_historical()
+            && let Some(fields) = index_fields.get(&name)
+            && let Some(index) =
+                super::super::join_index::load_fields(catalog, &name, &table, fields)
+        {
+            indexes.insert(name.clone(), index);
+        }
+        tables.insert(name, table);
     }
     drop(_lock);
 
     let source = SnapshotJoinSource {
         tables: RefCell::new(tables),
+        indexes: RefCell::new(indexes),
         historical: catalog.is_historical(),
     };
     let request = request.clone();
@@ -64,6 +96,7 @@ pub fn stream_query_bounded(
 
 struct SnapshotJoinSource {
     tables: RefCell<BTreeMap<String, DbfTable>>,
+    indexes: RefCell<BTreeMap<String, IndexFile>>,
     historical: bool,
 }
 
@@ -81,6 +114,22 @@ impl JoinSource for SnapshotJoinSource {
 
     fn catalog(&self) -> Option<&Catalog> {
         None
+    }
+
+    fn load_index_for_fields(
+        &self,
+        table_name: &str,
+        _table: &DbfTable,
+        fields: &[String],
+    ) -> Option<IndexFile> {
+        let mut indexes = self.indexes.borrow_mut();
+        if !indexes
+            .get(table_name)?
+            .has_exact_fields(&fields.iter().map(String::as_str).collect::<Vec<_>>())
+        {
+            return None;
+        }
+        indexes.remove(table_name)
     }
 }
 
