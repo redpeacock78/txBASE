@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 
 import { createWorkerObjectStore } from "../src/worker-object-store.mjs";
+import { createWorkerQueryStream } from "../src/worker-query-stream.mjs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -127,6 +128,62 @@ try {
   );
   const cancelledTable = new WasmObjectTable(cancelledStore, "users");
   await assert.rejects(() => cancelledTable.read_xbf(), /cancelled/);
+
+  const querySignals = [];
+  const startedResolvers = [];
+  const queryReadsStarted = [0, 1].map(
+    () => new Promise((resolve) => startedResolvers.push(resolve)),
+  );
+  const queryStore = createWorkerObjectStore({
+    baseUrl,
+    timeoutMs: 1_000,
+    fetchImpl(url, init) {
+      if (
+        new URL(url).pathname === "/objects/users/manifest.json" &&
+        querySignals.length < 2
+      ) {
+        const index = querySignals.length;
+        querySignals.push(init.signal);
+        startedResolvers[index]();
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              init.signal.addEventListener(
+                "abort",
+                () => controller.error(init.signal.reason),
+                { once: true },
+              );
+              if (init.signal.aborted) controller.error(init.signal.reason);
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return fetch(url, init);
+    },
+  });
+  const queryTable = new WasmObjectTable(queryStore, "users");
+  const firstReader = createWorkerQueryStream({ database: queryTable }).getReader();
+  const firstRead = firstReader.read();
+  await queryReadsStarted[0];
+  const queryController = new AbortController();
+  const secondReader = createWorkerQueryStream({
+    database: queryTable,
+    signal: queryController.signal,
+  }).getReader();
+  const secondRead = secondReader.read();
+  await queryReadsStarted[1];
+
+  await firstReader.cancel("reader disconnected");
+  assert.equal(querySignals[0].aborted, true);
+  assert.equal(querySignals[1].aborted, false);
+  queryController.abort("client disconnected");
+  await assert.rejects(
+    secondRead,
+    (error) => error.code === "cancelled" && error.message.includes("client disconnected"),
+  );
+  assert.equal(querySignals[1].aborted, true);
+  assert.equal((await firstRead).done, true);
 } finally {
   server.close();
   await once(server, "close");

@@ -14,13 +14,15 @@
 
 | メソッド | 結果 |
 | --- | --- |
-| `get(key)` | `Uint8Array`、またはオブジェクトが存在しない場合は`null` |
-| `putIfAbsent(key, bytes)` | 不変な初回公開後に解決 |
-| `compareAndSwap(key, expected, replacement)` | 条件付き置換後に解決 |
-| `delete(key)` | 削除後に解決。存在しないオブジェクトは削除済みとして扱う |
-| `list(prefix)` | ソート済みのオブジェクトキー文字列 |
+| `get(key, operationSignal?)` | `Uint8Array`、またはオブジェクトが存在しない場合は`null` |
+| `putIfAbsent(key, bytes, operationSignal?)` | 不変な初回公開後に解決 |
+| `compareAndSwap(key, expected, replacement, operationSignal?)` | 条件付き置換後に解決 |
+| `delete(key, operationSignal?)` | 削除後に解決。存在しないオブジェクトは削除済みとして扱う |
+| `list(prefix, operationSignal?)` | ソート済みのオブジェクトキー文字列 |
 
 アダプターは、ベースHTTP URL、任意の既定ヘッダー、任意の`AbortSignal`、0以上のリクエストタイムアウトを受け取ります。
+各ホストメソッドには、任意の操作単位`AbortSignal`を末尾の引数として渡せます。
+アダプターは生成時のシグナルと操作単位のシグナルを組み合わせるため、どちらで中断してもリクエストを停止します。
 
 既定のタイムアウトは30秒であり、既定のキャッシュモードは`no-store`です。
 
@@ -64,7 +66,7 @@
 
 設定したタイムアウトが満了するとリクエストを中断し、ホストの拒否値は`code: "unavailable"`になります。
 
-呼び出し側の`AbortSignal`が中断されるとリクエストを中断し、ホストの拒否値は`code: "cancelled"`になります。
+生成時または操作単位の`AbortSignal`が中断されるとリクエストを中断し、ホストの拒否値は`code: "cancelled"`になります。
 
 WASMブリッジは`invalid`、`conflict`、`missing`、`unavailable`、`cancelled`を対応する`ObjectStoreError`分類へ変換します。
 
@@ -94,7 +96,9 @@ const table = new WasmObjectTable(store, "users");
 
 `tests/wasm_worker_smoke.mjs`は、生成したWASMラッパーを決定的なローカルHTTPオブジェクトサービスへ接続します。
 
-スモークテストは、バイト列の公開、マニフェストのcompare-and-swap、列挙、存在しない読み取り、競合の変換、タイムアウトの変換、WASMブリッジを通る呼び出し側キャンセルを検査します。
+スモークテストは、バイト列の公開、マニフェストのcompare-and-swap、列挙、存在しない読み取り、競合の変換、タイムアウトの変換、WASMブリッジを通るクエリ単位のキャンセルを検査します。
+
+スナップショットを読み込み中のクエリを2つ同時に実行し、一方のキャンセルが他方のリクエストを中断しないことも検査します。
 
 このテストはNodeのWeb Fetch APIをポータブルなホストフィクスチャとして使い、デプロイ済みのCloudflare WorkerまたはWASIランタイムを検査するものではありません。
 

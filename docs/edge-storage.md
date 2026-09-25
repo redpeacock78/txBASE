@@ -45,6 +45,7 @@ The host supplies Promise-returning `get`, `putIfAbsent`, `compareAndSwap`, `del
 The adapter exposes XBF bytes, manifest inspection, commit, historical reads, recovery, retention, and orphan cleanup through the generated `wasm-bindgen` wrapper.
 It maps tagged host rejection codes to the shared object-store error categories, while timeout, cancellation, retry, and transport policy remain host responsibilities.
 The same wrapper exposes `query_stream_json` for the current snapshot and `query_stream_json_at` for a retained generation.
+Signal-aware `_with_signal` variants pass a query-scoped `AbortSignal` as the trailing argument to each host operation.
 Each method resolves after loading and converting the selected snapshot, then returns the shared owned query stream.
 
 `createWorkerObjectStore` supplies a Worker-compatible HTTP transport for those five methods.
@@ -205,11 +206,13 @@ The JavaScript WASM adapter, Worker Fetch adapter, and R2 binding adapter supply
 The R2 adapter's conditional-write behavior is specific to Cloudflare and remains outside the generic transport contract.
 
 The asynchronous query adapter supplies the generic storage-to-query handoff, but it does not select host scheduling, cancellation propagation, timeout, or retry behavior.
-The Worker Web Streams adapter supplies demand control and stops row delivery when its stream is cancelled; it cannot cancel an object-store future that is already in flight.
+The Worker Web Streams adapter supplies demand control and forwards cancellation to signal-aware WASM host operations.
+`createWorkerObjectStore` uses that per-query signal to abort the corresponding in-flight Fetch request.
+The runtime-neutral `AsyncObjectStore` contract and custom hosts that ignore the optional signal do not gain cancellation from this adapter.
 
 ## 7. Explicit non-goals
 
-This slice does not promise a deployed Worker or live R2 integration, provider-managed retention scheduling, WASI query-stream scheduling, cancellation of in-flight object-store operations, host-specific timeout or retry behavior, multi-region consensus, or automatic background garbage collection.
+This slice does not promise a deployed Worker or live R2 integration, provider-managed retention scheduling, WASI query-stream scheduling, a runtime-neutral cancellation contract for `AsyncObjectStore`, host-specific timeout or retry behavior, multi-region consensus, or automatic background garbage collection.
 
 Those features can reuse the manifest and generation contract after their host-specific failure behavior has a deterministic test.
 

@@ -41,11 +41,7 @@ export function createWorkerObjectStore({
   }
   if (
     signal !== undefined &&
-    (typeof signal !== "object" ||
-      signal === null ||
-      typeof signal.aborted !== "boolean" ||
-      typeof signal.addEventListener !== "function" ||
-      typeof signal.removeEventListener !== "function")
+    !isAbortSignal(signal)
   ) {
     throw new WorkerObjectStoreError(
       "invalid",
@@ -62,18 +58,26 @@ export function createWorkerObjectStore({
     );
   }
 
-  const request = async (url, init = {}) => {
-    if (signal?.aborted) {
-      throw cancelledError(signal.reason);
+  const request = async (url, init = {}, operationSignal, consumeResponse) => {
+    const callerSignals = [
+      ...new Set([signal, operationSignal].filter((item) => item !== undefined)),
+    ];
+    for (const callerSignal of callerSignals) {
+      if (callerSignal.aborted) throw cancelledError(callerSignal.reason);
     }
     const controller = new AbortController();
     let timedOut = false;
     let callerAborted = false;
-    const abortFromCaller = () => {
-      callerAborted = true;
-      controller.abort(signal.reason);
-    };
-    signal?.addEventListener("abort", abortFromCaller, { once: true });
+    let callerReason;
+    const abortListeners = callerSignals.map((callerSignal) => {
+      const listener = () => {
+        callerAborted = true;
+        callerReason = callerSignal.reason;
+        controller.abort(callerReason);
+      };
+      callerSignal.addEventListener("abort", listener, { once: true });
+      return [callerSignal, listener];
+    });
     const timer =
       timeoutMs > 0
         ? setTimeout(() => {
@@ -86,12 +90,13 @@ export function createWorkerObjectStore({
       for (const [key, value] of new Headers(init.headers ?? {})) {
         requestHeaders.set(key, value);
       }
-      return await fetchImpl(url, {
+      const response = await fetchImpl(url, {
         ...init,
         cache,
         headers: requestHeaders,
         signal: controller.signal,
       });
+      return await consumeResponse(response);
     } catch (error) {
       if (timedOut) {
         throw new WorkerObjectStoreError(
@@ -99,74 +104,92 @@ export function createWorkerObjectStore({
           `object-store request timed out after ${timeoutMs} ms`,
         );
       }
-      if (callerAborted || controller.signal.aborted) {
-        throw cancelledError(signal?.reason);
+      if (callerAborted) {
+        throw cancelledError(callerReason);
       }
+      if (error instanceof WorkerObjectStoreError) throw error;
       throw new WorkerObjectStoreError(
         "unavailable",
         `object-store request failed: ${errorMessage(error)}`,
       );
     } finally {
       if (timer !== undefined) clearTimeout(timer);
-      signal?.removeEventListener("abort", abortFromCaller);
+      for (const [callerSignal, listener] of abortListeners) {
+        callerSignal.removeEventListener("abort", listener);
+      }
     }
   };
 
-  const get = async (key) => {
-    const response = await request(keyUrl(root, key));
-    if (response.status === 404) return null;
-    await requireStatus(response, "get", [200]);
-    return new Uint8Array(await response.arrayBuffer());
+  const validateOperationSignal = (operationSignal) => {
+    if (operationSignal !== undefined && !isAbortSignal(operationSignal)) {
+      throw new WorkerObjectStoreError(
+        "invalid",
+        "worker object-store operation signal must be an AbortSignal",
+      );
+    }
   };
 
-  const putIfAbsent = async (key, bytes) => {
-    const response = await request(keyUrl(root, key), {
+  const get = async (key, operationSignal) => {
+    validateOperationSignal(operationSignal);
+    return request(keyUrl(root, key), {}, operationSignal, async (response) => {
+      if (response.status === 404) return null;
+      await requireStatus(response, "get", [200]);
+      return new Uint8Array(await response.arrayBuffer());
+    });
+  };
+
+  const putIfAbsent = async (key, bytes, operationSignal) => {
+    validateOperationSignal(operationSignal);
+    await request(keyUrl(root, key), {
       method: "PUT",
       headers: { "If-None-Match": "*" },
       body: bytes,
-    });
-    await requireStatus(response, "put-if-absent", [200, 201, 204]);
+    }, operationSignal, (response) => requireStatus(response, "put-if-absent", [200, 201, 204]));
   };
 
-  const compareAndSwap = async (key, expected, replacement) => {
+  const compareAndSwap = async (key, expected, replacement, operationSignal) => {
+    validateOperationSignal(operationSignal);
     const conditionalHeaders = expected === null ? { "If-None-Match": "*" } : {
       "If-Match": await strongEtag(expected, cryptoImpl),
     };
-    const response = await request(keyUrl(root, key), {
+    await request(keyUrl(root, key), {
       method: "PUT",
       headers: conditionalHeaders,
       body: replacement,
-    });
-    await requireStatus(response, "compare-and-swap", [200, 201, 204]);
+    }, operationSignal, (response) => requireStatus(response, "compare-and-swap", [200, 201, 204]));
   };
 
-  const remove = async (key) => {
-    const response = await request(keyUrl(root, key), { method: "DELETE" });
-    await requireStatus(response, "delete", [200, 204, 404]);
+  const remove = async (key, operationSignal) => {
+    validateOperationSignal(operationSignal);
+    await request(keyUrl(root, key), {
+      method: "DELETE",
+    }, operationSignal, (response) => requireStatus(response, "delete", [200, 204, 404]));
   };
 
-  const list = async (prefix) => {
+  const list = async (prefix, operationSignal) => {
+    validateOperationSignal(operationSignal);
     validatePrefix(prefix);
     const url = new URL(root);
     url.searchParams.set("prefix", prefix);
-    const response = await request(url);
-    await requireStatus(response, "list", [200]);
-    let keys;
-    try {
-      keys = await response.json();
-    } catch (error) {
-      throw new WorkerObjectStoreError(
-        "invalid",
-        `list response is not valid JSON: ${errorMessage(error)}`,
-      );
-    }
-    if (!Array.isArray(keys) || keys.some((key) => typeof key !== "string")) {
-      throw new WorkerObjectStoreError(
-        "invalid",
-        "list response must be a JSON array of strings",
-      );
-    }
-    return [...keys].sort();
+    return request(url, {}, operationSignal, async (response) => {
+      await requireStatus(response, "list", [200]);
+      let keys;
+      try {
+        keys = await response.json();
+      } catch (error) {
+        throw new WorkerObjectStoreError(
+          "invalid",
+          `list response is not valid JSON: ${errorMessage(error)}`,
+        );
+      }
+      if (!Array.isArray(keys) || keys.some((key) => typeof key !== "string")) {
+        throw new WorkerObjectStoreError(
+          "invalid",
+          "list response must be a JSON array of strings",
+        );
+      }
+      return [...keys].sort();
+    });
   };
 
   return { get, putIfAbsent, compareAndSwap, delete: remove, list };
@@ -278,6 +301,16 @@ function base64Url(bytes) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
+function isAbortSignal(signal) {
+  return (
+    signal !== null &&
+    typeof signal === "object" &&
+    typeof signal.aborted === "boolean" &&
+    typeof signal.addEventListener === "function" &&
+    typeof signal.removeEventListener === "function"
+  );
 }
 
 function cancelledError(reason) {

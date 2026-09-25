@@ -14,13 +14,17 @@ It is a transport adapter, not a claim that txBASE supports a particular cloud p
 
 | Method | Result |
 | --- | --- |
-| `get(key)` | `Uint8Array` or `null` when the object does not exist |
-| `putIfAbsent(key, bytes)` | resolves after an immutable first publication |
-| `compareAndSwap(key, expected, replacement)` | resolves after a conditional replacement |
-| `delete(key)` | resolves after deletion; a missing object is already deleted |
-| `list(prefix)` | sorted object-key strings |
+| `get(key, operationSignal?)` | `Uint8Array` or `null` when the object does not exist |
+| `putIfAbsent(key, bytes, operationSignal?)` | resolves after an immutable first publication |
+| `compareAndSwap(key, expected, replacement, operationSignal?)` | resolves after a conditional replacement |
+| `delete(key, operationSignal?)` | resolves after deletion; a missing object is already deleted |
+| `list(prefix, operationSignal?)` | sorted object-key strings |
 
 The adapter accepts a base HTTP URL, optional default headers, an optional `AbortSignal`, and a non-negative request timeout.
+
+Each host method also accepts an optional trailing operation-specific `AbortSignal`.
+
+The adapter combines it with the signal supplied at construction, so either signal can abort the request.
 
 The default timeout is 30 seconds and the default cache mode is `no-store`.
 
@@ -64,7 +68,7 @@ Each operation creates a private `AbortController` for its fetch request.
 
 When the configured timeout expires, the request is aborted and the host rejection has `code: "unavailable"`.
 
-When the caller's `AbortSignal` is aborted, the request is aborted and the host rejection has `code: "cancelled"`.
+When either the configured or operation-specific `AbortSignal` is aborted, the request is aborted and the host rejection has `code: "cancelled"`.
 
 The WASM bridge maps `invalid`, `conflict`, `missing`, `unavailable`, and `cancelled` to the corresponding `ObjectStoreError` category.
 
@@ -94,7 +98,9 @@ The adapter remains independent of the XBF manifest and recovery protocol.
 
 `tests/wasm_worker_smoke.mjs` runs the generated WASM wrapper against a deterministic local HTTP object service.
 
-The smoke test covers byte publication, manifest compare-and-swap, listing, missing reads, conflict mapping, timeout mapping, and caller cancellation through the WASM bridge.
+The smoke test covers byte publication, manifest compare-and-swap, listing, missing reads, conflict mapping, timeout mapping, and per-query cancellation through the WASM bridge.
+
+It also keeps two snapshot loads in flight and verifies that cancelling one query does not abort the other query's request.
 
 The test uses Node's Web Fetch APIs as a portable host fixture; it is not a deployed Cloudflare Worker or WASI runtime test.
 

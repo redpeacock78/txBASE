@@ -12,8 +12,10 @@ use wasm_bindgen_futures::JsFuture;
 
 const HOST_METHODS: [&str; 5] = ["get", "putIfAbsent", "compareAndSwap", "delete", "list"];
 
+#[derive(Clone)]
 struct JsObjectStore {
     host: JsValue,
+    signal: Option<JsValue>,
 }
 
 impl JsObjectStore {
@@ -23,11 +25,18 @@ impl JsObjectStore {
                 "WASM object-store host must be an object".into(),
             ));
         }
-        let store = Self { host };
+        let store = Self { host, signal: None };
         for method in HOST_METHODS {
             store.function(method)?;
         }
         Ok(store)
+    }
+
+    fn with_signal(&self, signal: JsValue) -> Self {
+        Self {
+            host: self.host.clone(),
+            signal: Some(signal),
+        }
     }
 
     fn function(&self, method: &str) -> Result<Function, ObjectStoreError> {
@@ -47,6 +56,9 @@ impl JsObjectStore {
 
     fn promise(&self, method: &str, arguments: &[JsValue]) -> Result<Promise, ObjectStoreError> {
         let arguments = Array::from_iter(arguments.iter());
+        if let Some(signal) = &self.signal {
+            arguments.push(signal);
+        }
         let value = self
             .function(method)?
             .apply(&self.host, &arguments)
@@ -163,6 +175,8 @@ impl AsyncObjectStore for JsObjectStore {
 #[wasm_bindgen]
 pub struct WasmObjectTable {
     table: AsyncObjectTable<JsObjectStore>,
+    store: JsObjectStore,
+    namespace: String,
 }
 
 #[wasm_bindgen]
@@ -175,8 +189,12 @@ impl WasmObjectTable {
     #[wasm_bindgen(constructor)]
     pub fn new(host: JsValue, namespace: String) -> Result<WasmObjectTable, JsValue> {
         let store = JsObjectStore::new(host).map_err(to_js_error)?;
-        let table = AsyncObjectTable::new(store, namespace).map_err(to_js_error)?;
-        Ok(Self { table })
+        let table = AsyncObjectTable::new(store.clone(), namespace.clone()).map_err(to_js_error)?;
+        Ok(Self {
+            table,
+            store,
+            namespace,
+        })
     }
 
     pub fn manifest_key(&self) -> String {
@@ -215,6 +233,30 @@ impl WasmObjectTable {
         body: &[u8],
     ) -> Result<WasmObjectQueryStream, JsValue> {
         object_query_stream(&self.table, body, Some(generation)).await
+    }
+
+    pub async fn query_stream_json_with_signal(
+        &self,
+        body: &[u8],
+        signal: JsValue,
+    ) -> Result<WasmObjectQueryStream, JsValue> {
+        object_query_stream_with_signal(&self.store, &self.namespace, body, None, signal).await
+    }
+
+    pub async fn query_stream_json_at_with_signal(
+        &self,
+        generation: u64,
+        body: &[u8],
+        signal: JsValue,
+    ) -> Result<WasmObjectQueryStream, JsValue> {
+        object_query_stream_with_signal(
+            &self.store,
+            &self.namespace,
+            body,
+            Some(generation),
+            signal,
+        )
+        .await
     }
 
     pub async fn commit_xbf(&self, bytes: &[u8]) -> Result<JsValue, JsValue> {
@@ -270,7 +312,7 @@ impl WasmObjectQueryStream {
     }
 }
 
-// ponytail: AsyncObjectStore futures have no cancellation token; add one to that contract if hosts must stop in-flight reads.
+// ponytail: keep cancellation Worker-scoped; add generic tokens when another runtime needs them.
 async fn object_query_stream(
     table: &AsyncObjectTable<JsObjectStore>,
     body: &[u8],
@@ -284,6 +326,39 @@ async fn object_query_stream(
     Ok(WasmObjectQueryStream {
         core: CoreQueryStream::new(stream),
     })
+}
+
+async fn object_query_stream_with_signal(
+    store: &JsObjectStore,
+    namespace: &str,
+    body: &[u8],
+    generation: Option<u64>,
+    signal: JsValue,
+) -> Result<WasmObjectQueryStream, JsValue> {
+    validate_abort_signal(&signal)?;
+    let table = AsyncObjectTable::new(store.with_signal(signal), namespace.to_owned())
+        .map_err(to_js_error)?;
+    object_query_stream(&table, body, generation).await
+}
+
+fn validate_abort_signal(signal: &JsValue) -> Result<(), JsValue> {
+    let is_function = |name| {
+        Reflect::get(signal, &JsValue::from_str(name))
+            .ok()
+            .is_some_and(|value| value.dyn_ref::<Function>().is_some())
+    };
+    let valid = !signal.is_null()
+        && !signal.is_undefined()
+        && Reflect::get(signal, &JsValue::from_str("aborted"))
+            .ok()
+            .is_some_and(|value| value.as_bool().is_some())
+        && is_function("addEventListener")
+        && is_function("removeEventListener");
+    if valid {
+        Ok(())
+    } else {
+        Err(to_js_error("query stream signal must be an AbortSignal"))
+    }
 }
 
 fn bytes_value(bytes: Vec<u8>) -> JsValue {

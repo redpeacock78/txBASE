@@ -25,9 +25,15 @@ export function createWorkerQueryStream({
       "query stream generation must be an unsigned 64-bit BigInt",
     );
   }
-  const method = generation === undefined
-    ? database?.query_stream_json
-    : database?.query_stream_json_at;
+  const signalMethod = generation === undefined
+    ? database?.query_stream_json_with_signal
+    : database?.query_stream_json_at_with_signal;
+  const usesOperationSignal = typeof signalMethod === "function";
+  const method = usesOperationSignal
+    ? signalMethod
+    : generation === undefined
+      ? database?.query_stream_json
+      : database?.query_stream_json_at;
   if (typeof method !== "function") {
     throw new WorkerQueryStreamError(
       "invalid",
@@ -60,11 +66,13 @@ export function createWorkerQueryStream({
 
   let coreStream;
   let pendingCoreStream;
+  let operationController;
   try {
     const body = normalizeQueryBody(query, textEncoder);
-    const result = generation === undefined
-      ? method.call(database, body)
-      : method.call(database, generation, body);
+    const methodArguments = generation === undefined ? [body] : [generation, body];
+    operationController = usesOperationSignal ? new AbortController() : undefined;
+    if (operationController) methodArguments.push(operationController.signal);
+    const result = method.apply(database, methodArguments);
     if (result && typeof result.then === "function") {
       pendingCoreStream = Promise.resolve(result);
     } else {
@@ -82,9 +90,10 @@ export function createWorkerQueryStream({
     signal?.removeEventListener("abort", abort);
   };
 
-  const cancelCore = () => {
+  const cancelCore = (reason) => {
     if (cancelled) return;
     cancelled = true;
+    operationController?.abort(reason);
     if (coreStream) {
       cancelStream(coreStream);
     } else {
@@ -95,7 +104,7 @@ export function createWorkerQueryStream({
   const abort = () => {
     if (closed) return;
     const error = cancellationError(signal);
-    cancelCore();
+    cancelCore(signal?.reason);
     closed = true;
     cleanup();
     controller?.error(error);
@@ -140,10 +149,10 @@ export function createWorkerQueryStream({
           streamController.error(mapStreamError(error));
         }
       },
-      cancel() {
+      cancel(reason) {
         if (closed) return;
         closed = true;
-        cancelCore();
+        cancelCore(reason);
         cleanup();
       },
     },

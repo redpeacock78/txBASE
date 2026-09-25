@@ -42,8 +42,8 @@ When the consumer is slow, the underlying source is not pulled beyond the config
 
 An `AbortSignal` may be supplied by the host.
 Aborting it cancels the WASM stream and errors the `ReadableStream` with `WorkerQueryStreamError` code `cancelled`.
-If the stream factory is still waiting on object-store Promises, the adapter stops forwarding rows and cancels the query stream after initialization resolves, but it cannot abort the in-flight storage operation.
-`AsyncObjectStore` has no per-operation cancellation token, so a host that must stop remote I/O must apply its own request-level cancellation policy.
+With the signal-aware WASM object-table methods, the Worker adapter also forwards a per-query signal to the Fetch request loading that query's snapshot, so cancelling the query aborts that request without aborting other queries.
+The runtime-neutral `AsyncObjectStore` contract still has no per-operation cancellation token; other adapters and hosts must define their own I/O cancellation policy.
 Calling the reader's `cancel()` follows the same cancellation path without converting normal consumer cancellation into a data error.
 
 Malformed query input, unsupported streaming controls, an invalid generation or queue size, or a missing WASM method use code `invalid`.
@@ -51,8 +51,8 @@ For a Promise-backed object table, initialization failures reach the stream as a
 Unexpected WASM failures use code `unavailable`.
 The adapter does not retry, catch, or reinterpret query failures as an empty stream.
 
-Cancellation is a lifecycle boundary for this in-memory implementation.
-It does not cancel a remote storage request because the stream does not perform storage I/O.
+Cancellation is a lifecycle boundary for the in-memory implementation, whose stream does not perform storage I/O.
+Remote snapshot I/O is cancelled only by the Worker signal-aware object-table path described above.
 
 ## 4. Verification
 
@@ -67,12 +67,14 @@ It does not cancel a remote storage request because the stream does not perform 
 - `AbortSignal` cancellation rejects the pending reader with the `cancelled` category;
 - direct WASM cancellation is observable and terminal.
 
+`tests/wasm_worker_smoke.mjs` verifies that cancelling a query aborts its in-flight snapshot Fetch, while a concurrent query remains unaffected until separately cancelled.
+
 The CI WASM job builds `wasm32-unknown-unknown`, generates the pinned Node.js wrapper, and runs this fixture with the existing WASM smoke tests.
 
 ## 5. Scope
 
 The adapter uses Web platform stream primitives and is suitable for a Worker-style host or a Node.js Web Streams fixture.
-It does not provide a WASI scheduler, a network query endpoint, remote page reads, cursor resumption, or cancellation of an in-flight object-store operation.
+It does not provide a WASI scheduler, a network query endpoint, remote page reads, cursor resumption, or a generic `AsyncObjectStore` cancellation contract beyond the Worker Fetch path.
 
 Those are separate host contracts and must define their own I/O, timeout, retry, backpressure, and recovery behavior.
 

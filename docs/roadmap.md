@@ -66,7 +66,7 @@ The repository currently provides:
 - A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A Worker-compatible Fetch object-store adapter with conditional HTTP publication, strong SHA-256 ETags, bounded request timeouts, explicit `AbortSignal` cancellation mapping, and a deterministic WASM-backed HTTP fixture.
 - A Cloudflare R2 binding adapter with conditional writes and cursor-based listing, checked against a deterministic in-memory binding fixture in CI; live service validation remains future.
-- A Worker-compatible Web Streams query adapter that supports in-memory WASM streams and Promise-backed current or retained XBF object-table streams, emits bounded NDJSON chunks with pull-based backpressure, and stops row delivery on `AbortSignal`; it does not cancel an in-flight storage operation.
+- A Worker-compatible Web Streams query adapter that supports in-memory WASM streams and Promise-backed current or retained XBF object-table streams, emits bounded NDJSON chunks with pull-based backpressure, and uses a per-query `AbortSignal` to cancel in-flight Worker Fetch requests during snapshot loading.
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, `ReplicationSnapshot`, and `ReplicationProgress` JSON formats, journaled `TXRP` data-plane and `TXRG` follower-progress sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, monotonic follower-progress acknowledgement with durable minimum-index coordinated compaction, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded entry-batch validation and ordered receiver application, bounded HTTP entry, contiguous entry-range, snapshot, and progress delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
@@ -154,14 +154,17 @@ conversion contract, and delegating row delivery to the owned snapshot stream.
 `AsyncObjectTable::query_stream_at` applies the same contract to one retained generation.
 `WasmObjectTable.query_stream_json` and `query_stream_json_at` expose those same
 current and retained-generation streams through the generated wrapper.
-The Worker adapter awaits snapshot loading before the first row; cancellation
-stops row delivery but does not abort an in-flight `AsyncObjectStore` future.
+The Worker adapter awaits snapshot loading before the first row.
+Signal-aware `WasmObjectTable` methods pass one query-scoped `AbortSignal` to host operations, and `createWorkerObjectStore` aborts the matching Fetch request when the reader or caller cancels that query.
+Concurrent queries use separate signals, so cancelling one query does not abort another query's request.
+The generic `AsyncObjectStore` future contract and custom hosts that ignore the optional signal remain uncancellable.
 The WASI CLI component also reads current or retained XBF snapshots through a
 read-only preopened filesystem store. It uses synchronous filesystem operations
 through `SyncObjectStoreAdapter`, loads the snapshot before row delivery, and
 fails before output when pending-WAL recovery needs a write. Writable or
-provider-backed WASI storage, non-blocking storage I/O, and host-specific
-lifecycle policy remain future work.
+provider-backed WASI storage, non-blocking storage I/O, a runtime-neutral
+`AsyncObjectStore` cancellation contract, and host-specific lifecycle policy
+remain future work.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 
@@ -385,8 +388,8 @@ stream backpressure; a pinned Wasmtime CI smoke check covers both input paths.
 The XBF adapter uses synchronous filesystem operations, is not safe for
 concurrent writers, and fails before row output if pending-WAL recovery needs a
 write. Writable or provider-backed WASI storage, non-blocking storage I/O,
-provider integrations beyond R2, and cancellation of in-flight storage I/O
-remain future work.
+provider integrations beyond R2, and a runtime-neutral cancellation contract
+for non-Worker `AsyncObjectStore` implementations remain future work.
 Production WASI host integration and a deployed worker fixture remain future work.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.

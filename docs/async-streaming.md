@@ -93,7 +93,8 @@ It does not make the filesystem channel non-blocking, add resume tokens, or defi
 
 The Worker-compatible Web Streams adapter supplies pull scheduling, bounded queueing, NDJSON transport chunks, and `AbortSignal` cancellation for both the in-memory WASM query snapshot and the JavaScript-hosted object table.
 `WasmObjectTable.query_stream_json` and `query_stream_json_at` return a Promise that resolves after the runtime-neutral `AsyncObjectTable` has loaded the current or selected retained XBF snapshot.
-The adapter stops row delivery on cancellation, but an in-flight object-store Promise continues because `AsyncObjectStore` has no operation cancellation token.
+The runtime-neutral `AsyncObjectStore` contract has no operation cancellation token, so its generic adapters cannot abort an in-flight object-store Promise.
+The Worker signal-aware methods `query_stream_json_with_signal` and `query_stream_json_at_with_signal` pass a query-scoped signal through the JavaScript host object table to the matching Fetch request, aborting that snapshot load without affecting concurrent queries.
 WASI scheduling and remote retry policy remain host-specific.
 
 ## 5. Worker Web Streams adapter

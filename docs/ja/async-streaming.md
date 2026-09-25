@@ -96,7 +96,9 @@ executor、ワーカーランタイム、ネットワークプロトコル、ス
 
 Worker互換のWeb Streamsアダプターは、インメモリWASMクエリスナップショットとJavaScriptホスト接続型テーブルの両方に、pullスケジューリング、有界キュー、NDJSON転送チャンク、`AbortSignal`キャンセルを提供します。
 `WasmObjectTable.query_stream_json`と`query_stream_json_at`は、ランタイム非依存の`AsyncObjectTable`が現在または選択した保持中のXBFスナップショットを読み込んだ後に解決するPromiseを返します。
-キャンセルすると行の配送は止まりますが、`AsyncObjectStore`に操作単位のキャンセルトークンがないため、実行中のオブジェクトストアPromiseは継続します。
+ランタイム非依存の`AsyncObjectStore`契約には操作単位のキャンセルトークンがないため、汎用アダプターは実行中のオブジェクトストアPromiseを中断できません。
+Worker専用の`query_stream_json_with_signal`と`query_stream_json_at_with_signal`は、クエリ単位のシグナルをJavaScriptホスト接続型オブジェクトテーブル経由で対応するFetchリクエストへ渡します。
+これにより、並行する別のクエリへ影響させずに、そのスナップショット読み込みを中断します。
 WASIのスケジューリングとリモート再試行方針はホスト固有の責務です。
 
 ## 5. Worker Web Streamsアダプター

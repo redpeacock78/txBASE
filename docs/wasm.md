@@ -59,14 +59,16 @@ Its versioned boundary currently provides:
   through the generated WASM wrapper, including timeout and cancellation;
 - a `createWorkerQueryStream` adapter that exposes the WASM snapshot stream as
   a bounded Web `ReadableStream` of NDJSON chunks, with reader cancellation and
-  `AbortSignal` lifecycle handling;
+  `AbortSignal` lifecycle handling, including cancellation of in-flight
+  object-store requests during snapshot loading;
 - runtime-neutral `AsyncObjectTable::query_stream` and `query_stream_at` adapters
   that load the current or one retained committed XBF snapshot through
   `AsyncObjectStore` and reuse the existing filter, projection, skip, and limit
   query-stream semantics after XBF-to-DBF conversion;
 - generated-wrapper `WasmObjectTable.query_stream_json` and
   `query_stream_json_at` methods that expose those current and retained
-  generation streams as Promise-returning `WasmObjectQueryStream` values;
+  generation streams as Promise-returning `WasmObjectQueryStream` values, plus
+  signal-aware variants that pass a per-query `AbortSignal` to host operations;
 - a pinned Node.js Web Streams fixture that exercises backpressure-shaped pull
   scheduling, snapshot stability, invalid controls, and cancellation;
 - a WASI CLI query stream that reads DBF files or current and retained
@@ -134,10 +136,22 @@ WASM stream lifecycle. It accepts both the synchronous in-memory `WasmDatabase`
 stream factory and the Promise-returning object-table factory, and can select a
 retained generation through `query_stream_json_at`.
 
+When the database exposes `query_stream_json_with_signal` or
+`query_stream_json_at_with_signal`, the Worker adapter creates one
+`AbortController` per readable stream and passes its signal to that query.
+Reader cancellation and the caller's `AbortSignal` abort only that query's
+in-flight host operations.
+
 For an object-table stream, snapshot recovery and loading finish before the
-first row is emitted. Cancelling the Web stream stops row delivery, but it does
-not cancel an object-store Promise already in flight because `AsyncObjectStore`
-does not define per-operation cancellation.
+first row is emitted.
+The signal-aware WASM methods pass the per-query signal as a trailing argument
+to each object-store host operation.
+`createWorkerObjectStore` honors that signal and aborts the corresponding
+Fetch request.
+Custom hosts must accept and honor the optional trailing signal to cancel
+their own I/O.
+The runtime-neutral `AsyncObjectStore` contract remains uncancellable outside
+this Worker/WASM host path.
 
 The object-store contract belongs below the shared table and transaction interfaces.
 The runtime-neutral `AsyncObjectStore` contract is implemented for the five primitive object operations.
@@ -152,7 +166,8 @@ Host rejection objects may provide `code` values `invalid`, `conflict`,
 `missing`, `unavailable`, or `cancelled`; the adapter maps them to the shared
 `ObjectStoreError` categories and maps untagged rejection to `unavailable`.
 The Worker Fetch adapter supplies HTTP transport, timeout, and cancellation
-mapping, while retry policy remains a host or provider concern.
+mapping for configured and per-operation signals, while retry policy remains a
+host or provider concern.
 
 ## 4. Target hosts
 
@@ -209,7 +224,8 @@ The following conditions remain before calling a deployed worker or production W
 - a smoke test against the selected deployed worker or production WASI host;
 - writable or provider-backed WASI object-store adapters and genuinely
   non-blocking storage I/O;
-- host-specific timeout, retry, and process-cancellation behavior for asynchronous query streams;
+- a runtime-neutral cancellation contract for `AsyncObjectStore` futures and
+  host-specific timeout and retry policy for non-Worker query streams;
 - live R2 service validation, provider integrations beyond R2, and provider-managed retention or retry policy.
 
 The Wasmtime smoke test does not establish a production deployment contract.
