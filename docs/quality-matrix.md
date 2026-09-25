@@ -28,11 +28,13 @@ cargo test --all-targets --all-features
 
 The native workflow runs that gate on Ubuntu, macOS, and Windows.
 The separate Ubuntu WASM job runs `cargo build --locked --lib --target wasm32-unknown-unknown --release`, generates the Node.js wrapper with `wasm-bindgen-cli` `0.2.128`, and runs `node tests/wasm_smoke.mjs target/wasm-bindgen`, `node tests/wasm_edge_smoke.mjs target/wasm-bindgen`, and `node tests/wasm_worker_smoke.mjs target/wasm-bindgen`.
+The separate Ubuntu WASI job builds the `wasm32-wasip2` CLI component and runs it with pinned Wasmtime `49.0.0` to check NDJSON output and unsupported-control errors.
 
 ## Current contracts
 
 | ID | Contract | Implementation or fixture evidence | Deterministic check | Status |
 | --- | --- | --- | --- | --- |
+| WASI-001 | The WASI CLI component reads a preopened DBF snapshot, reuses filter/projection/skip/limit streaming semantics, and writes NDJSON through WASI 0.3 stdout with Component Model stream backpressure; unsupported controls fail before output. | `examples/wasi-query-stream.rs`; `src/query/stream.rs`; `src/query/stream_async.rs`; `.github/workflows/ci.yml`; `tests/wasi_query_stream_smoke.sh`; `docs/wasi-query-stream.md` | `cargo build --locked --example wasi-query-stream --target wasm32-wasip2 --release`; `bash tests/wasi_query_stream_smoke.sh target/wasm32-wasip2/release/examples/wasi_query_stream.wasm` | Boundary |
 | QRY-003A | `$sortByCount` evaluates the shared bounded scalar-expression subset per input record, groups missing or null results as `null`, and retains the 10,000-group bound. | `src/query/aggregation_plan/stage_parsers.rs`; `src/query/aggregation/output.rs`; `src/query/aggregation_tests/sort_by_count_tests.rs`; `docs/aggregation.md` | `sort_by_count_evaluates_a_scalar_expression_per_record` | Boundary |
 | DBF-001 | Declared headers, descriptors, record lengths, and deletion markers are bounds-checked. | `src/dbf/parser.rs`; `tests/corpus/dbf/` | `src/dbf/malformed_tests.rs::rejects_malformed_dbf_corpus` and format tests | Current |
 | DBF-002 | Supported dBASE III, dBASE IV, and Visual FoxPro fixtures, including an upstream Windows-1251 table, round-trip through the declared field boundary and expose the declared code-page name in schema metadata. | `tests/fixtures/external-*.dbf.hex`; `src/dbf/compatibility_tests.rs`; `src/dbf/codec.rs`; `src/dbf/encoding_name_tests.rs` | `reads_and_writes_a_pinned_external_*_fixture`; `reads_and_writes_a_pinned_external_cp1251_fixture`; `reports_names_for_supported_language_drivers` | Current |

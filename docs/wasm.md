@@ -37,7 +37,7 @@ Its versioned boundary currently provides:
   a private copy and publishes a snapshot only when every operation succeeds.
   The shared `MAX_OPERATION_BATCH` limit is 1,000 operations, and oversized
   or empty batches are rejected before any operation is applied;
-- a `wasm-bindgen` `WasmDatabase` wrapper on `wasm32` with the same methods;
+- a `wasm-bindgen` `WasmDatabase` wrapper on `wasm32-unknown-unknown` with the same methods;
 - native contract tests;
 - a pinned Node.js `wasm-bindgen` smoke test that loads the generated wrapper,
   checks the ABI version and snapshot round trip, exercises all four mutation
@@ -112,7 +112,9 @@ It should not introduce a second query language, a second transaction model, or 
 
 The runtime-neutral `AsyncQueryStream` contract provides the same query stream item semantics to a host poller without selecting an executor.
 
-Its in-memory implementations complete immediately; a worker or WASI host must still provide scheduling, wake-up, backpressure, timeout, cancellation, and transport behavior.
+Its in-memory implementations complete immediately.
+The WASI 0.3 CLI component drives the shared stream through asynchronous stdout with Component Model stream backpressure; other host-specific timeout, cancellation, and transport behavior remains outside this contract.
+See [WASI query streaming](wasi-query-stream.md) for its command arguments, CI smoke check, and limits.
 
 The native `ThreadedQueryStream` adapter supplies bounded scheduling, wake-up, backpressure, and drop cancellation outside `wasm32`.
 
@@ -190,19 +192,20 @@ The current core slice meets the following initial conditions:
 - a generated-wrapper query stream over current and retained XBF object-table snapshots;
 - runtime-neutral asynchronous-storage-backed query-stream adapters for current
   and retained DBF-representable XBF snapshots;
+- a WASI 0.3 CLI query-stream component and a pinned Wasmtime smoke test;
 - explicit malformed-input errors at the byte and JSON boundaries;
 - a Node.js host smoke test for the generated `wasm-bindgen` wrapper.
 
-The following conditions remain before calling a deployed worker or WASI host
-complete:
+The CI workflow builds and runs the WASI CLI component on a pinned Wasmtime runtime.
+The following conditions remain before calling a deployed worker or production WASI host complete:
 
-- one smoke test in the selected worker or WASI runtime;
-- a WASI-specific query-stream scheduler, backpressure, and lifecycle contract;
-- host-specific timeout, retry, and cancellation behavior for asynchronous query streams;
+- a smoke test against the selected deployed worker or production WASI host;
+- an `AsyncObjectStore`-backed WASI query stream for XBF snapshots;
+- host-specific timeout, retry, and process-cancellation behavior for asynchronous query streams;
 - a provider-specific consistency and retry contract when remote storage is selected.
 
-Until then, the Worker Fetch transport is a current generic host boundary, and
-deployed worker or WASI runtime integration remains future work.
+The Wasmtime smoke test does not establish a production deployment contract.
+Worker deployment and production WASI storage integration remain future work.
 
 ## 7. Explicit non-goals
 
@@ -214,6 +217,10 @@ Those would be separate products and would obscure the shared core contract.
 
 - [WebAssembly Core Specification](https://webassembly.github.io/spec/core/)
 - [WASI](https://wasi.dev/)
+- [WASI 0.3 native async](https://wasi.dev/releases/wasi-p3)
+- [`wasip3` 0.9.0](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/)
+- [Rust `wasm32-wasip2` target](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
+- [Wasmtime CLI options](https://docs.wasmtime.dev/cli-options.html)
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
 - [Cloudflare Workers fetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
@@ -234,7 +241,7 @@ Worker-compatible Fetch object-store adapter and smoke fixture, and
 runtime-neutral asynchronous object-store and object-table contracts. It also
 has runtime-neutral and generated-wrapper query-stream adapters for
 DBF-representable current or retained XBF snapshots, plus a Worker-compatible
-Web Streams adapter and smoke fixture.
-It does not claim that a deployed worker or WASI runtime, WASI-specific
-query-stream scheduler, provider-specific consistency or retry policy, or a
-native recovery path is already supported.
+Web Streams adapter, a WASI 0.3 CLI query-stream component, and a pinned
+Wasmtime smoke check.
+It does not claim support for a deployed worker, production WASI object
+storage, provider-specific consistency or retry policy, or a native recovery path.

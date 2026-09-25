@@ -42,6 +42,7 @@
 ## 将来のアーキテクチャ
 
 - [WASMとワーカーのホスト境界](wasm.md)
+- [WASIクエリストリームコンポーネント](wasi-query-stream.md)
 - [Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)
 - [Workerクエリストリームアダプター](worker-query-stream.md)
 - [分散化の進化](distributed-evolution.md)

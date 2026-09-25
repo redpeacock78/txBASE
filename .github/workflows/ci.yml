@@ -35,6 +35,20 @@ jobs:
       - run: node tests/wasm_worker_smoke.mjs target/wasm-bindgen
       - run: node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 
+  wasi:
+    name: wasi-query-stream
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - uses: bytecodealliance/actions/wasmtime/setup@v1
+        with:
+          version: "49.0.0"
+      - run: cargo build --locked --example wasi-query-stream --target wasm32-wasip2 --release
+      - run: bash tests/wasi_query_stream_smoke.sh target/wasm32-wasip2/release/examples/wasi_query_stream.wasm
+
   test:
     name: test (${{ matrix.os }})
     strategy:

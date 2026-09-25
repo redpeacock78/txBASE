@@ -142,7 +142,7 @@ fn validate_json_input_size(body: &[u8]) -> Result<(), WasmError> {
     Ok(())
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 mod bindings {
     use super::{ABI_VERSION, WasmCore, WasmError, WasmQueryStream as CoreQueryStream};
     use wasm_bindgen::prelude::*;

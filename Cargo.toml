@@ -24,7 +24,16 @@ unicode-normalization = "0.1.25"
 fs2 = "0.4"
 tiny_http = "0.12"
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "wasi", target_env = "p2"))'.dependencies]
+futures = { version = "0.3", default-features = false, features = ["async-await"] }
+wasip3 = "=0.9.0"
+
+[[example]]
+name = "wasi-query-stream"
+crate-type = ["cdylib"]
+path = "examples/wasi-query-stream.rs"

@@ -12,7 +12,7 @@ pub mod server;
 pub mod storage;
 pub mod transaction;
 pub mod wasm;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub mod wasm_edge;
 pub mod xbase;
 pub mod xbf;

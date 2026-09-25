@@ -31,11 +31,13 @@ cargo test --all-targets --all-features
 別のUbuntu WASMジョブは`cargo build --locked --lib --target wasm32-unknown-unknown --release`を実行します。
 `wasm-bindgen-cli` `0.2.128`でNode.jsラッパーを生成します。
 生成したラッパーに対して`node tests/wasm_smoke.mjs target/wasm-bindgen`、`node tests/wasm_edge_smoke.mjs target/wasm-bindgen`、`node tests/wasm_worker_smoke.mjs target/wasm-bindgen`を実行します。
+別のUbuntu WASIジョブは`wasm32-wasip2` CLIコンポーネントをビルドし、固定したWasmtime `49.0.0`で実行してNDJSON出力と未対応制御のエラーを検査します。
 
 ## 現在の契約
 
 | ID | 契約 | 実装またはフィクスチャの証拠 | 決定的な検査 | 状態 |
 | --- | --- | --- | --- | --- |
+| WASI-001 | WASI CLIコンポーネントは事前公開DBFスナップショットを読み、共有するfilter、projection、skip、limitのストリーム意味論を再利用し、Component ModelストリームのbackpressureでWASI 0.3 stdoutへNDJSONを書き込む。未対応制御は出力前に失敗する。 | `examples/wasi-query-stream.rs`; `src/query/stream.rs`; `src/query/stream_async.rs`; `.github/workflows/ci.yml`; `tests/wasi_query_stream_smoke.sh`; `docs/ja/wasi-query-stream.md` | `cargo build --locked --example wasi-query-stream --target wasm32-wasip2 --release`; `bash tests/wasi_query_stream_smoke.sh target/wasm32-wasip2/release/examples/wasi_query_stream.wasm` | Boundary |
 | QRY-003A | `$sortByCount`が入力レコードごとに共有する有界なスカラー式サブセットを評価し、欠損またはnullの結果を`null`としてグループ化し、10,000グループの上限を保つ。 | `src/query/aggregation_plan/stage_parsers.rs`; `src/query/aggregation/output.rs`; `src/query/aggregation_tests/sort_by_count_tests.rs`; `docs/ja/aggregation.md` | `sort_by_count_evaluates_a_scalar_expression_per_record` | Boundary |
 | DBF-001 | 宣言済みヘッダー、記述子、レコード長、削除マーカーを境界検査する。 | `src/dbf/parser.rs`; `tests/corpus/dbf/` | `src/dbf/malformed_tests.rs::rejects_malformed_dbf_corpus`と形式テスト | Current |
 | DBF-002 | 上流の Windows-1251 テーブルを含む、サポートする dBASE III、dBASE IV、Visual FoxPro のフィクスチャが宣言されたフィールド境界を往復し、スキーマメタデータに宣言済みコードページ名を公開する。 | `tests/fixtures/external-*.dbf.hex`; `src/dbf/compatibility_tests.rs`; `src/dbf/codec.rs`; `src/dbf/encoding_name_tests.rs` | `reads_and_writes_a_pinned_external_*_fixture`; `reads_and_writes_a_pinned_external_cp1251_fixture`; `reports_names_for_supported_language_drivers` | Current |

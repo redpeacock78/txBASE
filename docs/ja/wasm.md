@@ -5,7 +5,8 @@
 リポジトリには、ホスト非依存DBFコアのスライス、ランタイム非依存の非同期オブジェクトストレージ境界、非同期XBFオブジェクトテーブルのcommit用JavaScriptホストアダプターがあります。
 明示的なタイムアウトとキャンセルの対応付けを持つ、Worker互換のFetch転送アダプターもあります。
 有界pullスケジューリングと`AbortSignal`キャンセルを持つWorker互換のWeb Streamsクエリアダプターもあります。
-WASI固有のクエリストリームランタイムアダプターは今後の作業です。
+WASI 0.3 CLIクエリストリームコンポーネントは、共有ストリームをComponent Modelの非同期stdoutへ接続します。
+コンポーネントの契約とCI検査は[WASIクエリストリーム](wasi-query-stream.md)で説明します。
 
 ## 0. 現在の実装スライス
 
@@ -25,7 +26,7 @@ WASMはパスとbodyの検証を二重に実装しません。
 - 同じ操作IRを有界な`{"operations":[...]}`トランザクション文書で受け取る`apply_operations_json`。
   すべての操作が成功した場合だけ、非公開コピーからスナップショットを公開する。
   共有する`MAX_OPERATION_BATCH`の上限は1,000操作であり、上限超過または空のバッチは操作を適用する前に拒否する。
-- `wasm32`で同じメソッドを公開する`wasm-bindgen`の`WasmDatabase`ラッパー。
+- `wasm32-unknown-unknown`で同じメソッドを公開する`wasm-bindgen`の`WasmDatabase`ラッパー。
 - ネイティブ契約テスト。
 - 生成したラッパーを読み込み、ABIバージョンとスナップショットの往復を検査し、4種類の更新操作と原子的なバッチのロールバックを検査する、固定したNode.js `wasm-bindgen`スモークテスト。
 - JavaScriptのオブジェクトストレージホストを受け取り、Promiseを返す`get`、`putIfAbsent`、`compareAndSwap`、`delete`、`list`を`AsyncObjectStore`へ接続し、XBFの読み取り、commit、復旧、過去世代読み取り、保持、孤立オブジェクト削除を公開する`WasmObjectTable`アダプター。
@@ -148,17 +149,20 @@ Worker FetchアダプターはHTTP転送、タイムアウト、キャンセル�
 - Worker互換のWeb Streamsクエリアダプターと決定的なNode.jsフィクスチャがある。
 - 現在または保持中のXBFオブジェクトテーブルスナップショットを対象にする、生成済みラッパーのクエリストリームがある。
 - 現在または保持中のDBFで表現できるXBFスナップショット向けに、ランタイム非依存の非同期ストレージ接続型クエリストリームアダプターがある。
+- WASI 0.3 CLIコンポーネントと、固定したWasmtimeで実行するCIスモーク検査がある。
 - バイト列とJSONの境界で不正入力エラーを明示的に扱う。
 - 生成した`wasm-bindgen`ラッパーをNode.jsから検査するスモークテストがある。
 
-デプロイ済みワーカーまたはWASIホストを完了と呼ぶ前に、次の条件を満たします。
+CIは固定したWasmtime上でWASI CLIコンポーネントをビルドして実行します。
+デプロイ済みワーカーまたは本番WASIホストを完了と呼ぶ前に、次の条件を満たします。
 
-- 選択したワーカーまたはWASIランタイムのスモークテストが1つある。
-- WASI固有のクエリストリームスケジューラー、バックプレッシャー、ライフサイクル契約がある。
-- 非同期クエリストリーム向けのホスト固有のタイムアウト、再試行、キャンセル動作がある。
+- 選択したデプロイ済みワーカーまたは本番WASIホストのスモークテストがある。
+- XBFスナップショット向けの`AsyncObjectStore`接続型WASIクエリストリームがある。
+- 非同期クエリストリーム向けのホスト固有のタイムアウト、再試行、プロセスキャンセル動作がある。
 - リモートストレージを選択する場合、プロバイダー固有の整合性と再試行の契約がある。
 
-それまでは、Worker Fetch転送を現在の汎用ホスト境界として扱い、デプロイ済みワーカーまたはWASIランタイム統合を今後の作業とします。
+Wasmtimeのスモーク検査は本番デプロイの契約を示しません。
+Workerのデプロイと本番WASIストレージ統合は今後の作業です。
 
 ## 7. 明示的な非目標
 
@@ -170,6 +174,10 @@ Worker FetchアダプターはHTTP転送、タイムアウト、キャンセル�
 
 - [WebAssemblyコア仕様](https://webassembly.github.io/spec/core/)
 - [WASI](https://wasi.dev/)
+- [WASI 0.3のネイティブ非同期処理](https://wasi.dev/releases/wasi-p3)
+- [`wasip3` 0.9.0](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/)
+- [Rustの`wasm32-wasip2`ターゲット](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
+- [Wasmtime CLIオプション](https://docs.wasmtime.dev/cli-options.html)
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
 - [Cloudflare Workersのfetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
@@ -185,5 +193,6 @@ WebAssemblyとWASIの仕様は、コアモジュールとホストインター�
 Component Model、Cloudflare Workers、Node.jsの資料は候補ホストの実装参照であり、txBASEの互換性を約束するものではありません。
 
 リポジトリにはWASMコアの実装、生成ラッパーのNode.jsスモーク検査、JavaScriptホスト接続型の非同期オブジェクトテーブルフィクスチャ、Worker互換Fetchオブジェクトストレージアダプターとスモークフィクスチャ、ランタイムから独立した非同期オブジェクトストレージとテーブルの契約があります。
-DBFで表現できる現在または保持中のXBFスナップショット向けに、ランタイム非依存と生成済みラッパーのクエリストリームアダプター、Worker互換Web Streamsアダプターとスモークフィクスチャもあります。
-デプロイ済みWorkerやWASIランタイム、WASI固有のクエリストリームスケジューラー、プロバイダー固有の整合性・再試行方針、ネイティブの復旧経路を現時点でサポートするとは主張しません。
+DBFで表現できる現在または保持中のXBFスナップショット向けに、ランタイム非依存と生成済みラッパーのクエリストリームアダプター、Worker互換Web Streamsアダプター、WASI 0.3 CLIクエリストリームコンポーネントを用意しています。
+固定したWasmtimeによるスモーク検査もあります。
+デプロイ済みWorker、本番WASIオブジェクトストレージ、プロバイダー固有の整合性・再試行方針、ネイティブの復旧経路はまだサポートしません。

@@ -48,6 +48,10 @@ executor、ワーカーランタイム、ネットワークプロトコル、ス
 
 このアダプターは`wasm32`向けにはコンパイルされません。
 
+この制約は`ThreadedQueryStream`だけに適用されます。
+別のWASIクエリストリームコンポーネントは、共有するインメモリの`QueryStream`をポーリングし、行をWASIの非同期stdoutへ渡します。
+コマンドとランタイムの境界は[WASIクエリストリーム](wasi-query-stream.md)で説明します。
+
 `AsyncObjectTable::query_stream`は、現在のコミット済みスナップショット向けに`AsyncObjectQueryStream`を返します。
 
 `AsyncObjectTable::query_stream_at`は、同じ非同期ストレージ境界を通じて保持中の世代を1つ選択します。

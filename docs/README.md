@@ -44,6 +44,7 @@ Research and future work do not imply an implemented feature.
 ## Future architecture
 
 - [WASM and worker host boundary](wasm.md)
+- [WASI query-stream component](wasi-query-stream.md)
 - [Worker Fetch object-store adapter](worker-object-store.md)
 - [Worker query stream adapter](worker-query-stream.md)
 - [Distributed evolution](distributed-evolution.md)

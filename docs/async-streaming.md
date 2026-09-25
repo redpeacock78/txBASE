@@ -48,6 +48,9 @@ Dropping the stream sets its cancellation flag, closes the receiver, and joins t
 
 This adapter is not compiled for `wasm32`.
 
+This statement applies to `ThreadedQueryStream` only.
+The separate WASI query-stream component polls the shared in-memory `QueryStream` and bridges rows to asynchronous WASI stdout; its command and runtime boundary are described in [WASI query streaming](wasi-query-stream.md).
+
 `AsyncObjectTable::query_stream` returns `AsyncObjectQueryStream` for the current committed snapshot.
 
 `AsyncObjectTable::query_stream_at` selects one retained generation through the same asynchronous-storage boundary.
