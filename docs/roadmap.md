@@ -148,8 +148,9 @@ The Worker-compatible Web Streams adapter now supplies pull scheduling, bounded
 NDJSON chunks, reader cancellation, and `AbortSignal` lifecycle handling for a
 WASM snapshot stream.
 `AsyncObjectTable::query_stream` supplies a runtime-neutral asynchronous-storage-backed
-query stream by recovering one committed XBF snapshot, reusing the existing XBF-to-DBF
+query stream by recovering the current committed XBF snapshot, reusing the existing XBF-to-DBF
 conversion contract, and delegating row delivery to the owned snapshot stream.
+`AsyncObjectTable::query_stream_at` applies the same contract to one retained generation.
 WASI scheduling, host-specific lifecycle policy, and the asynchronous object-table
 adapter for a provider-backed worker or WASI host remain host-specific.
 
@@ -357,7 +358,8 @@ The WASM slice now supplies generic Fetch timeout and cancellation mapping throu
 The Worker-compatible Web Streams query adapter supplies bounded pull scheduling,
 NDJSON chunks, and `AbortSignal` cancellation through `src/worker-query-stream.mjs`.
 The runtime-neutral asynchronous-storage-backed query stream is implemented for
-DBF-representable XBF snapshots through `AsyncObjectTable::query_stream`.
+DBF-representable current and retained XBF snapshots through
+`AsyncObjectTable::query_stream` and `AsyncObjectTable::query_stream_at`.
 It does not yet supply a WASI runtime adapter, a deployed worker fixture, or a
 provider-specific object-store adapter.
 

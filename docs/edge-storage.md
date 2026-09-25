@@ -24,13 +24,15 @@ The filesystem backend is a local durable adapter and does not claim cloud-provi
 `with_limits` applies the configured XBF limits to both snapshot encoding before publication and snapshot decoding during reads.
 The synchronous adapter does not make filesystem I/O non-blocking, but it exercises the same high-level protocol without selecting an executor.
 
-`AsyncObjectTable::query_stream` returns an `AsyncObjectQueryStream` that loads one recovered committed snapshot through `AsyncObjectStore` and reuses the existing query snapshot stream.
+`AsyncObjectTable::query_stream` returns an `AsyncObjectQueryStream` that loads the current recovered committed snapshot through `AsyncObjectStore` and reuses the existing query snapshot stream.
+
+`AsyncObjectTable::query_stream_at(generation, request)` selects one retained committed generation through the same boundary.
 
 The first poll may be `Pending`; once loading completes, the stream owns a stable DBF-representable snapshot and accepts only filter, projection, skip, and limit controls.
 
 Unsupported stream controls are rejected before the asynchronous storage read starts.
 
-A missing committed snapshot or an XBF value that the existing DBF export contract cannot represent produces one query error item and then end-of-stream.
+A missing current or retained snapshot, or an XBF value that the existing DBF export contract cannot represent, produces one query error item and then end-of-stream.
 
 On `wasm32`, `WasmObjectTable` wraps the same asynchronous table protocol for a JavaScript host object.
 The host supplies Promise-returning `get`, `putIfAbsent`, `compareAndSwap`, `delete`, and `list` methods.

@@ -48,9 +48,11 @@ Dropping the stream sets its cancellation flag, closes the receiver, and joins t
 
 This adapter is not compiled for `wasm32`.
 
-`AsyncObjectTable::query_stream` returns `AsyncObjectQueryStream` for a runtime-neutral asynchronous-storage-backed query.
+`AsyncObjectTable::query_stream` returns `AsyncObjectQueryStream` for the current committed snapshot.
 
-Its first poll recovers and reads one committed XBF snapshot through `AsyncObjectStore`, converts that snapshot through the existing XBF-to-DBF export contract, and then delegates row delivery to the owned snapshot stream.
+`AsyncObjectTable::query_stream_at` selects one retained generation through the same asynchronous-storage boundary.
+
+Its first poll recovers and reads the selected committed XBF snapshot through `AsyncObjectStore`, converts that snapshot through the existing XBF-to-DBF export contract, and then delegates row delivery to the owned snapshot stream.
 
 The load may return `Pending` and must wake the caller through the future's host contract; after the load completes, rows come from a stable in-memory snapshot.
 
@@ -60,7 +62,7 @@ The adapter accepts the same filter, projection, skip, and limit controls as the
 
 Unsupported sort, aggregation, pagination, and cursor controls are rejected before the storage future is created.
 
-An absent committed snapshot or an XBF snapshot that cannot be represented as DBF is reported as one `QueryError` item and the stream then ends.
+An absent current or retained snapshot, or an XBF snapshot that cannot be represented as DBF, is reported as one `QueryError` item and the stream then ends.
 
 ## 3. Host responsibilities
 
@@ -87,7 +89,7 @@ The native threaded adapter is one concrete host implementation.
 It does not make the filesystem channel non-blocking, add resume tokens, or define a remote storage protocol.
 
 The Worker-compatible Web Streams adapter supplies pull scheduling, bounded queueing, NDJSON transport chunks, and `AbortSignal` cancellation for the in-memory WASM query snapshot.
-The runtime-neutral asynchronous-storage-backed adapter is available through `AsyncObjectTable::query_stream`.
+The runtime-neutral asynchronous-storage-backed adapter is available through `AsyncObjectTable::query_stream` and `AsyncObjectTable::query_stream_at`.
 It does not define a WASI scheduler, remote retry policy, or Worker transport; those remain host-specific.
 
 ## 5. Worker Web Streams adapter

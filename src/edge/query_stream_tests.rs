@@ -145,6 +145,54 @@ fn async_object_query_stream_loads_one_snapshot_and_reuses_query_semantics() {
 }
 
 #[test]
+fn async_object_query_stream_reads_a_retained_generation() {
+    let store = SyncObjectStoreAdapter::new(MemoryObjectStore::new());
+    let object_table = AsyncObjectTable::new(store, "users").unwrap();
+    block_on(object_table.commit(&table(0, &["Alice"]))).unwrap();
+    block_on(object_table.commit(&table(1, &["Bob"]))).unwrap();
+
+    let mut stream = object_table
+        .query_stream_at(0, QueryRequest::default())
+        .unwrap();
+    let waker = Waker::noop();
+    let mut context = Context::from_waker(waker);
+
+    assert!(matches!(
+        AsyncQueryStream::poll_next(Pin::new(&mut stream), &mut context),
+        Poll::Ready(Some(Ok(value))) if value == json!({"NAME": "Alice"})
+    ));
+    assert!(matches!(
+        AsyncQueryStream::poll_next(Pin::new(&mut stream), &mut context),
+        Poll::Ready(None)
+    ));
+}
+
+#[test]
+fn async_object_query_stream_reports_an_unretained_generation_once() {
+    let store = SyncObjectStoreAdapter::new(MemoryObjectStore::new());
+    let object_table = AsyncObjectTable::new(store, "users").unwrap();
+    block_on(object_table.commit(&table(0, &["Alice"]))).unwrap();
+    block_on(object_table.commit(&table(1, &["Bob"]))).unwrap();
+    block_on(object_table.retain_generations(1)).unwrap();
+
+    let mut stream = object_table
+        .query_stream_at(0, QueryRequest::default())
+        .unwrap();
+    let waker = Waker::noop();
+    let mut context = Context::from_waker(waker);
+
+    assert!(matches!(
+        AsyncQueryStream::poll_next(Pin::new(&mut stream), &mut context),
+        Poll::Ready(Some(Err(crate::query::QueryError::Invalid(message))))
+            if message.contains("no retained snapshot at generation 0")
+    ));
+    assert!(matches!(
+        AsyncQueryStream::poll_next(Pin::new(&mut stream), &mut context),
+        Poll::Ready(None)
+    ));
+}
+
+#[test]
 fn async_object_query_stream_reports_a_missing_snapshot_once() {
     let store = SyncObjectStoreAdapter::new(MemoryObjectStore::new());
     let object_table = AsyncObjectTable::new(store, "users").unwrap();

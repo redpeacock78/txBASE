@@ -57,10 +57,10 @@ Its versioned boundary currently provides:
 - a `createWorkerQueryStream` adapter that exposes the WASM snapshot stream as
   a bounded Web `ReadableStream` of NDJSON chunks, with reader cancellation and
   `AbortSignal` lifecycle handling;
-- a runtime-neutral `AsyncObjectTable::query_stream` adapter that loads one
-  committed XBF snapshot through `AsyncObjectStore` and reuses the existing
-  filter, projection, skip, and limit query-stream semantics after XBF-to-DBF
-  conversion;
+- runtime-neutral `AsyncObjectTable::query_stream` and `query_stream_at` adapters
+  that load the current or one retained committed XBF snapshot through
+  `AsyncObjectStore` and reuse the existing filter, projection, skip, and limit
+  query-stream semantics after XBF-to-DBF conversion;
 - a pinned Node.js Web Streams fixture that exercises backpressure-shaped pull
   scheduling, snapshot stability, invalid controls, and cancellation;
 - a CI `wasm32-unknown-unknown` release build and wrapper smoke check.
@@ -177,8 +177,8 @@ The current core slice meets the following initial conditions:
   `wasm-bindgen` wrapper;
 - a Worker-compatible Fetch object-store adapter and deterministic HTTP fixture;
 - a Worker-compatible Web Streams query adapter and deterministic Node.js fixture;
-- a runtime-neutral asynchronous-storage-backed query-stream adapter for
-  DBF-representable XBF snapshots;
+- runtime-neutral asynchronous-storage-backed query-stream adapters for current
+  and retained DBF-representable XBF snapshots;
 - explicit malformed-input errors at the byte and JSON boundaries;
 - a Node.js host smoke test for the generated `wasm-bindgen` wrapper.
 

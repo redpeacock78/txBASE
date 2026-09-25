@@ -33,7 +33,7 @@ WASMはパスとbodyの検証を二重に実装しません。
 - compare-and-swap公開、WALクリーンアップ失敗後の復旧、過去世代読み取り、保持、ホストエラー変換を検査する固定Node.jsホストフィクスチャ。
 - 生成したWASMラッパーを介してWorker転送を検査し、タイムアウトとキャンセルを含めてWeb Fetchを検証する固定Node.jsフィクスチャ。
 - WASMのスナップショットストリームを、有界なNDJSONチャンクのWeb `ReadableStream`として公開し、readerのキャンセルと`AbortSignal`のライフサイクルを処理する`createWorkerQueryStream`アダプター。
-- `AsyncObjectStore`を通じてコミット済みのXBFスナップショットを1つ読み取り、XBFからDBFへ変換した後、既存のfilter、projection、skip、limitのクエリストリーム意味論を再利用する、ランタイム非依存の`AsyncObjectTable::query_stream`アダプター。
+- `AsyncObjectStore`を通じて現在または保持中のコミット済みXBFスナップショットを1つ読み取り、XBFからDBFへ変換した後、既存のfilter、projection、skip、limitのクエリストリーム意味論を再利用する、ランタイム非依存の`AsyncObjectTable::query_stream`と`query_stream_at`アダプター。
 - backpressureを考慮したpullスケジューリング、スナップショットの安定性、不正な制御、キャンセルを検査する固定Node.js Web Streamsフィクスチャ。
 - CIでの`wasm32-unknown-unknown` release buildとラッパースモーク検査。
 
@@ -140,7 +140,7 @@ Worker FetchアダプターはHTTP転送、タイムアウト、キャンセル�
 - 生成した`wasm-bindgen`ラッパーを使うJavaScriptホスト接続型の非同期オブジェクトテーブルフィクスチャが1つある。
 - Worker互換のFetchオブジェクトストレージアダプターと決定的なHTTPフィクスチャがある。
 - Worker互換のWeb Streamsクエリアダプターと決定的なNode.jsフィクスチャがある。
-- DBFで表現できるXBFスナップショット向けに、ランタイム非依存の非同期ストレージ接続型クエリストリームアダプターがある。
+- 現在または保持中のDBFで表現できるXBFスナップショット向けに、ランタイム非依存の非同期ストレージ接続型クエリストリームアダプターがある。
 - バイト列とJSONの境界で不正入力エラーを明示的に扱う。
 - 生成した`wasm-bindgen`ラッパーをNode.jsから検査するスモークテストがある。
 

@@ -24,14 +24,16 @@ R2アダプターやその他のクラウドプロバイダー実装は、この
 `with_limits`は、公開前のスナップショットエンコードと読み取り時のスナップショットデコードの両方に、設定したXBF上限を適用します。
 同期アダプターはファイルI/Oを非ブロッキングにはしませんが、executorを選ばずに同じ高レベルプロトコルを検証できます。
 
-`AsyncObjectTable::query_stream`は、`AsyncObjectStore`を通じて復旧済みのコミット済みスナップショットを1つ読み取り、既存のクエリスナップショットストリームを再利用する`AsyncObjectQueryStream`を返します。
+`AsyncObjectTable::query_stream`は、`AsyncObjectStore`を通じて現在の復旧済みコミット済みスナップショットを読み取り、既存のクエリスナップショットストリームを再利用する`AsyncObjectQueryStream`を返します。
+
+`AsyncObjectTable::query_stream_at(generation, request)`は、同じ境界を通じて保持中のコミット済み世代を1つ選択します。
 
 最初のポーリングは`Pending`になることがあります。
 読み込み完了後、ストリームはDBFで表現できる安定したスナップショットを所有し、filter、projection、skip、limitだけを受け付けます。
 
 対応しないストリーム制御は、非同期ストレージの読み取りを開始する前に拒否します。
 
-コミット済みスナップショットがない場合、または既存のDBF出力契約で表現できないXBF値は、クエリエラーの項目を1つ返してからストリームを終了します。
+現在または保持中のスナップショットがない場合、または既存のDBF出力契約で表現できないXBF値は、クエリエラーの項目を1つ返してからストリームを終了します。
 
 `wasm32`では、`WasmObjectTable`がJavaScriptのホストオブジェクトに同じ非同期テーブルプロトコルを委譲します。
 ホストはPromiseを返す`get`、`putIfAbsent`、`compareAndSwap`、`delete`、`list`を提供します。
