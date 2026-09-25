@@ -26,7 +26,13 @@ pub(super) fn load_rows(
                     > super::super::join_strategy::NESTED_LOOP_PAIR_LIMIT
             })
         })
-        .and_then(|fields| source.load_index_for_fields(table_name, &table, fields));
+        .and_then(|fields| {
+            let fields = fields
+                .iter()
+                .map(|field| super::unqualified_field(field, table_name).map(str::to_owned))
+                .collect::<Option<Vec<_>>>()?;
+            source.load_index_for_fields(table_name, &table, &fields)
+        });
     let page_reads = table
         .byte_len()
         .div_ceil(crate::index::COST_PAGE_SIZE)
