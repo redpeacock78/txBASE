@@ -209,8 +209,6 @@ The following require separate public contracts:
 2. Additional aggregation stages and accumulators beyond the current bounded aggregation contract, including extensions to `$group`, `$bucket`, and `$sortByCount`, and bounded-memory handling for their numeric expressions.
 3. Filesystem- and cache-aware merge planning and broader join semantics.
 4. Host-specific scheduling, backpressure, timeout, cancellation, and transport implementations for `AsyncQueryStream`.
-5. Differential tests against a small reference evaluator.
-
 Until those contracts exist, the record scan remains the simpler reference execution model.
 
 ## Primary references

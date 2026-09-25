@@ -304,6 +304,9 @@ mod field_expression_tests;
 mod array_predicate_tests;
 
 #[cfg(test)]
+mod reference_tests;
+
+#[cfg(test)]
 mod cursor_tests;
 
 #[cfg(test)]

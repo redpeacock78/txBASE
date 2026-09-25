@@ -244,6 +244,9 @@ The separate WASI component job uses stable Rust because the WASI 0.3 example re
 
 This is the current green gate.
 
+Query tests compare generated scalar comparison, membership, logical, and null/missing cases against an independent test-only evaluator in `src/query/reference_tests.rs`.
+The reference evaluator does not cover array predicates or `$expr`.
+
 The separate Ubuntu fuzz job installs `cargo-fuzz` 0.13.2 on nightly and runs both fuzz targets with the same fixed limits.
 The job has a 15-minute timeout that also bounds setup and compilation.
 
@@ -259,7 +262,7 @@ The order below keeps the feedback loop short:
 2. Add reference-model cases for multi-step mutation sequences.
 3. Extend malformed corpora and no-panic checks.
 4. Extend deterministic recovery tests for every WAL record kind and replacement boundary.
-5. Add differential checks only after a reference query evaluator exists.
+5. Extend query differential checks to array predicates and `$expr` while keeping the reference evaluator independent of production helpers.
 
 No coverage percentage is a substitute for these contracts.
 
