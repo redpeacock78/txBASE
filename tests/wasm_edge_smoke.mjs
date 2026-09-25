@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { createWorkerQueryStream } from "../src/worker-query-stream.mjs";
@@ -7,8 +8,13 @@ const packageDirectory = path.resolve(process.argv[2] ?? "target/wasm-bindgen");
 const require = createRequire(import.meta.url);
 const { WasmObjectTable } = require(path.join(packageDirectory, "txbase.js"));
 
+// Keep the schema DBF-exportable so this fixture exercises the shared query path.
 const xbf = Uint8Array.from(
-  Buffer.from("VFhCRgEAAAAAAAAAZAAAAGQAAAAAAAAAKwAAAAAAAADx2z6tjwAAAAAAAAAwAAAAAAAAAJs4vMK/AAAAAAAAAFIAAAAAAAAAiF8HnAIAAAAAAAAAAAAAAAAAAAB76dDSAAAAAAQAAAACAElEEQAAAAQATkFNRTAAAAADAEFHRREAAAAGAEFDVElWRQEAAAC/AAAAAAAAACoAAAAAAAAAAAAAAAAAAADpAAAAAAAAACgAAAAAAAAAAQAAAAAAAAARCAAAAAEAAAAAAAAAMAUAAABBbGljZREIAAAAHQAAAAAAAAABAQAAAAERCAAAAAIAAAAAAAAAMAMAAABCb2IRCAAAAAcAAAAAAAAAAQEAAAAA", "base64"),
+  fs
+    .readFileSync(new URL("./fixtures/query-stream-users.xbf.hex", import.meta.url), "utf8")
+    .trim()
+    .split(/\s+/),
+  (byte) => Number.parseInt(byte, 16),
 );
 
 function copyBytes(value) {
