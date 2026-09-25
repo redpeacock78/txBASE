@@ -120,7 +120,7 @@ resolvePendingStream({
     pendingStreamCancelled = true;
   },
 });
-await Promise.resolve();
+await new Promise((resolve) => setImmediate(resolve));
 assert.equal(pendingStreamCancelled, true);
 
 assert.throws(
