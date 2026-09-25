@@ -114,8 +114,8 @@ mod tests {
 
     #[test]
     fn locale_index_keys_follow_collation_and_field_direction() {
-        let a = IndexKey::Scalar(Value::String("阿".into()));
-        let z = IndexKey::Scalar(Value::String("中".into()));
+        let a = IndexKey::Compound(vec![IndexKey::Scalar(Value::String("阿".into()))]);
+        let z = IndexKey::Compound(vec![IndexKey::Scalar(Value::String("中".into()))]);
         assert_eq!(
             compare_index_keys(&a, &z, &[1], Some(Collation::Icu4x211Zh)),
             Ordering::Less
