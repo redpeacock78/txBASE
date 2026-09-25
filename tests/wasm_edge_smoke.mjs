@@ -9,11 +9,11 @@ const require = createRequire(import.meta.url);
 const { WasmObjectTable } = require(path.join(packageDirectory, "txbase.js"));
 
 // Keep the schema DBF-exportable so this fixture exercises the shared query path.
+const xbfHex = fs
+  .readFileSync(new URL("./fixtures/query-stream-users.xbf.hex", import.meta.url), "utf8")
+  .replace(/\s+/g, "");
 const xbf = Uint8Array.from(
-  fs
-    .readFileSync(new URL("./fixtures/query-stream-users.xbf.hex", import.meta.url), "utf8")
-    .trim()
-    .split(/\s+/),
+  xbfHex.match(/.{2}/g),
   (byte) => Number.parseInt(byte, 16),
 );
 
