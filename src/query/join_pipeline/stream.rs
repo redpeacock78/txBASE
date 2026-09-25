@@ -1,4 +1,4 @@
-use super::super::join::{JoinError, JoinRequest, JoinSource, JoinType, MAX_JOIN_ROWS};
+use super::super::join::{JoinError, JoinRequest, JoinSource, MAX_JOIN_ROWS};
 use super::cost::load_rows;
 use super::stage_fields;
 use crate::query::matches_filter;
@@ -32,16 +32,21 @@ pub(in crate::query) fn execute(
 
     let right = load_rows(source, &last.table)?;
     let (local_fields, foreign_fields) = stage_fields(last);
-    JoinRowStream::new(
-        left,
-        right.values,
-        last.kind.clone(),
-        local_fields,
-        foreign_fields,
-        request.filter.clone(),
-        request.projection.clone(),
-        !request.joins.is_empty(),
-    )
+    Ok(JoinRowStream {
+        rows: JoinRows::new(
+            left,
+            right.values,
+            last.kind.clone(),
+            local_fields,
+            foreign_fields,
+        )?,
+        filter: request.filter.clone(),
+        projection: request.projection.clone(),
+        limit_stage_rows: !request.joins.is_empty(),
+        stage_rows: 0,
+        output_rows: 0,
+        done: false,
+    })
 }
 
 pub(in crate::query) struct JoinRowStream {
@@ -52,29 +57,6 @@ pub(in crate::query) struct JoinRowStream {
     stage_rows: usize,
     output_rows: usize,
     done: bool,
-}
-
-impl JoinRowStream {
-    fn new(
-        left: Vec<Row>,
-        right: Vec<Row>,
-        kind: JoinType,
-        local_fields: Vec<String>,
-        foreign_fields: Vec<String>,
-        filter: Map<String, Value>,
-        projection: BTreeMap<String, i8>,
-        limit_stage_rows: bool,
-    ) -> Result<Self, JoinError> {
-        Ok(Self {
-            rows: JoinRows::new(left, right, kind, local_fields, foreign_fields)?,
-            filter,
-            projection,
-            limit_stage_rows,
-            stage_rows: 0,
-            output_rows: 0,
-            done: false,
-        })
-    }
 }
 
 impl Iterator for JoinRowStream {
