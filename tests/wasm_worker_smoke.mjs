@@ -94,8 +94,12 @@ try {
   assert.deepEqual(committed, { status: "committed", generation: 0 });
   assert.deepEqual([...await table.read_xbf()], [...xbf]);
   assert.deepEqual(
-    await store.list("users/"),
-    ["users/manifest.json", "users/snapshots/0.xbf"],
+    (await store.list("users/")).sort(),
+    [
+      "users/manifest.json",
+      "users/pages/0/0.bin",
+      "users/snapshots/0.pages.json",
+    ],
   );
   assert.equal(await store.get("users/missing.xbf"), null);
   await assert.rejects(

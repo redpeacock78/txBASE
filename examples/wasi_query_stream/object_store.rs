@@ -54,6 +54,7 @@ impl ReadOnlyFilesystemObjectStore {
     fn collect_keys(
         directory: &Path,
         relative: &str,
+        prefix: &str,
         keys: &mut Vec<String>,
     ) -> Result<(), ObjectStoreError> {
         let entries = fs::read_dir(directory)
@@ -71,14 +72,24 @@ impl ReadOnlyFilesystemObjectStore {
                 continue;
             }
 
-            let key = format!("{relative}/{name}");
+            let key = if relative.is_empty() {
+                name
+            } else {
+                format!("{relative}/{name}")
+            };
             let path = entry.path();
             let file_type = entry
                 .file_type()
                 .map_err(|error| io_error("inspect object-store entry", &path, error))?;
+            let prefix_is_below = prefix
+                .strip_prefix(&key)
+                .is_some_and(|remainder| remainder.starts_with('/'));
+            if !key.starts_with(prefix) && !(file_type.is_dir() && prefix_is_below) {
+                continue;
+            }
             if file_type.is_dir() {
-                Self::collect_keys(&path, &key, keys)?;
-            } else if file_type.is_file() {
+                Self::collect_keys(&path, &key, prefix, keys)?;
+            } else if file_type.is_file() && key.starts_with(prefix) {
                 keys.push(key);
             }
         }
@@ -114,27 +125,13 @@ impl ObjectStore for ReadOnlyFilesystemObjectStore {
     }
 
     fn list(&self, prefix: &str) -> Result<Vec<String>, ObjectStoreError> {
-        let relative = prefix.strip_suffix('/').ok_or_else(|| {
-            ObjectStoreError::Invalid(
-                "WASI query object store requires a directory prefix ending in '/'".into(),
-            )
-        })?;
-        let directory = self.path_for(relative)?;
-        let mut keys = Vec::new();
-        match fs::metadata(&directory) {
-            Ok(metadata) if metadata.is_dir() => {
-                Self::collect_keys(&directory, relative, &mut keys)?;
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(io_error(
-                    "inspect object-store directory",
-                    &directory,
-                    error,
-                ));
-            }
+        if prefix.is_empty() || prefix.contains('\0') {
+            return Err(ObjectStoreError::Invalid(
+                "object key must be non-empty and must not contain NUL".into(),
+            ));
         }
+        let mut keys = Vec::new();
+        Self::collect_keys(&self.root, "", prefix, &mut keys)?;
         keys.sort();
         Ok(keys)
     }
