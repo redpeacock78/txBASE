@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::task::{Context, Poll, Waker};
 
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
+pub(super) fn block_on<F: std::future::Future>(future: F) -> F::Output {
     let waker = Waker::noop();
     let mut context = Context::from_waker(waker);
     let mut future = Box::pin(future);
@@ -30,7 +30,7 @@ fn temporary_directory(label: &str) -> PathBuf {
     ))
 }
 
-fn table(generation: u64, name: &str) -> XbfTable {
+pub(super) fn table(generation: u64, name: &str) -> XbfTable {
     XbfTable {
         generation,
         fields: vec![XbfField {
@@ -70,11 +70,16 @@ fn commits_and_reads_one_consistent_xbf_generation() {
     assert_eq!(manifest.generation, 1);
     assert_eq!(manifest.wal_head, 1);
     assert_eq!(manifest.history, vec![0, 1]);
-    assert!(manifest.root.ends_with("snapshots/1.xbf"));
+    assert!(manifest.root.ends_with("snapshots/1.pages.json"));
     let removed = object_table.cleanup_orphans().unwrap();
     assert!(removed.is_empty());
     let removed = object_table.retain_generations(1).unwrap();
-    assert!(removed.iter().any(|key| key.ends_with("snapshots/0.xbf")));
+    assert!(
+        removed
+            .iter()
+            .any(|key| key.ends_with("snapshots/0.pages.json"))
+    );
+    assert!(removed.iter().any(|key| key.ends_with("pages/0/0.bin")));
     assert_eq!(object_table.manifest().unwrap().unwrap().history, vec![1]);
     assert_eq!(object_table.read_at(0).unwrap(), None);
     assert_eq!(object_table.read().unwrap(), Some(second));
@@ -101,38 +106,6 @@ fn compare_and_swap_rejects_concurrent_writers_and_allows_idempotent_retry() {
         Err(ObjectStoreError::Conflict(_))
     ));
     assert_eq!(first_writer.read().unwrap(), Some(first));
-}
-
-#[test]
-fn commit_reuses_an_identical_orphan_snapshot_after_interruption() {
-    let store = MemoryObjectStore::new();
-    let pending = table(0, "Alice");
-    store
-        .put_if_absent("users/snapshots/0.xbf", &encode(&pending).unwrap())
-        .unwrap();
-    let object_table = ObjectTable::new(store, "users").unwrap();
-
-    assert_eq!(
-        object_table.commit(&pending).unwrap(),
-        CommitResult::Committed { generation: 0 }
-    );
-    assert_eq!(object_table.read().unwrap(), Some(pending));
-}
-
-#[test]
-fn commit_rejects_an_orphan_snapshot_with_different_bytes() {
-    let store = MemoryObjectStore::new();
-    let pending = table(0, "Alice");
-    store
-        .put_if_absent("users/snapshots/0.xbf", &encode(&table(0, "Bob")).unwrap())
-        .unwrap();
-    let object_table = ObjectTable::new(store, "users").unwrap();
-
-    assert!(matches!(
-        object_table.commit(&pending),
-        Err(ObjectStoreError::Conflict(_))
-    ));
-    assert!(object_table.manifest().unwrap().is_none());
 }
 
 #[test]
@@ -211,7 +184,7 @@ fn rejects_invalid_manifest_history_and_zero_retention() {
 }
 
 #[test]
-fn recovers_after_snapshot_and_wal_publication_before_manifest_cas() {
+fn recovers_after_page_publication_before_manifest_cas() {
     let failure = Arc::new(AtomicBool::new(true));
     let store = FailingCasStore {
         inner: MemoryObjectStore::new(),
@@ -348,7 +321,10 @@ fn filesystem_object_table_persists_history_and_retention() {
         assert_eq!(object_table.read_at(2).unwrap(), Some(table(2, "Carol")));
         assert_eq!(
             object_table.retain_generations(2).unwrap(),
-            vec!["users/snapshots/0.xbf".to_owned(),]
+            vec![
+                "users/pages/0/0.bin".to_owned(),
+                "users/snapshots/0.pages.json".to_owned(),
+            ]
         );
         assert_eq!(
             object_table.manifest().unwrap().unwrap().history,
@@ -416,26 +392,13 @@ fn async_object_table_reuses_generation_commit_and_retention_contracts() {
     assert_eq!(block_on(object_table.read_at(0)).unwrap(), Some(first));
     assert_eq!(
         block_on(object_table.retain_generations(1)).unwrap(),
-        vec!["users/snapshots/0.xbf".to_owned()]
+        vec![
+            "users/pages/0/0.bin".to_owned(),
+            "users/snapshots/0.pages.json".to_owned(),
+        ]
     );
     assert_eq!(block_on(object_table.read_at(0)).unwrap(), None);
     assert_eq!(block_on(object_table.read()).unwrap(), Some(second));
-}
-
-#[test]
-fn async_commit_reuses_an_identical_orphan_snapshot_after_interruption() {
-    let store = MemoryObjectStore::new();
-    let pending = table(0, "Alice");
-    store
-        .put_if_absent("users/snapshots/0.xbf", &encode(&pending).unwrap())
-        .unwrap();
-    let object_table = AsyncObjectTable::new(SyncObjectStoreAdapter::new(store), "users").unwrap();
-
-    assert_eq!(
-        block_on(object_table.commit(&pending)).unwrap(),
-        CommitResult::Committed { generation: 0 }
-    );
-    assert_eq!(block_on(object_table.read()).unwrap(), Some(pending));
 }
 
 #[test]

@@ -1,4 +1,4 @@
-pub(super) fn crc32c(bytes: &[u8]) -> u32 {
+pub(crate) fn crc32c(bytes: &[u8]) -> u32 {
     // ponytail: keep the dependency-free bitwise checksum; use a table only if profiling proves it matters.
     let mut crc = u32::MAX;
     for byte in bytes {

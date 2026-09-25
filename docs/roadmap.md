@@ -346,12 +346,16 @@ The range-oriented local storage abstraction is a useful starting point, but rem
 
 - A deployed Worker and live R2 service validation, plus production WASI storage integration.
 - Provider integrations beyond the implemented R2 binding adapter.
-- Immutable pages and page-level manifests.
 - Provider-managed lifecycle rules and scheduled retention.
 
 The local XBF object-store boundary is implemented by `edge::ObjectTable`, `MemoryObjectStore`, and `FilesystemObjectStore`.
 It defines the manifest schema and committed-generation history, generation compare-and-swap, retry and recovery behavior, historical reads, explicit local retention, reader generation checks, and orphan cleanup without requiring a cloud account.
 The filesystem backend persists the same contract under one directory with exclusive object creation, a store lock, and synced temporary manifest replacement.
+New commits use a version-2 manifest that points to an immutable page manifest.
+The page manifest splits the encoded XBF byte sequence into 4 MiB pages, records each page's length and CRC-32C, and can reuse byte-identical pages from the immediately previous page-backed generation.
+The synchronous and asynchronous APIs expose page manifests and validated raw page reads; ordinary snapshot reads still assemble the full XBF before decoding.
+The pending WAL records the full page plan before page publication, so recovery can leave an incomplete attempt invisible and safely resume an identical retry.
+Readers continue to support legacy version-1 manifests that point to whole XBF objects.
 
 The generic Worker Fetch transport boundary is implemented in `src/worker-object-store.mjs` and tested through the generated WASM wrapper against a deterministic local HTTP service.
 The Cloudflare R2 binding adapter is implemented in `src/r2-object-store.mjs` and tested through the generated WASM wrapper against an in-memory binding fixture.

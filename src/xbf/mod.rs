@@ -7,6 +7,8 @@ mod schema;
 mod values;
 mod wal;
 
+pub(crate) use checksum::crc32c;
+
 #[cfg(test)]
 mod export_tests;
 #[cfg(test)]

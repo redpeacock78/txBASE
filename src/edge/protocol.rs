@@ -1,8 +1,11 @@
 use super::super::store::ObjectStoreError;
+use super::pages::PageManifest;
 use serde::{Deserialize, Serialize};
 
-pub(super) const MANIFEST_VERSION: u16 = 1;
-pub(super) const PENDING_VERSION: u16 = 1;
+pub(super) const MANIFEST_VERSION: u16 = 2;
+const LEGACY_MANIFEST_VERSION: u16 = 1;
+pub(super) const PENDING_VERSION: u16 = 2;
+const LEGACY_PENDING_VERSION: u16 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
@@ -29,7 +32,7 @@ impl Manifest {
     }
 
     fn validate(&self) -> Result<(), ObjectStoreError> {
-        if self.version != MANIFEST_VERSION {
+        if !matches!(self.version, LEGACY_MANIFEST_VERSION | MANIFEST_VERSION) {
             return Err(ObjectStoreError::Invalid(format!(
                 "unsupported manifest version {}",
                 self.version
@@ -39,6 +42,16 @@ impl Manifest {
             return Err(ObjectStoreError::Invalid(
                 "manifest root must be a non-empty object key".into(),
             ));
+        }
+        if (self.version == LEGACY_MANIFEST_VERSION && !self.root.ends_with(".xbf"))
+            || (self.version == MANIFEST_VERSION
+                && !self.root.ends_with(".xbf")
+                && !self.root.ends_with(".pages.json"))
+        {
+            return Err(ObjectStoreError::Invalid(format!(
+                "manifest root is incompatible with version {}",
+                self.version
+            )));
         }
         if !self.history.is_empty() {
             if self.history.windows(2).any(|window| window[0] >= window[1]) {
@@ -69,6 +82,8 @@ pub(super) struct PendingCommit {
     pub(super) target_generation: u64,
     pub(super) root: String,
     pub(super) wal_head: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) page_manifest: Option<PageManifest>,
 }
 
 impl PendingCommit {
@@ -84,7 +99,7 @@ impl PendingCommit {
     }
 
     fn validate(&self) -> Result<(), ObjectStoreError> {
-        if self.version != PENDING_VERSION {
+        if !matches!(self.version, LEGACY_PENDING_VERSION | PENDING_VERSION) {
             return Err(ObjectStoreError::Invalid(format!(
                 "unsupported pending commit version {}",
                 self.version
@@ -102,6 +117,20 @@ impl PendingCommit {
             return Err(ObjectStoreError::Invalid(
                 "pending commit root must be a non-empty object key".into(),
             ));
+        }
+        match (self.version, &self.page_manifest) {
+            (LEGACY_PENDING_VERSION, None) if self.root.ends_with(".xbf") => {}
+            (PENDING_VERSION, Some(manifest))
+                if self.root.ends_with(".pages.json")
+                    && manifest.generation == self.target_generation =>
+            {
+                manifest.to_bytes()?;
+            }
+            _ => {
+                return Err(ObjectStoreError::Invalid(
+                    "pending commit root does not match its page manifest version".into(),
+                ));
+            }
         }
         Ok(())
     }
@@ -130,10 +159,6 @@ pub(super) fn history_with_generation(
     }
     history.push(generation);
     Ok(history)
-}
-
-pub(super) fn snapshot_generation(prefix: &str, key: &str) -> Option<u64> {
-    key.strip_prefix(prefix)?.strip_suffix(".xbf")?.parse().ok()
 }
 
 pub(super) fn validate_namespace(namespace: &str) -> Result<(), ObjectStoreError> {

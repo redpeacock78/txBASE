@@ -1,7 +1,8 @@
 use super::super::store::{AsyncObjectStore, ObjectStoreError, put_if_absent_or_matching_async};
+use super::pages::{self, PageManifest, page_keys, page_manifest_key, read_page_async};
 use super::protocol::{
     CommitResult, MANIFEST_VERSION, Manifest, PENDING_VERSION, PendingCommit,
-    history_with_generation, manifest_history, snapshot_generation, validate_namespace,
+    history_with_generation, manifest_history, validate_namespace,
 };
 use crate::xbf::{XbfLimits, XbfTable, decode_with_limits, encode_with_limits};
 use std::collections::BTreeSet;
@@ -65,11 +66,48 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
         if !manifest_history(&manifest).contains(&generation) {
             return Ok(None);
         }
-        let root = self.snapshot_key(generation);
-        if self.store.get(&root).await?.is_none() {
+        let Some(root) = self.snapshot_root_for_generation(generation).await? else {
+            return Ok(None);
+        };
+        Ok(Some(self.read_snapshot(&root, generation).await?))
+    }
+
+    pub async fn page_manifest_at(
+        &self,
+        generation: u64,
+    ) -> Result<Option<PageManifest>, ObjectStoreError> {
+        self.recover().await?;
+        let (_, Some(manifest)) = self.current_manifest().await? else {
+            return Ok(None);
+        };
+        self.validate_manifest_root(&manifest)?;
+        if !manifest_history(&manifest).contains(&generation) {
             return Ok(None);
         }
-        Ok(Some(self.read_snapshot(&root, generation).await?))
+        let Some(root) = self.snapshot_root_for_generation(generation).await? else {
+            return Ok(None);
+        };
+        if !root.ends_with(".pages.json") {
+            return Ok(None);
+        }
+        pages::load_manifest_async(
+            &self.store,
+            &self.prefix,
+            generation,
+            self.limits.max_file_size,
+        )
+        .await
+    }
+
+    pub async fn read_page_at(
+        &self,
+        generation: u64,
+        index: usize,
+    ) -> Result<Option<Vec<u8>>, ObjectStoreError> {
+        let Some(manifest) = self.page_manifest_at(generation).await? else {
+            return Ok(None);
+        };
+        read_page_async(&self.store, &self.prefix, &manifest, index).await
     }
 
     pub async fn retain_generations(
@@ -106,19 +144,7 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
                 &compacted_manifest.to_bytes()?,
             )
             .await?;
-        let prefix = self.snapshot_prefix();
-        let mut removed = Vec::new();
-        for key in self.store.list(&prefix).await? {
-            let keep = snapshot_generation(&prefix, &key).is_some_and(|generation| {
-                retained.contains(&generation) || generation > manifest.generation
-            });
-            if !keep {
-                self.store.delete(&key).await?;
-                removed.push(key);
-            }
-        }
-        removed.sort();
-        Ok(removed)
+        self.cleanup_orphans().await
     }
 
     pub async fn commit(&self, table: &XbfTable) -> Result<CommitResult, ObjectStoreError> {
@@ -134,7 +160,9 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
                 )));
             }
             if table.generation == manifest.generation {
-                let current_snapshot = self.read_snapshot_bytes(&manifest.root).await?;
+                let current_snapshot = self
+                    .read_snapshot_bytes(&manifest.root, manifest.generation)
+                    .await?;
                 if current_snapshot == snapshot {
                     return Ok(CommitResult::AlreadyCommitted {
                         generation: table.generation,
@@ -147,17 +175,36 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
             }
         }
 
-        let root = self.snapshot_key(table.generation);
-        put_if_absent_or_matching_async(&self.store, &root, &snapshot).await?;
+        let current_generation = current.as_ref().map(|manifest| manifest.generation);
+        self.reject_incompatible_pending(current_generation, table.generation)
+            .await?;
+        let page_manifest = pages::make_manifest_async(
+            &self.store,
+            &self.prefix,
+            table.generation,
+            current.as_ref().map(|manifest| manifest.root.as_str()),
+            &snapshot,
+        )
+        .await?;
+        let root = page_manifest_key(&self.prefix, table.generation);
         let pending = PendingCommit {
             version: PENDING_VERSION,
             base_generation: current.as_ref().map(|manifest| manifest.generation),
             target_generation: table.generation,
             root: root.clone(),
             wal_head: table.generation,
+            page_manifest: Some(page_manifest.clone()),
         };
         let wal_key = self.wal_key(table.generation);
         put_if_absent_or_matching_async(&self.store, &wal_key, &pending.to_bytes()?).await?;
+        if let Err(error) =
+            pages::publish_pages_async(&self.store, &self.prefix, &page_manifest, &snapshot).await
+        {
+            if matches!(&error, ObjectStoreError::Conflict(_)) {
+                let _ = self.store.delete(&wal_key).await;
+            }
+            return Err(error);
+        }
         let manifest = Manifest {
             version: MANIFEST_VERSION,
             generation: table.generation,
@@ -198,8 +245,9 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
             };
             let pending = PendingCommit::from_bytes(&bytes)?;
             self.validate_pending(&wal_key, &pending)?;
-            self.read_snapshot(&pending.root, pending.target_generation)
-                .await?;
+            if self.read_pending_snapshot(&pending).await?.is_none() {
+                continue;
+            }
             pending_commits.push((wal_key, pending));
         }
         pending_commits.sort_by_key(|(_, pending)| pending.target_generation);
@@ -262,14 +310,20 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
             self.validate_manifest_root(manifest)?;
         }
         let current_generation = current.as_ref().map(|manifest| manifest.generation);
-        let current_root = current.as_ref().map(|manifest| manifest.root.as_str());
         let mut retained_roots = BTreeSet::new();
+        let mut retained_pages = BTreeSet::new();
         if let Some(manifest) = &current {
             for generation in manifest_history(manifest) {
-                retained_roots.insert(self.snapshot_key(generation));
+                let root = if generation == manifest.generation {
+                    Some(manifest.root.clone())
+                } else {
+                    self.snapshot_root_for_generation(generation).await?
+                };
+                if let Some(root) = root {
+                    self.retain_root_pages(&root, &mut retained_roots, &mut retained_pages)
+                        .await?;
+                }
             }
-        } else if let Some(root) = current_root {
-            retained_roots.insert(root.to_owned());
         }
         let mut removed = Vec::new();
         for wal_key in self.store.list(&self.wal_prefix()).await? {
@@ -279,7 +333,10 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
             let pending = PendingCommit::from_bytes(&bytes)?;
             self.validate_pending(&wal_key, &pending)?;
             if current_generation == pending.base_generation {
-                retained_roots.insert(pending.root);
+                retained_roots.insert(pending.root.clone());
+                if let Some(page_manifest) = &pending.page_manifest {
+                    self.retain_page_manifest(page_manifest, &mut retained_pages)?;
+                }
                 continue;
             }
             self.store.delete(&wal_key).await?;
@@ -291,6 +348,13 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
             }
             self.store.delete(&snapshot_key).await?;
             removed.push(snapshot_key);
+        }
+        for page_key in self.store.list(&self.page_prefix()).await? {
+            if retained_pages.contains(&page_key) {
+                continue;
+            }
+            self.store.delete(&page_key).await?;
+            removed.push(page_key);
         }
         removed.sort();
         Ok(removed)
@@ -310,7 +374,10 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
         generation: u64,
     ) -> Result<XbfTable, ObjectStoreError> {
         self.validate_snapshot_root(root, generation)?;
-        let table = decode_with_limits(&self.read_snapshot_bytes(root).await?, &self.limits)?;
+        let table = decode_with_limits(
+            &self.read_snapshot_bytes(root, generation).await?,
+            &self.limits,
+        )?;
         if table.generation != generation {
             return Err(ObjectStoreError::Invalid(format!(
                 "snapshot generation {} does not match manifest generation {generation}",
@@ -320,11 +387,21 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
         Ok(table)
     }
 
-    async fn read_snapshot_bytes(&self, root: &str) -> Result<Vec<u8>, ObjectStoreError> {
-        self.store
-            .get(root)
-            .await?
-            .ok_or_else(|| ObjectStoreError::Missing(root.into()))
+    async fn read_snapshot_bytes(
+        &self,
+        root: &str,
+        generation: u64,
+    ) -> Result<Vec<u8>, ObjectStoreError> {
+        pages::read_snapshot_bytes_async(
+            &self.store,
+            &self.prefix,
+            root,
+            generation,
+            self.limits.max_file_size,
+            false,
+        )
+        .await?
+        .ok_or_else(|| ObjectStoreError::Missing(root.into()))
     }
 
     fn validate_manifest_root(&self, manifest: &Manifest) -> Result<(), ObjectStoreError> {
@@ -342,7 +419,22 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
                 pending.target_generation
             )));
         }
-        self.validate_snapshot_root(&pending.root, pending.target_generation)
+        self.validate_snapshot_root(&pending.root, pending.target_generation)?;
+        match &pending.page_manifest {
+            Some(page_manifest)
+                if pending.root == page_manifest_key(&self.prefix, pending.target_generation)
+                    && page_manifest.generation == pending.target_generation =>
+            {
+                page_manifest.to_bytes()?;
+            }
+            None if pending.root == self.snapshot_key(pending.target_generation) => {}
+            _ => {
+                return Err(ObjectStoreError::Invalid(
+                    "pending commit root does not match its page manifest".into(),
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn validate_manifest_root_key(&self, root: &str) -> Result<(), ObjectStoreError> {
@@ -356,13 +448,7 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
 
     fn validate_snapshot_root(&self, root: &str, generation: u64) -> Result<(), ObjectStoreError> {
         self.validate_manifest_root_key(root)?;
-        let expected = self.snapshot_key(generation);
-        if root != expected {
-            return Err(ObjectStoreError::Invalid(format!(
-                "snapshot root does not match generation {generation}: {root}"
-            )));
-        }
-        Ok(())
+        pages::validate_snapshot_root(&self.prefix, root, generation)
     }
 
     fn snapshot_prefix(&self) -> String {
@@ -370,7 +456,119 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
     }
 
     fn snapshot_key(&self, generation: u64) -> String {
-        format!("{}snapshots/{generation}.xbf", self.prefix)
+        pages::legacy_snapshot_key(&self.prefix, generation)
+    }
+
+    async fn snapshot_root_for_generation(
+        &self,
+        generation: u64,
+    ) -> Result<Option<String>, ObjectStoreError> {
+        let page_root = page_manifest_key(&self.prefix, generation);
+        let legacy_root = self.snapshot_key(generation);
+        let roots = self
+            .store
+            .list(&format!("{}snapshots/{generation}.", self.prefix))
+            .await?;
+        match (roots.contains(&page_root), roots.contains(&legacy_root)) {
+            (true, true) => Err(ObjectStoreError::Invalid(format!(
+                "multiple snapshot roots found for generation {generation}"
+            ))),
+            (true, false) => Ok(Some(page_root)),
+            (false, true) => Ok(Some(legacy_root)),
+            (false, false) => Ok(None),
+        }
+    }
+
+    async fn read_pending_snapshot(
+        &self,
+        pending: &PendingCommit,
+    ) -> Result<Option<XbfTable>, ObjectStoreError> {
+        if let Some(expected) = &pending.page_manifest {
+            let Some(stored) = self.store.get(&pending.root).await? else {
+                return Ok(None);
+            };
+            if stored != expected.to_bytes()? {
+                return Err(ObjectStoreError::Invalid(
+                    "pending page manifest differs from its published root".into(),
+                ));
+            }
+        }
+        let Some(bytes) = pages::read_snapshot_bytes_async(
+            &self.store,
+            &self.prefix,
+            &pending.root,
+            pending.target_generation,
+            self.limits.max_file_size,
+            true,
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+        let table = decode_with_limits(&bytes, &self.limits)?;
+        if table.generation != pending.target_generation {
+            return Err(ObjectStoreError::Invalid(format!(
+                "snapshot generation {} does not match manifest generation {}",
+                table.generation, pending.target_generation
+            )));
+        }
+        Ok(Some(table))
+    }
+
+    async fn retain_root_pages(
+        &self,
+        root: &str,
+        retained_roots: &mut BTreeSet<String>,
+        retained_pages: &mut BTreeSet<String>,
+    ) -> Result<(), ObjectStoreError> {
+        retained_roots.insert(root.to_owned());
+        if root.ends_with(".pages.json") {
+            let generation = pages::root_generation(&self.prefix, root)
+                .ok_or_else(|| ObjectStoreError::Invalid(format!("invalid page root: {root}")))?;
+            let page_manifest = pages::load_manifest_async(
+                &self.store,
+                &self.prefix,
+                generation,
+                self.limits.max_file_size,
+            )
+            .await?
+            .ok_or_else(|| ObjectStoreError::Missing(root.to_owned()))?;
+            self.retain_page_manifest(&page_manifest, retained_pages)?;
+        }
+        Ok(())
+    }
+
+    fn retain_page_manifest(
+        &self,
+        manifest: &PageManifest,
+        retained_pages: &mut BTreeSet<String>,
+    ) -> Result<(), ObjectStoreError> {
+        manifest.to_bytes()?;
+        retained_pages.extend(page_keys(&self.prefix, manifest));
+        Ok(())
+    }
+
+    async fn reject_incompatible_pending(
+        &self,
+        base_generation: Option<u64>,
+        target_generation: u64,
+    ) -> Result<(), ObjectStoreError> {
+        for key in self.store.list(&self.wal_prefix()).await? {
+            let Some(bytes) = self.store.get(&key).await? else {
+                continue;
+            };
+            let pending = PendingCommit::from_bytes(&bytes)?;
+            self.validate_pending(&key, &pending)?;
+            if pending.base_generation == base_generation
+                && pending.target_generation != target_generation
+            {
+                return Err(ObjectStoreError::Conflict(format!(
+                    "generation {} is pending from the current base",
+                    pending.target_generation
+                )));
+            }
+        }
+        Ok(())
     }
 
     fn wal_prefix(&self) -> String {
@@ -379,5 +577,9 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
 
     fn wal_key(&self, generation: u64) -> String {
         format!("{}wal/{generation}.json", self.prefix)
+    }
+
+    fn page_prefix(&self) -> String {
+        format!("{}pages/", self.prefix)
     }
 }

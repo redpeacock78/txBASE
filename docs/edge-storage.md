@@ -12,6 +12,12 @@ The native DBF and XBF paths remain local file and sidecar implementations.
 
 The `txbase::edge::ObjectTable` API adds a separate object-store commit boundary for XBF snapshots.
 
+New commits store the encoded XBF snapshot as immutable 4 MiB byte pages and publish a page manifest.
+Each page reference records its storage generation, byte length, and CRC-32C; matching pages at the same index may be reused from the immediately previous page-backed generation.
+`ObjectTable` and `AsyncObjectTable` expose `page_manifest_at` and `read_page_at` for retained page-backed generations.
+`read` and `read_at` still assemble and validate the complete XBF snapshot before decoding it; pages are byte ranges, not record-aligned database pages.
+Version-1 manifests that point to whole `.xbf` snapshots remain readable.
+
 `MemoryObjectStore` is a deterministic fixture that implements the `ObjectStore` contract with immutable object publication and manifest compare-and-swap.
 
 `FilesystemObjectStore` persists the same contract below one directory.
@@ -51,44 +57,72 @@ A provider-specific remote object-store adapter can implement `AsyncObjectStore`
 
 One table uses this object layout:
 
+New commits use this object layout:
+
 ```text
 users/manifest.json
-users/snapshots/0.xbf
-users/snapshots/1.xbf
-users/wal/1.json
+users/snapshots/142.pages.json
+users/pages/142/0.bin
+users/pages/141/1.bin
+users/wal/142.json
 ```
 
-The manifest has one versioned schema:
+The top-level manifest has this version-2 schema:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "generation": 142,
-  "root": "users/snapshots/142.xbf",
+  "root": "users/snapshots/142.pages.json",
   "wal_head": 142,
   "history": [140, 141, 142]
 }
 ```
 
-`root` names an immutable XBF snapshot.
+`root` names an immutable page manifest.
+
+The page manifest describes the encoded XBF byte sequence:
+
+```json
+{
+  "version": 1,
+  "generation": 142,
+  "snapshot_length": 4194304,
+  "page_size": 4194304,
+  "pages": [
+    {"generation": 142, "length": 4194304, "crc32c": 1234567890}
+  ]
+}
+```
+
+The array position is the page index.
+Every page except the final page is exactly 4 MiB.
+The page object's key is `users/pages/{generation}/{index}.bin`; a page reference can name an older storage generation when its bytes were reused.
+Page CRC-32C values use the checksum implementation already defined by the XBF format.
 
 `generation` is the visible table generation.
 
 `wal_head` identifies the pending or published WAL generation in this local slice.
 
 `history` lists the committed generations still addressable by `ObjectTable::read_at`.
+The page-reading APIs return data only for retained page-backed generations.
 Older manifests may omit it; those manifests expose only their current generation until the next commit writes history.
 
-The reader rejects a snapshot whose embedded XBF generation differs from the manifest generation.
+Readers continue to accept version-1 manifests whose `root` names a whole `.xbf` object.
+The next successful commit writes a version-2 manifest and a page-manifest root.
+Historical lookup rejects a generation when both legacy and page-manifest roots exist for it.
+The reader rejects a snapshot whose embedded XBF generation differs from the top-level manifest generation.
 
 ## 3. Commit protocol
 
 `ObjectTable::commit` performs the following operations:
 
 ```text
-write immutable XBF snapshot with put-if-absent
+encode XBF and plan immutable pages plus their checksums
       ↓
-write pending WAL object with put-if-absent
+write version-2 pending WAL, including the complete page manifest
+      ↓
+write or reuse immutable pages, then publish the page manifest
       ↓
 compare-and-swap the manifest
       ↓
@@ -101,40 +135,49 @@ Two writers that publish different bytes for the same generation therefore produ
 
 Retrying the same generation with identical snapshot bytes returns `AlreadyCommitted`.
 
-If `put-if-absent` reports a conflict, the commit reuses the object only when its existing bytes match exactly.
-This lets a retry resume after snapshot publication but before WAL publication without overwriting immutable data.
+If `put-if-absent` reports a conflict, the commit reuses a page only when its existing bytes match exactly.
+A content conflict removes that attempt's pending WAL so orphan cleanup can remove the conflicting page; transient storage errors keep the WAL plan available for retry.
+This lets a retry resume after partial page publication without overwriting immutable data.
 
-If publication fails after the snapshot and WAL objects exist, `ObjectTable::recover` validates the XBF generation and completes the manifest CAS when the recorded base generation is still current.
+If publication fails after the WAL and all pages exist, `ObjectTable::recover` validates the page manifest, each page checksum, and the XBF generation, then completes the manifest CAS when the recorded base generation is still current.
+Recovery skips an incomplete page set and leaves the old manifest visible; retrying the same target generation can finish that commit.
 
 If the manifest was published but WAL cleanup failed, recovery removes the already-applied WAL without applying the snapshot twice.
 
-A reader resolves one manifest before loading its `root` object.
+A reader resolves one top-level manifest before loading its page manifest and pages.
 
-Because the root object is immutable and the embedded generation is checked, a reader cannot accept a mixed-generation result.
+The page manifest and pages are immutable, and each page's length and CRC-32C are checked before the bytes are assembled.
+The embedded XBF generation is also checked, so a reader cannot accept a mixed-generation result.
 
-`ObjectTable::read_at` reads a retained committed generation from its immutable snapshot object.
+`ObjectTable::read_at` reads a retained committed generation by assembling its immutable page set, or by reading its legacy whole-XBF object.
 It returns no snapshot after that generation has been removed by retention.
+
+`page_manifest_at` returns the manifest for a retained page-backed generation.
+`read_page_at` returns one raw XBF byte page and validates its length and CRC-32C; it does not decode a partial XBF snapshot.
+Both methods return no page data for a legacy whole-XBF generation.
 
 ## 4. Orphan cleanup
 
-`ObjectTable::cleanup_orphans` keeps every generation listed in the current manifest history and any pending root whose WAL still follows the current base generation.
+`ObjectTable::cleanup_orphans` keeps every generation listed in the current manifest history and every page referenced by those generations.
+It also keeps the root and planned page references of any pending commit whose WAL still follows the current base generation.
 
-It removes stale WAL objects and snapshot objects that are not in the committed history or a recoverable pending commit.
+It removes stale WAL objects, page manifests, legacy snapshots, and pages that are not in the committed history or a recoverable pending commit.
 
 The method does not remove a recoverable pending commit.
 
-`ObjectTable::retain_generations(keep_last)` first publishes a compacted manifest containing only the newest committed generations, then removes older snapshot objects.
+`ObjectTable::retain_generations(keep_last)` first publishes a compacted manifest containing only the newest committed generations, then removes unreferenced roots and pages.
+Pages shared by a retained generation remain available even when the generation that originally stored them is no longer retained.
 The manifest update uses compare-and-swap, so a concurrent commit fails the retention operation instead of being silently deleted.
 If deletion is interrupted, the compacted manifest remains authoritative and a later orphan cleanup can remove the leftover objects.
 It does not run automatically, so an adapter can select a retention and expiration policy appropriate to its storage service.
 
 ## 5. XBF relationship
 
-The object-store boundary stores encoded XBF snapshots and reuses the XBF checksum, schema validation, generation field, and decode limits.
+The object-store boundary stores encoded XBF snapshots as opaque byte pages and reuses the XBF checksum, schema validation, generation field, and decode limits.
 
 It does not create a second query language or mutation model.
 
-The manifest is the mutable commit point, while snapshots and pending WAL objects remain immutable after publication.
+The top-level manifest is the mutable commit point, while page manifests, pages, legacy snapshots, and pending WAL objects remain immutable after publication.
 
 ## 6. Cloud adapter boundary
 
@@ -166,7 +209,7 @@ The Worker Web Streams adapter supplies demand control and stops row delivery wh
 
 ## 7. Explicit non-goals
 
-This slice does not promise a deployed Worker or live R2 integration, provider-managed retention scheduling, WASI query-stream scheduling, cancellation of in-flight object-store operations, host-specific timeout or retry behavior, multi-region consensus, automatic background garbage collection, or immutable page splitting.
+This slice does not promise a deployed Worker or live R2 integration, provider-managed retention scheduling, WASI query-stream scheduling, cancellation of in-flight object-store operations, host-specific timeout or retry behavior, multi-region consensus, or automatic background garbage collection.
 
 Those features can reuse the manifest and generation contract after their host-specific failure behavior has a deterministic test.
 
