@@ -85,7 +85,11 @@ export function createWorkerQueryStream({
   const cancelCore = () => {
     if (cancelled) return;
     cancelled = true;
-    cancelStream(coreStream);
+    if (coreStream) {
+      cancelStream(coreStream);
+    } else {
+      pendingCoreStream?.then(cancelStream, () => {});
+    }
   };
 
   const abort = () => {
@@ -108,10 +112,7 @@ export function createWorkerQueryStream({
         if (closed || cancelled) return;
         try {
           const stream = coreStream ?? await pendingCoreStream;
-          if (closed || cancelled) {
-            cancelStream(stream);
-            return;
-          }
+          if (closed || cancelled) return;
           if (
             !stream ||
             typeof stream.next_json !== "function" ||
