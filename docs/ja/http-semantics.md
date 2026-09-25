@@ -58,6 +58,7 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 | `QUERY /{table}/records/stream`（カタログサーバー） | `Content-Type: application/json`とストリーム対応クエリ文書 | 一行一レコードの chunked `application/x-ndjson` |
 | `QUERY /{table}/explain`（カタログサーバー） | `Content-Type: application/json`とクエリ文書 | `Accept-Query`付きの名前付きテーブルのクエリ計画 |
 | `QUERY /join`（カタログサーバー） | `Content-Type: application/json`と有界な結合文書 | `Accept-Query`付きの結合済み JSON 結果 |
+| `QUERY /join/stream`（カタログサーバー） | `Content-Type: application/json`と同じ有界な結合文書 | `Accept-Query`を伴うchunked `application/x-ndjson`で結合行を一行ずつ返す |
 | `POST /{table}/records`（カタログサーバー） | 既知のフィールドを持つ JSON オブジェクト | `201 Created`とテーブル修飾済み`Location` |
 | `PUT`、`PATCH`、`DELETE /{table}/records/{id}`（カタログサーバー） | 単一テーブルと同じ本文および前提条件規則 | 独立した名前付きテーブル更新 |
 | `POST /transaction`（カタログサーバー） | 名前付きテーブル更新操作を含む JSON オブジェクト | カタログジャーナルコミット後に新しいカタログ`ETag`付きの`200`、または失敗した`If-Match`と一致する`If-None-Match`に対する変更なしの`412` |
@@ -109,7 +110,7 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 
 カタログの読み取りルートは、正のcommit済みカタログトランザクションIDを持つ任意の`at`クエリパラメーターを受け付けます。
 
-このパラメーターは、`GET`および`HEAD /catalog`、名前付きテーブルのレコード読み取り、ストリームと説明を含む名前付きテーブルの`QUERY`ルート、`QUERY /join`に適用します。
+このパラメーターは、`GET`および`HEAD /catalog`、名前付きテーブルのレコード読み取り、ストリームと説明を含む名前付きテーブルの`QUERY`ルート、`QUERY /join`と`QUERY /join/stream`に適用します。
 
 1つのリクエストが読むすべてのテーブルは、同じ保持済みカタログイメージに属します。
 
@@ -264,17 +265,24 @@ txBASEは`Accept-Query: "application/json"`を通知し、JSONクエリ文書だ
 
 ただし、許可する制御は`filter`、`projection`、`skip`、`limit`だけです。
 
+`QUERY /join/stream`は`QUERY /join`と同じ有界な結合文書を受け付けます。
+
 成功した応答のメディアタイプは`application/x-ndjson`です。
 
 ラッパー配列またはcursorを使わず、コンパクトなJSONレコードを一行ずつ返します。
 
+結合ストリームは、ラッパー配列を使わず結合行を一行ずつ返します。
+
 サーバーは`Content-Length`を省略するため、HTTP/1.1では固定容量チャネルを使う有界スナップショット生成側からchunked transferで返します。
+
+結合ストリームは参照するテーブルを1つのカタログ読み取りロック中に取得してロックを解放し、その後、有界チャネルを通じて最終段の行を返します。
 
 不正な入力はストリーミング開始前に既存の`400`、`415`、`422`境界で拒否します。
 
 ストリームにはETag、バイト範囲、resume tokenの契約がありません。
 
-応答ヘッダー送信後の評価に失敗した場合は接続を終了し、クライアントはクエリ全体を再試行しなければなりません。
+応答ヘッダー送信後の評価に失敗した場合は完了を示さずに接続を終了します。
+クライアントは不完全な応答を破棄し、クエリ全体を再試行しなければなりません。
 
 ## 5. CDC読み取りルート
 
@@ -357,5 +365,6 @@ Rust APIの境界は、[スナップショットトランザクション](transa
 ## 主な参照先
 
 - [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
+- [RFC 9112: HTTP/1.1、第7.1節](https://www.rfc-editor.org/rfc/rfc9112.html#section-7.1)
 - [RFC 5789: PATCH Method](https://www.rfc-editor.org/rfc/rfc5789.html)
 - [RFC 10008: The HTTP QUERY Method](https://www.rfc-editor.org/rfc/rfc10008.html)

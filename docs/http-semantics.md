@@ -58,6 +58,7 @@ The response does not authorize a method on a resource that its route rules woul
 | `QUERY /{table}/records/stream` (catalog server) | `Content-Type: application/json` and a stream-compatible query document | Chunked `application/x-ndjson`, one named-table record per line |
 | `QUERY /{table}/explain` (catalog server) | `Content-Type: application/json` and a query document | Named-table query plan with `Accept-Query` |
 | `QUERY /join` (catalog server) | `Content-Type: application/json` and a bounded join document | Joined JSON result with `Accept-Query` |
+| `QUERY /join/stream` (catalog server) | `Content-Type: application/json` and the same bounded join document | Chunked `application/x-ndjson`, one joined row per line, with `Accept-Query` |
 | `POST /{table}/records` (catalog server) | JSON object with known fields | `201 Created`, table-qualified `Location` |
 | `PUT`/`PATCH`/`DELETE /{table}/records/{id}` (catalog server) | Same body and precondition rules as single-table routes | Independent named-table mutation |
 | `POST /transaction` (catalog server) | JSON object containing named-table mutation operations | `200` with the new catalog `ETag` after catalog-journal commit, or `412` without mutation for a failed `If-Match` or matching `If-None-Match` |
@@ -111,7 +112,7 @@ Catalog read routes accept an optional `at` query parameter with a positive comm
 transaction ID.
 
 The parameter applies to `GET` and `HEAD /catalog`, named-table record reads, named-table
-`QUERY` routes including streams and explain, and `QUERY /join`.
+`QUERY` routes including streams and explain, and both `QUERY /join` routes.
 
 Every table read by one request comes from the same retained catalog image.
 
@@ -250,18 +251,25 @@ neither form can be combined with `skip`.
 `QUERY /records/stream` and `QUERY /{table}/records/stream` use the same JSON request document as
 the pull-based query route but only allow `filter`, `projection`, `skip`, and `limit`.
 
+`QUERY /join/stream` accepts the same bounded join document as `QUERY /join`.
+
 The successful response has media type `application/x-ndjson` and emits one compact JSON record
 per line without a wrapper array or cursor.
 
+The join stream emits one joined row per line without a wrapper array.
+
 The server omits `Content-Length`, so HTTP/1.1 uses chunked transfer while a bounded snapshot
 producer supplies records through a fixed-capacity channel.
+
+The join stream captures its referenced tables under one catalog read lock, releases the lock, and
+then supplies final-stage rows through the bounded channel.
 
 Malformed input is rejected before streaming with the existing `400`, `415`, or `422` boundary.
 
 The stream has no ETag, byte-range, or resume-token contract.
 
-If evaluation fails after the response headers are sent, the connection terminates and the client
-must retry the complete query.
+If evaluation fails after the response headers are sent, the connection terminates without a
+completion marker; the client must discard the partial response and retry the complete query.
 
 ## 5. CDC read routes
 
@@ -340,5 +348,6 @@ The following require explicit contracts before implementation:
 ## Primary references
 
 - [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
+- [RFC 9112: HTTP/1.1, Section 7.1](https://www.rfc-editor.org/rfc/rfc9112.html#section-7.1)
 - [RFC 5789: PATCH Method](https://www.rfc-editor.org/rfc/rfc5789.html)
 - [RFC 10008: The HTTP QUERY Method](https://www.rfc-editor.org/rfc/rfc10008.html)

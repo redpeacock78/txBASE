@@ -7,6 +7,11 @@ use serde_json::{Map, Value};
 
 mod cost;
 mod stages;
+#[cfg(not(target_arch = "wasm32"))]
+mod stream;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) use stream::execute as stream;
 
 pub(super) const MAX_JOIN_STAGES: usize = 8;
 use cost::{estimate_join_rows, load_rows, materialized_page_reads, output_columns};
@@ -35,35 +40,7 @@ pub(super) fn execute(
     let mut rows = initial.values;
     let mut row_page_reads = initial.page_reads;
     for spec in std::iter::once(&request.join).chain(request.joins.iter()) {
-        let right = load_rows(source, &spec.table)?;
-        let (local_fields, foreign_fields) = stage_fields(spec);
-        let cost_input = if matches!(&spec.kind, JoinType::Cross) {
-            JoinCostInput::default()
-        } else {
-            JoinCostInput {
-                outer_page_reads: row_page_reads,
-                inner_page_reads: right.page_reads,
-                output_rows: estimate_join_rows(
-                    &rows,
-                    &right.values,
-                    &local_fields,
-                    &foreign_fields,
-                    &spec.kind,
-                )?,
-                output_columns: output_columns(&rows, &right.values, &spec.kind),
-                ..JoinCostInput::default()
-            }
-        };
-        let next_rows = stages::apply(
-            source,
-            rows,
-            &right.values,
-            &right.numbers,
-            spec,
-            cost_input,
-        )?;
-        row_page_reads = materialized_page_reads(&next_rows);
-        rows = next_rows;
+        (rows, row_page_reads) = apply_stage(source, rows, row_page_reads, spec)?;
     }
 
     let mut output = Vec::new();
@@ -73,6 +50,43 @@ pub(super) fn execute(
         }
     }
     Ok(output)
+}
+
+fn apply_stage(
+    source: &dyn JoinSource,
+    rows: Vec<Map<String, Value>>,
+    row_page_reads: usize,
+    spec: &JoinSpec,
+) -> Result<(Vec<Map<String, Value>>, usize), JoinError> {
+    let right = load_rows(source, &spec.table)?;
+    let (local_fields, foreign_fields) = stage_fields(spec);
+    let cost_input = if matches!(&spec.kind, JoinType::Cross) {
+        JoinCostInput::default()
+    } else {
+        JoinCostInput {
+            outer_page_reads: row_page_reads,
+            inner_page_reads: right.page_reads,
+            output_rows: estimate_join_rows(
+                &rows,
+                &right.values,
+                &local_fields,
+                &foreign_fields,
+                &spec.kind,
+            )?,
+            output_columns: output_columns(&rows, &right.values, &spec.kind),
+            ..JoinCostInput::default()
+        }
+    };
+    let rows = stages::apply(
+        source,
+        rows,
+        &right.values,
+        &right.numbers,
+        spec,
+        cost_input,
+    )?;
+    let page_reads = materialized_page_reads(&rows);
+    Ok((rows, page_reads))
 }
 
 fn validate_spec(spec: &JoinSpec, available: &[&str]) -> Result<(), JoinError> {

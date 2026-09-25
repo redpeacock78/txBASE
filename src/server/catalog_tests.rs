@@ -48,6 +48,7 @@ fn catalog_server_query_join_executes_and_exposes_schema() {
     let root = temporary_catalog();
     fs::write(root.join("left.dbf"), fixture()).unwrap();
     fs::write(root.join("right.dbf"), fixture()).unwrap();
+    fs::write(root.join("third.dbf"), fixture()).unwrap();
     let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
 
     let schema_request = TestRequest::new()
@@ -77,6 +78,64 @@ fn catalog_server_query_join_executes_and_exposes_schema() {
     response.into_reader().read_to_string(&mut body).unwrap();
     assert!(body.contains("left.NAME"));
     assert!(body.contains("right.NAME"));
+
+    let expected: Vec<serde_json::Value> = serde_json::from_str(&body).unwrap();
+    let mut stream_request = TestRequest::new()
+        .with_method("QUERY".parse().unwrap())
+        .with_path("/join/stream")
+        .with_header(header("Content-Type", JSON_QUERY_MEDIA_TYPE))
+        .with_body(
+            r#"{"from":"left","join":{"type":"inner","table":"right","on":{"left.ID":{"$eq":{"$field":"right.ID"}}}},"projection":{"left.NAME":1,"right.NAME":1}}"#,
+        )
+        .into();
+    let response = super::catalog::join_stream_response(&mut stream_request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert_eq!(
+        response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("Content-Type"))
+            .map(|header| header.value.as_str()),
+        Some("application/x-ndjson")
+    );
+    let mut stream_body = String::new();
+    response
+        .into_reader()
+        .read_to_string(&mut stream_body)
+        .unwrap();
+    let streamed: Vec<serde_json::Value> = stream_body
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(streamed, expected);
+
+    let chained_body = r#"{"from":"left","join":{"type":"inner","table":"right","on":{"left.ID":{"$eq":{"$field":"right.ID"}}}},"joins":[{"type":"inner","table":"third","on":{"right.ID":{"$eq":{"$field":"third.ID"}}}}],"projection":{"left.NAME":1,"right.NAME":1,"third.NAME":1}}"#;
+    let mut chained_request = json_request("QUERY".parse().unwrap(), "/join", chained_body);
+    let response = super::catalog::join_response(&mut chained_request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let mut chained_expected = String::new();
+    response
+        .into_reader()
+        .read_to_string(&mut chained_expected)
+        .unwrap();
+
+    let mut chained_stream_request =
+        json_request("QUERY".parse().unwrap(), "/join/stream", chained_body);
+    let response = super::catalog::join_stream_response(&mut chained_stream_request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let mut chained_stream = String::new();
+    response
+        .into_reader()
+        .read_to_string(&mut chained_stream)
+        .unwrap();
+    let chained_streamed: Vec<serde_json::Value> = chained_stream
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(
+        chained_streamed,
+        serde_json::from_str::<Vec<serde_json::Value>>(&chained_expected).unwrap()
+    );
 
     fs::remove_dir_all(root).unwrap();
 }

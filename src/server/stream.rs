@@ -1,11 +1,13 @@
 use super::{HttpResponse, ServerBody, error, header, json_response, read_json_body};
 use crate::dbf::DbfTable;
-use crate::query::{self, BoundedQueryStream};
+use crate::query;
+use serde_json::Value;
+use std::fmt::Display;
 use std::io::{self, Read};
 use tiny_http::{Request, Response, StatusCode};
 
 const NDJSON_MEDIA_TYPE: &str = "application/x-ndjson";
-const CHANNEL_CAPACITY: usize = 32;
+pub(super) const CHANNEL_CAPACITY: usize = 32;
 
 pub(super) fn response(request: &mut Request, table: &DbfTable) -> HttpResponse {
     let body = match read_json_body(request, "QUERY /records/stream", true) {
@@ -24,6 +26,15 @@ pub(super) fn response(request: &mut Request, table: &DbfTable) -> HttpResponse 
             return json_response(422, error("invalid_query", &query_error.to_string()), true);
         }
     };
+    ndjson_response(stream)
+}
+
+pub(super) fn ndjson_response<E>(
+    stream: impl Iterator<Item = Result<Value, E>> + Send + 'static,
+) -> HttpResponse
+where
+    E: Display + Send + 'static,
+{
     Response::new(
         StatusCode(200),
         vec![
@@ -36,17 +47,17 @@ pub(super) fn response(request: &mut Request, table: &DbfTable) -> HttpResponse 
     )
 }
 
-struct NdjsonReader {
-    stream: BoundedQueryStream,
+struct NdjsonReader<E> {
+    stream: Box<dyn Iterator<Item = Result<Value, E>> + Send>,
     pending: Vec<u8>,
     offset: usize,
     done: bool,
 }
 
-impl NdjsonReader {
-    fn new(stream: BoundedQueryStream) -> Self {
+impl<E: 'static> NdjsonReader<E> {
+    fn new(stream: impl Iterator<Item = Result<Value, E>> + Send + 'static) -> Self {
         Self {
-            stream,
+            stream: Box::new(stream),
             pending: Vec::new(),
             offset: 0,
             done: false,
@@ -54,7 +65,7 @@ impl NdjsonReader {
     }
 }
 
-impl Read for NdjsonReader {
+impl<E: Display> Read for NdjsonReader<E> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         if buffer.is_empty() {
             return Ok(0);

@@ -80,6 +80,8 @@ fn handle_request(
                     && record_route(&path).is_some()
                 {
                     table_response(&request, &path, catalog)
+                } else if request.method().as_str() == "QUERY" && path == "/join/stream" {
+                    join_stream_response(&mut request, catalog)
                 } else if request.method().as_str() == "QUERY" && path == "/join" {
                     join_response(&mut request, catalog)
                 } else if request.method().as_str() == "QUERY"
@@ -448,6 +450,21 @@ pub(super) fn join_response(request: &mut Request, catalog: &Catalog) -> HttpRes
     };
     match join::execute(catalog, &join) {
         Ok(records) => query_result_response(request, Value::Array(records)),
+        Err(error) => join_error_response(error),
+    }
+}
+
+pub(super) fn join_stream_response(request: &mut Request, catalog: &Catalog) -> HttpResponse {
+    let body = match read_json_body(request, "QUERY /join/stream", true) {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+    let join = match join::parse(&body) {
+        Ok(join) => join,
+        Err(error) => return join_error_response(error),
+    };
+    match join::stream_query_bounded(catalog, &join, super::stream::CHANNEL_CAPACITY) {
+        Ok(stream) => super::stream::ndjson_response(stream),
         Err(error) => join_error_response(error),
     }
 }

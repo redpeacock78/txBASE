@@ -7,10 +7,14 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
 mod execute;
+#[cfg(not(target_arch = "wasm32"))]
+mod stream;
 
 pub use execute::execute;
 pub(crate) use execute::{JoinSource, execute_read_transaction};
 pub(super) use execute::{emit, encoded_key};
+#[cfg(not(target_arch = "wasm32"))]
+pub use stream::{BoundedJoinStream, stream_query_bounded};
 
 pub const MAX_JOIN_ROWS: usize = 100_000;
 

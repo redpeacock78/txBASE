@@ -122,7 +122,21 @@ Filesystem- and cache-aware merge planning remains future work.
 
 The single-table HTTP server does not expose joins.
 
-The catalog server exposes the same read-only boundary at `QUERY /join`.
+The catalog server exposes the same read-only boundary at `QUERY /join` and `QUERY /join/stream`.
+
+`QUERY /join` returns a bounded JSON array, while `QUERY /join/stream` returns one joined row per `application/x-ndjson` line.
+
+The streaming route captures only the referenced tables under one catalog read lock, then releases the lock before producing rows through a bounded channel.
+
+The producer applies backpressure when the channel is full and stops when the consumer drops the stream.
+
+The table inputs and equality lookup map remain in memory; the route avoids collecting the complete final result vector.
+
+For chained joins, stages before the final stage remain materialized under the existing 100,000-row cap, while the final stage emits incrementally.
+
+The streaming equality path uses an in-memory equality map and does not use current index sidecars or the cost-based index and merge planner.
+
+Direct result limits remain after filtering, while a chained final-stage limit applies before its final filter.
 
 Cross-table writes and transactions remain outside this surface.
 

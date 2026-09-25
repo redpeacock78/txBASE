@@ -49,7 +49,7 @@ The repository currently provides:
 - A bounded aggregation pipeline with zero or more input `$match` and top-level-array `$unwind` stages, at most one input `$set` or `$addFields` stage in total, at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each, and one terminal `$count` or `$distinct` stage, one `$group` or `$bucket` stage using `$count`, bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, one bounded scalar-expression `$bucketAuto` stage whose result is finite numeric, or one bounded scalar-expression `$sortByCount` stage, followed by bounded group-output `$match` stages, one optional `$project`, and final `$sort`, `$skip`, and `$limit` stages. Input stages execute in listed order. Input `$set` and `$addFields` preserve existing fields and compute top-level fields from the shared bounded field, literal, null-coalescing, string, and numeric expressions against the stage-input snapshot; computed string results are capped at 1 MiB. Input `$project` reuses the 0/1 query projection contract and materializes fields before later stages. `$unwind` supports the top-level document options `includeArrayIndex` and `preserveNullAndEmptyArrays`, preserves input and array order, rejects non-array values, and caps all emitted records at 10,000. `$bucket` uses the shared scalar-expression subset for numeric range assignment, finite ascending numeric boundaries, inclusive lower and exclusive upper ranges, an optional default bucket, bounded accumulators, and omits empty buckets. `$bucketAuto` derives at most 10,000 numeric input values into approximately even non-empty ranges, rejects missing or nonnumeric expression results, and rejects `granularity`. `$sortByCount` emits `_id` and `count` in descending count order and shares the 10,000-group bound.
 - A bounded local `inner`, `left`, `right`, `full`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
 - Direct and chained equality-join cost models that compare hash and index-nested-loop paths with exact pre-filter key-cardinality estimates, materialized row-width work, logical input page reads, and logical index-sidecar page reads, plus ordered-merge paths for direct joins and eligible chained stages.
-- A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, and the bounded local join.
+- A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, the bounded local join, and `QUERY /join/stream` as joined-row NDJSON.
 - Physical and sorted keyset cursors with a 1,000-record page cap.
 - Bounded `unicode-lowercase` and `unicode-nfkc-lowercase` sort collations with cursor-boundary validation and a safe table-scan fallback.
 - Borrowed and owned-snapshot query streams for incremental filter and projection over an in-memory table snapshot.
@@ -220,8 +220,9 @@ Additional stages may reference earlier joined tables and keep one catalog read 
 pipeline.
 Chained `full` stages use the bounded hash fallback rather than the direct ordered merge path.
 Eligible chained non-`full` stages can use an ordered merge by sorting the materialized intermediate rows, consuming the loaded rows of the new table through a fresh exact ordered index, and accounting for the bounded sort work.
-Filesystem- and cache-aware merge planning, streaming, and broader null or missing field semantics
-remain future work before adding broader query surfaces.
+`QUERY /join/stream` snapshots only its referenced tables under one catalog read lock and emits the final stage through a bounded channel.
+It keeps the input tables and equality map in memory; earlier chained stages remain materialized under the existing 100,000-row cap, and the streaming equality path does not use index sidecars or the cost-based index and merge planner.
+Filesystem- and cache-aware merge planning and broader null or missing field semantics remain future work before adding broader query surfaces.
 
 Distributed joins and distributed transactions remain later features.
 
@@ -469,6 +470,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Filesystem- and cache-aware merge planning, streaming join execution, aggregation, predicate-level serializable MVCC, durable XBF, provider integrations beyond R2, live R2 service validation, TLS, durable retry queues, authority discovery, quorum, or consensus code without a contract and end-to-end test.
+- Filesystem- and cache-aware merge planning, aggregation, predicate-level serializable MVCC, durable XBF, provider integrations beyond R2, live R2 service validation, TLS, durable retry queues, authority discovery, quorum, or consensus code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and filesystem- or cache-aware merge planning remain future work.
