@@ -30,7 +30,7 @@ pub(crate) struct OwnedQuerySnapshotStream {
 }
 
 enum SnapshotTable {
-    Dbf(DbfTable),
+    Dbf(Box<DbfTable>),
     Xbf(XbfTable),
 }
 
@@ -181,7 +181,7 @@ pub(crate) fn stream_query_snapshot_owned(
 ) -> Result<OwnedQuerySnapshotStream, QueryError> {
     validate_stream_request(request)?;
     Ok(OwnedQuerySnapshotStream {
-        table: SnapshotTable::Dbf(table.clone()),
+        table: SnapshotTable::Dbf(Box::new(table.clone())),
         request: request.clone(),
         state: SnapshotStreamState::new(request),
     })
