@@ -360,3 +360,7 @@ pub(super) fn page_keys(prefix: &str, manifest: &PageManifest) -> Vec<String> {
         .map(|(index, page)| page_key(prefix, page.generation, index))
         .collect()
 }
+
+#[cfg(test)]
+#[path = "page_builder_tests.rs"]
+mod page_builder_tests;
