@@ -8,6 +8,44 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[test]
+fn sync_and_async_page_manifests_split_exact_page_boundaries() {
+    let store = MemoryObjectStore::new();
+    let async_store = SyncObjectStoreAdapter::new(store.clone());
+
+    for size in [
+        super::page_manifest::PAGE_SIZE,
+        super::page_manifest::PAGE_SIZE + 1,
+    ] {
+        let snapshot = vec![0x5a; size];
+        let synchronous =
+            super::pages::make_manifest(&store, "users/", 0, None, &snapshot).unwrap();
+        let asynchronous = block_on(super::pages::make_manifest_async(
+            &async_store,
+            "users/",
+            0,
+            None,
+            &snapshot,
+        ))
+        .unwrap();
+
+        assert_eq!(asynchronous, synchronous);
+        assert_eq!(synchronous.snapshot_length, size as u64);
+        assert_eq!(
+            synchronous
+                .pages
+                .iter()
+                .map(|page| page.length)
+                .collect::<Vec<_>>(),
+            if size == super::page_manifest::PAGE_SIZE {
+                vec![size as u32]
+            } else {
+                vec![super::page_manifest::PAGE_SIZE as u32, 1]
+            }
+        );
+    }
+}
+
+#[test]
 fn commit_reuses_an_identical_orphan_page_after_interruption() {
     let store = MemoryObjectStore::new();
     let pending = table(0, "Alice");
