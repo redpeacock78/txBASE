@@ -7,8 +7,9 @@ runtime-neutral asynchronous object-store boundary, and a JavaScript host
 adapter for asynchronous XBF object-table commits. It also contains a
 Worker-compatible Fetch transport adapter with explicit timeout and
 cancellation mapping. It also contains a Worker-compatible Web Streams query
-adapter with bounded pull scheduling and `AbortSignal` cancellation. WASI-specific
-query-stream runtime adapters remain future work.
+adapter with bounded pull scheduling and `AbortSignal` cancellation. A WASI 0.3
+CLI component also streams DBF queries through asynchronous stdout; production
+WASI storage integration remains future work.
 
 ## 0. Current implementation slice
 
