@@ -94,6 +94,66 @@ await assert.rejects(
   () => store.compareAndSwap("users/manifest.json", Uint8Array.of(1), xbf),
   (error) => error.code === "conflict",
 );
+await assert.rejects(() => store.get(""), (error) => error.code === "invalid");
+await assert.rejects(
+  () => store.list("bad\0prefix"),
+  (error) => error.code === "invalid",
+);
+await assert.rejects(
+  () => store.putIfAbsent("race/key", [1]),
+  (error) => error.code === "invalid",
+);
+await assert.rejects(
+  () => store.compareAndSwap("race/key", [], Uint8Array.of(1)),
+  (error) => error.code === "invalid",
+);
+
+const malformedObjectBucket = Object.create(bucket);
+malformedObjectBucket.get = async () => ({});
+await assert.rejects(
+  () => createR2ObjectStore(malformedObjectBucket).get("users/malformed"),
+  (error) => error.code === "invalid",
+);
+
+const malformedBodyBucket = Object.create(bucket);
+malformedBodyBucket.get = async () => ({ arrayBuffer: async () => Uint8Array.of(1) });
+await assert.rejects(
+  () => createR2ObjectStore(malformedBodyBucket).get("users/malformed"),
+  (error) => error.code === "invalid",
+);
+
+const missingEtagBucket = Object.create(bucket);
+missingEtagBucket.get = async () => ({ arrayBuffer: async () => Uint8Array.of(0).buffer });
+await assert.rejects(
+  () =>
+    createR2ObjectStore(missingEtagBucket).compareAndSwap(
+      "race/key",
+      Uint8Array.of(0),
+      Uint8Array.of(1),
+    ),
+  (error) => error.code === "invalid" && error.message.includes("httpEtag"),
+);
+
+const malformedPutBucket = Object.create(bucket);
+malformedPutBucket.put = async () => undefined;
+await assert.rejects(
+  () => createR2ObjectStore(malformedPutBucket).putIfAbsent("users/malformed", xbf),
+  (error) => error.code === "invalid",
+);
+
+const outsidePrefixBucket = Object.create(bucket);
+outsidePrefixBucket.list = async () => ({ objects: [{ key: "other/object" }], truncated: false });
+await assert.rejects(
+  () => createR2ObjectStore(outsidePrefixBucket).list("users/"),
+  (error) => error.code === "invalid" && error.message.includes("prefix"),
+);
+
+const missingCursorBucket = Object.create(bucket);
+missingCursorBucket.list = async () => ({ objects: [], truncated: true });
+await assert.rejects(
+  () => createR2ObjectStore(missingCursorBucket).list("users/"),
+  (error) => error.code === "invalid" && error.message.includes("cursor"),
+);
 
 await store.putIfAbsent("race/key", Uint8Array.of(0));
 const competingWrites = await Promise.allSettled([
