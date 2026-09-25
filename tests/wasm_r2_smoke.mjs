@@ -6,6 +6,59 @@ import path from "node:path";
 
 import { createR2ObjectStore } from "../src/r2-object-store.mjs";
 
+class FakeR2Bucket {
+  constructor(pageSize) {
+    this.objects = new Map();
+    this.pageSize = pageSize;
+    this.repeatCursor = false;
+  }
+
+  async get(key) {
+    const entry = this.objects.get(key);
+    if (entry === undefined) return null;
+    const bytes = entry.bytes.slice();
+    return {
+      ...entry,
+      async arrayBuffer() {
+        return bytes.buffer;
+      },
+    };
+  }
+
+  async put(key, value, { onlyIf }) {
+    const current = this.objects.get(key);
+    if (onlyIf.get("If-None-Match") === "*" && current !== undefined) return null;
+    if (
+      onlyIf.has("If-Match") &&
+      (current === undefined || current.httpEtag !== onlyIf.get("If-Match"))
+    ) {
+      return null;
+    }
+    const bytes = Uint8Array.from(value);
+    const etag = createHash("sha256").update(bytes).digest("hex");
+    const result = { bytes, etag, httpEtag: `"${etag}"` };
+    this.objects.set(key, result);
+    return { etag, httpEtag: result.httpEtag };
+  }
+
+  async delete(key) {
+    this.objects.delete(key);
+  }
+
+  async list({ prefix, cursor, limit }) {
+    const keys = [...this.objects.keys()].filter((key) => key.startsWith(prefix)).sort();
+    const offset = cursor === undefined ? 0 : cursor === "same" ? 0 : Number(cursor);
+    const page = keys.slice(offset, offset + Math.min(limit, this.pageSize));
+    const nextOffset = offset + page.length;
+    const truncated = nextOffset < keys.length;
+    return {
+      objects: page.map((key) => ({ key })),
+      truncated,
+      ...(truncated ? { cursor: this.repeatCursor ? "same" : String(nextOffset) } : {}),
+    };
+  }
+}
+
 const packageDirectory = path.resolve(process.argv[2] ?? "target/wasm-bindgen");
 const require = createRequire(import.meta.url);
 const { WasmObjectTable } = require(path.join(packageDirectory, "txbase.js"));
@@ -80,56 +133,3 @@ await assert.rejects(
 );
 
 console.log("wasm R2 object-store smoke passed");
-
-class FakeR2Bucket {
-  constructor(pageSize) {
-    this.objects = new Map();
-    this.pageSize = pageSize;
-    this.repeatCursor = false;
-  }
-
-  async get(key) {
-    const entry = this.objects.get(key);
-    if (entry === undefined) return null;
-    const bytes = entry.bytes.slice();
-    return {
-      ...entry,
-      async arrayBuffer() {
-        return bytes.buffer;
-      },
-    };
-  }
-
-  async put(key, value, { onlyIf }) {
-    const current = this.objects.get(key);
-    if (onlyIf.get("If-None-Match") === "*" && current !== undefined) return null;
-    if (
-      onlyIf.has("If-Match") &&
-      (current === undefined || current.httpEtag !== onlyIf.get("If-Match"))
-    ) {
-      return null;
-    }
-    const bytes = Uint8Array.from(value);
-    const etag = createHash("sha256").update(bytes).digest("hex");
-    const result = { bytes, etag, httpEtag: `"${etag}"` };
-    this.objects.set(key, result);
-    return { etag, httpEtag: result.httpEtag };
-  }
-
-  async delete(key) {
-    this.objects.delete(key);
-  }
-
-  async list({ prefix, cursor, limit }) {
-    const keys = [...this.objects.keys()].filter((key) => key.startsWith(prefix)).sort();
-    const offset = cursor === undefined ? 0 : cursor === "same" ? 0 : Number(cursor);
-    const page = keys.slice(offset, offset + Math.min(limit, this.pageSize));
-    const nextOffset = offset + page.length;
-    const truncated = nextOffset < keys.length;
-    return {
-      objects: page.map((key) => ({ key })),
-      truncated,
-      ...(truncated ? { cursor: this.repeatCursor ? "same" : String(nextOffset) } : {}),
-    };
-  }
-}

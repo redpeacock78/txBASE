@@ -29,7 +29,7 @@ cargo test --all-targets --all-features
 
 ネイティブのワークフローはUbuntu、macOS、Windowsでこのゲートを実行します。
 別のUbuntu WASMジョブはreleaseモジュールをビルドし、`wasm-bindgen-cli` `0.2.128`でNode.jsラッパーを生成します。
-生成したラッパーに対して、次の4つのスモーク検査を実行します。
+生成したラッパーに対して、次の4つのスモークテストを実行します。
 
 ```bash
 node tests/wasm_smoke.mjs target/wasm-bindgen
