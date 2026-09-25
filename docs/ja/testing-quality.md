@@ -246,6 +246,8 @@ cargo test --all-targets --all-features
 
 UbuntuのMSRVジョブはRust 1.85.0を導入し、`cargo test --locked --all-targets --all-features`を実行します。
 この検査では、コミット済みロックファイルを使い、ネイティブターゲットと全機能が宣言済みの最小Rustバージョンで動くことを確認します。
+リポジトリのresolver設定は、ロックファイルの更新時に宣言済みRustバージョンと互換性のある依存バージョンを優先します。
+`yoke-derive` 0.8.3はRust 1.85で使えないAPIを使い、最小Rustバージョンも宣言していないため、ロックファイルでは0.8.2に固定します。
 WASI 0.3のサンプルはRust 1.87以降を必要とするため、別のWASIコンポーネントジョブではstable Rustを使います。
 
 これが現在のgreen gateです。
@@ -281,4 +283,5 @@ SQLiteの完全なリリースプロセスより意図的に小さくしてい�
 - [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz)
 - [libFuzzerのオプションとコーパスの動作](https://www.llvm.org/docs/LibFuzzer.html)
 - [Cargoの`rust-version`フィールド](https://doc.rust-lang.org/cargo/reference/rust-version.html)
+- [CargoのRustバージョン非互換resolver設定](https://doc.rust-lang.org/cargo/reference/config.html#resolverincompatible-rust-versions)
 - [dtolnay/rust-toolchain](https://github.com/dtolnay/rust-toolchain)

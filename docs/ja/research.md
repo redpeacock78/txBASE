@@ -181,6 +181,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 ### Rustツールチェーンのサポート
 
 - [Cargoの`rust-version`フィールド](https://doc.rust-lang.org/cargo/reference/rust-version.html)
+- [CargoのRustバージョン非互換resolver設定](https://doc.rust-lang.org/cargo/reference/config.html#resolverincompatible-rust-versions)
 - [dtolnay/rust-toolchain](https://github.com/dtolnay/rust-toolchain)
 
 ### ファイルシステムのコミットプリミティブ

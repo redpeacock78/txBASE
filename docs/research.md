@@ -181,6 +181,7 @@ Second, POSIX durability language is limited to the Unix path; cross-platform re
 ### Rust toolchain support
 
 - [Cargo `rust-version` field](https://doc.rust-lang.org/cargo/reference/rust-version.html)
+- [Cargo incompatible Rust-version resolver setting](https://doc.rust-lang.org/cargo/reference/config.html#resolverincompatible-rust-versions)
 - [dtolnay/rust-toolchain](https://github.com/dtolnay/rust-toolchain)
 
 ### File-system commit primitives

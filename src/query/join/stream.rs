@@ -55,12 +55,12 @@ pub fn stream_query_bounded(
         .collect::<BTreeMap<_, _>>();
     for name in table_names {
         let table = catalog.open_table_unlocked(&name)?;
-        if !catalog.is_historical()
-            && let Some(fields) = index_fields.get(&name)
-            && let Some(index) =
+        if !catalog.is_historical() {
+            if let Some(index) = index_fields.get(&name).and_then(|fields| {
                 super::super::join_index::load_fields(catalog, &name, &table, fields)
-        {
-            indexes.insert(name.clone(), index);
+            }) {
+                indexes.insert(name.clone(), index);
+            }
         }
         tables.insert(name, table);
     }

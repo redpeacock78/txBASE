@@ -238,6 +238,8 @@ Wildcard examples remain descriptive and are not expanded by this check.
 
 An Ubuntu MSRV job installs Rust 1.85.0 and runs `cargo test --locked --all-targets --all-features`.
 This verifies the declared minimum Rust version for native package targets and every feature against the committed lockfile.
+The repository resolver configuration prefers dependency versions compatible with that declared Rust version when updating the lockfile.
+The lockfile pins `yoke-derive` to 0.8.2 because 0.8.3 uses an API unavailable in Rust 1.85 and does not declare a minimum Rust version.
 The separate WASI component job uses stable Rust because the WASI 0.3 example requires Rust 1.87 or later.
 
 This is the current green gate.
@@ -273,4 +275,5 @@ The matrix should be updated in the same change as a new format, query, persiste
 - [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz)
 - [libFuzzer options and corpus behavior](https://www.llvm.org/docs/LibFuzzer.html)
 - [Cargo `rust-version` field](https://doc.rust-lang.org/cargo/reference/rust-version.html)
+- [Cargo incompatible Rust-version resolver setting](https://doc.rust-lang.org/cargo/reference/config.html#resolverincompatible-rust-versions)
 - [dtolnay/rust-toolchain](https://github.com/dtolnay/rust-toolchain)

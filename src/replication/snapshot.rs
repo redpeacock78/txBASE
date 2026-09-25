@@ -211,13 +211,13 @@ impl ReplicationLog {
                 actual: snapshot.last_transaction_id,
             });
         }
-        if let Some(acknowledged) = self.safe_compaction_index()
-            && snapshot.last_index > acknowledged
-        {
-            return Err(ReplicationError::CompactionNotAcknowledged {
-                requested: snapshot.last_index,
-                acknowledged,
-            });
+        if let Some(acknowledged) = self.safe_compaction_index() {
+            if snapshot.last_index > acknowledged {
+                return Err(ReplicationError::CompactionNotAcknowledged {
+                    requested: snapshot.last_index,
+                    acknowledged,
+                });
+            }
         }
         let local_catalog = catalog
             .export_snapshot_at(expected_transaction_id)
