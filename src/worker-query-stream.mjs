@@ -13,12 +13,27 @@ export function createWorkerQueryStream({
   query = {},
   signal,
   queueSize = DEFAULT_QUEUE_SIZE,
+  generation,
   textEncoder = new TextEncoder(),
 } = {}) {
-  if (!database || typeof database.query_stream_json !== "function") {
+  if (
+    generation !== undefined &&
+    (typeof generation !== "bigint" || generation < 0n || generation > 0xffff_ffff_ffff_ffffn)
+  ) {
     throw new WorkerQueryStreamError(
       "invalid",
-      "database must expose query_stream_json",
+      "query stream generation must be an unsigned 64-bit BigInt",
+    );
+  }
+  const method = generation === undefined
+    ? database?.query_stream_json
+    : database?.query_stream_json_at;
+  if (typeof method !== "function") {
+    throw new WorkerQueryStreamError(
+      "invalid",
+      generation === undefined
+        ? "database must expose query_stream_json"
+        : "database must expose query_stream_json_at for a selected generation",
     );
   }
   if (!Number.isSafeInteger(queueSize) || queueSize < 1) {
@@ -44,8 +59,17 @@ export function createWorkerQueryStream({
   }
 
   let coreStream;
+  let pendingCoreStream;
   try {
-    coreStream = database.query_stream_json(normalizeQueryBody(query, textEncoder));
+    const body = normalizeQueryBody(query, textEncoder);
+    const result = generation === undefined
+      ? method.call(database, body)
+      : method.call(database, generation, body);
+    if (result && typeof result.then === "function") {
+      pendingCoreStream = Promise.resolve(result);
+    } else {
+      coreStream = result;
+    }
   } catch (error) {
     throw mapStreamError(error);
   }
@@ -61,11 +85,7 @@ export function createWorkerQueryStream({
   const cancelCore = () => {
     if (cancelled) return;
     cancelled = true;
-    try {
-      coreStream.cancel();
-    } catch {
-      // The stream is already being cancelled; the consumer-visible error wins.
-    }
+    cancelStream(coreStream);
   };
 
   const abort = () => {
@@ -84,10 +104,27 @@ export function createWorkerQueryStream({
         signal?.addEventListener("abort", abort, { once: true });
         if (signal?.aborted) abort();
       },
-      pull(streamController) {
+      async pull(streamController) {
         if (closed || cancelled) return;
         try {
-          const record = coreStream.next_json();
+          const stream = coreStream ?? await pendingCoreStream;
+          if (closed || cancelled) {
+            cancelStream(stream);
+            return;
+          }
+          if (
+            !stream ||
+            typeof stream.next_json !== "function" ||
+            typeof stream.cancel !== "function"
+          ) {
+            throw new WorkerQueryStreamError(
+              "invalid",
+              "query stream method must return an object with next_json and cancel",
+            );
+          }
+          coreStream = stream;
+          const record = await stream.next_json();
+          if (closed || cancelled) return;
           if (record === null || record === undefined) {
             closed = true;
             cleanup();
@@ -96,6 +133,7 @@ export function createWorkerQueryStream({
           }
           streamController.enqueue(textEncoder.encode(`${record}\n`));
         } catch (error) {
+          if (closed || cancelled) return;
           closed = true;
           cleanup();
           streamController.error(mapStreamError(error));
@@ -112,6 +150,14 @@ export function createWorkerQueryStream({
   );
 
   return readable;
+}
+
+function cancelStream(stream) {
+  try {
+    stream?.cancel();
+  } catch {
+    // The consumer-visible error wins if cancellation itself fails.
+  }
 }
 
 function normalizeQueryBody(query, textEncoder) {

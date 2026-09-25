@@ -61,6 +61,9 @@ Its versioned boundary currently provides:
   that load the current or one retained committed XBF snapshot through
   `AsyncObjectStore` and reuse the existing filter, projection, skip, and limit
   query-stream semantics after XBF-to-DBF conversion;
+- generated-wrapper `WasmObjectTable.query_stream_json` and
+  `query_stream_json_at` methods that expose those current and retained
+  generation streams as Promise-returning `WasmObjectQueryStream` values;
 - a pinned Node.js Web Streams fixture that exercises backpressure-shaped pull
   scheduling, snapshot stability, invalid controls, and cancellation;
 - a CI `wasm32-unknown-unknown` release build and wrapper smoke check.
@@ -119,7 +122,14 @@ The Worker-compatible `createWorkerQueryStream` adapter uses the Web Streams
 pull boundary instead of a Rust executor. It advances the WASM snapshot by at
 most one record per pull, applies a positive queue high-water mark, emits
 UTF-8 NDJSON chunks, and maps reader or `AbortSignal` cancellation to the
-WASM stream lifecycle.
+WASM stream lifecycle. It accepts both the synchronous in-memory `WasmDatabase`
+stream factory and the Promise-returning object-table factory, and can select a
+retained generation through `query_stream_json_at`.
+
+For an object-table stream, snapshot recovery and loading finish before the
+first row is emitted. Cancelling the Web stream stops row delivery, but it does
+not cancel an object-store Promise already in flight because `AsyncObjectStore`
+does not define per-operation cancellation.
 
 The object-store contract belongs below the shared table and transaction interfaces.
 The runtime-neutral `AsyncObjectStore` contract is implemented for the five primitive object operations.
@@ -177,6 +187,7 @@ The current core slice meets the following initial conditions:
   `wasm-bindgen` wrapper;
 - a Worker-compatible Fetch object-store adapter and deterministic HTTP fixture;
 - a Worker-compatible Web Streams query adapter and deterministic Node.js fixture;
+- a generated-wrapper query stream over current and retained XBF object-table snapshots;
 - runtime-neutral asynchronous-storage-backed query-stream adapters for current
   and retained DBF-representable XBF snapshots;
 - explicit malformed-input errors at the byte and JSON boundaries;
@@ -209,7 +220,8 @@ Those would be separate products and would obscure the shared core contract.
 - [Cloudflare Workers web standards](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)
 - [Cloudflare Workers Request `AbortSignal`](https://developers.cloudflare.com/workers/runtime-apis/request/)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
-- [wasm-bindgen guide](https://rustwasm.github.io/docs/wasm-bindgen/)
+- [wasm-bindgen: Promises and Futures](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html)
+- [wasm-bindgen: exported Rust types](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/exported-rust-types.html)
 - [`wasm-bindgen-futures` API](https://docs.rs/wasm-bindgen-futures/latest/wasm_bindgen_futures/)
 - [`js-sys` `Function::apply` API](https://docs.rs/js-sys/latest/js_sys/struct.Function.html)
 
@@ -220,9 +232,9 @@ The repository has a WASM core implementation, a generated-wrapper Node.js
 smoke check, a JavaScript host-backed asynchronous object-table fixture, a
 Worker-compatible Fetch object-store adapter and smoke fixture, and
 runtime-neutral asynchronous object-store and object-table contracts. It also
-has a runtime-neutral asynchronous-storage-backed query-stream adapter for
-DBF-representable XBF snapshots, plus a Worker-compatible Web Streams query
-adapter and smoke fixture.
+has runtime-neutral and generated-wrapper query-stream adapters for
+DBF-representable current or retained XBF snapshots, plus a Worker-compatible
+Web Streams adapter and smoke fixture.
 It does not claim that a deployed worker or WASI runtime, WASI-specific
 query-stream scheduler, provider-specific consistency or retry policy, or a
 native recovery path is already supported.

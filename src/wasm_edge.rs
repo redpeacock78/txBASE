@@ -3,6 +3,7 @@
 use crate::edge::{
     AsyncObjectStore, AsyncObjectStoreFuture, AsyncObjectTable, CommitResult, ObjectStoreError,
 };
+use crate::wasm::WasmQueryStream as CoreQueryStream;
 use crate::xbf::{XbfLimits, decode_with_limits, encode};
 use js_sys::{Array, Function, Promise, Reflect, Uint8Array};
 use wasm_bindgen::JsCast;
@@ -165,6 +166,11 @@ pub struct WasmObjectTable {
 }
 
 #[wasm_bindgen]
+pub struct WasmObjectQueryStream {
+    core: CoreQueryStream,
+}
+
+#[wasm_bindgen]
 impl WasmObjectTable {
     #[wasm_bindgen(constructor)]
     pub fn new(host: JsValue, namespace: String) -> Result<WasmObjectTable, JsValue> {
@@ -197,6 +203,18 @@ impl WasmObjectTable {
         table
             .map(|table| encode(&table).map(bytes_value).map_err(to_js_error))
             .unwrap_or_else(|| Ok(JsValue::NULL))
+    }
+
+    pub async fn query_stream_json(&self, body: &[u8]) -> Result<WasmObjectQueryStream, JsValue> {
+        object_query_stream(&self.table, body, None).await
+    }
+
+    pub async fn query_stream_json_at(
+        &self,
+        generation: u64,
+        body: &[u8],
+    ) -> Result<WasmObjectQueryStream, JsValue> {
+        object_query_stream(&self.table, body, Some(generation)).await
     }
 
     pub async fn commit_xbf(&self, bytes: &[u8]) -> Result<JsValue, JsValue> {
@@ -232,6 +250,40 @@ impl WasmObjectTable {
         let removed = self.table.cleanup_orphans().await.map_err(to_js_error)?;
         json_string(&removed)
     }
+}
+
+#[wasm_bindgen]
+impl WasmObjectQueryStream {
+    pub fn next_json(&mut self) -> Result<JsValue, JsValue> {
+        self.core
+            .next_json()
+            .map(|record| {
+                record
+                    .map(|record| JsValue::from_str(&record))
+                    .unwrap_or(JsValue::NULL)
+            })
+            .map_err(to_js_error)
+    }
+
+    pub fn cancel(&mut self) {
+        self.core.cancel();
+    }
+}
+
+// ponytail: AsyncObjectStore futures have no cancellation token; add one to that contract if hosts must stop in-flight reads.
+async fn object_query_stream(
+    table: &AsyncObjectTable<JsObjectStore>,
+    body: &[u8],
+    generation: Option<u64>,
+) -> Result<WasmObjectQueryStream, JsValue> {
+    let request = crate::query::parse(body).map_err(to_js_error)?;
+    let stream = table
+        .query_stream_owned(generation, request)
+        .await
+        .map_err(to_js_error)?;
+    Ok(WasmObjectQueryStream {
+        core: CoreQueryStream::new(stream),
+    })
 }
 
 fn bytes_value(bytes: Vec<u8>) -> JsValue {

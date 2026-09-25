@@ -38,6 +38,8 @@ On `wasm32`, `WasmObjectTable` wraps the same asynchronous table protocol for a 
 The host supplies Promise-returning `get`, `putIfAbsent`, `compareAndSwap`, `delete`, and `list` methods.
 The adapter exposes XBF bytes, manifest inspection, commit, historical reads, recovery, retention, and orphan cleanup through the generated `wasm-bindgen` wrapper.
 It maps tagged host rejection codes to the shared object-store error categories, while timeout, cancellation, retry, and transport policy remain host responsibilities.
+The same wrapper exposes `query_stream_json` for the current snapshot and `query_stream_json_at` for a retained generation.
+Each method resolves after loading and converting the selected snapshot, then returns the shared owned query stream.
 
 `createWorkerObjectStore` supplies a Worker-compatible HTTP transport for those five methods.
 It uses Web Fetch APIs, standard conditional request headers, strong SHA-256 ETags, `AbortSignal`, and a bounded request timeout without adding a cloud-provider dependency to the Rust core.
@@ -154,10 +156,11 @@ The high-level asynchronous manifest protocol covers commit, recovery, retention
 The JavaScript WASM adapter and Worker Fetch adapter supply host-managed fixtures for this protocol; provider-specific consistency and retry behavior remain outside this generic transport.
 
 The asynchronous query adapter supplies the generic storage-to-query handoff, but it does not select host scheduling, cancellation propagation, timeout, or retry behavior.
+The Worker Web Streams adapter supplies demand control and stops row delivery when its stream is cancelled; it cannot cancel an object-store future that is already in flight.
 
 ## 7. Explicit non-goals
 
-This slice does not promise an R2 adapter, a specific cloud vendor, Worker or WASI query-stream scheduling, host-specific timeout or retry behavior, multi-region consensus, automatic background garbage collection, immutable page splitting, or a cloud-backed WASM host.
+This slice does not promise an R2 adapter, a specific cloud vendor, WASI query-stream scheduling, cancellation of in-flight object-store operations, host-specific timeout or retry behavior, multi-region consensus, automatic background garbage collection, immutable page splitting, or a provider-specific cloud-backed WASM host.
 
 Those features can reuse the manifest and generation contract after their host-specific failure behavior has a deterministic test.
 

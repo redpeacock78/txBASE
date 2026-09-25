@@ -34,6 +34,7 @@ WASMはパスとbodyの検証を二重に実装しません。
 - 生成したWASMラッパーを介してWorker転送を検査し、タイムアウトとキャンセルを含めてWeb Fetchを検証する固定Node.jsフィクスチャ。
 - WASMのスナップショットストリームを、有界なNDJSONチャンクのWeb `ReadableStream`として公開し、readerのキャンセルと`AbortSignal`のライフサイクルを処理する`createWorkerQueryStream`アダプター。
 - `AsyncObjectStore`を通じて現在または保持中のコミット済みXBFスナップショットを1つ読み取り、XBFからDBFへ変換した後、既存のfilter、projection、skip、limitのクエリストリーム意味論を再利用する、ランタイム非依存の`AsyncObjectTable::query_stream`と`query_stream_at`アダプター。
+- 現在世代と保持世代のストリームをPromiseを返す`WasmObjectQueryStream`として公開する、生成済みラッパーの`WasmObjectTable.query_stream_json`と`query_stream_json_at`。
 - backpressureを考慮したpullスケジューリング、スナップショットの安定性、不正な制御、キャンセルを検査する固定Node.js Web Streamsフィクスチャ。
 - CIでの`wasm32-unknown-unknown` release buildとラッパースモーク検査。
 
@@ -88,6 +89,11 @@ WASM境界は、対応する範囲で既存のDBFとXBFのコーデックを再�
 
 Worker互換の`createWorkerQueryStream`アダプターは、Rustのexecutorを使わずにWeb Streamsのpull境界を利用します。
 1回のpullでWASMスナップショットを最大1レコードだけ進め、正のキューのハイウォーターマークを適用し、UTF-8のNDJSONチャンクを生成し、readerまたは`AbortSignal`のキャンセルをWASMストリームのライフサイクルへ対応付けます。
+このアダプターは、同期型のインメモリ`WasmDatabase`と、Promiseを返すオブジェクトテーブルのストリーム生成の両方を受け付けます。
+`query_stream_json_at`を通じて保持世代を選択できます。
+
+オブジェクトテーブルのストリームは、最初の行を出力する前にスナップショットの復旧と読み込みを完了します。
+Webストリームをキャンセルすると行の出力は止まりますが、`AsyncObjectStore`に操作単位のキャンセル契約がないため、実行中のオブジェクトストアPromiseは中断しません。
 
 オブジェクトストレージの契約は、共有するテーブルとトランザクションのインターフェースより下位に置きます。
 ランタイムから独立した`AsyncObjectStore`契約は、5つの基本オブジェクト操作について実装済みです。
@@ -140,6 +146,7 @@ Worker FetchアダプターはHTTP転送、タイムアウト、キャンセル�
 - 生成した`wasm-bindgen`ラッパーを使うJavaScriptホスト接続型の非同期オブジェクトテーブルフィクスチャが1つある。
 - Worker互換のFetchオブジェクトストレージアダプターと決定的なHTTPフィクスチャがある。
 - Worker互換のWeb Streamsクエリアダプターと決定的なNode.jsフィクスチャがある。
+- 現在または保持中のXBFオブジェクトテーブルスナップショットを対象にする、生成済みラッパーのクエリストリームがある。
 - 現在または保持中のDBFで表現できるXBFスナップショット向けに、ランタイム非依存の非同期ストレージ接続型クエリストリームアダプターがある。
 - バイト列とJSONの境界で不正入力エラーを明示的に扱う。
 - 生成した`wasm-bindgen`ラッパーをNode.jsから検査するスモークテストがある。
@@ -169,7 +176,8 @@ Worker FetchアダプターはHTTP転送、タイムアウト、キャンセル�
 - [Cloudflare WorkersのWeb標準](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)
 - [Cloudflare WorkersのRequest `AbortSignal`](https://developers.cloudflare.com/workers/runtime-apis/request/)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
-- [wasm-bindgenガイド](https://rustwasm.github.io/docs/wasm-bindgen/)
+- [wasm-bindgen：PromiseとFuture](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html)
+- [wasm-bindgen：exportするRust型](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/exported-rust-types.html)
 - [`wasm-bindgen-futures` API](https://docs.rs/wasm-bindgen-futures/latest/wasm_bindgen_futures/)
 - [`js-sys`の`Function::apply` API](https://docs.rs/js-sys/latest/js_sys/struct.Function.html)
 
@@ -177,5 +185,5 @@ WebAssemblyとWASIの仕様は、コアモジュールとホストインター�
 Component Model、Cloudflare Workers、Node.jsの資料は候補ホストの実装参照であり、txBASEの互換性を約束するものではありません。
 
 リポジトリにはWASMコアの実装、生成ラッパーのNode.jsスモーク検査、JavaScriptホスト接続型の非同期オブジェクトテーブルフィクスチャ、Worker互換Fetchオブジェクトストレージアダプターとスモークフィクスチャ、ランタイムから独立した非同期オブジェクトストレージとテーブルの契約があります。
-DBFで表現できるXBFスナップショット向けのランタイム非依存非同期ストレージ接続型クエリストリームアダプター、Worker互換Web Streamsクエリアダプター、スモークフィクスチャもあります。
-デプロイ済みワーカーまたはWASIランタイム、WASI固有のクエリストリームスケジューラー、プロバイダー固有の整合性または再試行方針、ネイティブの復旧経路をすでにサポートするとは主張しません。
+DBFで表現できる現在または保持中のXBFスナップショット向けに、ランタイム非依存と生成済みラッパーのクエリストリームアダプター、Worker互換Web Streamsアダプターとスモークフィクスチャもあります。
+デプロイ済みWorkerやWASIランタイム、WASI固有のクエリストリームスケジューラー、プロバイダー固有の整合性・再試行方針、ネイティブの復旧経路を現時点でサポートするとは主張しません。

@@ -65,7 +65,7 @@ The repository currently provides:
 - A runtime-neutral `AsyncObjectStore` primitive contract, `AsyncObjectTable` manifest protocol, and synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
 - A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A Worker-compatible Fetch object-store adapter with conditional HTTP publication, strong SHA-256 ETags, bounded request timeouts, explicit `AbortSignal` cancellation mapping, and a deterministic WASM-backed HTTP fixture.
-- A Worker-compatible Web Streams query adapter that exposes the WASM snapshot stream as bounded NDJSON chunks with pull-based backpressure and `AbortSignal` cancellation, plus a deterministic generated-wrapper fixture.
+- A Worker-compatible Web Streams query adapter that supports in-memory WASM streams and Promise-backed current or retained XBF object-table streams, emits bounded NDJSON chunks with pull-based backpressure, and stops row delivery on `AbortSignal`; it does not cancel an in-flight storage operation.
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, `ReplicationSnapshot`, and `ReplicationProgress` JSON formats, journaled `TXRP` data-plane and `TXRG` follower-progress sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, monotonic follower-progress acknowledgement with durable minimum-index coordinated compaction, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded entry-batch validation and ordered receiver application, bounded HTTP entry, contiguous entry-range, snapshot, and progress delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
@@ -144,13 +144,17 @@ responses over this stream.
 owned in-memory streams implement it with immediate polls.
 The native `query::stream_query_threaded` adapter supplies non-blocking polling, bounded producer
 backpressure, waker notification, and worker cancellation on drop.
-The Worker-compatible Web Streams adapter now supplies pull scheduling, bounded
-NDJSON chunks, reader cancellation, and `AbortSignal` lifecycle handling for a
-WASM snapshot stream.
+The Worker-compatible Web Streams adapter supplies pull scheduling, bounded
+NDJSON chunks, reader cancellation, and `AbortSignal` lifecycle handling for
+both in-memory WASM streams and Promise-backed object-table streams.
 `AsyncObjectTable::query_stream` supplies a runtime-neutral asynchronous-storage-backed
 query stream by recovering the current committed XBF snapshot, reusing the existing XBF-to-DBF
 conversion contract, and delegating row delivery to the owned snapshot stream.
 `AsyncObjectTable::query_stream_at` applies the same contract to one retained generation.
+`WasmObjectTable.query_stream_json` and `query_stream_json_at` expose those same
+current and retained-generation streams through the generated wrapper.
+The Worker adapter awaits snapshot loading before the first row; cancellation
+stops row delivery but does not abort an in-flight `AsyncObjectStore` future.
 WASI scheduling, host-specific lifecycle policy, and the asynchronous object-table
 adapter for a provider-backed worker or WASI host remain host-specific.
 
@@ -336,7 +340,7 @@ The range-oriented local storage abstraction is a useful starting point, but rem
 ### Candidate scope
 
 - A storage-backend redesign for remote object stores.
-- Worker or WASI host adapters for the current WASM core.
+- A deployed Worker fixture, a WASI runtime adapter, and provider-specific object-storage integration.
 - An R2 or other cloud object-storage adapter.
 - Immutable pages and page-level manifests.
 - Cloud generation snapshots and retention.
@@ -360,8 +364,10 @@ NDJSON chunks, and `AbortSignal` cancellation through `src/worker-query-stream.m
 The runtime-neutral asynchronous-storage-backed query stream is implemented for
 DBF-representable current and retained XBF snapshots through
 `AsyncObjectTable::query_stream` and `AsyncObjectTable::query_stream_at`.
-It does not yet supply a WASI runtime adapter, a deployed worker fixture, or a
-provider-specific object-store adapter.
+The generated `WasmObjectTable` wrapper and Worker adapter also expose these
+queries through Promise-based initialization.
+It does not yet supply a WASI runtime adapter, a deployed worker fixture, a
+provider-specific object-store adapter, or cancellation of in-flight storage I/O.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 

@@ -51,7 +51,7 @@ pub struct WasmQueryStream {
 }
 
 impl WasmQueryStream {
-    fn new(stream: query::OwnedQuerySnapshotStream) -> Self {
+    pub(crate) fn new(stream: query::OwnedQuerySnapshotStream) -> Self {
         Self {
             stream,
             cancelled: false,

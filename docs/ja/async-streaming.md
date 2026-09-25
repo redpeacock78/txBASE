@@ -90,17 +90,20 @@ executor、ワーカーランタイム、ネットワークプロトコル、ス
 
 ファイルシステムのチャネルを非ブロッキングに変えたり、resume tokenを追加したり、リモートストレージのプロトコルを定義したりはしません。
 
-Worker互換のWeb Streamsアダプターは、インメモリWASMクエリスナップショットに対して、pullスケジューリング、有界キュー、NDJSON転送チャンク、`AbortSignal`キャンセルを提供します。
-ランタイムから独立した非同期ストレージ接続型アダプターは、`AsyncObjectTable::query_stream`と`AsyncObjectTable::query_stream_at`から利用できます。
-WASIのスケジューラー、リモート再試行方針、Worker転送は定義せず、ホスト固有の責務として残します。
+Worker互換のWeb Streamsアダプターは、インメモリWASMクエリスナップショットとJavaScriptホスト接続型テーブルの両方に、pullスケジューリング、有界キュー、NDJSON転送チャンク、`AbortSignal`キャンセルを提供します。
+`WasmObjectTable.query_stream_json`と`query_stream_json_at`は、ランタイム非依存の`AsyncObjectTable`が現在または選択した保持中のXBFスナップショットを読み込んだ後に解決するPromiseを返します。
+キャンセルすると行の配送は止まりますが、`AsyncObjectStore`に操作単位のキャンセルトークンがないため、実行中のオブジェクトストアPromiseは継続します。
+WASIのスケジューリングとリモート再試行方針はホスト固有の責務です。
 
 ## 5. Worker Web Streamsアダプター
 
-`createWorkerQueryStream`は、WASMの`WasmQueryStream`を標準の`ReadableStream`でラップします。
-各`pull`はスナップショットを最大1レコードだけ進め、UTF-8のNDJSONチャンクを1つキューへ追加します。
+`createWorkerQueryStream`は、同期またはPromiseを返すWASMクエリストリームを標準の`ReadableStream`でラップします。
+非同期ストリーム生成が完了してから行を返し、その後の各`pull`はスナップショットを最大1レコードだけ進め、UTF-8のNDJSONチャンクを1つキューへ追加します。
 正の`queueSize`ハイウォーターマークによって、Web Streamsのキューへ需要制御を委譲します。
+オブジェクトテーブルのクエリは、行をストリーミングする前にXBFスナップショット全体を読み込んで変換します。
+リモートページをストリーミングするわけではありません。
 
-アダプターは、readerのキャンセルと`AbortSignal`を`WasmQueryStream.cancel`へ伝えます。
+アダプターは、readerのキャンセルと`AbortSignal`を現在のWASMクエリストリームの`cancel()`メソッドへ伝えます。
 不正なクエリ入力、対応しない制御、ライフサイクルエラーはエラーとして伝播し、空の結果へ変換しません。
 
 詳細な境界、エラー分類、生成ラッパーを使う決定的なfixtureは、[Workerクエリストリームアダプター](worker-query-stream.md)に記載します。

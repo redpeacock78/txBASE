@@ -88,17 +88,19 @@ The native threaded adapter is one concrete host implementation.
 
 It does not make the filesystem channel non-blocking, add resume tokens, or define a remote storage protocol.
 
-The Worker-compatible Web Streams adapter supplies pull scheduling, bounded queueing, NDJSON transport chunks, and `AbortSignal` cancellation for the in-memory WASM query snapshot.
-The runtime-neutral asynchronous-storage-backed adapter is available through `AsyncObjectTable::query_stream` and `AsyncObjectTable::query_stream_at`.
-It does not define a WASI scheduler, remote retry policy, or Worker transport; those remain host-specific.
+The Worker-compatible Web Streams adapter supplies pull scheduling, bounded queueing, NDJSON transport chunks, and `AbortSignal` cancellation for both the in-memory WASM query snapshot and the JavaScript-hosted object table.
+`WasmObjectTable.query_stream_json` and `query_stream_json_at` return a Promise that resolves after the runtime-neutral `AsyncObjectTable` has loaded the current or selected retained XBF snapshot.
+The adapter stops row delivery on cancellation, but an in-flight object-store Promise continues because `AsyncObjectStore` has no operation cancellation token.
+WASI scheduling and remote retry policy remain host-specific.
 
 ## 5. Worker Web Streams adapter
 
-`createWorkerQueryStream` wraps the WASM `WasmQueryStream` in a standard `ReadableStream`.
-Each `pull` advances the snapshot by at most one record and enqueues one UTF-8 NDJSON chunk.
+`createWorkerQueryStream` wraps a synchronous or Promise-backed WASM query stream in a standard `ReadableStream`.
+It awaits asynchronous stream creation before the first row, then each `pull` advances the snapshot by at most one record and enqueues one UTF-8 NDJSON chunk.
 The positive `queueSize` high-water mark delegates demand control to the Web Streams queue.
+Object-table queries load and convert one whole XBF snapshot before streaming rows; they do not stream remote pages.
 
-The adapter propagates reader cancellation and an `AbortSignal` to `WasmQueryStream.cancel`.
+The adapter propagates reader cancellation and an `AbortSignal` to the active WASM query stream's `cancel()` method.
 Malformed query input, unsupported controls, and lifecycle failures remain errors; they are not converted into an empty result.
 
 The full boundary, error categories, and deterministic generated-wrapper fixture are documented in [Worker query stream adapter](worker-query-stream.md).

@@ -74,7 +74,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - ランタイムから独立した`AsyncObjectStore`基本契約、`AsyncObjectTable`マニフェストプロトコル、executorを選択せずに5つのオブジェクト操作をfutureとして公開する同期ストアアダプター。
 - Promiseを返すJavaScriptホスト操作を通じて、同じ非同期XBFオブジェクトテーブルのcommit、復旧、過去世代読み取り、保持、孤立オブジェクト削除プロトコルを公開する`wasm-bindgen` JavaScriptホストアダプター。
 - 条件付きHTTP公開、強いSHA-256 ETag、有界なリクエストタイムアウト、明示的な`AbortSignal`キャンセル対応付け、WASMを使う決定的なHTTPフィクスチャを持つWorker互換Fetchオブジェクトストレージアダプター。
-- WASMのスナップショットストリームをpull型backpressureと`AbortSignal`キャンセルを持つ有界NDJSONチャンクとして公開するWorker互換Web Streamsクエリアダプターと、生成ラッパーを使う決定的なfixture。
+- インメモリWASMストリームとPromiseを返す現在または保持中のXBFオブジェクトテーブルストリームに対応し、pull型backpressureを使う有界NDJSONチャンクを出力して、`AbortSignal`で行の配送を停止するWorker互換Web Streamsクエリアダプター。実行中のストレージ操作はキャンセルしません。
 - 順序付き`TXCD`イベント、WAL復旧、冪等な公開、壊れた末尾の修復、バックアップとリストア、読み取り専用APIとCLIカーソル、有界なHTTP読み取りルートを備えた単一テーブルのコミット済み変更データ取得サイドカー。
 - 明示的な複数テーブルカタログトランザクション向けに、順序付き`TXCC`エンベロープ、ジャーナル復旧、冪等な公開、読み取り専用APIとCLIカーソル、有界なHTTP読み取りルートを備えたカタログ変更データ取得サイドカー。
 - プロセス内の単一権威によるレプリケーション境界。ジャーナル化された`TXRP`データ面サイドカーと`TXRG`フォロワー進捗サイドカーの永続化を提供する。
@@ -164,10 +164,14 @@ HTTPサーバーは`/records/stream`と`/{table}/records/stream`をこのスト�
 
 ネイティブの`query::stream_query_threaded`アダプターは、ブロックしないポーリング、有界な生成側バックプレッシャー、waker通知、破棄時のワーカーキャンセルを提供します。
 
-Worker互換Web Streamsアダプターは、WASMスナップショットストリームに対してpullスケジューリング、有界NDJSONチャンク、readerのキャンセル、`AbortSignal`ライフサイクルを提供します。
+Worker互換Web Streamsアダプターは、インメモリWASMストリームとPromiseを返すオブジェクトテーブルストリームの両方に、pullスケジューリング、有界NDJSONチャンク、readerのキャンセル、`AbortSignal`ライフサイクルを提供します。
 `AsyncObjectTable::query_stream`は、現在のコミット済みXBFスナップショットを復旧し、既存のXBFからDBFへの変換契約を再利用し、所有型スナップショットストリームへ行の配送を委譲する、ランタイム非依存の非同期ストレージ接続型クエリストリームを提供します。
 `AsyncObjectTable::query_stream_at`は、同じ契約を保持中の1つの世代へ適用します。
-WASIのスケジューリング、ホスト固有のライフサイクル方針、プロバイダー接続型のワーカーまたはWASIホスト向け非同期`ObjectTable`アダプターは、ホスト固有のままです。
+`WasmObjectTable.query_stream_json`と`query_stream_json_at`は、同じ現在世代または保持世代のストリームを生成ラッパーから公開します。
+Workerアダプターは最初の行を返す前にスナップショットを読み込みます。
+キャンセルすると行の配送は止まりますが、実行中の`AsyncObjectStore` futureは中断しません。
+WASIのスケジューリングとホスト固有のライフサイクル方針は、ホスト側が定義します。
+プロバイダー接続型のWorker実装と、WASIホスト向け非同期`ObjectTable`アダプターは、まだ提供していません。
 
 より広いロードマップに対してインデックスを完成と呼ぶには、insert、update、論理削除、復旧、古いインデックスの検出、再構築動作、コストモデルの制限、方向の互換性、クラッシュ動作を一緒に仕様化してテストしなければなりません。
 
@@ -391,7 +395,7 @@ DBF互換性は明示的なインポートまたはエクスポート経路と�
 ### 候補範囲
 
 - リモートオブジェクトストレージ向けストレージバックエンドの再設計。
-- 現在のWASMコア向けワーカーまたはWASIホストアダプター。
+- デプロイ済みWorkerのfixture、WASIランタイムアダプター、プロバイダー固有のオブジェクトストレージ統合。
 - R2またはその他のクラウドオブジェクトストレージアダプター。
 - 不変ページとページ単位のマニフェスト。
 - クラウド上の世代スナップショットと保持期間。
@@ -412,6 +416,8 @@ CIゲートは生成した`wasm-bindgen`ラッパーをNode.jsから読み込み
 WASMスライスは、Workerアダプターを通じて汎用Fetchのタイムアウトとキャンセルの対応付けを提供します。
 Worker互換Web Streamsクエリアダプターは`src/worker-query-stream.mjs`に実装し、有界pullスケジューリング、NDJSONチャンク、`AbortSignal`キャンセルを提供します。
 ランタイム非依存の非同期ストレージ接続型クエリストリームは、`AsyncObjectTable::query_stream`と`AsyncObjectTable::query_stream_at`を通じて、DBFで表現できる現在または保持中のXBFスナップショット向けに実装済みです。
+生成済みの`WasmObjectTable`ラッパーとWorkerアダプターは、Promiseを介して同じクエリを公開します。
+実行中のストレージI/Oをキャンセルする契約はまだありません。
 WASIランタイムアダプター、デプロイ済みWorkerのfixture、プロバイダー固有のオブジェクトストレージアダプターはまだありません。
 
 WASMは2つ目のデータベース実装を作らず、DBFまたはXBFコーデックとクエリ契約を再利用しなければなりません。

@@ -89,6 +89,45 @@ assert.throws(
   /streaming query supports/,
 );
 
+let resolvePendingStream;
+let pendingStreamCancelled = false;
+const asyncDatabase = {
+  query_stream_json() {
+    return new Promise((resolve) => {
+      resolvePendingStream = resolve;
+    });
+  },
+};
+const loadingController = new AbortController();
+const loadingReader = createWorkerQueryStream({
+  database: asyncDatabase,
+  signal: loadingController.signal,
+}).getReader();
+const loadingRead = loadingReader.read();
+loadingController.abort("cancel during stream initialization");
+await assert.rejects(
+  loadingRead,
+  (error) =>
+    error instanceof WorkerQueryStreamError &&
+    error.code === "cancelled" &&
+    error.message.includes("cancel during stream initialization"),
+);
+resolvePendingStream({
+  next_json() {
+    assert.fail("cancelled stream must not pull a record");
+  },
+  cancel() {
+    pendingStreamCancelled = true;
+  },
+});
+await Promise.resolve();
+assert.equal(pendingStreamCancelled, true);
+
+assert.throws(
+  () => createWorkerQueryStream({ database, generation: 0 }),
+  /unsigned 64-bit BigInt/,
+);
+
 const alreadyAborted = new AbortController();
 alreadyAborted.abort("already closed");
 assert.throws(

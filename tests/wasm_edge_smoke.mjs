@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { createWorkerQueryStream } from "../src/worker-query-stream.mjs";
 
 const packageDirectory = path.resolve(process.argv[2] ?? "target/wasm-bindgen");
 const require = createRequire(import.meta.url);
@@ -17,6 +18,20 @@ function copyBytes(value) {
 function equalBytes(left, right) {
   if (left === null || right === null) return left === right;
   return left.length === right.length && left.every((byte, index) => byte === right[index]);
+}
+
+function jsonBytes(value) {
+  return Uint8Array.from(Buffer.from(JSON.stringify(value), "utf8"));
+}
+
+async function readRows(stream) {
+  const reader = stream.getReader();
+  const rows = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return rows;
+    rows.push(JSON.parse(Buffer.from(value).toString("utf8")));
+  }
 }
 
 class HostObjectStore {
@@ -73,6 +88,23 @@ assert.deepEqual(committed, { status: "already_committed", generation: 0 });
 assert.deepEqual([...await table.read_xbf()], [...xbf]);
 assert.deepEqual([...await table.read_xbf_at(0n)], [...xbf]);
 assert.equal(await table.read_xbf_at(1n), null);
+
+const query = { projection: { NAME: 1 } };
+const currentRows = await readRows(
+  createWorkerQueryStream({ database: table, query, queueSize: 1 }),
+);
+assert.deepEqual(currentRows, [{ NAME: "Alice" }, { NAME: "Bob" }]);
+const historicalRows = await readRows(
+  createWorkerQueryStream({ database: table, generation: 0n, query, queueSize: 1 }),
+);
+assert.deepEqual(historicalRows, currentRows);
+const cancelledStream = await table.query_stream_json(jsonBytes(query));
+cancelledStream.cancel();
+assert.throws(() => cancelledStream.next_json(), /cancelled/);
+await assert.rejects(
+  () => table.query_stream_json_at(1n, jsonBytes(query)),
+  /no retained snapshot at generation 1/,
+);
 
 host.objects.set("users/snapshots/999.xbf", new Uint8Array([0xff]));
 assert.deepEqual(JSON.parse(await table.cleanup_orphans()), ["users/snapshots/999.xbf"]);
