@@ -35,9 +35,9 @@ WASMはパスとbodyの検証を二重に実装しません。
 - それら5つの操作をWeb Fetch、条件付きリクエスト、強いSHA-256 ETag、リクエストタイムアウト、`AbortSignal`によるキャンセルでHTTPオブジェクトサービスへ対応付ける`createWorkerObjectStore`アダプター。
 - compare-and-swap公開、WALクリーンアップ失敗後の復旧、過去世代読み取り、保持、ホストエラー変換を検査する固定Node.jsホストフィクスチャ。
 - 生成したWASMラッパーを介してWorker転送を検査し、タイムアウトとキャンセルを含めてWeb Fetchを検証する固定Node.jsフィクスチャ。
-- WASMのスナップショットストリームを、有界なNDJSONチャンクのWeb `ReadableStream`として公開し、readerのキャンセルと`AbortSignal`のライフサイクルを処理する`createWorkerQueryStream`アダプター。スナップショット読み込み中のオブジェクトストレージ要求も中断します。
+- WASMのスナップショットストリームを、有界なNDJSONチャンクのWeb `ReadableStream`として公開し、readerのキャンセルと`AbortSignal`のライフサイクルを処理する`createWorkerQueryStream`アダプター。スナップショット読み込み中のオブジェクトストレージ要求も中断する。
 - `AsyncObjectStore`を通じて現在または保持中のコミット済みXBFスナップショットを1つ読み取り、XBFからDBFへ変換した後、既存のfilter、projection、skip、limitのクエリストリーム意味論を再利用する、ランタイム非依存の`AsyncObjectTable::query_stream`と`query_stream_at`アダプター。
-- 現在世代と保持世代のストリームをPromiseを返す`WasmObjectQueryStream`として公開する、生成済みラッパーの`WasmObjectTable.query_stream_json`と`query_stream_json_at`。クエリごとの`AbortSignal`をホスト操作へ渡すシグナル対応版もあります。
+- 現在世代と保持世代のストリームをPromiseを返す`WasmObjectQueryStream`として公開する、生成済みラッパーの`WasmObjectTable.query_stream_json`と`query_stream_json_at`。クエリごとの`AbortSignal`をホスト操作へ渡すシグナル対応版も提供する。
 - backpressureを考慮したpullスケジューリング、スナップショットの安定性、不正な制御、キャンセルを検査する固定Node.js Web Streamsフィクスチャ。
 - DBFファイル、または読み取り専用の事前公開filesystem storeを介した現在・保持中のDBF表現可能なXBFスナップショットを読み込むWASI CLIクエリストリーム。
   書き込みが必要な保留中WALの復旧は、行を出力する前に失敗する。
@@ -103,7 +103,7 @@ readerのキャンセルと呼び出し側の`AbortSignal`は、そのクエリ�
 オブジェクトテーブルのストリームは、最初の行を出力する前にスナップショットの復旧と読み込みを完了します。
 シグナル対応WASMメソッドは、クエリごとのシグナルを末尾の引数として各ホスト操作へ渡します。
 `createWorkerObjectStore`は、そのシグナルで該当するFetchリクエストを中断します。
-カスタムホストが自身のI/Oも中断するには、末尾の任意引数を受け取り、そのシグナルを処理する必要があります。
+カスタムホストもI/Oを中断する場合は、末尾の任意引数で受け取るシグナルを処理します。
 WorkerとWASMの経路以外では、ランタイム非依存の`AsyncObjectStore`契約にキャンセル機能はありません。
 
 オブジェクトストレージの契約は、共有するテーブルとトランザクションのインターフェースより下位に置きます。

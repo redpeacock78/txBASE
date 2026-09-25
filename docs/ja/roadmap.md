@@ -170,9 +170,10 @@ HTTPサーバーは`/records/stream`と`/{table}/records/stream`をこのスト�
 Worker互換Web Streamsアダプターは、インメモリWASMストリームとPromiseを返すオブジェクトテーブルストリームの両方に、pullスケジューリング、有界NDJSONチャンク、readerのキャンセル、`AbortSignal`ライフサイクルを提供します。
 `AsyncObjectTable::query_stream`は、現在のコミット済みXBFスナップショットを復旧し、既存のXBFからDBFへの変換契約を再利用し、所有型スナップショットストリームへ行の配送を委譲する、ランタイム非依存の非同期ストレージ接続型クエリストリームを提供します。
 `AsyncObjectTable::query_stream_at`は、同じ契約を保持中の1つの世代へ適用します。
-`WasmObjectTable.query_stream_json`と`query_stream_json_at`は、同じ現在世代または保持世代のストリームを生成ラッパーから公開します。
+`WasmObjectTable.query_stream_json`と`query_stream_json_at`は、現在世代と選択した保持世代のストリームを生成ラッパーから公開します。
 Workerアダプターは最初の行を返す前にスナップショットを読み込みます。
-シグナル対応の`WasmObjectTable`メソッドは、クエリ専用の`AbortSignal`をホスト操作へ渡し、readerまたは呼び出し側がキャンセルすると`createWorkerObjectStore`が該当するFetchリクエストを中断します。
+シグナル対応の`WasmObjectTable`メソッドは、クエリ専用の`AbortSignal`をホスト操作へ渡します。
+readerまたは呼び出し側がキャンセルすると、`createWorkerObjectStore`は該当するFetchリクエストを中断します。
 クエリごとに異なるシグナルを使うため、1つのキャンセルが別のクエリのリクエストへ波及しません。
 汎用の`AsyncObjectStore` future契約と、任意のシグナルを無視するカスタムホストはキャンセルできません。
 WASI CLIコンポーネントは読み取り専用の事前公開filesystem storeを通じて、保持中の世代を含むXBFスナップショットも読み込みます。
