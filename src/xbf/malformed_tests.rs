@@ -1,4 +1,6 @@
-use super::{XbfField, XbfRecord, XbfTable, XbfType, XbfValue, decode, encode};
+use super::{
+    XbfField, XbfLimits, XbfRecord, XbfTable, XbfType, XbfValue, decode, decode_with_limits, encode,
+};
 
 fn hex_fixture(input: &str) -> Vec<u8> {
     input
@@ -115,6 +117,53 @@ fn refresh_data_checksum(bytes: &mut [u8]) {
 }
 
 #[test]
+fn rejects_each_xbf_checksum_mismatch() {
+    let encoded = encode(&table_fixture()).unwrap();
+    let checksum_offsets = [
+        (92, "header checksum"),
+        (get_u64(&encoded, 16) as usize, "schema checksum"),
+        (get_u64(&encoded, 36) as usize, "record-directory checksum"),
+        (get_u64(&encoded, 56) as usize, "record-data checksum"),
+    ];
+
+    for (offset, message) in checksum_offsets {
+        let mut corrupted = encoded.clone();
+        corrupted[offset] ^= 1;
+        let error = decode(&corrupted).unwrap_err();
+        assert!(
+            error.to_string().contains(message),
+            "expected {message:?}, got {error}"
+        );
+    }
+}
+
+#[test]
+fn rejects_invalid_xbf_header_metadata() {
+    let encoded = encode(&table_fixture()).unwrap();
+    let mutations = [
+        (4, 2, 2, "unsupported XBF major version"),
+        (6, 2, 1, "unsupported XBF minor version"),
+        (12, 4, 99, "XBF header length is not 100"),
+        (96, 4, 1, "XBF header reserved field is non-zero"),
+    ];
+
+    for (offset, width, value, message) in mutations {
+        let mut invalid = encoded.clone();
+        if width == 2 {
+            put_u16(&mut invalid, offset, value as u16);
+        } else {
+            put_u32(&mut invalid, offset, value as u32);
+        }
+        refresh_header_checksum(&mut invalid);
+        let error = decode(&invalid).unwrap_err();
+        assert!(
+            error.to_string().contains(message),
+            "expected {message:?}, got {error}"
+        );
+    }
+}
+
+#[test]
 fn rejects_malformed_xbf_sections_and_directory() {
     let encoded = encode(&table_fixture()).unwrap();
 
@@ -149,6 +198,48 @@ fn rejects_malformed_xbf_sections_and_directory() {
         error
             .to_string()
             .contains("record directory entries overlap")
+    );
+}
+
+#[test]
+fn rejects_xbf_section_and_record_bounds_overflow() {
+    let encoded = encode(&table_fixture()).unwrap();
+
+    let mut invalid_section = encoded.clone();
+    put_u64(&mut invalid_section, 16, u64::MAX);
+    refresh_header_checksum(&mut invalid_section);
+    let error = decode(&invalid_section).unwrap_err();
+    assert!(error.to_string().contains("schema"), "got {error}");
+
+    let mut excessive_count = encoded.clone();
+    put_u64(&mut excessive_count, 76, u64::MAX);
+    refresh_header_checksum(&mut excessive_count);
+    let limits = XbfLimits {
+        max_records: usize::MAX,
+        ..XbfLimits::default()
+    };
+    assert!(
+        decode_with_limits(&excessive_count, &limits).is_err(),
+        "accepted an overflowing record count"
+    );
+
+    let directory_offset = get_u64(&encoded, 36) as usize;
+    let mut overflowing_entry = encoded.clone();
+    put_u64(&mut overflowing_entry, directory_offset, u64::MAX - 7);
+    put_u64(&mut overflowing_entry, directory_offset + 8, 16);
+    refresh_directory_checksum(&mut overflowing_entry);
+    let error = decode(&overflowing_entry).unwrap_err();
+    assert!(error.to_string().contains("overflows"), "got {error}");
+
+    let data_end = get_u64(&encoded, 56) + get_u64(&encoded, 64);
+    let mut out_of_range_entry = encoded;
+    put_u64(&mut out_of_range_entry, directory_offset, data_end);
+    put_u64(&mut out_of_range_entry, directory_offset + 8, 1);
+    refresh_directory_checksum(&mut out_of_range_entry);
+    let error = decode(&out_of_range_entry).unwrap_err();
+    assert!(
+        error.to_string().contains("outside record data"),
+        "got {error}"
     );
 }
 
