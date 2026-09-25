@@ -194,6 +194,7 @@ The current core slice meets the following initial conditions:
 - a JavaScript host-backed asynchronous object-table fixture using the generated
   `wasm-bindgen` wrapper;
 - a Worker-compatible Fetch object-store adapter and deterministic HTTP fixture;
+- a Cloudflare R2 binding adapter and deterministic in-memory binding fixture;
 - a Worker-compatible Web Streams query adapter and deterministic Node.js fixture;
 - a generated-wrapper query stream over current and retained XBF object-table snapshots;
 - runtime-neutral asynchronous-storage-backed query-stream adapters for current
@@ -209,7 +210,7 @@ The following conditions remain before calling a deployed worker or production W
 - writable or provider-backed WASI object-store adapters and genuinely
   non-blocking storage I/O;
 - host-specific timeout, retry, and process-cancellation behavior for asynchronous query streams;
-- a provider-specific consistency and retry contract when remote storage is selected.
+- live R2 service validation, provider integrations beyond R2, and provider-managed retention or retry policy.
 
 The Wasmtime smoke test does not establish a production deployment contract.
 Worker deployment and production WASI storage integration remain future work.
@@ -233,6 +234,8 @@ Those would be separate products and would obscure the shared core contract.
 - [Cloudflare Workers fetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
 - [Cloudflare Workers web standards](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)
 - [Cloudflare Workers Request `AbortSignal`](https://developers.cloudflare.com/workers/runtime-apis/request/)
+- [Cloudflare R2 Workers API reference](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)
+- [Cloudflare R2 consistency model](https://developers.cloudflare.com/r2/reference/consistency/)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
 - [wasm-bindgen: Promises and Futures](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html)
 - [wasm-bindgen: exported Rust types](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/exported-rust-types.html)
@@ -244,13 +247,15 @@ The Component Model and the Cloudflare Workers and Node.js pages are implementat
 
 The repository has a WASM core implementation, a generated-wrapper Node.js
 smoke check, a JavaScript host-backed asynchronous object-table fixture, a
-Worker-compatible Fetch object-store adapter and smoke fixture, and
-runtime-neutral asynchronous object-store and object-table contracts. It also
+Worker-compatible Fetch adapter and smoke fixture, a Cloudflare R2 binding
+adapter and in-memory smoke fixture, and runtime-neutral asynchronous
+object-store and object-table contracts. It also
 has runtime-neutral and generated-wrapper query-stream adapters for
 DBF-representable current or retained XBF snapshots, a Worker-compatible Web
 Streams adapter, and a WASI 0.3 CLI component. The WASI component reads XBF
 snapshots through a read-only preopened filesystem adapter and has a pinned
 Wasmtime smoke check.
-It does not claim support for a deployed worker, writable or provider-backed
-WASI object storage, non-blocking WASI storage I/O, provider-specific consistency
-or retry policy, or a native recovery path.
+It does not claim support for a deployed worker or live R2 service, writable or
+provider-backed WASI object storage, non-blocking WASI storage I/O, provider
+integrations beyond R2, provider-managed retention or automatic retries, or a
+native recovery path.

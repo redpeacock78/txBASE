@@ -28,9 +28,17 @@ cargo test --all-targets --all-features
 ```
 
 ネイティブのワークフローはUbuntu、macOS、Windowsでこのゲートを実行します。
-別のUbuntu WASMジョブは`cargo build --locked --lib --target wasm32-unknown-unknown --release`を実行します。
-`wasm-bindgen-cli` `0.2.128`でNode.jsラッパーを生成します。
-生成したラッパーに対して`node tests/wasm_smoke.mjs target/wasm-bindgen`、`node tests/wasm_edge_smoke.mjs target/wasm-bindgen`、`node tests/wasm_worker_smoke.mjs target/wasm-bindgen`を実行します。
+別のUbuntu WASMジョブはreleaseモジュールをビルドし、`wasm-bindgen-cli` `0.2.128`でNode.jsラッパーを生成します。
+生成したラッパーに対して、次の4つのスモーク検査を実行します。
+
+```bash
+node tests/wasm_smoke.mjs target/wasm-bindgen
+node tests/wasm_edge_smoke.mjs target/wasm-bindgen
+node tests/wasm_worker_smoke.mjs target/wasm-bindgen
+node tests/wasm_r2_smoke.mjs target/wasm-bindgen
+```
+
+モジュールのビルドには`cargo build --locked --lib --target wasm32-unknown-unknown --release`を使います。
 別のUbuntu WASIジョブは`wasm32-wasip2` CLIコンポーネントをビルドし、固定したWasmtime `49.0.0`で実行してNDJSON出力と未対応制御のエラーを検査します。
 別のUbuntuファジングジョブは`cargo-fuzz` 0.13.2を使い、XBFデコーダーとクエリJSONパーサーを固定シードで各1,000回実行します。入力上限は1 MiB、入力ごとのタイムアウトは10秒です。
 
@@ -129,6 +137,7 @@ cargo test --all-targets --all-features
 | WASM-005 | Worker互換Fetchオブジェクトストレージアダプターが、生成したWASMラッパーを介して、不変な公開、強いSHA-256 ETagによるcompare-and-swap、列挙、存在しない読み取り、HTTP競合、リクエストタイムアウト、呼び出し側`AbortSignal`キャンセルを対応付け、Rustのオブジェクトテーブルプロトコルを変更しない。 | `src/worker-object-store.mjs`; `src/wasm_edge.rs`; `src/edge/store.rs`; `.github/workflows/ci.yml`; `tests/wasm_worker_smoke.mjs`; `docs/worker-object-store.md`; `docs/ja/wasm.md` | `node tests/wasm_worker_smoke.mjs target/wasm-bindgen` | Boundary |
 | WASM-006 | Worker互換Web Streamsクエリアダプターが、WASM所有のクエリスナップショットを有界UTF-8 NDJSONチャンクとして公開し、filter、projection、skip、limitだけを受け付け、readerと`AbortSignal`のキャンセルを伝播し、共通クエリ結果の意味論を保つ。 | `src/query/stream.rs`; `src/wasm.rs`; `src/worker-query-stream.mjs`; `.github/workflows/ci.yml`; `tests/wasm_query_stream_smoke.mjs`; `docs/ja/worker-query-stream.md`; `docs/ja/async-streaming.md`; `docs/ja/wasm.md` | `node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen` | Boundary |
 | WASM-007 | 生成済みラッパーは、DBFで表現可能な現在または保持中のXBFクエリをPromiseを返す`WasmObjectQueryStream`として公開します。Workerアダプターは初期化を待ち、pullごとに最大1行のNDJSONを返します。キャンセルで行の配送は止まりますが、実行中の`AsyncObjectStore`操作は中断しません。 | `src/edge/query_stream.rs`; `src/wasm.rs`; `src/wasm_edge.rs`; `src/worker-query-stream.mjs`; `.github/workflows/ci.yml`; `tests/wasm_edge_smoke.mjs`; `tests/wasm_query_stream_smoke.mjs`; `docs/ja/wasm.md`; `docs/ja/edge-storage.md`; `docs/ja/worker-query-stream.md`; `docs/ja/async-streaming.md` | `node tests/wasm_edge_smoke.mjs target/wasm-bindgen`; `node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen` | Boundary |
+| WASM-008 | R2バインディングアダプターは、存在しないオブジェクトの読み取り、不変な公開、`If-Match`を使うバイト比較付きcompare-and-swap、冪等な削除、ページ分割されたプレフィックス一覧、バインディングエラーを5つの`AsyncObjectStore`操作へ対応付け、Rustのプロトコルを変更しません。生成したWASMラッパーはインメモリのバインディングフィクスチャで検査し、Cloudflareの本番動作は主張しません。 | `src/r2-object-store.mjs`; `src/wasm_edge.rs`; `src/edge/store.rs`; `.github/workflows/ci.yml`; `tests/wasm_r2_smoke.mjs`; `docs/ja/r2-object-store.md`; `docs/ja/edge-storage.md` | `node tests/wasm_r2_smoke.mjs target/wasm-bindgen` | Boundary |
 | HTTP-009 | HTTPのJSONリクエスト本文が共有する1 MiBの入力境界に制限され、解析または永続化の前に`413 Payload Too Large`を返す。 | `src/lib.rs`; `src/server.rs`; `src/server/body.rs`; `src/server/tests/query_tests.rs`; `docs/ja/http-semantics.md` | `query_endpoint_rejects_an_oversized_json_body_before_parsing` | Boundary |
 | QRY-011 | `$expr`と入力用`$set`/`$addFields`が、フィールド参照、リテラル、nullフォールバック、文字列結合、ロケールに依存しないUnicodeの大文字と小文字の変換、有界な数値式について1つのスカラー式ASTと評価器を共有する。型が合わない値は表面ごとの規則に従って不一致または`null`になり、計算した文字列は1 MiBまでである。 | `src/query/expression.rs`; `src/query/expression/numeric.rs`; `src/query/aggregation_plan/set.rs`; `src/query/aggregation/input.rs`; `src/query/field_expression_tests.rs`; `src/query/aggregation_tests/input_stage_tests.rs`; `docs/ja/query-model.md`; `docs/ja/aggregation.md` | `compares_string_scalar_expression_results`; `string_scalar_expressions_support_null_fallback_and_literal_values`; `sets_string_scalar_expressions_before_matching_and_grouping`; `rejects_unsupported_or_malformed_expr` | Boundary |
 | FUZZ-001 | 任意のXBFバイト列とクエリJSONを公開デコーダーに渡し、固定シードのCIファジングでpanicしないことを確認する。入力サイズ、入力ごとの時間、ジョブ全体の時間を制限する。 | `fuzz/Cargo.toml`; `fuzz/Cargo.lock`; `fuzz/fuzz_targets/xbf_decode.rs`; `fuzz/fuzz_targets/query_json.rs`; `fuzz/corpus/query_json/`; `tests/corpus/xbf/`; `tests/fixtures/query-stream-users.xbf.hex`; `.github/workflows/ci.yml` | `cargo fuzz run xbf_decode`; `cargo fuzz run query_json`; 各対象で`-runs=1000 -seed=1 -max_len=1048576 -timeout=10`を指定 | Boundary |
@@ -146,7 +155,8 @@ cargo test --all-targets --all-features
   `$group`または`$bucket`の`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を超えるアキュムレータも対象とする。
 - 述語単位のロックと分散serializable調整。
 - ロケール対応CJK照合と、より広い上流CJKフィクスチャ。
-- スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、プロバイダー固有のクラウドオブジェクトストレージアダプターと保持方針、デプロイ済みWorkerまたはWASIのランタイムfixture、WASIのクエリスケジューリング、実行中のオブジェクトストア操作のキャンセル、TLS、永続的な再試行キュー、権威検出、クォーラムまたはコンセンサス、分散レプリケーション。
+- スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針。
+- デプロイ済みWorkerまたはWASIのランタイムfixture、WASIのクエリスケジューリング、実行中のオブジェクトストア操作のキャンセル、TLS、永続的な再試行キュー、権威検出、クォーラムまたはコンセンサス、分散レプリケーション。
 
 これらのいずれかをCurrentへ移す前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。
 

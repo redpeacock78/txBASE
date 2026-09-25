@@ -1,10 +1,10 @@
 # Edge storage and object-store commits
 
-This document defines the implemented local object-store boundary and the future cloud adapter boundary.
+This document defines the generic XBF object-store contract, its local memory and filesystem backends, and the host adapters that reuse it.
 
 The local boundary provides an in-memory fixture and a durable filesystem backend for the same generation, conditional publication, retry, recovery, historical-read, and explicit-retention contract.
 
-It does not claim an R2 adapter or any other cloud-provider implementation.
+The R2 binding's provider-specific conditions and pagination are documented separately in [Cloudflare R2 object-store adapter](r2-object-store.md).
 
 ## 1. Current boundary
 
@@ -135,7 +135,9 @@ The manifest is the mutable commit point, while snapshots and pending WAL object
 
 ## 6. Cloud adapter boundary
 
-A remote adapter still needs to define:
+The R2 adapter implements the Cloudflare binding's conditional writes and cursor-based list operation; its exact mapping is in [Cloudflare R2 object-store adapter](r2-object-store.md).
+
+An adapter for another provider still needs to define:
 
 - conditional-write and retry error mapping;
 - consistency guarantees for `get`, `list`, and compare-and-swap;
@@ -153,14 +155,15 @@ The local and asynchronous object-table tests also verify that an encode-limit f
 The Worker Fetch adapter implements the host-managed HTTP shape described in [Worker Fetch object-store adapter](worker-object-store.md).
 The remote adapter may implement `ObjectStore` for a blocking native client or `AsyncObjectStore` for another host-managed client.
 The high-level asynchronous manifest protocol covers commit, recovery, retention, and conditional publication.
-The JavaScript WASM adapter and Worker Fetch adapter supply host-managed fixtures for this protocol; provider-specific consistency and retry behavior remain outside this generic transport.
+The JavaScript WASM adapter, Worker Fetch adapter, and R2 binding adapter supply host-managed implementations for this protocol.
+The R2 adapter's conditional-write behavior is specific to Cloudflare and remains outside the generic transport contract.
 
 The asynchronous query adapter supplies the generic storage-to-query handoff, but it does not select host scheduling, cancellation propagation, timeout, or retry behavior.
 The Worker Web Streams adapter supplies demand control and stops row delivery when its stream is cancelled; it cannot cancel an object-store future that is already in flight.
 
 ## 7. Explicit non-goals
 
-This slice does not promise an R2 adapter, a specific cloud vendor, WASI query-stream scheduling, cancellation of in-flight object-store operations, host-specific timeout or retry behavior, multi-region consensus, automatic background garbage collection, immutable page splitting, or a provider-specific cloud-backed WASM host.
+This slice does not promise a deployed Worker or live R2 integration, provider-managed retention scheduling, WASI query-stream scheduling, cancellation of in-flight object-store operations, host-specific timeout or retry behavior, multi-region consensus, automatic background garbage collection, or immutable page splitting.
 
 Those features can reuse the manifest and generation contract after their host-specific failure behavior has a deterministic test.
 
@@ -173,5 +176,5 @@ Those features can reuse the manifest and generation contract after their host-s
 POSIX `rename()` and `fsync()` are the relevant filesystem references for the local backend's temporary-file replacement and synchronization path.
 The manifest, generation, compare-and-swap, recovery, and retention rules are txBASE-owned contracts, not claims about any cloud provider.
 
-No cloud-provider source belongs in the current implementation contract because no remote adapter has been selected.
-Provider documentation should be added to a provider-specific adapter document when one is implemented.
+The local manifest and generation rules remain txBASE-owned contracts.
+R2's provider-specific guarantees and their official sources belong in [Cloudflare R2 object-store adapter](r2-object-store.md), not in this generic contract.

@@ -150,6 +150,7 @@ Worker FetchアダプターはHTTP転送、タイムアウト、キャンセル�
 - ランタイムから独立したストレージ契約を使う非同期テーブルフィクスチャが1つある。
 - 生成した`wasm-bindgen`ラッパーを使うJavaScriptホスト接続型の非同期オブジェクトテーブルフィクスチャが1つある。
 - Worker互換のFetchオブジェクトストレージアダプターと決定的なHTTPフィクスチャがある。
+- Cloudflare R2バインディングアダプターと決定的なインメモリバインディングフィクスチャがある。
 - Worker互換のWeb Streamsクエリアダプターと決定的なNode.jsフィクスチャがある。
 - 現在または保持中のXBFオブジェクトテーブルスナップショットを対象にする、生成済みラッパーのクエリストリームがある。
 - 現在または保持中のDBFで表現できるXBFスナップショット向けに、ランタイム非依存の非同期ストレージ接続型クエリストリームアダプターがある。
@@ -161,9 +162,10 @@ CIは固定したWasmtime上でWASI CLIコンポーネントをビルドして�
 デプロイ済みワーカーまたは本番WASIホストを完了と呼ぶ前に、次の条件を満たします。
 
 - 選択したデプロイ済みワーカーまたは本番WASIホストのスモークテストがある。
+- 本番R2サービスへ接続するWorkerスモークテストがある。
 - 書き込み可能またはプロバイダー接続型のWASIオブジェクトストアアダプターと、真にノンブロッキングなストレージI/Oがある。
 - 非同期クエリストリーム向けのホスト固有のタイムアウト、再試行、プロセスキャンセル動作がある。
-- リモートストレージを選択する場合、プロバイダー固有の整合性と再試行の契約がある。
+- R2以外のプロバイダー統合と、プロバイダー管理の保持または再試行方針がある。
 
 Wasmtimeのスモーク検査は本番デプロイの契約を示しません。
 Workerのデプロイと本番WASIストレージ統合は今後の作業です。
@@ -187,6 +189,8 @@ Workerのデプロイと本番WASIストレージ統合は今後の作業です�
 - [Cloudflare Workersのfetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
 - [Cloudflare WorkersのWeb標準](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)
 - [Cloudflare WorkersのRequest `AbortSignal`](https://developers.cloudflare.com/workers/runtime-apis/request/)
+- [Cloudflare R2 Workers APIリファレンス](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)
+- [Cloudflare R2の整合性モデル](https://developers.cloudflare.com/r2/reference/consistency/)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
 - [wasm-bindgen：PromiseとFuture](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html)
 - [wasm-bindgen：exportするRust型](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/exported-rust-types.html)
@@ -196,7 +200,7 @@ Workerのデプロイと本番WASIストレージ統合は今後の作業です�
 WebAssemblyとWASIの仕様は、コアモジュールとホストインターフェースの語彙を定義します。
 Component Model、Cloudflare Workers、Node.jsの資料は候補ホストの実装参照であり、txBASEの互換性を約束するものではありません。
 
-リポジトリにはWASMコアの実装、生成ラッパーのNode.jsスモーク検査、JavaScriptホスト接続型の非同期オブジェクトテーブルフィクスチャ、Worker互換Fetchオブジェクトストレージアダプターとスモークフィクスチャ、ランタイムから独立した非同期オブジェクトストレージとテーブルの契約があります。
+リポジトリにはWASMコアの実装、生成ラッパーのNode.jsスモーク検査、JavaScriptホスト接続型の非同期オブジェクトテーブルフィクスチャ、Worker互換Fetchアダプターとスモークフィクスチャ、Cloudflare R2バインディングアダプターとインメモリのスモークフィクスチャ、ランタイムから独立した非同期オブジェクトストレージとテーブルの契約があります。
 DBFで表現できる現在または保持中のXBFスナップショット向けに、ランタイム非依存と生成済みラッパーのクエリストリームアダプター、Worker互換Web Streamsアダプター、WASI 0.3 CLIコンポーネントを用意しています。
 WASIコンポーネントは読み取り専用の事前公開filesystem adapterを使い、固定したWasmtimeによるスモーク検査があります。
-デプロイ済みWorker、書き込み可能なWASIオブジェクトストレージとプロバイダー接続型アダプター、ノンブロッキングなWASIストレージI/O、プロバイダー固有の整合性・再試行方針はまだサポートしません。
+デプロイ済みWorkerやR2サービスへの接続、書き込み可能なWASIオブジェクトストレージとWASI用プロバイダー接続型アダプター、ノンブロッキングなWASIストレージI/O、R2以外のプロバイダー統合、プロバイダー管理の保持や自動再試行はまだサポートしません。

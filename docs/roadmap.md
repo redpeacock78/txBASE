@@ -65,6 +65,7 @@ The repository currently provides:
 - A runtime-neutral `AsyncObjectStore` primitive contract, `AsyncObjectTable` manifest protocol, and synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
 - A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A Worker-compatible Fetch object-store adapter with conditional HTTP publication, strong SHA-256 ETags, bounded request timeouts, explicit `AbortSignal` cancellation mapping, and a deterministic WASM-backed HTTP fixture.
+- A Cloudflare R2 binding adapter with conditional writes and cursor-based listing, checked against a deterministic in-memory binding fixture in CI; live service validation remains future.
 - A Worker-compatible Web Streams query adapter that supports in-memory WASM streams and Promise-backed current or retained XBF object-table streams, emits bounded NDJSON chunks with pull-based backpressure, and stops row delivery on `AbortSignal`; it does not cancel an in-flight storage operation.
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
@@ -80,7 +81,7 @@ The baseline intentionally does not include the following:
 - Aggregation stages or accumulators beyond bounded input `$match`, `$unwind` with its documented top-level options, `$set`/`$addFields` with its documented expression subset, `$project`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, `$group`, `$bucket`, bounded scalar-expression `$bucketAuto` with finite numeric results, and bounded scalar-expression `$sortByCount` with bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
 - Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
-- Provider-specific cloud object-storage adapters, consistency guarantees, retention policy, and durable retry queues.
+- Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
 - Quorum or consensus, quorum-coordinated snapshot/log retention, distributed follower reads, and distributed partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
@@ -343,24 +344,27 @@ The range-oriented local storage abstraction is a useful starting point, but rem
 
 ### Candidate scope
 
-- A storage-backend redesign for remote object stores.
-- A deployed Worker fixture, production WASI storage integration, and provider-specific object-storage integration.
-- An R2 or other cloud object-storage adapter.
+- A deployed Worker and live R2 service validation, plus production WASI storage integration.
+- Provider integrations beyond the implemented R2 binding adapter.
 - Immutable pages and page-level manifests.
-- Cloud generation snapshots and retention.
+- Provider-managed lifecycle rules and scheduled retention.
 
 The local XBF object-store boundary is implemented by `edge::ObjectTable`, `MemoryObjectStore`, and `FilesystemObjectStore`.
 It defines the manifest schema and committed-generation history, generation compare-and-swap, retry and recovery behavior, historical reads, explicit local retention, reader generation checks, and orphan cleanup without requiring a cloud account.
 The filesystem backend persists the same contract under one directory with exclusive object creation, a store lock, and synced temporary manifest replacement.
 
 The generic Worker Fetch transport boundary is implemented in `src/worker-object-store.mjs` and tested through the generated WASM wrapper against a deterministic local HTTP service.
-The remaining cloud boundary needs a provider-specific consistency contract, service-specific retention and orphan-page cleanup policy, retry behavior, and a provider adapter fixture.
+The Cloudflare R2 binding adapter is implemented in `src/r2-object-store.mjs` and tested through the generated WASM wrapper against an in-memory binding fixture.
+It maps conditional writes to R2 `If-None-Match` and `If-Match` operations and follows paginated listings.
+The fixture does not contact a Cloudflare account or verify a deployed Worker.
+The remaining work is live host validation, provider integrations beyond R2, and operational lifecycle or scheduled-retention policy.
 
 The current WASM slice exposes DBF bytes, query execution, and record mutation through the shared implementation.
 The repository's edge-storage slice also defines the five object-store primitives and the manifest protocol through runtime-neutral contracts.
 `WasmObjectTable` now exposes those contracts to a JavaScript host through the generated `wasm-bindgen` ABI.
 The CI gate loads the generated `wasm-bindgen` wrapper from Node.js and verifies the ABI version, snapshot round trip, all four mutation methods, and atomic batch rollback.
 The same gate verifies asynchronous object publication, compare-and-swap recovery, historical reads, retention, orphan cleanup, and tagged host-error mapping.
+It also runs the Worker Fetch and R2 binding fixtures against the generated wrapper.
 The native `ThreadedQueryStream` adapter is available outside `wasm32` and does not change the WASM ABI.
 The WASM slice now supplies generic Fetch timeout and cancellation mapping through the Worker adapter.
 The Worker-compatible Web Streams query adapter supplies bounded pull scheduling,
@@ -376,9 +380,9 @@ preopened filesystem store, and writes NDJSON through asynchronous stdout with
 stream backpressure; a pinned Wasmtime CI smoke check covers both input paths.
 The XBF adapter uses synchronous filesystem operations, is not safe for
 concurrent writers, and fails before row output if pending-WAL recovery needs a
-write. Writable or provider-backed storage, non-blocking storage I/O,
-provider-specific semantics, and cancellation of in-flight storage I/O remain
-future work.
+write. Writable or provider-backed WASI storage, non-blocking storage I/O,
+provider integrations beyond R2, and cancellation of in-flight storage I/O
+remain future work.
 Production WASI host integration and a deployed worker fixture remain future work.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
@@ -458,6 +462,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Filesystem- and cache-aware merge planning, streaming join execution, aggregation, predicate-level serializable MVCC, durable XBF, provider-specific cloud object-storage, TLS, durable retry queues, authority discovery, quorum, or consensus code without a contract and end-to-end test.
+- Filesystem- and cache-aware merge planning, streaming join execution, aggregation, predicate-level serializable MVCC, durable XBF, provider integrations beyond R2, live R2 service validation, TLS, durable retry queues, authority discovery, quorum, or consensus code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and filesystem- or cache-aware merge planning remain future work.
