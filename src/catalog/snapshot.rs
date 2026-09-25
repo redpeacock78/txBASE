@@ -14,6 +14,7 @@ const TABLE_STATE_EXTENSIONS: [&str; 5] = [
     "txbase.state",
     "txbase.idx",
 ];
+type SnapshotSidecar<'a> = (&'a str, Option<Vec<u8>>, Option<Vec<u8>>);
 
 impl Catalog {
     pub(crate) fn export_snapshot_at(&self, transaction_id: u64) -> Result<Vec<u8>, CatalogError> {
@@ -40,13 +41,11 @@ impl Catalog {
         Ok((snapshot.transaction_id, super::representation_tag(&schema)))
     }
 
-    pub(crate) fn install_snapshot_with_sidecar(
+    pub(crate) fn install_snapshot_with_sidecars(
         &mut self,
         snapshot_bytes: &[u8],
         expected_current_transaction_id: u64,
-        sidecar_name: &str,
-        expected_sidecar: Option<Vec<u8>>,
-        sidecar_after: Vec<u8>,
+        sidecars: Vec<SnapshotSidecar<'_>>,
     ) -> Result<u64, CatalogTransactionError> {
         if self.is_historical() {
             return Err(CatalogTransactionError::Invalid(
@@ -76,14 +75,23 @@ impl Catalog {
             });
         }
 
-        let sidecar_path = super::transaction::sidecar_path(&self.root, sidecar_name)
-            .map_err(CatalogTransactionError::Catalog)?;
-        let actual_sidecar =
-            read_optional(&sidecar_path).map_err(CatalogTransactionError::Catalog)?;
-        if actual_sidecar != expected_sidecar {
-            return Err(CatalogTransactionError::SidecarPreconditionFailed {
-                name: sidecar_name.to_owned(),
-            });
+        let mut sidecar_changes = Vec::with_capacity(sidecars.len());
+        let mut sidecar_names = BTreeSet::new();
+        for (sidecar_name, expected_sidecar, sidecar_after) in sidecars {
+            if !sidecar_names.insert(sidecar_name) {
+                return Err(CatalogTransactionError::Invalid(format!(
+                    "duplicate catalog sidecar: {sidecar_name}"
+                )));
+            }
+            let path = super::transaction::sidecar_path(&self.root, sidecar_name)
+                .map_err(CatalogTransactionError::Catalog)?;
+            let actual = read_optional(&path).map_err(CatalogTransactionError::Catalog)?;
+            if actual != expected_sidecar {
+                return Err(CatalogTransactionError::SidecarPreconditionFailed {
+                    name: sidecar_name.to_owned(),
+                });
+            }
+            sidecar_changes.push((path, sidecar_after));
         }
 
         let mut names = self.table_names().into_iter().collect::<BTreeSet<_>>();
@@ -143,8 +151,9 @@ impl Catalog {
         .map_err(CatalogTransactionError::Catalog)?;
         stage_change(&mut changes, super::cdc::path_for(&self.root), None)
             .map_err(CatalogTransactionError::Catalog)?;
-        stage_change(&mut changes, sidecar_path, Some(sidecar_after))
-            .map_err(CatalogTransactionError::Catalog)?;
+        for (path, after) in sidecar_changes {
+            stage_change(&mut changes, path, after).map_err(CatalogTransactionError::Catalog)?;
+        }
 
         let transaction_id = commit_at(
             &self.root,

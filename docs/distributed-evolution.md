@@ -143,19 +143,23 @@ The authority computes the safe compaction index as the minimum acknowledged
 index across all registered followers.
 `compact_through_acknowledged` rejects compaction when no follower has
 registered progress or when the requested snapshot is beyond that minimum.
-The existing `compact_through` method remains an explicit local-only primitive
-for deployments that intentionally manage retention outside this control plane.
+`compact_through` applies the same minimum-index safety gate when followers
+are registered; it is not a bypass for follower safety.
 
-Follower progress is process-local control state and is not included in the
-`TXRP` data-plane sidecar.
-An authority restart therefore forgets its acknowledgements and requires each
-follower to register again before coordinated compaction can proceed.
-This prevents an old acknowledgement from authorizing retention after a term
-or process restart.
+Follower progress is stored in a separate journaled `TXRG` sidecar named
+`.txbase.replication-progress`; it is not mixed into the `TXRP` data-plane
+sidecar.
+The progress sidecar is updated through metadata-only catalog journal commits,
+so it does not advance the catalog transaction ID.
+`ReplicationLog::open` validates every persisted acknowledgement against the
+current term, schema, retained base, and catalog position before restoring it.
+Snapshot installation replaces the `TXRP` state and removes the `TXRG` state
+in the same catalog journal commit; a duplicate installation also removes
+stale progress state.
 
 This contract is a watermark safety check, not quorum or consensus.
-It has no membership persistence, lease, fencing token, network retry queue, or
-failure detector.
+It has no membership configuration or lifecycle, lease, fencing token, network
+retry queue, or failure detector.
 
 ### HTTP transport boundary
 
@@ -262,7 +266,7 @@ The local slice defines the following initial contracts:
 - follower reads: a caller can read a retained catalog image at an applied log transaction;
 - snapshot recovery: a follower can install one validated catalog image atomically and resume at its next log position;
 - log retention: the local authority can compact through an exact retained snapshot without advancing the catalog transaction or losing the log suffix;
-- follower safety: the authority accepts monotonic follower progress, exposes the minimum acknowledged index, and permits coordinated compaction only through that index; acknowledgements must be re-established after restart;
+- follower safety: the authority accepts monotonic follower progress, journals it in `TXRG`, restores and validates it after restart, exposes the minimum acknowledged index, and permits compaction only through that index;
 - transport: the catalog server exposes bounded status and contiguous entry-range reads, accepts versioned entry, snapshot, and progress JSON through HTTP routes with explicit conflict statuses, and `ReplicationHttpClient::catch_up` connects those routes to local ordered replay;
 - authority capture: the default authority role journals `/transaction` and named-table mutations with `TXRP` state, while the follower role rejects direct catalog mutations;
 - authentication: `TXBASE_REPLICATION_TOKEN` optionally protects the replication routes with RFC 6750 Bearer credentials;
@@ -283,7 +287,7 @@ The initial local replication slice is complete because it has:
 
 - one selected local authority model: fixed-term single writer;
 - the versioned `ReplicationEntry` and `ReplicationLog` formats;
-- the journaled `TXRP` sidecar with term and catalog-position checks;
+- the journaled `TXRP` sidecar with term and catalog-position checks, plus the validated `TXRG` follower-progress sidecar;
 - the local historical follower-read boundary with applied-position checks;
 - versioned snapshot export and atomic installation with stale, conflicting, and concurrent-change rejection;
 - catalog-history compaction and `TXRP` base-position recovery after snapshot installation;
@@ -291,7 +295,7 @@ The initial local replication slice is complete because it has:
 - partition-gap, serialized-log recovery, term, and schema-tag tests;
 - snapshot round-trip, installation, resume, stale-image, and conflict tests;
 - retained snapshot export, suffix-preserving log compaction, sidecar-only journal recovery, and compaction conflict tests;
-- follower watermark monotonicity, minimum-index compaction gating, restart re-registration, and bounded HTTP progress tests;
+- follower watermark monotonicity, bounded `TXRG` progress-sidecar persistence, restart restoration, malformed-sidecar rejection, minimum-index compaction gating, snapshot cleanup, and bounded HTTP progress tests;
 - bounded HTTP status, contiguous entry-range, entry delivery, duplicate delivery, snapshot installation, export, client parsing, authenticated requests, and one-shot catch-up tests;
 - default authority capture, table-ETag recheck, and follower read-only role tests;
 - explicit write consistency: only the next catalog transaction can commit;
@@ -318,7 +322,7 @@ The Raft paper is a candidate protocol reference for the authority step in the p
 It does not select Raft for txBASE and does not define the future txBASE log, schema, or recovery format.
 
 The current repository has a local entry/replay implementation, a versioned
-snapshot installation primitive, a journaled `TXRP` sidecar, bounded HTTP
+snapshot installation primitive, journaled `TXRP` and `TXRG` sidecars, bounded HTTP
 status and contiguous entry-range delivery routes, a bounded HTTP client,
 follower watermark acknowledgements, default authority capture for catalog
 mutations, a read-only follower role, and a bounded historical follower-read

@@ -348,6 +348,14 @@ fn snapshot_installation_compacts_history_and_resumes_replication() {
     let mut replica = ReplicationLog::open(&follower, 1).unwrap();
     authority.propose(&leader, vec![post(3, "Carol")]).unwrap();
     authority.propose(&leader, vec![post(4, "Dave")]).unwrap();
+    replica.propose(&follower, vec![post(3, "Carol")]).unwrap();
+    let (_, follower_schema_tag) = follower.schema_representation().unwrap();
+    replica
+        .acknowledge_follower(
+            &follower,
+            ReplicationProgress::new("follower-a".into(), 1, 1, 1, follower_schema_tag).unwrap(),
+        )
+        .unwrap();
 
     for extension in ["mvcc", "cdc", "wal", "state", "idx"] {
         fs::write(
@@ -374,8 +382,14 @@ fn snapshot_installation_compacts_history_and_resumes_replication() {
         }
     );
     assert!(replica.entries().is_empty());
+    assert_eq!(replica.follower_count(), 0);
     assert_eq!(replica.last_index(), 2);
     assert_eq!(replica.last_transaction_id(), 2);
+    assert!(
+        !follower_root
+            .join(REPLICATION_PROGRESS_SIDECAR_NAME)
+            .exists()
+    );
     assert_eq!(Catalog::mvcc_versions(&follower_root).unwrap(), vec![2]);
     for extension in ["mvcc", "cdc", "wal", "state", "idx"] {
         assert!(
@@ -536,7 +550,7 @@ fn authority_compaction_rejects_unavailable_and_divergent_snapshots() {
 }
 
 #[test]
-fn follower_watermarks_gate_compaction_and_require_re_registration_after_restart() {
+fn follower_watermarks_gate_compaction_and_survive_restart() {
     let root = catalog_root("watermarks");
     let catalog = Catalog::from_path(&root).unwrap();
     let mut log = ReplicationLog::open(&catalog, 1).unwrap();
@@ -594,10 +608,19 @@ fn follower_watermarks_gate_compaction_and_require_re_registration_after_restart
         .unwrap();
     assert_eq!(log.base_index(), 2);
     assert_eq!(log.follower_count(), 2);
+    assert_eq!(catalog.transaction_id().unwrap(), Some(3));
+    assert!(
+        catalog
+            .read_sidecar_bytes(REPLICATION_PROGRESS_SIDECAR_NAME)
+            .unwrap()
+            .is_some()
+    );
 
-    let reopened = ReplicationLog::from_sidecar_bytes(&log.to_sidecar_bytes().unwrap()).unwrap();
+    drop(log);
+    let reopened = ReplicationLog::open(&catalog, 1).unwrap();
     assert_eq!(reopened.base_index(), 2);
-    assert_eq!(reopened.follower_count(), 0);
+    assert_eq!(reopened.follower_count(), 2);
+    assert_eq!(reopened.safe_compaction_index(), Some(2));
 
     fs::remove_dir_all(root).unwrap();
 }
@@ -708,6 +731,59 @@ fn follower_progress_reports_the_applied_log_position_and_round_trips() {
 
     let invalid = log.progress_for(&catalog, "follower/a".into()).unwrap_err();
     assert!(matches!(invalid, ReplicationError::Invalid(_)));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn follower_progress_sidecar_rejects_malformed_state_on_restart() {
+    let root = catalog_root("progress-sidecar-invalid");
+    let catalog = Catalog::from_path(&root).unwrap();
+    let mut log = ReplicationLog::open(&catalog, 1).unwrap();
+    log.propose(&catalog, vec![post(3, "Carol")]).unwrap();
+    let (_, schema_tag) = catalog.schema_representation().unwrap();
+    log.acknowledge_follower(
+        &catalog,
+        ReplicationProgress::new("follower-a".into(), 1, 1, 1, schema_tag).unwrap(),
+    )
+    .unwrap();
+    let valid = catalog
+        .read_sidecar_bytes(REPLICATION_PROGRESS_SIDECAR_NAME)
+        .unwrap();
+    catalog
+        .replace_sidecar_without_transaction(
+            REPLICATION_PROGRESS_SIDECAR_NAME,
+            valid,
+            b"TXRG\x01{\"followers\":{\"follower-a\":{\"version\":1}}}".to_vec(),
+        )
+        .unwrap();
+    drop(log);
+
+    assert!(matches!(
+        ReplicationLog::open(&catalog, 1),
+        Err(ReplicationError::Serialization(_))
+    ));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn follower_progress_sidecar_requires_a_replication_log_sidecar() {
+    let root = catalog_root("progress-sidecar-orphan");
+    let catalog = Catalog::from_path(&root).unwrap();
+    catalog
+        .replace_sidecar_without_transaction(
+            REPLICATION_PROGRESS_SIDECAR_NAME,
+            None,
+            b"TXRG\x01{\"followers\":{}}".to_vec(),
+        )
+        .unwrap();
+
+    assert!(matches!(
+        ReplicationLog::open(&catalog, 1),
+        Err(ReplicationError::Invalid(message))
+            if message.contains("requires a replication log sidecar")
+    ));
 
     fs::remove_dir_all(root).unwrap();
 }
@@ -870,12 +946,14 @@ fn snapshot_install_rejects_a_stale_txrp_sidecar_without_mutating_catalog() {
     .unwrap();
 
     let error = follower
-        .install_snapshot_with_sidecar(
+        .install_snapshot_with_sidecars(
             &snapshot.catalog,
             0,
-            crate::replication::REPLICATION_SIDECAR_NAME,
-            Some(b"stale".to_vec()),
-            sidecar_after,
+            vec![(
+                crate::replication::REPLICATION_SIDECAR_NAME,
+                Some(b"stale".to_vec()),
+                Some(sidecar_after),
+            )],
         )
         .unwrap_err();
     assert!(matches!(

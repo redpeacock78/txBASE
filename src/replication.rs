@@ -20,8 +20,8 @@ pub use http::{
     ReplicationProgressResponseOutcome, ReplicationSyncResult,
 };
 pub use progress::{
-    MAX_REPLICATION_FOLLOWERS, MAX_REPLICATION_PROGRESS_BYTES, REPLICATION_PROGRESS_VERSION,
-    ReplicationProgress, ReplicationProgressOutcome,
+    MAX_REPLICATION_FOLLOWERS, MAX_REPLICATION_PROGRESS_BYTES, REPLICATION_PROGRESS_SIDECAR_NAME,
+    REPLICATION_PROGRESS_VERSION, ReplicationProgress, ReplicationProgressOutcome,
 };
 pub use snapshot::{MAX_REPLICATION_SNAPSHOT_BYTES, ReplicationSnapshot};
 pub use transport::{
@@ -210,10 +210,20 @@ impl ReplicationLog {
         catalog: &Catalog,
         progress: ReplicationProgress,
     ) -> Result<ReplicationProgressOutcome, ReplicationError> {
-        let mut watermarks = std::mem::take(&mut self.follower_watermarks);
-        let outcome = watermarks.acknowledge(self, catalog, progress);
+        let mut watermarks = self.follower_watermarks.clone();
+        let outcome = watermarks.acknowledge(self, catalog, progress)?;
+        let expected_sidecar = catalog
+            .read_sidecar_bytes(REPLICATION_PROGRESS_SIDECAR_NAME)
+            .map_err(ReplicationError::Catalog)?;
+        catalog
+            .replace_sidecar_without_transaction(
+                REPLICATION_PROGRESS_SIDECAR_NAME,
+                expected_sidecar,
+                watermarks.to_sidecar_bytes()?,
+            )
+            .map_err(ReplicationError::Commit)?;
         self.follower_watermarks = watermarks;
-        outcome
+        Ok(outcome)
     }
 
     /// Returns the lowest applied index reported by all registered followers.
@@ -295,7 +305,8 @@ impl ReplicationLog {
         let bytes = catalog
             .read_sidecar_bytes(REPLICATION_SIDECAR_NAME)
             .map_err(ReplicationError::Catalog)?;
-        let log = match bytes {
+        let has_log_sidecar = bytes.is_some();
+        let mut log = match bytes {
             Some(bytes) => Self::from_sidecar_bytes(&bytes)?,
             None => {
                 let transaction_id = current_transaction_id(catalog)?;
@@ -313,6 +324,19 @@ impl ReplicationLog {
             });
         }
         log.ensure_catalog_position(current_transaction_id(catalog)?)?;
+        let progress_sidecar = catalog
+            .read_sidecar_bytes(REPLICATION_PROGRESS_SIDECAR_NAME)
+            .map_err(ReplicationError::Catalog)?;
+        if !has_log_sidecar && progress_sidecar.is_some() {
+            return Err(ReplicationError::Invalid(
+                "replication progress sidecar requires a replication log sidecar".into(),
+            ));
+        }
+        log.follower_watermarks = match progress_sidecar {
+            Some(bytes) => progress::FollowerWatermarks::from_sidecar_bytes(&bytes)?,
+            None => progress::FollowerWatermarks::default(),
+        };
+        log.follower_watermarks.validate_against(&log, catalog)?;
         Ok(log)
     }
 

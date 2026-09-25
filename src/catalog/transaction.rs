@@ -42,6 +42,23 @@ impl Catalog {
         expected_sidecar: Option<Vec<u8>>,
         sidecar_after: Vec<u8>,
     ) -> Result<(), CatalogTransactionError> {
+        self.update_sidecar_without_transaction(sidecar_name, expected_sidecar, Some(sidecar_after))
+    }
+
+    pub(crate) fn remove_sidecar_without_transaction(
+        &self,
+        sidecar_name: &str,
+        expected_sidecar: Option<Vec<u8>>,
+    ) -> Result<(), CatalogTransactionError> {
+        self.update_sidecar_without_transaction(sidecar_name, expected_sidecar, None)
+    }
+
+    fn update_sidecar_without_transaction(
+        &self,
+        sidecar_name: &str,
+        expected_sidecar: Option<Vec<u8>>,
+        sidecar_after: Option<Vec<u8>>,
+    ) -> Result<(), CatalogTransactionError> {
         if self.is_historical() {
             return Err(CatalogTransactionError::Invalid(
                 "historical catalog snapshots are read-only".into(),
@@ -58,7 +75,7 @@ impl Catalog {
                 name: sidecar_name.to_owned(),
             });
         }
-        if actual.as_deref() == Some(sidecar_after.as_slice()) {
+        if actual == sidecar_after {
             return Ok(());
         }
         commit_files(
@@ -66,7 +83,7 @@ impl Catalog {
             vec![FileChange {
                 target: path,
                 before: actual,
-                after: Some(sidecar_after),
+                after: sidecar_after,
             }],
         )
         .map_err(CatalogTransactionError::Catalog)

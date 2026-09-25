@@ -68,7 +68,7 @@ The repository currently provides:
 - A Worker-compatible Web Streams query adapter that exposes the WASM snapshot stream as bounded NDJSON chunks with pull-based backpressure and `AbortSignal` cancellation, plus a deterministic generated-wrapper fixture.
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
-- A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, `ReplicationSnapshot`, and `ReplicationProgress` JSON formats, journaled `TXRP` sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, monotonic follower-progress acknowledgement with minimum-index coordinated compaction and restart re-registration, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded entry-batch validation and ordered receiver application, bounded HTTP entry, contiguous entry-range, snapshot, and progress delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
+- A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, `ReplicationSnapshot`, and `ReplicationProgress` JSON formats, journaled `TXRP` data-plane and `TXRG` follower-progress sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, monotonic follower-progress acknowledgement with durable minimum-index coordinated compaction, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded entry-batch validation and ordered receiver application, bounded HTTP entry, contiguous entry-range, snapshot, and progress delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
 - A bounded `ReplicationHttpClient` that validates authority status, pulls contiguous entry pages or a current snapshot, applies them through the local ordered replay contract, and acknowledges follower progress over plain HTTP.
 - A public `txbase replicate catch-up` command that opens a fixed-term follower catalog, resumes its journaled `TXRP` position, performs one bounded HTTP catch-up session, and reports the resulting progress as JSON.
 
@@ -387,13 +387,14 @@ Optional RFC 6750 Bearer authentication protects the replication routes when `TX
 The public `txbase replicate catch-up` command provides a one-shot operational
 client for the same routes and resumes an already persisted follower prefix.
 The authority can export a retained snapshot at an applied index and compact the local `TXRP` prefix through that exact image while preserving the suffix and catalog transaction ID.
-It accepts validated monotonic follower progress and exposes the minimum acknowledged index for coordinated compaction.
-Follower progress is process-local and must be re-registered after an authority restart; quorum-safe truncation remains future work.
+It accepts validated monotonic follower progress, persists it in the metadata-only
+`TXRG` sidecar, restores it after restart, and exposes the minimum acknowledged
+index for coordinated compaction. Quorum-safe truncation remains future work.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
-- Persistent WAL history beyond the current table, catalog, and `TXRP` sidecars.
+- Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
 - Raft or another explicitly selected authority protocol.
 - TLS, retry, backpressure, quorum-safe log truncation, and authority discovery.
 - Distributed follower-read guarantees.

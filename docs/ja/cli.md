@@ -69,7 +69,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 | `txbase backup SOURCE DEST` | DBFと対応するmemo、スキーマ、CDC、状態、MVCC、有効なインデックスサイドカーを検証してコピーする。 |
 | `txbase restore SOURCE DEST` | バックアップをソースとして、同じ検証済みコピー手順を使う。 |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | 単一テーブルHTTPサーバーを起動する。 |
-| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | カタログHTTPサーバーと有界なレプリケーション配送およびフォロワー適用位置確認ルートを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、`follower`ロールは直接のカタログ更新とフォロワー適用位置確認を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。`TXBASE_REPLICATION_TOKEN`を設定した場合、すべてのレプリケーションルートにRFC 6750の`Authorization: Bearer <token>`ヘッダーが必要になる。 |
+| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | カタログHTTPサーバーと有界なレプリケーション配送およびフォロワー適用位置確認ルートを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、フォロワー位置をメタデータだけの`TXRG`サイドカーへ保存する。`follower`ロールは直接のカタログ更新とフォロワー適用位置確認を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。`TXBASE_REPLICATION_TOKEN`を設定した場合、すべてのレプリケーションルートにRFC 6750の`Authorization: Bearer <token>`ヘッダーが必要になる。 |
 | `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | フォロワーカタログを開き、authorityから有界な1回のcatch-upを取得し、適用済みカタログと`TXRP`位置を永続化し、適用位置を確認して、同期結果をJSONで表示する。`TERM`はauthorityと一致する必要があり、`COUNT`は`1`から`128`の範囲で指定する。authorityがBearer認証を要求する場合は、任意の`TXBASE_REPLICATION_TOKEN`環境変数を使う。 |
 
 ## オプションの所有範囲
@@ -117,7 +117,7 @@ WALの作成や切り詰めは行いません。
 
 `replicate catch-up`は、1回だけ実行する更新操作です。
 
-スナップショットのインストール、エントリページの一部適用、フォロワーの`TXRP`サイドカー書き込みの後にエラーを返す場合があります。
+スナップショットのインストール、エントリページの一部適用、フォロワーの`TXRP`サイドカーまたは`TXRG`進捗サイドカーの書き込みの後にエラーを返す場合があります。
 
 同じコマンドを再実行すると、永続化済みの位置から再開して、結果の適用位置を確認できます。
 

@@ -1,4 +1,7 @@
-use super::{ApplyOutcome, REPLICATION_SIDECAR_NAME, ReplicationError, ReplicationLog};
+use super::{
+    ApplyOutcome, REPLICATION_PROGRESS_SIDECAR_NAME, REPLICATION_SIDECAR_NAME, ReplicationError,
+    ReplicationLog,
+};
 use crate::catalog::{Catalog, CatalogTransactionError};
 use serde::{Deserialize, Serialize};
 
@@ -208,6 +211,14 @@ impl ReplicationLog {
                 actual: snapshot.last_transaction_id,
             });
         }
+        if let Some(acknowledged) = self.safe_compaction_index()
+            && snapshot.last_index > acknowledged
+        {
+            return Err(ReplicationError::CompactionNotAcknowledged {
+                requested: snapshot.last_index,
+                acknowledged,
+            });
+        }
         let local_catalog = catalog
             .export_snapshot_at(expected_transaction_id)
             .map_err(ReplicationError::Catalog)?;
@@ -294,6 +305,9 @@ impl ReplicationLog {
         let actual_sidecar = catalog
             .read_sidecar_bytes(REPLICATION_SIDECAR_NAME)
             .map_err(ReplicationError::Catalog)?;
+        let actual_progress_sidecar = catalog
+            .read_sidecar_bytes(REPLICATION_PROGRESS_SIDECAR_NAME)
+            .map_err(ReplicationError::Catalog)?;
 
         if current == snapshot.last_transaction_id {
             let current_snapshot = catalog
@@ -307,6 +321,14 @@ impl ReplicationLog {
             if actual_sidecar.as_deref() != Some(sidecar_after.as_slice()) {
                 return Err(ReplicationError::SidecarStateMismatch);
             }
+            if let Some(progress_sidecar) = actual_progress_sidecar {
+                catalog
+                    .remove_sidecar_without_transaction(
+                        REPLICATION_PROGRESS_SIDECAR_NAME,
+                        Some(progress_sidecar),
+                    )
+                    .map_err(ReplicationError::Commit)?;
+            }
             *self = next_log;
             return Ok(ApplyOutcome::SnapshotDuplicate {
                 index: snapshot.last_index,
@@ -314,12 +336,21 @@ impl ReplicationLog {
             });
         }
 
-        let transaction_id = match catalog.install_snapshot_with_sidecar(
+        let transaction_id = match catalog.install_snapshot_with_sidecars(
             &snapshot.catalog,
             current,
-            REPLICATION_SIDECAR_NAME,
-            actual_sidecar,
-            sidecar_after,
+            vec![
+                (
+                    REPLICATION_SIDECAR_NAME,
+                    actual_sidecar,
+                    Some(sidecar_after),
+                ),
+                (
+                    REPLICATION_PROGRESS_SIDECAR_NAME,
+                    actual_progress_sidecar,
+                    None,
+                ),
+            ],
         ) {
             Ok(transaction_id) => transaction_id,
             Err(CatalogTransactionError::TransactionPreconditionFailed { expected, actual }) => {
