@@ -6,16 +6,16 @@ use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll, Wake, Waker};
 
 struct PendingOperation<T> {
-    dropped: Arc<AtomicBool>,
+    dropped: Arc<AtomicUsize>,
     output: PhantomData<fn() -> T>,
 }
 
 impl<T> PendingOperation<T> {
-    fn new(dropped: Arc<AtomicBool>) -> Self {
+    fn new(dropped: Arc<AtomicUsize>) -> Self {
         Self {
             dropped,
             output: PhantomData,
@@ -35,13 +35,13 @@ impl<T> Future for PendingOperation<T> {
 
 impl<T> Drop for PendingOperation<T> {
     fn drop(&mut self) {
-        self.dropped.store(true, Ordering::SeqCst);
+        self.dropped.fetch_add(1, Ordering::SeqCst);
     }
 }
 
 #[derive(Clone)]
 struct PendingStore {
-    dropped: Arc<AtomicBool>,
+    dropped: Arc<AtomicUsize>,
     calls: Arc<AtomicUsize>,
 }
 
@@ -107,7 +107,7 @@ impl Wake for CountWake {
 
 #[test]
 fn cancelling_a_pending_query_wakes_polling_and_drops_storage_work() {
-    let dropped = Arc::new(AtomicBool::new(false));
+    let dropped = Arc::new(AtomicUsize::new(0));
     let table = AsyncObjectTable::new(
         PendingStore {
             dropped: dropped.clone(),
@@ -132,12 +132,12 @@ fn cancelling_a_pending_query_wakes_polling_and_drops_storage_work() {
         stream.as_mut().poll_next(&mut context),
         Poll::Ready(None)
     ));
-    assert!(dropped.load(Ordering::SeqCst));
+    assert_eq!(dropped.load(Ordering::SeqCst), 1);
 }
 
 #[test]
 fn dropping_a_pending_query_cancels_its_token_and_storage_work() {
-    let dropped = Arc::new(AtomicBool::new(false));
+    let dropped = Arc::new(AtomicUsize::new(0));
     let table = AsyncObjectTable::new(
         PendingStore {
             dropped: dropped.clone(),
@@ -158,7 +158,7 @@ fn dropping_a_pending_query_cancels_its_token_and_storage_work() {
     drop(stream);
 
     assert!(cancellation.is_cancelled());
-    assert!(dropped.load(Ordering::SeqCst));
+    assert_eq!(dropped.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -180,7 +180,7 @@ fn cancellation_waiter_wakes_when_the_token_is_cancelled() {
 
 #[test]
 fn cancelling_before_first_poll_skips_storage() {
-    let dropped = Arc::new(AtomicBool::new(false));
+    let dropped = Arc::new(AtomicUsize::new(0));
     let calls = Arc::new(AtomicUsize::new(0));
     let table = AsyncObjectTable::new(
         PendingStore {
@@ -204,7 +204,7 @@ fn cancelling_before_first_poll_skips_storage() {
 
 #[test]
 fn a_cancelled_token_rejects_new_store_operations() {
-    let dropped = Arc::new(AtomicBool::new(false));
+    let dropped = Arc::new(AtomicUsize::new(0));
     let calls = Arc::new(AtomicUsize::new(0));
     let store = PendingStore {
         dropped,
@@ -246,7 +246,7 @@ fn a_cancelled_token_rejects_new_store_operations() {
 
 #[test]
 fn cancellation_drops_a_pending_list_operation() {
-    let dropped = Arc::new(AtomicBool::new(false));
+    let dropped = Arc::new(AtomicUsize::new(0));
     let store = PendingStore {
         dropped: dropped.clone(),
         calls: Arc::new(AtomicUsize::new(0)),
@@ -262,32 +262,83 @@ fn cancellation_drops_a_pending_list_operation() {
         list.as_mut().poll(&mut context),
         Poll::Ready(Err(ObjectStoreError::Cancelled(_)))
     ));
-    assert!(dropped.load(Ordering::SeqCst));
+    assert_eq!(dropped.load(Ordering::SeqCst), 1);
 }
 
 #[test]
-fn cancellation_does_not_abort_an_accepted_write() {
-    let dropped = Arc::new(AtomicBool::new(false));
+fn cancellation_drops_all_registered_read_operations() {
+    let dropped = Arc::new(AtomicUsize::new(0));
+    let calls = Arc::new(AtomicUsize::new(0));
     let store = PendingStore {
         dropped: dropped.clone(),
-        calls: Arc::new(AtomicUsize::new(0)),
+        calls: calls.clone(),
     };
     let cancellation = CancellationToken::new();
     let waker = Waker::noop();
     let mut context = Context::from_waker(waker);
-    let mut write = Box::pin(store.put_if_absent_with_cancellation("key", b"value", &cancellation));
+    let mut get = Box::pin(store.get_with_cancellation("key", &cancellation));
+    let mut list = Box::pin(store.list_with_cancellation("users/", &cancellation));
 
-    assert!(matches!(write.as_mut().poll(&mut context), Poll::Pending));
+    assert!(matches!(get.as_mut().poll(&mut context), Poll::Pending));
+    assert!(matches!(list.as_mut().poll(&mut context), Poll::Pending));
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+
     cancellation.cancel();
-    assert!(matches!(write.as_mut().poll(&mut context), Poll::Pending));
-    assert!(!dropped.load(Ordering::SeqCst));
-    drop(write);
-    assert!(dropped.load(Ordering::SeqCst));
+
+    assert!(matches!(
+        get.as_mut().poll(&mut context),
+        Poll::Ready(Err(ObjectStoreError::Cancelled(_)))
+    ));
+    assert!(matches!(
+        list.as_mut().poll(&mut context),
+        Poll::Ready(Err(ObjectStoreError::Cancelled(_)))
+    ));
+    assert_eq!(dropped.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn cancellation_does_not_abort_accepted_mutations() {
+    let dropped = Arc::new(AtomicUsize::new(0));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let store = PendingStore {
+        dropped: dropped.clone(),
+        calls: calls.clone(),
+    };
+    let cancellation = CancellationToken::new();
+    let waker = Waker::noop();
+    let mut context = Context::from_waker(waker);
+    let mut put = Box::pin(store.put_if_absent_with_cancellation("key", b"value", &cancellation));
+    let mut compare_and_swap =
+        Box::pin(store.compare_and_swap_with_cancellation("key", None, b"value", &cancellation));
+    let mut delete = Box::pin(store.delete_with_cancellation("key", &cancellation));
+
+    assert!(matches!(put.as_mut().poll(&mut context), Poll::Pending));
+    assert!(matches!(
+        compare_and_swap.as_mut().poll(&mut context),
+        Poll::Pending
+    ));
+    assert!(matches!(delete.as_mut().poll(&mut context), Poll::Pending));
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+
+    cancellation.cancel();
+
+    assert!(matches!(put.as_mut().poll(&mut context), Poll::Pending));
+    assert!(matches!(
+        compare_and_swap.as_mut().poll(&mut context),
+        Poll::Pending
+    ));
+    assert!(matches!(delete.as_mut().poll(&mut context), Poll::Pending));
+    assert_eq!(dropped.load(Ordering::SeqCst), 0);
+
+    drop(put);
+    drop(compare_and_swap);
+    drop(delete);
+    assert_eq!(dropped.load(Ordering::SeqCst), 3);
 }
 
 #[test]
 fn cancelling_one_query_does_not_cancel_another_query() {
-    let first_dropped = Arc::new(AtomicBool::new(false));
+    let first_dropped = Arc::new(AtomicUsize::new(0));
     let first_table = AsyncObjectTable::new(
         PendingStore {
             dropped: first_dropped.clone(),
@@ -296,7 +347,7 @@ fn cancelling_one_query_does_not_cancel_another_query() {
         "first",
     )
     .unwrap();
-    let second_dropped = Arc::new(AtomicBool::new(false));
+    let second_dropped = Arc::new(AtomicUsize::new(0));
     let second_table = AsyncObjectTable::new(
         PendingStore {
             dropped: second_dropped.clone(),
@@ -328,6 +379,6 @@ fn cancelling_one_query_does_not_cancel_another_query() {
         second.as_mut().poll_next(&mut context),
         Poll::Pending
     ));
-    assert!(first_dropped.load(Ordering::SeqCst));
-    assert!(!second_dropped.load(Ordering::SeqCst));
+    assert_eq!(first_dropped.load(Ordering::SeqCst), 1);
+    assert_eq!(second_dropped.load(Ordering::SeqCst), 0);
 }
