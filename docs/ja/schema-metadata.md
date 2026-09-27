@@ -49,7 +49,10 @@ txbase schema apply users.dbf users.txschema.candidate.json
         "references": {
           "table": "users",
           "fields": ["TENANT_ID", "ID"]
-        }
+        },
+        "deferred": true,
+        "on_delete": "no_action",
+        "on_update": "no_action"
       }
     ]
   }
@@ -89,8 +92,9 @@ DBFヘッダーやメタデータサイドカーには保存しません。
 | `not_null` | insert、replace、patch、recall で JSON `null`を拒否する |
 | `default` | insert でフィールドが省略されたとき、スカラー値を補う |
 | `references` | カタログスコープの`TABLE.FIELD`外部キー対象を宣言する |
-| `on_delete` | スカラー参照の削除動作を`restrict`（既定）、`cascade`、`set_null`から選ぶ |
-| `on_update` | スカラー参照の更新動作を`restrict`（既定）、`cascade`、`set_null`から選ぶ |
+| `deferred` | スカラー外部キー検査をカタログtransactionのcommitまで延期する。既定は`false` |
+| `on_delete` | スカラー参照の削除動作を`restrict`（既定）、`no_action`、`cascade`、`set_null`から選ぶ |
+| `on_update` | スカラー参照の更新動作を`restrict`（既定）、`no_action`、`cascade`、`set_null`から選ぶ |
 
 任意のルート`checks`配列は、すべてのテーブルレベル述語が一致しない候補レコードを拒否します。
 
@@ -100,7 +104,7 @@ DBFヘッダーやメタデータサイドカーには保存しません。
 | --- | --- |
 | `primary` | 二つ以上のフィールド名を要求し、すべての値が非 null でタプルが一意であることを要求する |
 | `unique` | 二つ以上のフィールド名の配列を受け付け、非 null のタプルがアクティブレコード間で重複することを拒否する |
-| `foreign_keys` | 同じ長さの子と親のフィールド列、および任意の更新・削除動作を持つ複合参照を受け付ける |
+| `foreign_keys` | 同じ長さの子と親のフィールド列、任意の`deferred`、更新・削除動作を持つ複合参照を受け付ける |
 
 サイドカーの`encoding`プロパティはフィールド制約ではありません。
 
@@ -110,7 +114,9 @@ DBFヘッダーやメタデータサイドカーには保存しません。
 
 照合や自動変換方針は追加しません。
 
-制約は、メモリ上のレコードを変更する前に検査します。
+フィールド、一意性、主キー、`checks`の制約は、メモリ上のレコードを変更する前に検査します。
+
+カタログ外部キーは、`deferred`の指定がなければ各操作の後に検査し、カタログcommit前にも全件を再検査します。
 
 スカラー `default`値はinsertで省略されたフィールドにだけ適用します。
 
@@ -122,27 +128,49 @@ DBFヘッダーやメタデータサイドカーには保存しません。
 
 nullを含むタプルは一意性に参加させず、既存の単一フィールド一意性と同じ動作にします。
 
-`references`は、名前付き更新またはカタログトランザクションの後にディレクトリカタログが解決します。
+`references`は、名前付き更新の各操作後とカタログトランザクションのcommit時にディレクトリカタログが解決します。
 
 非nullの子値は参照テーブルのアクティブレコードに一致しなければなりません。
 
 nullは許可します。
 
-スカラー参照の`on_delete`と`on_update`は、既定の`restrict`、`cascade`、`set_null`を受け付けます。
+スカラー参照の`on_delete`と`on_update`は、既定の`restrict`、`no_action`、`cascade`、`set_null`を受け付けます。
 
-`restrict`は子を孤立させる親の論理削除またはキー更新を拒否します。
+`restrict`は外部キー検査が延期されていても、子を孤立させる親の論理削除またはキー更新を直ちに拒否します。
 
-`cascade`は一致する子の削除またはキー更新を適用します。
+`no_action`は子レコードを変更せず、延期された外部キーではcommitまで一時的な不整合を許します。
+
+`cascade`は一致する子の削除またはキー更新を直ちに適用します。
 
 `set_null`はすべてのローカルキーへJSON `null`を書き込むため、対象フィールドを`not_null`にしたり主キーの一部にしたりできません。
 
 `constraints.foreign_keys`は、子側の`fields`列と、親側の`table`および`fields`を持つ`references`オブジェクトで複合参照を宣言します。
 
-この要素も同じ`on_delete`と`on_update`を任意に持ちます。
+この要素は`deferred`、`on_delete`、`on_update`を任意に持ちます。
 
 2つのフィールド列は、それぞれ2つ以上の異なる名前を持ち、同じ長さでなければなりません。
 
 子側の値のいずれかがnullなら複合参照を検査せず、それ以外ではすべての子側の値が1つのアクティブな親レコードの対応する値と一致しなければなりません。
+
+外部キーは既定で各操作の後に検査します。
+
+スカラーまたは複合外部キーに`deferred: true`を指定すると、原子的なカタログトランザクション中は各操作後の検査を省略し、カタログjournalのcommit前に検査します。
+
+この設定により、同じトランザクション内で親より先に子を追加したり、`no_action`の親変更を後続操作で修復したりできます。
+
+最終検査に失敗した場合、テーブルやサイドカーは公開しません。
+
+単独の更新は1つの操作からなるため、commit前にすべての外部キーを満たす必要があります。
+
+`deferred`は固定のスキーマ方針です。
+
+txBASEは実行時に制約の検査時点を切り替える`SET CONSTRAINTS`をまだ提供しません。
+
+`no_action`は検査を延期できますが、`restrict`は常に直ちに検査します。
+
+`cascade`と`set_null`は各操作の適用時に実行します。
+
+この検査時点の区別はPostgreSQLの外部キー契約に倣いますが、txBASEはPostgreSQL互換性を主張しません。
 
 カタログの連鎖は同じカタログトランザクションとジャーナルcommitの内部で再帰的に適用します。
 
@@ -194,7 +222,7 @@ DBFとメタデータファイルは別々のファイルです。
 - DBFレイアウトの移行、または現在のサイドカーフォーマットを超えるスキーマバージョン。
 - DBF言語ドライバーとオーバーライドの自動選択。
 
-追加のテーブル間制約の意味論を安全に追加するには、より広いメタデータ、移行、復旧規則が必要です。
+実行時の検査時点切り替え、延期可能な`UNIQUE`、`PRIMARY KEY`、`CHECK`制約、カタログルートをまたぐ参照は今後の課題です。
 
 SQLiteの公式[`CREATE TABLE`リファレンス](https://sqlite.org/lang_createtable.html)は、`NOT NULL`、`CHECK`、`UNIQUE`、`PRIMARY KEY`、`FOREIGN KEY`の制約を区別し、書き込み時の動作を文書化しています。
 
@@ -206,5 +234,6 @@ txBASEはそれらを設計上の参照としますが、SQLite互換性は主�
 
 - [SQLite `CREATE TABLE`](https://sqlite.org/lang_createtable.html)
 - [SQLite foreign-key support](https://www.sqlite.org/foreignkeys.html)
+- [PostgreSQLの外部キー動作と検査延期](https://www.postgresql.org/docs/18/ddl-constraints.html)
 - [DBF 互換性の境界](dbf-compatibility.md)
 - [ロードマップと明示的な非目標](roadmap.md)

@@ -368,7 +368,7 @@ fn foreign_key_actions_require_references_and_nullable_children() {
     assert!(
         error
             .to_string()
-            .contains("foreign-key actions require references")
+            .contains("foreign-key options require references")
     );
 
     let non_nullable = serde_json::to_vec(&serde_json::json!({

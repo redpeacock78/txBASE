@@ -72,6 +72,7 @@ The repository currently provides:
 - A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, `ReplicationSnapshot`, and `ReplicationProgress` JSON formats, journaled `TXRP` data-plane and `TXRG` follower-progress sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, monotonic follower-progress acknowledgement with durable minimum-index coordinated compaction, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded entry-batch validation and ordered receiver application, bounded HTTP entry, contiguous entry-range, snapshot, and progress delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
 - A bounded `ReplicationHttpClient` that validates authority status, pulls contiguous entry pages or a current snapshot, applies them through the local ordered replay contract, acknowledges follower progress over plain HTTP, and retries explicitly transient socket or HTTP failures within a bounded in-process policy.
 - A public `txbase replicate catch-up` command that opens a fixed-term follower catalog, resumes its journaled `TXRP` position, performs one bounded HTTP catch-up session, and reports the resulting progress as JSON.
+- Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
 
 The baseline intentionally does not include the following:
 
@@ -79,7 +80,7 @@ The baseline intentionally does not include the following:
 - Production WASI host lifecycle semantics, writable or provider-backed object-store adapters, and genuinely non-blocking storage I/O beyond the current read-only filesystem adapter.
 - Predicate-level locking and distributed serializable coordination.
 - Aggregation stages or accumulators beyond bounded input `$match`, `$unwind` with its documented top-level options, `$set`/`$addFields` with its documented expression subset, `$project`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, `$group`, `$bucket`, bounded scalar-expression `$bucketAuto` with finite numeric results, and bounded scalar-expression `$sortByCount` with bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
-- Deferred and cross-catalog constraint semantics beyond catalog-scoped scalar and composite foreign keys and their local cascade actions.
+- Runtime constraint-timing changes, deferred `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints, and references across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
 - Quorum or consensus, quorum-coordinated snapshot/log retention, distributed follower reads, and distributed partitioning.
@@ -104,6 +105,9 @@ This phase keeps the database local and makes its operational boundary useful be
 ### Completion conditions
 
 Schema introspection, verification, sidecar-aware backup and restore, copy tooling, `PACK`, `RECALL`, read-only WAL inspection, and the first directory-catalog boundary are implemented as the first Phase 1 slice.
+
+Catalog transactions check non-deferred foreign keys after each operation and deferred foreign keys before publishing the journal commit.
+The fixed schema policy does not expose runtime constraint-timing changes.
 
 The catalog currently derives table identity from direct-child DBF filenames and does not persist a separate manifest.
 

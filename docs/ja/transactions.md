@@ -81,6 +81,16 @@ APIはマージ方針を自動選択せず、ネットワーク応答を失っ�
 
 これはカタログwrite lockと検出したすべてのテーブルの排他ロックを保持し、名前付きレコード操作を非公開コピーへ適用し、テーブル間制約を検証して1つのカタログjournalへcommitします。
 
+延期されていない外部キーは各操作の後に検査し、スキーマで延期した外部キーはjournal commit前に検査します。
+
+`RESTRICT`動作は直ちに検査しますが、`NO ACTION`は同じトランザクション内の後続操作で一時的な違反を修復できます。
+
+`apply`が失敗したRustトランザクションはabort状態になり、最終検査に失敗した場合はファイルを公開しません。
+
+カタログHTTP `POST /transaction`も同じタイミングで外部キーを検査します。
+
+そのため延期した外部キーでは、同じリクエストの後続操作で追加する親レコードを参照できます。
+
 `src/transaction/`エンジンは低レベルのWALトランザクションプリミティブとして残り、DBFの可視性やこのテーブルAPIは提供しません。
 
 テーブルとカタログの過去スナップショットは、引き続き読み取り専用のMVCCビューです。
@@ -142,6 +152,7 @@ HTTP経路とこのRust APIは、同じテーブル更新および永続化経�
 
 - [PostgreSQLのトランザクション分離](https://www.postgresql.org/docs/current/transaction-iso.html)
 - [PostgreSQLの並行性制御](https://www.postgresql.org/docs/current/mvcc.html)
+- [PostgreSQLの外部キー動作と検査延期](https://www.postgresql.org/docs/18/ddl-constraints.html)
 - [SQLiteの分離](https://sqlite.org/isolation.html)
 - [SQLiteのWAL](https://sqlite.org/wal.html)
 - [MVCCと過去スナップショット](mvcc.md)

@@ -36,10 +36,12 @@ impl SchemaMetadata {
             }
             field_primary |= metadata.primary;
             if metadata.references.is_none()
-                && (metadata.on_delete.is_some() || metadata.on_update.is_some())
+                && (metadata.deferred
+                    || metadata.on_delete.is_some()
+                    || metadata.on_update.is_some())
             {
                 return Err(DbfError::Invalid(format!(
-                    "schema field {name} foreign-key actions require references"
+                    "schema field {name} foreign-key options require references"
                 )));
             }
             if let Some(action) = &metadata.on_delete {
@@ -123,6 +125,7 @@ impl SchemaMetadata {
                     parent_fields: vec![field.to_owned()],
                     on_delete: metadata.on_delete.unwrap_or_default(),
                     on_update: metadata.on_update.unwrap_or_default(),
+                    deferred: metadata.deferred,
                 })
             })
             .collect::<Result<Vec<_>, DbfError>>()?;
@@ -143,6 +146,7 @@ impl SchemaMetadata {
                 parent_fields: key.references.fields.clone(),
                 on_delete: key.on_delete.unwrap_or_default(),
                 on_update: key.on_update.unwrap_or_default(),
+                deferred: key.deferred,
             });
         }
         Ok(foreign_keys)

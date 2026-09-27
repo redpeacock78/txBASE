@@ -14,6 +14,7 @@ pub struct CatalogTransaction {
     before: BTreeMap<String, DbfTable>,
     tables: BTreeMap<String, DbfTable>,
     touched: BTreeSet<String>,
+    aborted: bool,
     expected_table_set: BTreeSet<(String, String)>,
     catalog_lock: super::transaction::CatalogWriteLock,
     table_locks: Vec<TableLock>,
@@ -60,6 +61,7 @@ impl Catalog {
             tables: before.clone(),
             before,
             touched: BTreeSet::new(),
+            aborted: false,
             expected_table_set,
             catalog_lock,
             table_locks,
@@ -75,6 +77,11 @@ impl CatalogTransaction {
 
     /// Returns a read-only copy of a table in the private transaction image.
     pub fn open_table(&self, name: &str) -> Result<DbfTable, CatalogError> {
+        if self.aborted {
+            return Err(CatalogError::Invalid(
+                "catalog transaction is aborted after a failed operation".into(),
+            ));
+        }
         let mut table = self
             .tables
             .get(name)
@@ -86,21 +93,36 @@ impl CatalogTransaction {
 
     /// Applies one named record mutation to the private transaction image.
     pub fn apply(&mut self, operation: &OperationIr) -> Result<(), CatalogTransactionError> {
-        super::transaction::apply_operation_to_tables(
+        if self.aborted {
+            return Err(CatalogTransactionError::Invalid(
+                "catalog transaction is aborted after a failed operation".into(),
+            ));
+        }
+        let result = super::transaction::apply_operation_to_tables(
             &self.catalog,
             &mut self.tables,
             &mut self.touched,
             operation,
-        )
+        );
+        if result.is_err() {
+            self.aborted = true;
+        }
+        result
     }
 
     /// Commits all applied mutations as one catalog journal transaction.
     pub fn commit(self) -> Result<u64, CatalogTransactionError> {
+        if self.aborted {
+            return Err(CatalogTransactionError::Invalid(
+                "catalog transaction is aborted after a failed operation".into(),
+            ));
+        }
         let Self {
             catalog,
             before,
             tables,
             touched,
+            aborted: _,
             expected_table_set,
             catalog_lock,
             table_locks,

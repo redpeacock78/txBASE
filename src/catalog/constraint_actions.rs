@@ -4,10 +4,66 @@ use crate::json_order::compare_scalar_values;
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+pub(crate) fn snapshot_referenced_tables(
+    images: &BTreeMap<String, DbfTable>,
+    tables: &BTreeMap<String, DbfTable>,
+) -> Result<BTreeMap<String, Vec<DbfRecord>>, CatalogError> {
+    let mut snapshots = BTreeMap::new();
+    for (name, table) in images {
+        if let Some(records) = snapshot_referenced_table(name, table, tables)? {
+            snapshots.insert(name.clone(), records);
+        }
+    }
+    Ok(snapshots)
+}
+
+pub(crate) fn snapshot_referenced_table(
+    name: &str,
+    table: &DbfTable,
+    tables: &BTreeMap<String, DbfTable>,
+) -> Result<Option<Vec<DbfRecord>>, CatalogError> {
+    let mut fields = BTreeSet::new();
+    for (child_name, child) in tables {
+        let foreign_keys = child.foreign_keys().map_err(|source| CatalogError::Table {
+            name: child_name.clone(),
+            source,
+        })?;
+        for foreign_key in foreign_keys {
+            if foreign_key.parent_table == name {
+                fields.extend(foreign_key.parent_fields);
+            }
+        }
+    }
+    if fields.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(
+        table
+            .records()
+            .iter()
+            .map(|record| DbfRecord {
+                number: record.number,
+                deleted: record.deleted,
+                values: fields
+                    .iter()
+                    .filter_map(|field| {
+                        record
+                            .values
+                            .get(field)
+                            .map(|value| (field.clone(), value.clone()))
+                    })
+                    .collect(),
+            })
+            .collect(),
+    ))
+}
+
 pub(crate) fn apply_actions(
-    before: &BTreeMap<String, DbfTable>,
+    before: &BTreeMap<String, Vec<DbfRecord>>,
     tables: &mut BTreeMap<String, DbfTable>,
 ) -> Result<BTreeSet<String>, CatalogError> {
+    let mut cascade_before = BTreeMap::<String, Vec<DbfRecord>>::new();
     let relationship_count = tables
         .values()
         .map(|table| table.foreign_keys())
@@ -38,7 +94,10 @@ pub(crate) fn apply_actions(
                     source,
                 })?;
             for foreign_key in foreign_keys {
-                let Some(before_parent) = before.get(&foreign_key.parent_table) else {
+                let Some(before_parent) = before
+                    .get(&foreign_key.parent_table)
+                    .or_else(|| cascade_before.get(&foreign_key.parent_table))
+                else {
                     continue;
                 };
                 let Some(current_parent) = tables.get(&foreign_key.parent_table) else {
@@ -52,10 +111,26 @@ pub(crate) fn apply_actions(
                     } else {
                         &foreign_key.on_delete
                     };
+                    let child_before = if matches!(
+                        action,
+                        ForeignKeyAction::Cascade | ForeignKeyAction::SetNull
+                    ) && !before.contains_key(&child_name)
+                        && !cascade_before.contains_key(&child_name)
+                    {
+                        let Some(child) = tables.get(&child_name) else {
+                            continue;
+                        };
+                        snapshot_referenced_table(&child_name, child, tables)?
+                    } else {
+                        None
+                    };
                     let Some(child) = tables.get_mut(&child_name) else {
                         continue;
                     };
                     if apply_action(child, &child_name, &foreign_key, &change, action)? {
+                        if let Some(child_before) = child_before {
+                            cascade_before.insert(child_name.clone(), child_before);
+                        }
                         pass_changed = true;
                         changed_tables.insert(child_name.clone());
                     }
@@ -79,12 +154,11 @@ struct ParentChange {
 }
 
 fn parent_changes(
-    before: &DbfTable,
+    before: &[DbfRecord],
     current: &DbfTable,
     parent_fields: &[String],
 ) -> Vec<ParentChange> {
     before
-        .records()
         .iter()
         .enumerate()
         .filter_map(|(index, old)| {
@@ -115,9 +189,6 @@ fn apply_action(
     change: &ParentChange,
     action: &ForeignKeyAction,
 ) -> Result<bool, CatalogError> {
-    if matches!(action, ForeignKeyAction::Restrict) {
-        return Ok(false);
-    }
     let matching_records = child
         .active_records()
         .filter(|record| {
@@ -127,6 +198,17 @@ fn apply_action(
         .map(|record| record.number)
         .collect::<Vec<_>>();
     if matching_records.is_empty() {
+        return Ok(false);
+    }
+    if matches!(action, ForeignKeyAction::Restrict) {
+        return Err(CatalogError::Invalid(format!(
+            "table {child_name} foreign key {} has no matching {}.{}; RESTRICT prevents the parent change",
+            format_fields(&foreign_key.local_fields),
+            foreign_key.parent_table,
+            format_fields(&foreign_key.parent_fields),
+        )));
+    }
+    if matches!(action, ForeignKeyAction::NoAction) {
         return Ok(false);
     }
 
@@ -163,10 +245,20 @@ fn apply_action(
                         source,
                     })?;
             }
-            ForeignKeyAction::Restrict => unreachable!("restrict returned above"),
+            ForeignKeyAction::Restrict | ForeignKeyAction::NoAction => {
+                unreachable!("non-mutating actions returned above")
+            }
         }
     }
     Ok(true)
+}
+
+fn format_fields(fields: &[String]) -> String {
+    if fields.len() == 1 {
+        fields[0].clone()
+    } else {
+        format!("({})", fields.join(", "))
+    }
 }
 
 fn tuple_values(record: &DbfRecord, fields: &[String]) -> Option<Vec<Value>> {

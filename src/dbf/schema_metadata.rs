@@ -42,6 +42,8 @@ struct FieldMetadata {
     default: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     references: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    deferred: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     on_delete: Option<ForeignKeyAction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -64,6 +66,8 @@ struct ConstraintMetadata {
 struct CompositeForeignKeyMetadata {
     fields: Vec<String>,
     references: ForeignKeyTargetMetadata,
+    #[serde(default, skip_serializing_if = "is_false")]
+    deferred: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     on_delete: Option<ForeignKeyAction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -75,6 +79,10 @@ struct CompositeForeignKeyMetadata {
 struct ForeignKeyTargetMetadata {
     table: String,
     fields: Vec<String>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 impl SchemaMetadata {
@@ -132,6 +140,7 @@ impl SchemaMetadata {
             || self.fields.values().any(|field| {
                 field.default.is_some()
                     || field.references.is_some()
+                    || field.deferred
                     || field.on_delete.is_some()
                     || field.on_update.is_some()
             })

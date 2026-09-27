@@ -25,6 +25,22 @@ fn foreign_key_metadata() -> Vec<u8> {
     .unwrap()
 }
 
+fn deferred_foreign_key_metadata() -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {
+            "ID": {
+                "references": "users.ID",
+                "deferred": true,
+                "on_delete": "no_action",
+                "on_update": "no_action"
+            }
+        }
+    }))
+    .unwrap()
+}
+
 fn temporary_catalog() -> std::path::PathBuf {
     let id = NEXT_CATALOG_ID.fetch_add(1, Ordering::Relaxed);
     let path =
@@ -457,6 +473,64 @@ fn catalog_server_transaction_commits_multiple_named_tables() {
         30
     );
     assert!(!root.join(".txbase.catalog.txn").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn catalog_server_transaction_allows_a_deferred_parent_insert_later_in_the_batch() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.dbf"), fixture()).unwrap();
+    fs::write(
+        root.join("posts.txschema.json"),
+        deferred_foreign_key_metadata(),
+    )
+    .unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+    let mut request = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{
+            "operations": [
+                {"method":"POST","path":"/posts/records","body":{"ID":3,"NAME":"Child","AGE":42,"ACTIVE":true}},
+                {"method":"POST","path":"/users/records","body":{"ID":3,"NAME":"Parent","AGE":42,"ACTIVE":true}}
+            ]
+        }"#,
+    );
+
+    let response = super::catalog_transaction::response(&mut request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    assert!(
+        catalog
+            .open_table("posts")
+            .unwrap()
+            .active_record(3)
+            .is_some()
+    );
+    assert!(
+        catalog
+            .open_table("users")
+            .unwrap()
+            .active_record(3)
+            .is_some()
+    );
+
+    let mut invalid_request = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{"operations":[{"method":"POST","path":"/posts/records","body":{"ID":4,"NAME":"Orphan","AGE":43,"ACTIVE":true}}]}"#,
+    );
+    let response = super::catalog_transaction::response(&mut invalid_request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(422));
+    assert!(
+        catalog
+            .open_table("posts")
+            .unwrap()
+            .active_record(4)
+            .is_none()
+    );
+    assert_eq!(catalog.transaction_id().unwrap(), Some(1));
+
     fs::remove_dir_all(root).unwrap();
 }
 

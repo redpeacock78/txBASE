@@ -110,6 +110,7 @@ pub struct RowVersion {
 pub(crate) enum ForeignKeyAction {
     #[default]
     Restrict,
+    NoAction,
     Cascade,
     SetNull,
 }
@@ -121,6 +122,7 @@ pub(crate) struct ForeignKey {
     pub(crate) parent_fields: Vec<String>,
     pub(crate) on_delete: ForeignKeyAction,
     pub(crate) on_update: ForeignKeyAction,
+    pub(crate) deferred: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

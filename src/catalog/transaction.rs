@@ -290,17 +290,35 @@ pub(super) fn apply_operation_to_tables(
             "table not found: {name}"
         )));
     }
+    let before_table = tables
+        .get(name)
+        .expect("catalog transaction table was inserted");
+    let before_snapshot =
+        super::constraint_actions::snapshot_referenced_table(name, before_table, tables)
+            .map_err(CatalogTransactionError::Catalog)?;
     let table = tables
         .get_mut(name)
         .expect("catalog transaction table was inserted");
-    touched.insert(name.to_owned());
     table
         .apply_operation(&OperationIr {
             method: operation.method,
             path: local_path,
             body: operation.body.clone(),
         })
-        .map_err(|error| CatalogTransactionError::Invalid(format!("table {name}: {error}")))
+        .map_err(|error| CatalogTransactionError::Invalid(format!("table {name}: {error}")))?;
+
+    let before = before_snapshot
+        .map(|records| BTreeMap::from([(name.to_owned(), records)]))
+        .unwrap_or_default();
+    let cascaded = super::constraint_actions::apply_actions(&before, tables)
+        .map_err(CatalogTransactionError::Catalog)?;
+    let mut changed_tables = BTreeSet::from([name.to_owned()]);
+    changed_tables.extend(cascaded.iter().cloned());
+    super::constraints::validate_statement_constraints(tables, &changed_tables)
+        .map_err(CatalogTransactionError::Catalog)?;
+    touched.insert(name.to_owned());
+    touched.extend(cascaded);
+    Ok(())
 }
 
 impl Catalog {
@@ -317,8 +335,11 @@ impl Catalog {
                 .map(|transaction_id| transaction_id.unwrap_or(0))
                 .map_err(CatalogTransactionError::Catalog);
         }
+        let before_snapshots =
+            super::constraint_actions::snapshot_referenced_tables(&before, &tables)
+                .map_err(CatalogTransactionError::Catalog)?;
         touched.extend(
-            super::constraint_actions::apply_actions(&before, &mut tables)
+            super::constraint_actions::apply_actions(&before_snapshots, &mut tables)
                 .map_err(CatalogTransactionError::Catalog)?,
         );
         if reuse_loaded_tables {

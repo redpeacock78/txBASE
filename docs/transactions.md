@@ -83,6 +83,14 @@ rollback, `Catalog::begin_serializable` returns a `CatalogTransaction`.
 It holds the catalog write lock and every discovered table's exclusive lock, applies named record
 operations to private copies, validates cross-table constraints, and commits through one catalog
 journal.
+Non-deferred foreign keys are checked after each applied operation; schema-marked deferred keys
+are checked before the journal commit.
+`RESTRICT` actions remain immediate, while `NO ACTION` can leave a temporary violation for a later
+operation in the same transaction to repair.
+A failed `apply` aborts this Rust transaction, and a failed final validation publishes no files.
+
+The catalog HTTP `POST /transaction` route uses the same per-operation and commit-time foreign-key
+checks. A deferred key can therefore reference a parent inserted later in the same request batch.
 
 The `src/transaction/` engine remains a lower-level WAL transaction primitive and does not provide DBF visibility or this table API.
 
@@ -149,6 +157,7 @@ The HTTP route and this Rust API share the same table mutation and persistence p
 - [PostgreSQL concurrency control](https://www.postgresql.org/docs/current/mvcc.html)
 - [SQLite isolation](https://sqlite.org/isolation.html)
 - [SQLite write-ahead logging](https://sqlite.org/wal.html)
+- [PostgreSQL foreign-key actions and deferral](https://www.postgresql.org/docs/18/ddl-constraints.html)
 - [MVCC and historical snapshots](mvcc.md)
 - [Mutation model](mutation-model.md)
 - [HTTP method semantics and QUERY](http-semantics.md)

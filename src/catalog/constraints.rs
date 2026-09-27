@@ -2,7 +2,7 @@ use super::{Catalog, CatalogError};
 use crate::dbf::DbfTable;
 use crate::json_order::compare_scalar_values;
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn validate_replacements(
     catalog: &Catalog,
@@ -23,12 +23,33 @@ pub(crate) fn validate_replacements(
 pub(super) fn validate_loaded_tables(
     tables: &BTreeMap<String, DbfTable>,
 ) -> Result<(), CatalogError> {
+    validate_loaded_tables_with_deferred(tables, true, None)
+}
+
+pub(super) fn validate_statement_constraints(
+    tables: &BTreeMap<String, DbfTable>,
+    changed_tables: &BTreeSet<String>,
+) -> Result<(), CatalogError> {
+    validate_loaded_tables_with_deferred(tables, false, Some(changed_tables))
+}
+
+fn validate_loaded_tables_with_deferred(
+    tables: &BTreeMap<String, DbfTable>,
+    include_deferred: bool,
+    changed_tables: Option<&BTreeSet<String>>,
+) -> Result<(), CatalogError> {
     for (child_name, child) in tables {
         let foreign_keys = child.foreign_keys().map_err(|source| CatalogError::Table {
             name: child_name.clone(),
             source,
         })?;
         for foreign_key in foreign_keys {
+            let affected = changed_tables.is_none_or(|changed| {
+                changed.contains(child_name) || changed.contains(&foreign_key.parent_table)
+            });
+            if !affected {
+                continue;
+            }
             let parent = tables.get(&foreign_key.parent_table).ok_or_else(|| {
                 CatalogError::Invalid(format!(
                     "table {child_name} references missing table {}",
@@ -46,6 +67,9 @@ pub(super) fn validate_loaded_tables(
                         foreign_key.parent_table, parent_field
                     )));
                 }
+            }
+            if foreign_key.deferred && !include_deferred {
+                continue;
             }
             for record in child.active_records() {
                 let values = foreign_key
