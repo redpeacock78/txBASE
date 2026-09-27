@@ -65,3 +65,19 @@ fi
 
 test ! -s "$temp_dir/pending-wal.stdout"
 grep -q 'object store is read-only' "$temp_dir/pending-wal.stderr"
+
+cp "$temp_dir/object-store/users/snapshots/0.xbf" "$temp_dir/outside.xbf"
+mkdir -p "$temp_dir/symlink-store/users/snapshots" "$temp_dir/symlink-store/users/wal"
+printf '%s\n' \
+  '{"version":1,"generation":0,"root":"users/snapshots/0.xbf","wal_head":0,"history":[0]}' \
+  > "$temp_dir/symlink-store/users/manifest.json"
+ln -s ../../../outside.xbf "$temp_dir/symlink-store/users/snapshots/0.xbf"
+if wasmtime run --dir "$temp_dir::/data" "$component" \
+  --object-store /data/symlink-store users '{"projection":{"NAME":1}}' \
+  > "$temp_dir/symlink.stdout" 2> "$temp_dir/symlink.stderr"; then
+  printf '%s\n' 'object store unexpectedly followed a symbolic link' >&2
+  exit 1
+fi
+
+test ! -s "$temp_dir/symlink.stdout"
+grep -q 'symbolic links' "$temp_dir/symlink.stderr"

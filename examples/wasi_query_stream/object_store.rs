@@ -40,6 +40,16 @@ impl ReadOnlyFilesystemObjectStore {
                 )));
             }
             path.push(component);
+            match fs::symlink_metadata(&path) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(ObjectStoreError::Invalid(
+                        "object key must not traverse symbolic links".into(),
+                    ));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => break,
+                Err(error) => return Err(io_error("inspect object path", &path, error)),
+            }
         }
         Ok(path)
     }
