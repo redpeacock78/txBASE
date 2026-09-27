@@ -25,6 +25,10 @@ It creates parent directories, publishes immutable objects with exclusive creati
 The filesystem backend is a local durable adapter and does not claim cloud-provider consistency.
 
 `AsyncObjectStore` defines the same five primitive operations as a runtime-neutral future boundary.
+Its cancellation-aware methods preserve existing store implementations through defaults.
+The default `get` and `list` wrappers drop their operation future after cancellation is observed on a poll; stopping the underlying I/O depends on the host future.
+The default mutation wrappers reject work when cancellation is already requested, but do not abort an accepted write.
+Callers must keep polling an accepted write to observe its result, while dropping the containing future retains the host future's normal cancellation semantics.
 `SyncObjectStoreAdapter` exposes the existing synchronous stores through already-ready futures, so native tests can exercise the asynchronous contract without selecting an executor.
 `AsyncObjectTable` reuses the manifest, generation, recovery, retention, and orphan-cleanup rules through that future boundary.
 `with_limits` applies the configured XBF limits to both snapshot encoding before publication and snapshot decoding during reads.
@@ -207,14 +211,19 @@ The high-level asynchronous manifest protocol covers commit, recovery, retention
 The JavaScript WASM adapter, Worker Fetch adapter, and R2 binding adapter supply host-managed implementations for this protocol.
 The R2 adapter's conditional-write behavior is specific to Cloudflare and remains outside the generic transport contract.
 
-The asynchronous query adapter supplies the generic storage-to-query handoff, but it does not select host scheduling, cancellation propagation, timeout, or retry behavior.
+The Rust asynchronous query adapter gives each `AsyncObjectQueryStream` its own `CancellationToken`.
+Cancelling the token stops pending read and list futures on their next poll and prevents later storage operations from starting.
+An accepted recovery write is allowed to resolve before a cancelled stream ends, but dropping the stream drops its outstanding future.
+The token cannot guarantee that dropping a host future stops its underlying I/O, and it cannot interrupt the blocking operations in `SyncObjectStoreAdapter`.
+The adapter does not select host scheduling, timeout, or retry behavior.
 The Worker Web Streams adapter supplies demand control and forwards cancellation to signal-aware WASM host operations.
 `createWorkerObjectStore` uses that per-query signal to abort the corresponding in-flight Fetch request.
-The runtime-neutral `AsyncObjectStore` contract and custom hosts that ignore the optional signal do not gain cancellation from this adapter.
+The generated WASM Promise methods do not expose the Rust cancellation token.
+For those methods, a custom host that ignores the optional `AbortSignal` may continue its underlying request after the caller stops awaiting it.
 
 ## 7. Explicit non-goals
 
-This slice does not promise a deployed Worker or live R2 integration, provider-managed retention scheduling, WASI query-stream scheduling, a runtime-neutral cancellation contract for `AsyncObjectStore`, host-specific timeout or retry behavior, multi-region consensus, or automatic background garbage collection.
+This slice does not promise a deployed Worker or live R2 integration, provider-managed retention scheduling, WASI query-stream scheduling, cancellation of blocking filesystem calls, host-specific timeout or retry behavior, multi-region consensus, or automatic background garbage collection.
 
 Those features can reuse the manifest and generation contract after their host-specific failure behavior has a deterministic test.
 

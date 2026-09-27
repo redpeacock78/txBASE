@@ -43,7 +43,9 @@ When the consumer is slow, the underlying source is not pulled beyond the config
 An `AbortSignal` may be supplied by the host.
 Aborting it cancels the WASM stream and errors the `ReadableStream` with `WorkerQueryStreamError` code `cancelled`.
 With the signal-aware WASM object-table methods, the Worker adapter also forwards a per-query signal to the Fetch request loading that query's snapshot, so cancelling the query aborts that request without aborting other queries.
-The runtime-neutral `AsyncObjectStore` contract still has no per-operation cancellation token; other adapters and hosts must define their own I/O cancellation policy.
+The Rust `AsyncObjectQueryStream` has a per-query `CancellationToken` contract, documented in [Asynchronous query streaming](async-streaming.md).
+Its default wrappers drop pending read and list futures, but the host future determines whether that stops the underlying I/O.
+The generated WASM Promise methods do not expose this Rust token; their remote snapshot requests use the signal-aware Worker path described above.
 Calling the reader's `cancel()` follows the same cancellation path without converting normal consumer cancellation into a data error.
 
 Malformed query input, unsupported streaming controls, an invalid generation or queue size, or a missing WASM method use code `invalid`.
@@ -74,7 +76,8 @@ The CI WASM job builds `wasm32-unknown-unknown`, generates the pinned Node.js wr
 ## 5. Scope
 
 The adapter uses Web platform stream primitives and is suitable for a Worker-style host or a Node.js Web Streams fixture.
-It does not provide a WASI scheduler, a network query endpoint, remote page reads, cursor resumption, or a generic `AsyncObjectStore` cancellation contract beyond the Worker Fetch path.
+It does not provide a WASI scheduler, a network query endpoint, remote page reads, cursor resumption, or a guarantee that dropping a host future aborts its underlying I/O.
+The Rust cancellation-token contract is documented in [Asynchronous query streaming](async-streaming.md); the generated WASM Promise methods do not expose that token.
 
 Those are separate host contracts and must define their own I/O, timeout, retry, backpressure, and recovery behavior.
 

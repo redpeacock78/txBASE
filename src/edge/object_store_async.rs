@@ -1,4 +1,7 @@
-use super::super::store::{AsyncObjectStore, ObjectStoreError, put_if_absent_or_matching_async};
+use super::super::cancellation::CancellationToken;
+use super::super::store::{
+    AsyncObjectStore, CancellableObjectStore, ObjectStoreError, put_if_absent_or_matching_async,
+};
 use super::pages::{self, PageManifest, page_keys, page_manifest_key, read_page_async};
 use super::protocol::{
     CommitResult, MANIFEST_VERSION, Manifest, PENDING_VERSION, PendingCommit,
@@ -30,6 +33,18 @@ impl<S: AsyncObjectStore> AsyncObjectTable<S> {
     pub fn with_limits(mut self, limits: XbfLimits) -> Self {
         self.limits = limits;
         self
+    }
+
+    pub(crate) fn with_cancellation(
+        &self,
+        cancellation: CancellationToken,
+    ) -> AsyncObjectTable<CancellableObjectStore<'_, S>> {
+        AsyncObjectTable {
+            store: CancellableObjectStore::new(&self.store, cancellation),
+            prefix: self.prefix.clone(),
+            manifest_key: self.manifest_key.clone(),
+            limits: self.limits,
+        }
     }
 
     pub fn manifest_key(&self) -> &str {

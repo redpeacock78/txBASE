@@ -100,9 +100,18 @@ DBFで表現できる値のJSON形式は既存の契約を維持し、XBF固有�
 
 Worker互換のWeb Streamsアダプターは、インメモリWASMクエリスナップショットとJavaScriptホスト接続型テーブルの両方に、pullスケジューリング、有界キュー、NDJSON転送チャンク、`AbortSignal`キャンセルを提供します。
 `WasmObjectTable.query_stream_json`と`query_stream_json_at`は、ランタイム非依存の`AsyncObjectTable`が現在または選択した保持中のXBFスナップショットを読み込んだ後に解決するPromiseを返します。
-ランタイム非依存の`AsyncObjectStore`契約には操作単位のキャンセルトークンがないため、汎用アダプターは実行中のオブジェクトストアPromiseを中断できません。
-Worker専用の`query_stream_json_with_signal`と`query_stream_json_at_with_signal`は、クエリ単位のシグナルをJavaScriptホスト接続型オブジェクトテーブル経由で対応するFetchリクエストへ渡します。
-これにより、並行する別のクエリへ影響させずに、そのスナップショット読み込みを中断します。
+Rustの`AsyncObjectStore`契約は、`CancellationToken`を受け取る操作単位の**協調キャンセル**を提供します。
+各`AsyncObjectQueryStream`は独立したトークンを持ち、`cancel()`と`cancellation_token()`からキャンセルを要求できます。
+ストリームを破棄した場合も、そのトークンをキャンセルします。
+標準の読み取りと一覧取得は、キャンセル後のポーリングで操作futureを破棄します。
+基盤のI/Oまで停止するかどうかはホストfutureの実装に依存します。
+標準の変更操作は、キャンセル要求後の新しい処理を拒否しますが、受け付け済みの書き込みは中断しません。
+書き込み中に`cancel()`を呼んだ場合、ストリームは書き込みの結果が確定してから終了します。
+ストリーム自体を破棄した場合は、未完了のfutureも破棄され、書き込みの動作はホストfutureのキャンセル規則に従います。
+`SyncObjectStoreAdapter`はブロッキングなファイル操作を中断できません。
+生成されたWASM Promiseメソッドは、このRustトークンを公開しません。
+Worker専用の`query_stream_json_with_signal`と`query_stream_json_at_with_signal`は、代わりにクエリ単位のシグナルをJavaScriptホスト接続型オブジェクトテーブル経由で対応するFetchリクエストへ渡します。
+この方法では、並行する別のクエリへ影響させずに、そのスナップショット読み込みを中断します。
 WASIのスケジューリングとリモート再試行方針はホスト固有の責務です。
 
 ## 5. Worker Web Streamsアダプター
@@ -123,7 +132,11 @@ WASIのスケジューリングとリモート再試行方針はホスト固有�
 - [Rustの`Context`](https://doc.rust-lang.org/std/task/struct.Context.html)
 - [Rustの`Poll`](https://doc.rust-lang.org/std/task/enum.Poll.html)
 - [Rustの`Pin`](https://doc.rust-lang.org/std/pin/index.html)
+- [`futures` 0.3.34の`Abortable`](https://docs.rs/futures/0.3.34/futures/future/struct.Abortable.html)
+- [`futures` 0.3.34の`AbortHandle`](https://docs.rs/futures/0.3.34/futures/future/struct.AbortHandle.html)
 
 これらの資料は、境界が使うタスクコンテキスト、準備状態、waker契約、pinモデルを定義します。
+`futures`の資料は、既定のキャンセルラッパーが使うabort handleの境界を定義します。
+ホストfutureを破棄したときに基盤I/Oを停止することや、変更操作を取り消すことまでは保証しません。
 
 txBASEのクエリ意味論を定義したり、特定の非同期ランタイムとの互換性を示したりはしません。

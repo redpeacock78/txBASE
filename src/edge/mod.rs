@@ -1,3 +1,4 @@
+mod cancellation;
 #[cfg(not(target_arch = "wasm32"))]
 mod filesystem;
 mod memory;
@@ -5,6 +6,7 @@ mod object_store;
 mod query_stream;
 mod store;
 
+pub use cancellation::CancellationToken;
 #[cfg(not(target_arch = "wasm32"))]
 pub use filesystem::FilesystemObjectStore;
 pub use memory::MemoryObjectStore;
@@ -16,6 +18,8 @@ pub use store::{
     AsyncObjectStore, AsyncObjectStoreFuture, ObjectStore, ObjectStoreError, SyncObjectStoreAdapter,
 };
 
+#[cfg(test)]
+mod cancellation_tests;
 #[cfg(test)]
 mod page_tests;
 #[cfg(test)]

@@ -62,7 +62,7 @@ The repository currently provides:
 - Durable table-local row history stored with MVCC prepare/commit records, epoch-separated physical row IDs, retained row reads, baseline reconstruction during full-image GC, and optional independent per-row retention through `mvcc gc --keep-rows`.
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection, index-sidecar recovery, and DBF-read recovery.
 - A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and single-operation or atomic-batch mutation contracts, a `wasm-bindgen` wrapper, a pinned Node.js wrapper smoke test, and a WASI 0.3 CLI query-stream component that reads DBF files and current or retained XBF snapshots through a read-only preopened filesystem store, with a pinned Wasmtime smoke check.
-- A runtime-neutral `AsyncObjectStore` primitive contract, `AsyncObjectTable` manifest protocol, and synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
+- A runtime-neutral `AsyncObjectStore` primitive contract with operation-level `CancellationToken` methods, an `AsyncObjectTable` manifest protocol, and a synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
 - A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A Worker-compatible Fetch object-store adapter with conditional HTTP publication, strong SHA-256 ETags, bounded request timeouts, explicit `AbortSignal` cancellation mapping, and a deterministic WASM-backed HTTP fixture.
 - A Cloudflare R2 binding adapter with conditional writes and cursor-based listing, checked against a deterministic in-memory binding fixture in CI; live service validation remains future.
@@ -159,14 +159,17 @@ current and retained-generation streams through the generated wrapper.
 The Worker adapter awaits snapshot loading before the first row.
 Signal-aware `WasmObjectTable` methods pass one query-scoped `AbortSignal` to host operations, and `createWorkerObjectStore` aborts the matching Fetch request when the reader or caller cancels that query.
 Concurrent queries use separate signals, so cancelling one query does not abort another query's request.
-The generic `AsyncObjectStore` future contract and custom hosts that ignore the optional signal remain uncancellable.
+Rust `AsyncObjectQueryStream` also has a per-query `CancellationToken`.
+Its default read and list wrappers drop their futures when cancellation is polled, while host implementations determine whether that stops the underlying I/O.
+The mutation wrappers reject operations after cancellation but let accepted writes resolve; dropping the stream still drops its outstanding future.
+The token is not exposed by the generated WASM Promise methods, whose host requests use `AbortSignal` instead.
+Hosts that ignore that signal may continue their underlying request after the Promise caller stops awaiting it.
 The WASI CLI component also reads current or retained XBF snapshots through a
 read-only preopened filesystem store. It uses synchronous filesystem operations
 through `SyncObjectStoreAdapter`, loads the snapshot before row delivery, and
 fails before output when pending-WAL recovery needs a write. Writable or
-provider-backed WASI storage, non-blocking storage I/O, a runtime-neutral
-`AsyncObjectStore` cancellation contract, and host-specific lifecycle policy
-remain future work.
+provider-backed WASI storage, non-blocking storage I/O, and host-specific
+lifecycle policy remain future work.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
 
@@ -386,6 +389,9 @@ The runtime-neutral asynchronous-storage-backed query stream is implemented for
 current and retained XBF snapshots through
 `AsyncObjectTable::query_stream` and `AsyncObjectTable::query_stream_at`.
 It maps live rows directly into the shared JSON query contract, including XBF-only values, but still loads and validates the whole snapshot before row delivery.
+Each Rust query stream also has an independent `CancellationToken`.
+The token cancels pending read and list futures and prevents later store operations from starting; accepted recovery writes are not aborted.
+The default future wrapper cannot guarantee that a host's underlying I/O stops when its future is dropped.
 The generated `WasmObjectTable` wrapper and Worker adapter also expose these
 queries through Promise-based initialization.
 A WASI 0.3 CLI component now drives the shared `AsyncQueryStream`, reads either
@@ -395,8 +401,8 @@ stream backpressure; a pinned Wasmtime CI smoke check covers both input paths.
 The XBF adapter uses synchronous filesystem operations, is not safe for
 concurrent writers, and fails before row output if pending-WAL recovery needs a
 write. Writable or provider-backed WASI storage, non-blocking storage I/O,
-provider integrations beyond R2, and a runtime-neutral cancellation contract
-for non-Worker `AsyncObjectStore` implementations remain future work.
+provider integrations beyond R2, and host-specific lifecycle policies remain
+future work.
 Production WASI host integration and a deployed worker fixture remain future work.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.

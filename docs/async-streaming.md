@@ -97,8 +97,14 @@ It does not make the filesystem channel non-blocking, add resume tokens, or defi
 
 The Worker-compatible Web Streams adapter supplies pull scheduling, bounded queueing, NDJSON transport chunks, and `AbortSignal` cancellation for both the in-memory WASM query snapshot and the JavaScript-hosted object table.
 `WasmObjectTable.query_stream_json` and `query_stream_json_at` return a Promise that resolves after the runtime-neutral `AsyncObjectTable` has loaded the current or selected retained XBF snapshot.
-The runtime-neutral `AsyncObjectStore` contract has no operation cancellation token, so its generic adapters cannot abort an in-flight object-store Promise.
-The Worker signal-aware methods `query_stream_json_with_signal` and `query_stream_json_at_with_signal` pass a query-scoped signal through the JavaScript host object table to the matching Fetch request, aborting that snapshot load without affecting concurrent queries.
+The Rust `AsyncObjectStore` contract provides operation-level cancellation methods that accept a `CancellationToken`.
+Each `AsyncObjectQueryStream` owns a separate token, exposes `cancel()` and `cancellation_token()`, and cancels it when the stream is dropped.
+The default read and list methods drop their operation future after cancellation is observed on a poll; whether that stops the underlying I/O depends on the host future.
+The default mutation methods reject work if cancellation is already requested, but do not abort an accepted write.
+Calling `cancel()` while a recovery write is in progress lets that write resolve before the stream ends; dropping the stream still drops its outstanding future according to the host future's cancellation behavior.
+`SyncObjectStoreAdapter` cannot interrupt a blocking filesystem operation.
+The generated WASM Promise methods do not expose this Rust token.
+The Worker signal-aware methods `query_stream_json_with_signal` and `query_stream_json_at_with_signal` instead pass a query-scoped signal through the JavaScript host object table to the matching Fetch request, aborting that snapshot load without affecting concurrent queries.
 WASI scheduling and remote retry policy remain host-specific.
 
 ## 5. Worker Web Streams adapter
@@ -118,7 +124,11 @@ The full boundary, error categories, and deterministic generated-wrapper fixture
 - [Rust `Context`](https://doc.rust-lang.org/std/task/struct.Context.html)
 - [Rust `Poll`](https://doc.rust-lang.org/std/task/enum.Poll.html)
 - [Rust `Pin`](https://doc.rust-lang.org/std/pin/index.html)
+- [`futures` 0.3.34 `Abortable`](https://docs.rs/futures/0.3.34/futures/future/struct.Abortable.html)
+- [`futures` 0.3.34 `AbortHandle`](https://docs.rs/futures/0.3.34/futures/future/struct.AbortHandle.html)
 
 These references define the task context, readiness states, waker contract, and pinning model used by the boundary.
+The `futures` references define the abort-handle boundary used by the default cancellation wrapper.
+They do not promise that dropping a host future stops its underlying I/O or reverses a mutation.
 
 They do not define txBASE query semantics or imply compatibility with a particular async runtime.

@@ -15,6 +15,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 encoding_rs = "0.8"
+futures = { version = "0.3", default-features = false, features = ["alloc", "async-await"] }
 icu_collator = { version = "=2.1.1", default-features = false, features = ["compiled_data"] }
 icu_locale = { version = "=2.1.1", default-features = false, features = ["compiled_data"] }
 serde = { version = "1", features = ["derive"] }
@@ -32,7 +33,6 @@ wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "wasi", target_env = "p2"))'.dependencies]
-futures = { version = "0.3", default-features = false, features = ["async-await"] }
 wasip3 = "=0.9.0"
 
 [[example]]

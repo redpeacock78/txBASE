@@ -151,8 +151,12 @@ to each object-store host operation.
 Fetch request.
 Custom hosts must accept and honor the optional trailing signal to cancel
 their own I/O.
-The runtime-neutral `AsyncObjectStore` contract remains uncancellable outside
-this Worker/WASM host path.
+The Rust `AsyncObjectQueryStream` also provides a per-query `CancellationToken`;
+its default wrappers drop pending read and list futures when polled after
+cancellation, but cannot guarantee that the host's underlying I/O stops.
+The generated WASM Promise methods do not expose that Rust token.
+They use the signal-aware Worker/WASM host path above to abort matching Fetch
+requests.
 
 The object-store contract belongs below the shared table and transaction interfaces.
 The runtime-neutral `AsyncObjectStore` contract is implemented for the five primitive object operations.
@@ -225,8 +229,7 @@ The following conditions remain before calling a deployed worker or production W
 - a smoke test against the selected deployed worker or production WASI host;
 - writable or provider-backed WASI object-store adapters and genuinely
   non-blocking storage I/O;
-- a runtime-neutral cancellation contract for `AsyncObjectStore` futures and
-  host-specific timeout and retry policy for non-Worker query streams;
+- host-specific timeout and retry policy for non-Worker query streams;
 - live R2 service validation, provider integrations beyond R2, and provider-managed retention or retry policy.
 
 The Wasmtime smoke test does not establish a production deployment contract.
