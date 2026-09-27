@@ -183,7 +183,7 @@ Rustの`AsyncObjectQueryStream`は、クエリごとに独立した`Cancellation
 基盤I/Oまで停止するかどうかはホストfutureの実装に依存します。
 変更操作はキャンセル後の新しい処理を拒否しますが、受け付け済みの書き込みは中断しません。
 このトークンは生成されたWASM Promiseメソッドには公開されず、ホストリクエストのキャンセルには`AbortSignal`を使います。
-`AbortSignal`を無視するホストでは、Promiseの待機をやめた後もリクエストが続くことがあります。
+`AbortSignal`を無視するホストでは、Promiseの待機をやめた後もリクエストは継続します。
 WASI CLIコンポーネントは読み取り専用の事前公開filesystem storeを通じて、保持中の世代を含むXBFスナップショットも読み込みます。
 `SyncObjectStoreAdapter`を介した同期ファイルシステム操作を使い、行の配送前にスナップショットを読み込みます。
 保留中WALの復旧で書き込みが必要になると、出力前に失敗します。
