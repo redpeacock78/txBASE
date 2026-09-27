@@ -16,11 +16,16 @@ Named options change interpretation or select a bounded policy, such as `--encod
 
 ## Git reference boundary
 
-The Git command-line interface documentation is a reference for explicit subcommands and named options.
+The command hierarchy is a txBASE design decision based on its own operation and recovery boundaries.
+
+Git's manual describes conventions used by Git, including option and argument rules and how some commands distinguish revisions from paths with `--`.
+
+txBASE uses the manual only to compare Git-specific argument conventions; it is not the authority for txBASE's command-grouping decision.
 
 txBASE does not copy Git's command set, repository model, revision language, object database, or option semantics.
 
-The resemblance is structural only: txBASE operates on DBF files, catalog directories, sidecars, and local recovery boundaries rather than Git repositories.
+txBASE groups commands around DBF files, catalog directories, sidecars, and local recovery boundaries.
+Its command parser does not implement Git's revision language or its revision-versus-path disambiguation.
 
 ## Failure-boundary placement
 
@@ -40,6 +45,6 @@ A familiar command name does not claim dBASE, MongoDB, Git, or SQLite compatibil
 
 The CLI exposes a bounded repository-local subset, and each command document defines its own input limits, recovery behavior, write set, and failure statuses.
 
-## Primary reference
+## Comparison reference
 
-- [Git command-line interface and conventions](https://git-scm.com/docs/gitcli)
+- [Git command-line interface and conventions](https://git-scm.com/docs/gitcli) (comparison for Git-specific argument conventions)
