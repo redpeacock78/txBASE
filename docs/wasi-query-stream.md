@@ -57,8 +57,9 @@ This command does not make synchronous DBF or object-store filesystem reads inte
 The `wasi-query-stream` CI job installs the WASI target and Wasmtime `49.0.0`, builds the component, and runs `tests/wasi_query_stream_smoke.sh`.
 The smoke check decodes pinned DBF and XBF fixtures, checks the DBF result and current and retained XBF generations, verifies that `sort` is rejected without stdout output, and verifies that pending-WAL recovery fails without stdout output.
 
-This proves the component build and CLI behavior on the pinned Wasmtime runtime.
-It does not prove deployment in another WASI host, writable or provider-backed storage, or non-blocking filesystem I/O.
+This proves the component build and CLI behavior on the pinned Wasmtime `49.0.0` runtime, not production readiness of a WASI host.
+WASI 0.3.1 is a stable specification, but Wasmtime's `wasmtime-wasi::p3` host module is documented as experimental, unstable, and incomplete.
+This smoke test does not validate a custom embedded host, deployment in another runtime, writable or provider-backed storage, or non-blocking filesystem I/O.
 
 ## Primary references and scope
 
@@ -66,6 +67,7 @@ It does not prove deployment in another WASI host, writable or provider-backed s
 - [`wasip3` 0.9.0 bindings](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/)
 - [Rust `wasm32-wasip2` target](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
 - [Wasmtime CLI options](https://docs.wasmtime.dev/cli-options.html)
+- [Wasmtime's WASI P3 host implementation](https://docs.rs/wasmtime-wasi/latest/wasmtime_wasi/p3/index.html)
 - [Bytecode Alliance Wasmtime setup action](https://github.com/bytecodealliance/actions)
 
 WASI 0.3.1 is the current release and adds Component Model features beyond the async primitives introduced in WASI 0.3.0.

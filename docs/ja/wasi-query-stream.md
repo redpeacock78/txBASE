@@ -63,8 +63,9 @@ Rustのクエリストリームを破棄すると、行の生成を終了しま�
 スモーク検査は固定DBF・XBFフィクスチャをデコードし、DBFの結果、現在および保持中のXBF世代を確認します。
 `sort`がstdoutを出力せず拒否されることと、保留中のWAL復旧がstdoutを出力せず失敗することも確認します。
 
-この検査が保証するのは、固定したWasmtimeランタイムでのコンポーネントのビルドとCLI動作です。
-別のWASIホストへのデプロイ、書き込み可能またはプロバイダー接続型のストレージ、ノンブロッキングなファイルシステムI/Oは保証しません。
+この検査が示すのは、固定したWasmtime `49.0.0`ランタイムでのコンポーネントのビルドとCLI動作であり、WASIホストの本番対応ではありません。
+WASI 0.3.1仕様は安定版ですが、Wasmtimeの`wasmtime-wasi::p3`ホスト実装は上流資料で実験的かつ不安定で、未完成と説明されています。
+このスモーク検査は、独自に組み込んだホスト、別ランタイムへのデプロイ、書き込み可能またはプロバイダー接続型のストレージ、ノンブロッキングなファイルシステムI/Oを検証しません。
 
 ## 一次資料と対象範囲
 
@@ -72,6 +73,7 @@ Rustのクエリストリームを破棄すると、行の生成を終了しま�
 - [`wasip3` 0.9.0のバインディング](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/)
 - [Rustの`wasm32-wasip2`ターゲット](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
 - [Wasmtime CLIオプション](https://docs.wasmtime.dev/cli-options.html)
+- [WasmtimeのWASI P3ホスト実装](https://docs.rs/wasmtime-wasi/latest/wasmtime_wasi/p3/index.html)
 - [Bytecode AllianceのWasmtimeセットアップアクション](https://github.com/bytecodealliance/actions)
 
 WASIの現行リリースは0.3.1であり、WASI 0.3.0で導入された非同期プリミティブに加えてComponent Modelの機能を導入しています。

@@ -93,7 +93,6 @@ This phase keeps the database local and makes its operational boundary useful be
 - Schema introspection.
 - A multi-table catalog boundary.
 - Secondary-index maintenance and query planning.
-- Production WASI host lifecycle handling, writable or provider-backed XBF object-table adapters, and genuinely non-blocking storage I/O.
 - `PACK` and `RECALL` maintenance operations.
 - `verify`, `backup`, and `restore` tooling.
 - Read-only WAL inspection.
@@ -401,14 +400,17 @@ preopened filesystem store, and writes NDJSON through asynchronous stdout with
 stream backpressure; a pinned Wasmtime CI smoke check covers both input paths.
 The XBF adapter uses synchronous filesystem operations, is not safe for
 concurrent writers, and fails before row output if pending-WAL recovery needs a
-write. Writable or provider-backed WASI storage, non-blocking storage I/O,
-provider integrations beyond R2, and host-specific lifecycle policies remain
-future work.
-Production WASI host integration and a deployed worker fixture remain future work.
+write.
+WASI 0.3.1 is a stable specification, but Wasmtime's `wasmtime-wasi::p3` host
+implementation is documented as experimental, unstable, and incomplete.
+The pinned CLI smoke test does not validate a custom production host.
+Writable or provider-backed WASI storage, non-blocking storage I/O, host-specific
+lifecycle policies, provider integrations beyond R2, and live host validation
+remain future work.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 
-The detailed future boundaries are described in [edge storage](edge-storage.md) and [WASM](wasm.md).
+The detailed future boundaries are described in [edge storage](edge-storage.md), [WASI query streaming](wasi-query-stream.md), and [WASM](wasm.md).
 
 ## 8. Phase 6: advanced database features
 
