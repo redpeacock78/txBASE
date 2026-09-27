@@ -58,7 +58,7 @@
 
 ICU4Xの識別子は、ICU4X 2.1.1の既定オプションで日本語、中国語、韓国語のロケールを選びます。
 
-選定した日本語・中国語の期待値は、[ICU4X 2.1.1の公開crateソース](https://docs.rs/crate/icu_collator/2.1.1/source/)に含まれる照合テストに従います。
+選定した日本語・中国語の照合期待値は、[ICU4X 2.1.1の公開crateソース](https://docs.rs/crate/icu_collator/2.1.1/source/)の照合テストを参照しました。
 韓国語のハングル・漢字の期待値は[CLDR 48の韓国語標準照合規則](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml)に従います。
 このフィクスチャはロケール動作の一部を検証するもので、上流の適合テスト一式を網羅するものではありません。
 
