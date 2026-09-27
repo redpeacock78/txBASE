@@ -310,6 +310,9 @@ mod reference_tests;
 mod cursor_tests;
 
 #[cfg(test)]
+mod locale_collation_tests;
+
+#[cfg(test)]
 mod stream_tests;
 
 #[cfg(test)]
