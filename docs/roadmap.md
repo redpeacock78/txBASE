@@ -297,8 +297,9 @@ the complete legacy alias set. An upstream Visual FoxPro Windows-1251 fixture al
 round-trips Cyrillic record values. Pinned explicit-codec byte fixtures cover DBF record decoding
 and write round-trips for all eight supported explicit codec names. The query layer now has a bounded
 `unicode-lowercase` and `unicode-nfkc-lowercase` sort collations, plus versioned ICU4X 2.1.1
-Japanese, Chinese, and Korean locale collations. Additional broader upstream CJK collation
-fixtures remain future work.
+Japanese, Chinese, and Korean locale collations. Curated upstream fixtures cover Japanese Han/Kana,
+Chinese pinyin/Bopomofo, and Korean Hangul/Hanja ordering; the full upstream CJK collation
+conformance corpus remains future work.
 
 An upstream JavaDBF GBK fixture now covers three GBK-encoded CJK field names and 28 real records,
 including a read, mutation, and byte round-trip.

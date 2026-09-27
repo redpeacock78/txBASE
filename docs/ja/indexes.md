@@ -58,6 +58,10 @@
 
 ICU4Xの識別子は、ICU4X 2.1.1の既定オプションで日本語、中国語、韓国語のロケールを選びます。
 
+選定した日本語・中国語の期待値は、[ICU4X 2.1.1の公開crateソース](https://docs.rs/crate/icu_collator/2.1.1/source/)に含まれる照合テストに従います。
+韓国語のハングル・漢字の期待値は[CLDR 48の韓国語標準照合規則](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml)に従います。
+このフィクスチャはロケール動作の一部を検証するもので、上流の適合テスト一式を網羅するものではありません。
+
 Unicode小文字化モードは正規化済み文字列キーを保存します。
 ICU4Xモードは元の文字列を保持し、ICUのソートキーを永続化せず、ロケール照合器で順序を比較します。
 
@@ -298,8 +302,10 @@ freshnessの検証では引き続きDBFとmemoのバイト列を読み取り、�
 - [MongoDBの等値、ソート、範囲の指針](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
 - [ICU4X 2.1.1 `Collator`](https://docs.rs/icu_collator/2.1.1/icu_collator/struct.Collator.html)
 - [ICU4X 2.1.1 `CollatorOptions`](https://docs.rs/icu_collator/2.1.1/icu_collator/options/struct.CollatorOptions.html)
+- [ICU4X 2.1.1の公開crateソース](https://docs.rs/crate/icu_collator/2.1.1/source/)
+- [CLDR 48の韓国語標準照合規則](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml)
 
-これらの資料は、プランナーの語彙と複合インデックスの順序を考える背景だけに使います。
+MongoDBの資料は、プランナーの語彙と複合インデックスの順序を考える背景としてのみ使います。
 候補の上限、ローカル統計、レコード数によるコストモデル、物理順での具体化はtxBASEの契約であり、MongoDB互換性の主張ではありません。
-ICU4Xはロケール対応比較APIと既定の第3照合レベルを提供します。
+ICU4Xはロケール対応比較APIと既定の第3照合レベルを提供し、ICU4XとCLDRの資料はフィクスチャの根拠を示します。
 受け付けるロケール識別子、版の固定、インデックスとカーソルの動作はtxBASEの契約です。

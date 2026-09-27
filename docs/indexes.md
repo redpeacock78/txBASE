@@ -58,6 +58,9 @@ An index definition may add `collation` with `unicode-lowercase`, `unicode-nfkc-
 
 The ICU4X identifiers select the Japanese, Chinese, or Korean locale with ICU4X 2.1.1's default options.
 
+Curated Japanese and Chinese expectations follow the collation tests included in ICU4X 2.1.1's [published crate source](https://docs.rs/crate/icu_collator/2.1.1/source/); Korean Hangul/Hanja expectations follow [CLDR 48's standard Korean collation](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml).
+These fixtures cover selected locale behavior, not the full upstream conformance corpus.
+
 Unicode lowercase modes store normalized string keys; ICU4X modes retain the original strings and order them through the locale collator instead of persisting ICU sort keys.
 
 The versioned identifier binds persisted index order and sorted cursors to this collation contract. A future ICU4X or collation-data upgrade must use a new identifier and rebuild affected indexes.
@@ -268,7 +271,9 @@ The equality, equality-intersection, statistics-ordered, histogram-ordered range
 - [MongoDB equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
 - [ICU4X 2.1.1 `Collator`](https://docs.rs/icu_collator/2.1.1/icu_collator/struct.Collator.html)
 - [ICU4X 2.1.1 `CollatorOptions`](https://docs.rs/icu_collator/2.1.1/icu_collator/options/struct.CollatorOptions.html)
+- [ICU4X 2.1.1 published crate source](https://docs.rs/crate/icu_collator/2.1.1/source/)
+- [CLDR 48 Korean standard collation](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml)
 
-These sources provide planner vocabulary and compound-index ordering context only.
+The MongoDB sources provide planner vocabulary and compound-index ordering context only.
 The candidate bounds, local statistics, record-count cost model, and physical-order materialization are txBASE contracts, not MongoDB compatibility claims.
-ICU4X provides the locale-aware comparison API and default tertiary strength; txBASE defines the accepted locale identifiers, version binding, and index/cursor behavior.
+ICU4X provides the locale-aware comparison API and default tertiary strength, while ICU4X and CLDR provide fixture provenance; txBASE defines the accepted locale identifiers, version binding, and index/cursor behavior.

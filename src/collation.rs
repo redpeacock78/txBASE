@@ -76,4 +76,48 @@ mod tests {
         assert_eq!(Collation::Icu4x211Ko.compare("가", "나"), Ordering::Less);
         assert_eq!(Collation::Icu4x211Zh.key("阿"), "阿");
     }
+
+    #[test]
+    fn locale_collations_match_upstream_cjk_fixtures() {
+        // Japanese and Chinese follow ICU4X 2.1.1 tests; Korean follows CLDR 48.
+        let cases: &[(Collation, &[(&str, &str, Ordering)])] = &[
+            (
+                Collation::Icu4x211Ja,
+                &[
+                    ("川", "州", Ordering::Greater),
+                    ("東京", "京都", Ordering::Greater),
+                    ("あい", "愛", Ordering::Less),
+                    ("飛行機", "飞行机", Ordering::Less),
+                ],
+            ),
+            (
+                Collation::Icu4x211Zh,
+                &[
+                    ("艾", "a", Ordering::Less),
+                    ("佰", "a", Ordering::Less),
+                    ("ㄅ", "a", Ordering::Greater),
+                    ("ㄅ", "ж", Ordering::Greater),
+                    ("艾", "佰", Ordering::Less),
+                    ("艾", "ㄅ", Ordering::Less),
+                    ("佰", "ㄅ", Ordering::Less),
+                    ("不", "把", Ordering::Greater),
+                ],
+            ),
+            (
+                Collation::Icu4x211Ko,
+                &[
+                    ("가", "나", Ordering::Less),
+                    ("가", "伽", Ordering::Less),
+                    ("각", "刻", Ordering::Less),
+                    ("강", "剛", Ordering::Less),
+                ],
+            ),
+        ];
+
+        for (collation, pairs) in cases {
+            for &(left, right, expected) in *pairs {
+                assert_eq!(collation.compare(left, right), expected);
+            }
+        }
+    }
 }
