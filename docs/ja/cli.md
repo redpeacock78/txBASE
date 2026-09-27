@@ -70,7 +70,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 | `txbase restore SOURCE DEST` | バックアップをソースとして、同じ検証済みコピー手順を使う。 |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | 単一テーブルHTTPサーバーを起動する。 |
 | `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | カタログHTTPサーバーと有界なレプリケーション配送およびフォロワー適用位置確認ルートを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、フォロワー位置をメタデータだけの`TXRG`サイドカーへ保存する。`follower`ロールは直接のカタログ更新とフォロワー適用位置確認を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。`TXBASE_REPLICATION_TOKEN`を設定した場合、すべてのレプリケーションルートにRFC 6750の`Authorization: Bearer <token>`ヘッダーが必要になる。 |
-| `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | フォロワーカタログを開き、authorityから有界な1回のcatch-upを取得し、適用済みカタログと`TXRP`位置を永続化し、適用位置を確認して、同期結果をJSONで表示する。`TERM`はauthorityと一致する必要があり、`COUNT`は`1`から`128`の範囲で指定する。authorityがBearer認証を要求する場合は、任意の`TXBASE_REPLICATION_TOKEN`環境変数を使う。 |
+| `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | フォロワーカタログを開き、authorityから有界な1回のcatch-upを取得し、適用済みカタログと`TXRP`位置を永続化し、適用位置を確認して、同期結果をJSONで表示する。`AUTHORITY_URL`ではHTTPとHTTPSを使えます。HTTPSではOSの信頼ストアを使って証明書と接続先のホスト名を検証します。`TERM`はauthorityと一致する必要があり、`COUNT`は`1`から`128`の範囲で指定します。authorityがBearer認証を要求する場合は、任意の`TXBASE_REPLICATION_TOKEN`環境変数を使います。Bearer認証情報を送る場合は、loopback HTTP以外ではHTTPSを使います。 |
 
 ## オプションの所有範囲
 
@@ -83,7 +83,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 - `TXBASE_REPLICATION_TOKEN`は`serve-catalog`の任意の環境変数であり、CLIオプションではない。コマンドラインにトークンを露出させずにレプリケーションルートを保護する。
 - `--replication-term`と`--follower-id`は`replicate catch-up`だけに属し、ローカルの固定termとフォロワーセッションを指定する。
 - `--limit`と`--timeout-ms`は`replicate catch-up`だけに属し、1回のpullセッションとソケット操作を制限する。
-- `TXBASE_REPLICATION_TOKEN`は`replicate catch-up`でも読み取り、authorityのBearer認証に使う。
+- `TXBASE_REPLICATION_TOKEN`は`replicate catch-up`でも読み取り、authorityのBearer認証に使う。authority URLがloopbackでない場合はHTTPSを使う。
 - `--after`は`cdc`と`cdc catalog`だけに属する。
 - `--keep`はテーブルとカタログのMVCCガベージコレクションに属し、`--keep-rows`はテーブルMVCCガベージコレクションだけに属する。
 - `index build-compound`は、各フィールドの方向に`1`または`asc`、`-1`または`desc`を受け付ける。

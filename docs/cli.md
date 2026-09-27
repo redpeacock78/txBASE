@@ -69,7 +69,7 @@ The following table is the current command contract.
 | `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as the source. |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | Starts the single-table HTTP server. |
 | `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | Starts the catalog HTTP server and its bounded replication delivery and follower-progress routes. The default `authority` role captures `/transaction` and named-table mutation routes in the catalog journal and `TXRP` sidecar, and persists follower progress in the metadata-only `TXRG` sidecar; `follower` rejects direct catalog mutations and follower-progress acknowledgements with `409` while accepting replication delivery. `TERM` is a positive fixed local replication term and defaults to `1`. When `TXBASE_REPLICATION_TOKEN` is set, all replication routes require an RFC 6750 `Authorization: Bearer <token>` header. |
-| `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | Opens a follower catalog, pulls one bounded catch-up session from an authority, persists the applied catalog and `TXRP` position, acknowledges progress, and prints the synchronization result as JSON. `TERM` must match the authority, `COUNT` is between `1` and `128`, and the optional `TXBASE_REPLICATION_TOKEN` environment variable supplies the Bearer credential. |
+| `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | Opens a follower catalog, pulls one bounded catch-up session from an authority, persists the applied catalog and `TXRP` position, acknowledges progress, and prints the synchronization result as JSON. `AUTHORITY_URL` accepts HTTP or HTTPS; HTTPS verifies the authority certificate and host name with the operating system's trust facilities. `TERM` must match the authority, `COUNT` is between `1` and `128`, and the optional `TXBASE_REPLICATION_TOKEN` environment variable supplies the Bearer credential. Bearer credentials require HTTPS except for loopback HTTP. |
 
 ## Option ownership
 
@@ -82,7 +82,7 @@ The following table is the current command contract.
 - `TXBASE_REPLICATION_TOKEN` is an optional `serve-catalog` environment variable, not a CLI option; it protects the replication routes without exposing the token in the command line.
 - `--replication-term` and `--follower-id` belong to `replicate catch-up` and identify the local fixed-term follower session.
 - `--limit` and `--timeout-ms` belong only to `replicate catch-up`; they bound one pull session and its socket operations.
-- `TXBASE_REPLICATION_TOKEN` is also read by `replicate catch-up` when the authority requires Bearer authentication.
+- `TXBASE_REPLICATION_TOKEN` is also read by `replicate catch-up` when the authority requires Bearer authentication; use HTTPS except when the authority URL resolves to loopback.
 - `--after` belongs only to `cdc` and `cdc catalog`.
 - `--keep` belongs to table and catalog MVCC garbage collection; `--keep-rows` belongs only to table MVCC garbage collection.
 - `index build-compound` accepts `1` or `asc`, and `-1` or `desc`, for each field direction.

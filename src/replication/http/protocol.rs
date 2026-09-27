@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, Read};
-use std::net::TcpStream;
 
 const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
 
@@ -16,6 +15,7 @@ pub enum ReplicationHttpError {
     UnsupportedScheme(String),
     InvalidConfig(String),
     Io(io::Error),
+    Tls(String),
     InvalidResponse(String),
     HttpStatus {
         status: u16,
@@ -39,6 +39,7 @@ impl Display for ReplicationHttpError {
                 )
             }
             Self::Io(error) => write!(formatter, "replication HTTP I/O error: {error}"),
+            Self::Tls(error) => write!(formatter, "replication TLS error: {error}"),
             Self::InvalidResponse(message) => {
                 write!(formatter, "invalid replication HTTP response: {message}")
             }
@@ -250,7 +251,7 @@ pub struct ReplicationSyncResult {
 
 pub(super) fn parse_base_url(
     base_url: &str,
-) -> Result<(String, u16, String, String), ReplicationHttpError> {
+) -> Result<(String, u16, String, String, bool), ReplicationHttpError> {
     if base_url.is_empty()
         || base_url
             .chars()
@@ -262,12 +263,17 @@ pub(super) fn parse_base_url(
     }
     let Some((scheme, rest)) = base_url.split_once("://") else {
         return Err(ReplicationHttpError::InvalidUrl(
-            "URL must use the http:// scheme".into(),
+            "URL must use the http:// or https:// scheme".into(),
         ));
     };
-    if !scheme.eq_ignore_ascii_case("http") {
+    let use_tls = if scheme.eq_ignore_ascii_case("https") {
+        true
+    } else if scheme.eq_ignore_ascii_case("http") {
+        false
+    } else {
         return Err(ReplicationHttpError::UnsupportedScheme(scheme.into()));
-    }
+    };
+    let default_port = if use_tls { 443 } else { 80 };
     let authority_end = rest.find(['/', '?', '#']);
     let (authority, suffix) = authority_end.map_or((rest, ""), |index| rest.split_at(index));
     if authority.is_empty() || authority.contains('@') {
@@ -296,7 +302,7 @@ pub(super) fn parse_base_url(
             ));
         };
         let host = &rest[..close];
-        let port = parse_port(&rest[close + 1..])?;
+        let port = parse_port(&rest[close + 1..], default_port)?;
         if host.is_empty() {
             return Err(ReplicationHttpError::InvalidUrl(
                 "host must not be empty".into(),
@@ -312,7 +318,7 @@ pub(super) fn parse_base_url(
         let (host, port) = if let Some((host, port)) = authority.split_once(':') {
             (host, parse_port_value(port)?)
         } else {
-            (authority, 80)
+            (authority, default_port)
         };
         if host.is_empty() {
             return Err(ReplicationHttpError::InvalidUrl(
@@ -333,12 +339,12 @@ pub(super) fn parse_base_url(
     } else {
         format!("{host}:{port}")
     };
-    Ok((host, port, host_header, base_path))
+    Ok((host, port, host_header, base_path, use_tls))
 }
 
-fn parse_port(rest: &str) -> Result<u16, ReplicationHttpError> {
+fn parse_port(rest: &str, default_port: u16) -> Result<u16, ReplicationHttpError> {
     if rest.is_empty() {
-        return Ok(80);
+        return Ok(default_port);
     }
     let Some(port) = rest.strip_prefix(':') else {
         return Err(ReplicationHttpError::InvalidUrl(
@@ -386,7 +392,7 @@ pub(super) fn parse_json<T: DeserializeOwned>(
 }
 
 pub(super) fn read_response(
-    stream: &mut TcpStream,
+    stream: &mut impl Read,
     max_body_bytes: usize,
 ) -> Result<Vec<u8>, ReplicationHttpError> {
     let max_response_bytes = max_body_bytes.saturating_add(MAX_HTTP_HEADER_BYTES);

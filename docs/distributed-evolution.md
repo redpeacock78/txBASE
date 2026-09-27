@@ -193,15 +193,23 @@ The `follower` role reports its role through `status`, rejects direct catalog mu
 When `TXBASE_REPLICATION_TOKEN` is configured, the replication routes require
 RFC 6750 Bearer authorization and return `401` with `WWW-Authenticate: Bearer`
 for missing or invalid credentials. Without that environment variable, the routes
-remain unauthenticated for local development compatibility. The transport still has
-no TLS, streaming, durable retry queue, backpressure, quorum, or authority discovery.
+remain unauthenticated for local development compatibility. The replication client
+supports HTTPS and verifies certificates and host names with the operating
+system's trust facilities. Bearer tokens require HTTPS, except for loopback
+HTTP. The catalog server itself remains HTTP-only, so deployments that need
+network encryption must terminate TLS at a reverse proxy and protect the
+proxy-to-server connection, for example by keeping it on loopback. The
+transport still has no mutual TLS, streaming, durable retry queue, backpressure,
+quorum, or authority discovery.
 
 ### HTTP client
 
 `ReplicationHttpClient` connects the existing delivery routes to a local
 `ReplicationLog`.
-It accepts only a plain `http://` authority URL, an optional base path,
+It accepts an `http://` or `https://` authority URL, an optional base path,
 a positive socket timeout, and an optional validated Bearer token.
+HTTPS uses the platform trust store and verifies the authority name; private
+certificate authorities must be installed in that trust store.
 
 `status()` validates the remote term, schema tag, retained base, and applied
 position.
@@ -235,8 +243,8 @@ under the delivery contracts; conflict responses and malformed responses are
 terminal. `ReplicationRetryPolicy` allows at most eight total attempts and a
 30-second backoff cap. This is an in-process request policy, not a durable
 retry queue.
-It does not implement TLS, streaming, backpressure, authority discovery,
-quorum, or consensus.
+It does not implement native server-side TLS, mutual TLS, streaming,
+backpressure, authority discovery, quorum, or consensus.
 
 ## 4. Co-location before distributed joins
 
@@ -284,7 +292,7 @@ The local slice defines the following initial contracts:
 The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
-- TLS, streaming, durable retry queues, backpressure, quorum-safe log truncation, and authority discovery;
+- native server-side TLS, mutual TLS, streaming, durable retry queues, backpressure, quorum-safe log truncation, and authority discovery;
 - observability for lag and transport state;
 - quorum and network failure behavior.
 
@@ -318,7 +326,7 @@ guarantees, and distributed partitioning remain future work.
 
 This document does not promise Raft, quorum, multi-region writes, global
 transactions, networked log truncation, distributed follower-read guarantees,
-automatic partition balancing, TLS, durable retry queues, or authority discovery.
+automatic partition balancing, native server-side TLS, mutual TLS, durable retry queues, or authority discovery.
 
 Those choices require the authority and recovery contracts above.
 
@@ -327,6 +335,8 @@ Those choices require the authority and recovery contracts above.
 - [In Search of an Understandable Consensus Algorithm (Raft)](https://raft.github.io/raft.pdf)
 - [Raft consensus algorithm](https://raft.github.io/)
 - [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
+- [Rustls platform verifier](https://github.com/rustls/rustls-platform-verifier)
+- [Rustls `StreamOwned`](https://docs.rs/rustls/0.23.45/rustls/struct.StreamOwned.html)
 
 The Raft paper is a candidate protocol reference for the authority step in the progression.
 It does not select Raft for txBASE and does not define the future txBASE log, schema, or recovery format.

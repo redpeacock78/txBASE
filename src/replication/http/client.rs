@@ -9,8 +9,12 @@ use crate::replication::{
     MAX_REPLICATION_SNAPSHOT_BYTES, ReplicationEntry, ReplicationEntryBatch, ReplicationError,
     ReplicationLog, ReplicationProgress, ReplicationSnapshot,
 };
-use std::io::{self, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use rustls::pki_types::ServerName;
+use rustls::{ClientConfig, ClientConnection, StreamOwned};
+use rustls_platform_verifier::BuilderVerifierExt;
+use std::io::{self, Read, Write};
+use std::net::{IpAddr, TcpStream, ToSocketAddrs};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -65,6 +69,7 @@ pub struct ReplicationHttpClient {
     port: u16,
     host_header: String,
     base_path: String,
+    tls_config: Option<Arc<ClientConfig>>,
     timeout: Duration,
     bearer_token: Option<String>,
     retry_policy: ReplicationRetryPolicy,
@@ -73,20 +78,38 @@ pub struct ReplicationHttpClient {
 impl ReplicationHttpClient {
     /// Creates a client for the existing HTTP replication routes.
     ///
-    /// Only plain http URLs are accepted. TLS, discovery, and durable retry
-    /// queues belong to the future consensus transport rather than this
-    /// bounded delivery client.
+    /// HTTPS uses the operating system's certificate verifier. Server-side
+    /// TLS termination remains the responsibility of a reverse proxy.
     pub fn new(base_url: &str) -> Result<Self, ReplicationHttpError> {
-        let (host, port, host_header, base_path) = parse_base_url(base_url)?;
+        let (host, port, host_header, base_path, use_tls) = parse_base_url(base_url)?;
+        let tls_config = if use_tls {
+            let config = ClientConfig::builder()
+                .with_platform_verifier()
+                .map_err(|error| ReplicationHttpError::Tls(error.to_string()))?
+                .with_no_client_auth();
+            Some(Arc::new(config))
+        } else {
+            None
+        };
         Ok(Self {
             host,
             port,
             host_header,
             base_path,
+            tls_config,
             timeout: DEFAULT_TIMEOUT,
             bearer_token: None,
             retry_policy: ReplicationRetryPolicy::default(),
         })
+    }
+
+    #[cfg(test)]
+    pub(in crate::replication) fn with_tls_config_for_test(
+        mut self,
+        tls_config: Arc<ClientConfig>,
+    ) -> Self {
+        self.tls_config = Some(tls_config);
+        self
     }
 
     pub fn with_timeout(mut self, timeout: Duration) -> Result<Self, ReplicationHttpError> {
@@ -107,6 +130,11 @@ impl ReplicationHttpClient {
         if !is_valid_bearer_token(&token) {
             return Err(ReplicationHttpError::InvalidConfig(
                 "bearer token contains unsupported characters".into(),
+            ));
+        }
+        if self.tls_config.is_none() && !is_loopback_host(&self.host) {
+            return Err(ReplicationHttpError::InvalidConfig(
+                "bearer tokens require HTTPS or a loopback HTTP host".into(),
             ));
         }
         self.bearer_token = Some(token);
@@ -350,10 +378,36 @@ impl ReplicationHttpClient {
         max_response_body_bytes: usize,
     ) -> Result<Vec<u8>, ReplicationHttpError> {
         let target = self.target(path)?;
-        let mut stream = self.connect()?;
-        stream.set_read_timeout(Some(self.timeout))?;
-        stream.set_write_timeout(Some(self.timeout))?;
+        let mut socket = self.connect()?;
+        socket.set_read_timeout(Some(self.timeout))?;
+        socket.set_write_timeout(Some(self.timeout))?;
 
+        if let Some(config) = &self.tls_config {
+            let server_name = ServerName::try_from(self.host.clone()).map_err(|_| {
+                ReplicationHttpError::InvalidUrl("host is not a valid TLS server name".into())
+            })?;
+            let mut connection = ClientConnection::new(Arc::clone(config), server_name)
+                .map_err(|error| ReplicationHttpError::Tls(error.to_string()))?;
+            while connection.is_handshaking() {
+                connection
+                    .complete_io(&mut socket)
+                    .map_err(tls_handshake_error)?;
+            }
+            let mut stream = StreamOwned::new(connection, socket);
+            self.send_request(&mut stream, method, &target, body, max_response_body_bytes)
+        } else {
+            self.send_request(&mut socket, method, &target, body, max_response_body_bytes)
+        }
+    }
+
+    fn send_request(
+        &self,
+        stream: &mut (impl Read + Write),
+        method: &str,
+        target: &str,
+        body: Option<&[u8]>,
+        max_response_body_bytes: usize,
+    ) -> Result<Vec<u8>, ReplicationHttpError> {
         let mut headers = format!(
             "{method} {target} HTTP/1.1\r\nHost: {}\r\nAccept: application/json\r\nConnection: close\r\n",
             self.host_header
@@ -374,7 +428,7 @@ impl ReplicationHttpClient {
             stream.write_all(body)?;
         }
         stream.flush()?;
-        read_response(&mut stream, max_response_body_bytes)
+        read_response(stream, max_response_body_bytes)
     }
 
     fn connect(&self) -> Result<TcpStream, ReplicationHttpError> {
@@ -388,6 +442,16 @@ impl ReplicationHttpClient {
         }
         let mut last_error = None;
         for address in addresses {
+            if self.bearer_token.is_some()
+                && self.tls_config.is_none()
+                && !address.ip().is_loopback()
+            {
+                last_error = Some(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "refusing to send a bearer token over non-loopback HTTP",
+                ));
+                continue;
+            }
             match TcpStream::connect_timeout(&address, self.timeout) {
                 Ok(stream) => return Ok(stream),
                 Err(error) => last_error = Some(error),
@@ -411,6 +475,25 @@ impl ReplicationHttpClient {
         } else {
             Ok(format!("{}{}", self.base_path, path))
         }
+    }
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<IpAddr>()
+            .is_ok_and(|address| address.is_loopback())
+}
+
+fn tls_handshake_error(error: io::Error) -> ReplicationHttpError {
+    if error.kind() == io::ErrorKind::InvalidData
+        || error
+            .get_ref()
+            .is_some_and(|source| source.downcast_ref::<rustls::Error>().is_some())
+    {
+        ReplicationHttpError::Tls(error.to_string())
+    } else {
+        ReplicationHttpError::Io(error)
     }
 }
 

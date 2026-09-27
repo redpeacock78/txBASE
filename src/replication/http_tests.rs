@@ -1,11 +1,14 @@
 use super::*;
 use crate::catalog::Catalog;
 use crate::xbase::{OperationIr, OperationMethod};
+use rustls::pki_types::PrivateKeyDer;
+use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection, StreamOwned};
 use serde_json::json;
 use std::fs;
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -87,7 +90,7 @@ fn spawn_sequence(responses: Vec<Vec<u8>>) -> (String, JoinHandle<Vec<String>>) 
     (format!("http://{address}/api/"), handle)
 }
 
-fn read_request(stream: &mut TcpStream) -> Vec<u8> {
+fn read_request(stream: &mut impl Read) -> Vec<u8> {
     let mut request = Vec::new();
     let mut buffer = [0_u8; 4096];
     let header_end = loop {
@@ -112,12 +115,63 @@ fn read_request(stream: &mut TcpStream) -> Vec<u8> {
     request
 }
 
+fn tls_config_pair() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
+    let rcgen::CertifiedKey { cert, key_pair } =
+        rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+    let certificate = cert.der().clone();
+    let mut roots = RootCertStore::empty();
+    roots.add(certificate.clone()).unwrap();
+
+    let client = ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    let server = ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![certificate],
+            PrivateKeyDer::Pkcs8(key_pair.serialize_der().into()),
+        )
+        .unwrap();
+    (Arc::new(client), Arc::new(server))
+}
+
+fn spawn_tls_status(body: Vec<u8>, config: Arc<ServerConfig>) -> (String, JoinHandle<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let handle = thread::spawn(move || {
+        let (socket, _) = listener.accept().unwrap();
+        let connection = ServerConnection::new(config).unwrap();
+        let mut stream = StreamOwned::new(connection, socket);
+        let request = String::from_utf8(read_request(&mut stream)).unwrap();
+        stream.write_all(&response(body)).unwrap();
+        stream.conn.send_close_notify();
+        stream.flush().unwrap();
+        request
+    });
+    (format!("https://localhost:{port}/api/"), handle)
+}
+
+fn spawn_untrusted_tls_server(config: Arc<ServerConfig>) -> (String, JoinHandle<bool>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let handle = thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut connection = ServerConnection::new(config).unwrap();
+        connection.complete_io(&mut socket).is_err()
+    });
+    (format!("https://localhost:{port}/api/"), handle)
+}
+
 #[test]
 fn client_validates_plain_http_configuration() {
     assert!(matches!(
-        ReplicationHttpClient::new("https://127.0.0.1"),
-        Err(ReplicationHttpError::UnsupportedScheme(scheme)) if scheme == "https"
+        ReplicationHttpClient::new("ftp://127.0.0.1"),
+        Err(ReplicationHttpError::UnsupportedScheme(scheme)) if scheme == "ftp"
     ));
+    assert!(ReplicationHttpClient::new("https://127.0.0.1").is_ok());
     assert!(matches!(
         ReplicationHttpClient::new("http://127.0.0.1?token=secret"),
         Err(ReplicationHttpError::InvalidUrl(_))
@@ -126,6 +180,12 @@ fn client_validates_plain_http_configuration() {
         ReplicationHttpClient::new("http://127.0.0.1")
             .unwrap()
             .with_timeout(Duration::ZERO),
+        Err(ReplicationHttpError::InvalidConfig(_))
+    ));
+    assert!(matches!(
+        ReplicationHttpClient::new("http://replica.example.com")
+            .unwrap()
+            .with_bearer_token("secret"),
         Err(ReplicationHttpError::InvalidConfig(_))
     ));
     assert!(matches!(
@@ -142,6 +202,47 @@ fn client_validates_plain_http_configuration() {
         ReplicationRetryPolicy::new(2, Duration::from_secs(2), Duration::from_secs(1)),
         Err(ReplicationHttpError::InvalidConfig(_))
     ));
+}
+
+#[test]
+fn client_sends_authenticated_status_over_verified_https() {
+    let (client_tls, server_tls) = tls_config_pair();
+    let status = json!({
+        "transport_version": REPLICATION_TRANSPORT_VERSION,
+        "role": "authority",
+        "term": 4,
+        "base_index": 0,
+        "base_transaction_id": 0,
+        "last_index": 0,
+        "last_transaction_id": 0,
+        "follower_count": 0,
+        "safe_compaction_index": null,
+        "schema_tag": "schema-v1"
+    });
+    let (url, server) = spawn_tls_status(status.to_string().into_bytes(), server_tls);
+    let client = ReplicationHttpClient::new(&url)
+        .unwrap()
+        .with_tls_config_for_test(client_tls)
+        .with_bearer_token("secret")
+        .unwrap();
+
+    assert_eq!(client.status().unwrap().term, 4);
+    let request = server.join().unwrap();
+    assert!(request.starts_with("GET /api/replication/status HTTP/1.1\r\n"));
+    assert!(request.contains("\r\nAuthorization: Bearer secret\r\n"));
+}
+
+#[test]
+fn client_rejects_untrusted_https_certificate_without_retrying_as_http() {
+    let (_, server_tls) = tls_config_pair();
+    let (url, server) = spawn_untrusted_tls_server(server_tls);
+    let client = ReplicationHttpClient::new(&url)
+        .unwrap()
+        .with_bearer_token("secret")
+        .unwrap();
+
+    assert!(matches!(client.status(), Err(ReplicationHttpError::Tls(_))));
+    assert!(server.join().unwrap());
 }
 
 #[test]
