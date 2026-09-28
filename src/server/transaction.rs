@@ -1,6 +1,6 @@
 use super::{HttpResponse, dbf_error_response, error, etag, json_response, read_json_body};
 use crate::dbf::{DbfTable, DbfTransaction};
-use crate::xbase::OperationBatch;
+use crate::xbase::{TransactionBatch, TransactionCommand, TransactionStep};
 use serde_json::json;
 use std::path::Path;
 use tiny_http::Request;
@@ -17,7 +17,7 @@ pub(super) fn response(
         Ok(body) => body,
         Err(response) => return response,
     };
-    let transaction = match serde_json::from_slice::<OperationBatch>(&body) {
+    let transaction = match serde_json::from_slice::<TransactionBatch>(&body) {
         Ok(transaction) if !transaction.operations.is_empty() => transaction,
         Ok(_) => {
             return json_response(
@@ -40,8 +40,34 @@ pub(super) fn response(
 
     let original = table.clone();
     let mut working = DbfTransaction::from_table(dbf_path, original.clone());
-    for operation in &transaction.operations {
-        if let Err(dbf_error) = working.apply(operation) {
+    for step in &transaction.operations {
+        let result = match step {
+            TransactionStep::Mutation(operation) => working.apply(operation),
+            TransactionStep::Command(TransactionCommand::SetConstraints {
+                table,
+                all,
+                names,
+                mode,
+            }) => {
+                if table.is_some() {
+                    return json_response(
+                        422,
+                        error(
+                            "invalid_transaction",
+                            "table is not valid for a single-table transaction",
+                        ),
+                        false,
+                    );
+                }
+                if *all {
+                    working.set_all_constraints(*mode)
+                } else {
+                    let names = names.iter().map(String::as_str).collect::<Vec<_>>();
+                    working.set_constraints(&names, *mode)
+                }
+            }
+        };
+        if let Err(dbf_error) = result {
             return dbf_error_response(dbf_error);
         }
     }

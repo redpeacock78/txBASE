@@ -1,4 +1,4 @@
-use super::{Catalog, CatalogError};
+use super::{Catalog, CatalogError, CatalogTransactionError};
 use crate::ConstraintMode;
 use crate::dbf::DbfTable;
 use crate::json_order::compare_scalar_values;
@@ -45,6 +45,116 @@ pub(super) fn initial_deferred_constraints(
         deferred.insert(table_name.clone(), names);
     }
     Ok(deferred)
+}
+
+pub(super) fn change_constraint_modes(
+    tables: &BTreeMap<String, DbfTable>,
+    current: &BTreeMap<String, BTreeSet<String>>,
+    table_name: Option<&str>,
+    names: &[String],
+    all: bool,
+    mode: ConstraintMode,
+) -> Result<BTreeMap<String, BTreeSet<String>>, CatalogTransactionError> {
+    if (all && !names.is_empty()) || (!all && names.is_empty()) {
+        return Err(CatalogTransactionError::Invalid(
+            "specify either all constraints or one or more constraint names".into(),
+        ));
+    }
+    if table_name.is_some_and(|name| name.trim().is_empty()) {
+        return Err(CatalogTransactionError::Invalid(
+            "constraint table name must not be empty".into(),
+        ));
+    }
+    if names.iter().any(|name| name.trim().is_empty()) {
+        return Err(CatalogTransactionError::Invalid(
+            "constraint names must not be empty".into(),
+        ));
+    }
+
+    let targets = if all {
+        let selected = match table_name {
+            Some(name) => vec![(
+                name.to_owned(),
+                tables
+                    .get(name)
+                    .ok_or_else(|| {
+                        CatalogTransactionError::Invalid(format!("table not found: {name}"))
+                    })?
+                    .deferrable_constraint_modes()
+                    .map_err(|source| {
+                        CatalogTransactionError::Catalog(CatalogError::Table {
+                            name: name.to_owned(),
+                            source,
+                        })
+                    })?,
+            )],
+            None => tables
+                .iter()
+                .map(|(name, table)| {
+                    table
+                        .deferrable_constraint_modes()
+                        .map(|modes| (name.clone(), modes))
+                        .map_err(|source| {
+                            CatalogTransactionError::Catalog(CatalogError::Table {
+                                name: name.clone(),
+                                source,
+                            })
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        };
+        selected
+            .into_iter()
+            .flat_map(|(table, modes)| modes.into_keys().map(move |name| (table.clone(), name)))
+            .collect::<Vec<_>>()
+    } else {
+        let table = table_name.ok_or_else(|| {
+            CatalogTransactionError::Invalid(
+                "a table name is required when setting named constraints".into(),
+            )
+        })?;
+        if !tables.contains_key(table) {
+            return Err(CatalogTransactionError::Invalid(format!(
+                "table not found: {table}"
+            )));
+        }
+        names
+            .iter()
+            .map(|name| (table.to_owned(), name.clone()))
+            .collect()
+    };
+
+    let mut next = current.clone();
+    for (table_name, name) in targets {
+        let table = tables
+            .get(&table_name)
+            .expect("constraint target table was selected from the table set");
+        let modes = table.deferrable_constraint_modes().map_err(|source| {
+            CatalogTransactionError::Catalog(CatalogError::Table {
+                name: table_name.clone(),
+                source,
+            })
+        })?;
+        if !modes.contains_key(&name) {
+            return Err(CatalogTransactionError::Invalid(format!(
+                "constraint {name} is not deferrable in table {table_name}"
+            )));
+        }
+        let deferred = next.entry(table_name).or_default();
+        match mode {
+            ConstraintMode::Immediate => {
+                deferred.remove(&name);
+            }
+            ConstraintMode::Deferred => {
+                deferred.insert(name);
+            }
+        }
+    }
+    if mode == ConstraintMode::Immediate {
+        validate_transaction_constraints(tables, &next)
+            .map_err(CatalogTransactionError::Catalog)?;
+    }
+    Ok(next)
 }
 
 pub(super) fn validate_statement_constraints(
@@ -166,4 +276,43 @@ fn format_fields(fields: &[String]) -> String {
 
 fn values_equal(left: &Value, right: &Value) -> bool {
     compare_scalar_values(left, right).is_some_and(|ordering| ordering.is_eq()) || left == right
+}
+
+#[cfg(test)]
+mod tests {
+    use super::change_constraint_modes;
+    use crate::ConstraintMode;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn constraint_mode_selector_requires_all_or_names() {
+        let tables = BTreeMap::new();
+        let current = BTreeMap::new();
+        assert!(
+            change_constraint_modes(&tables, &current, None, &[], true, ConstraintMode::Deferred,)
+                .is_ok()
+        );
+        assert!(
+            change_constraint_modes(
+                &tables,
+                &current,
+                None,
+                &["constraint".into()],
+                true,
+                ConstraintMode::Deferred,
+            )
+            .is_err()
+        );
+        assert!(
+            change_constraint_modes(
+                &tables,
+                &current,
+                None,
+                &[],
+                false,
+                ConstraintMode::Deferred,
+            )
+            .is_err()
+        );
+    }
 }

@@ -5,14 +5,16 @@
 //! same versioned entry, ordering, schema, and duplicate-delivery contract.
 
 use crate::catalog::Catalog;
-use crate::xbase::{MAX_OPERATION_BATCH, OperationIr, OperationMethod};
+use crate::xbase::{OperationIr, TransactionStep};
 use serde::{Deserialize, Serialize};
 
+mod entry;
 mod error;
 mod http;
 mod progress;
 mod snapshot;
 mod transport;
+pub use entry::{REPLICATION_ENTRY_VERSION, ReplicationEntry};
 pub use error::ReplicationError;
 pub use http::{
     ReplicationDeliveryOutcome, ReplicationDeliveryResponse, ReplicationHttpClient,
@@ -28,7 +30,6 @@ pub use transport::{
     MAX_REPLICATION_ENTRY_BATCH, MAX_REPLICATION_ENTRY_BATCH_BYTES, ReplicationEntryBatch,
 };
 
-pub const REPLICATION_ENTRY_VERSION: u16 = 1;
 pub const REPLICATION_LOG_VERSION: u16 = 1;
 pub const REPLICATION_TRANSPORT_VERSION: u16 = 1;
 pub const REPLICATION_SIDECAR_NAME: &str = ".txbase.replication";
@@ -46,103 +47,6 @@ enum CommitPreconditions<'a> {
         if_match: Option<&'a str>,
         if_none_match: Option<&'a str>,
     },
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ReplicationEntry {
-    pub version: u16,
-    pub term: u64,
-    pub index: u64,
-    pub transaction_id: u64,
-    pub schema_tag: String,
-    pub operations: Vec<OperationIr>,
-}
-
-impl ReplicationEntry {
-    pub fn new(
-        term: u64,
-        index: u64,
-        transaction_id: u64,
-        schema_tag: String,
-        operations: Vec<OperationIr>,
-    ) -> Result<Self, ReplicationError> {
-        let entry = Self {
-            version: REPLICATION_ENTRY_VERSION,
-            term,
-            index,
-            transaction_id,
-            schema_tag,
-            operations,
-        };
-        entry.validate()?;
-        Ok(entry)
-    }
-
-    pub fn validate(&self) -> Result<(), ReplicationError> {
-        if self.version != REPLICATION_ENTRY_VERSION {
-            return Err(ReplicationError::Invalid(format!(
-                "unsupported replication entry version: {}",
-                self.version
-            )));
-        }
-        if self.term == 0 || self.index == 0 || self.transaction_id == 0 {
-            return Err(ReplicationError::Invalid(
-                "term, index, and transaction_id must be positive".into(),
-            ));
-        }
-        if self.schema_tag.trim().is_empty() {
-            return Err(ReplicationError::Invalid(
-                "schema_tag must not be empty".into(),
-            ));
-        }
-        if self.operations.is_empty() {
-            return Err(ReplicationError::Invalid(
-                "operations must not be empty".into(),
-            ));
-        }
-        if self.operations.len() > MAX_OPERATION_BATCH {
-            return Err(ReplicationError::Invalid(format!(
-                "operation count exceeds {MAX_OPERATION_BATCH}"
-            )));
-        }
-        for operation in &self.operations {
-            if matches!(
-                operation.method,
-                OperationMethod::Get | OperationMethod::Query
-            ) {
-                return Err(ReplicationError::Invalid(format!(
-                    "{} is a read operation",
-                    operation.method.as_str()
-                )));
-            }
-        }
-        Ok(())
-    }
-
-    pub fn to_json(&self) -> Result<Vec<u8>, ReplicationError> {
-        self.validate()?;
-        let bytes = serde_json::to_vec(self)
-            .map_err(|error| ReplicationError::Serialization(error.to_string()))?;
-        if bytes.len() > MAX_REPLICATION_ENTRY_BYTES {
-            return Err(ReplicationError::Invalid(format!(
-                "replication entry JSON exceeds {MAX_REPLICATION_ENTRY_BYTES} bytes"
-            )));
-        }
-        Ok(bytes)
-    }
-
-    pub fn from_json(bytes: &[u8]) -> Result<Self, ReplicationError> {
-        if bytes.len() > MAX_REPLICATION_ENTRY_BYTES {
-            return Err(ReplicationError::Invalid(format!(
-                "replication entry JSON exceeds {MAX_REPLICATION_ENTRY_BYTES} bytes"
-            )));
-        }
-        let entry: Self = serde_json::from_slice(bytes)
-            .map_err(|error| ReplicationError::Serialization(error.to_string()))?;
-        entry.validate()?;
-        Ok(entry)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -401,6 +305,30 @@ impl ReplicationLog {
         Ok(entry)
     }
 
+    /// Proposes an ordered transaction step batch while checking catalog ETags.
+    pub fn propose_steps_with_catalog_preconditions(
+        &mut self,
+        catalog: &Catalog,
+        steps: Vec<TransactionStep>,
+        if_match: Option<&str>,
+        if_none_match: Option<&str>,
+    ) -> Result<ReplicationEntry, ReplicationError> {
+        let current_transaction_id = current_transaction_id(catalog)?;
+        self.ensure_catalog_position(current_transaction_id)?;
+        let (_, schema_tag) = catalog
+            .schema_representation()
+            .map_err(ReplicationError::Catalog)?;
+        let entry = ReplicationEntry::new_with_steps(
+            self.term,
+            next(self.last_index(), "index")?,
+            next(self.last_transaction_id(), "transaction_id")?,
+            schema_tag,
+            steps,
+        )?;
+        self.apply_new_with_catalog_preconditions(catalog, entry.clone(), if_match, if_none_match)?;
+        Ok(entry)
+    }
+
     /// Proposes one entry while checking the representation of one named table.
     pub fn propose_with_table_preconditions(
         &mut self,
@@ -610,12 +538,13 @@ impl ReplicationLog {
         };
         let mut next_log = self.clone();
         next_log.entries.push(entry.clone());
+        let steps = entry.transaction_steps();
         let transaction_id = match preconditions {
             Some(CommitPreconditions::Catalog {
                 if_match,
                 if_none_match,
-            }) => catalog.commit_operations_with_preconditions_and_sidecar(
-                &entry.operations,
+            }) => catalog.commit_steps_with_preconditions_and_sidecar(
+                &steps,
                 if_match,
                 if_none_match,
                 REPLICATION_SIDECAR_NAME,
@@ -627,15 +556,24 @@ impl ReplicationLog {
                 if_match,
                 if_none_match,
             }) => catalog.commit_operations_with_sidecar_and_table_preconditions(
-                &entry.operations,
+                &steps
+                    .iter()
+                    .cloned()
+                    .map(TransactionStep::into_mutation)
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or_else(|| {
+                        ReplicationError::Invalid(
+                            "constraint commands require catalog transaction preconditions".into(),
+                        )
+                    })?,
                 name,
                 (if_match, if_none_match),
                 REPLICATION_SIDECAR_NAME,
                 expected_sidecar,
                 next_log.to_sidecar_bytes()?,
             ),
-            None => catalog.commit_operations_with_sidecar(
-                &entry.operations,
+            None => catalog.commit_steps_with_sidecar(
+                &steps,
                 REPLICATION_SIDECAR_NAME,
                 expected_sidecar,
                 next_log.to_sidecar_bytes()?,

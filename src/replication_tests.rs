@@ -1,4 +1,5 @@
 use super::*;
+use crate::xbase::OperationMethod;
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
@@ -41,6 +42,10 @@ fn post(record_id: i64, name: &str) -> OperationIr {
 #[test]
 fn entries_are_versioned_and_round_trip() {
     let entry = ReplicationEntry::new(1, 1, 1, "schema-v1".into(), vec![post(3, "Carol")]).unwrap();
+    assert_eq!(entry.version, REPLICATION_ENTRY_VERSION);
+    let serialized = serde_json::to_value(&entry).unwrap();
+    assert!(serialized.get("operations").is_some());
+    assert!(serialized.get("steps").is_none());
     entry.validate().unwrap();
     let decoded = ReplicationEntry::from_json(&entry.to_json().unwrap()).unwrap();
     assert_eq!(decoded, entry);

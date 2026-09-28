@@ -73,8 +73,10 @@ The API does not select the merge policy automatically and does not promise exac
 
 The single-table HTTP `POST /transaction` route reuses this apply-and-commit boundary.
 
-The route shares the `OperationBatch` decoder with the WASM boundary and rejects empty batches or
-batches larger than 1,000 operations before applying any operation.
+Both HTTP routes decode an ordered `TransactionBatch`; the `operations` array can contain record
+mutations and `setConstraints` commands.
+WASM continues to use the mutation-only `OperationBatch` decoder.
+A batch must contain at least one record mutation and no more than 1,000 steps.
 
 The catalog `POST /transaction` route remains a separate cross-table journal boundary because it coordinates DBF and sidecar images under the catalog lock.
 
@@ -107,8 +109,18 @@ If that validation fails, `DbfTransaction` keeps its previous mode and remains u
 `CatalogTransaction` aborts after any failed operation, including a failed mode change.
 Commit validates every constraint before publishing table or journal changes.
 
-The HTTP `POST /transaction` routes begin with the schema-selected modes, but `OperationBatch` has no
-operation for changing those modes within a request.
+The HTTP `POST /transaction` routes accept `setConstraints` commands in the ordered `operations`
+array.
+Use `{"type":"setConstraints","all":true,"mode":"deferred"}` to change every applicable
+constraint, or provide a non-empty `names` array and set `all` to `false` or omit it.
+The single-table route rejects `table`; the catalog route requires `table` for named constraints.
+For `all: true`, the catalog route applies the command to the named table when `table` is present and
+to every catalog table when it is omitted.
+The routes apply commands and mutations in array order.
+Switching a deferred constraint to immediate validates the current transaction image before the
+mode changes.
+If any command, mutation, or final validation fails, the HTTP transaction publishes no table or
+journal changes.
 The named `CHECK` constraint is a txBASE extension; PostgreSQL supports deferrable `UNIQUE`,
 `PRIMARY KEY`, `EXCLUDE`, and foreign-key constraints, while `CHECK` and `NOT NULL` remain immediate.
 

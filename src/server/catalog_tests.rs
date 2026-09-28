@@ -50,6 +50,22 @@ fn parent_key_metadata() -> Vec<u8> {
     .unwrap()
 }
 
+fn deferrable_name_metadata() -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 2,
+        "fields": {},
+        "constraints": {
+            "deferrable": [{
+                "name": "users_name_unique",
+                "kind": "unique",
+                "fields": ["NAME"]
+            }]
+        }
+    }))
+    .unwrap()
+}
+
 fn temporary_catalog() -> std::path::PathBuf {
     let id = NEXT_CATALOG_ID.fetch_add(1, Ordering::Relaxed);
     let path =
@@ -542,6 +558,51 @@ fn catalog_server_transaction_allows_a_deferred_parent_insert_later_in_the_batch
     );
     assert_eq!(catalog.transaction_id().unwrap(), Some(1));
 
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn catalog_http_transaction_changes_named_constraint_modes_in_order() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("users.txschema.json"), deferrable_name_metadata()).unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+    let mut request = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{"operations":[{"type":"setConstraints","table":"users","all":true,"mode":"deferred"},{"method":"POST","path":"/users/records","body":{"ID":3,"NAME":"Bob","AGE":42,"ACTIVE":true}},{"method":"PATCH","path":"/users/records/1","body":{"NAME":"Bob"}},{"method":"PATCH","path":"/users/records/3","body":{"NAME":"Alice"}},{"type":"setConstraints","table":"users","names":["users_name_unique"],"mode":"immediate"}]}"#,
+    );
+
+    let response = super::catalog_transaction::response(&mut request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let table = catalog.open_table("users").unwrap();
+    assert_eq!(table.active_record(1).unwrap().values["NAME"], "Bob");
+    assert_eq!(table.active_record(3).unwrap().values["NAME"], "Alice");
+    assert_eq!(catalog.transaction_id().unwrap(), Some(1));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn catalog_http_transaction_requires_a_table_for_named_constraints() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
+    let mut request = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{"operations":[{"type":"setConstraints","names":["users_name_unique"],"mode":"deferred"},{"method":"POST","path":"/users/records","body":{"ID":3,"NAME":"Bob","AGE":42,"ACTIVE":true}}]}"#,
+    );
+
+    let response = super::catalog_transaction::response(&mut request, &catalog);
+    assert_eq!(response.status_code(), StatusCode(422));
+    assert_eq!(catalog.transaction_id().unwrap(), None);
+    assert!(
+        catalog
+            .open_table("users")
+            .unwrap()
+            .active_record(3)
+            .is_none()
+    );
     fs::remove_dir_all(root).unwrap();
 }
 

@@ -207,8 +207,9 @@ and therefore still has to satisfy every foreign key before it commits.
 `DbfTransaction::set_all_constraints` changes every deferrable local constraint. The catalog
 counterparts accept a table name and can also change every deferrable constraint in the catalog.
 Changing a mode to immediate validates the current transaction image before the mode changes.
-The HTTP `POST /transaction` routes use each schema's initial modes but do not accept an in-batch
-mode-change operation.
+The HTTP `POST /transaction` routes accept ordered `setConstraints` commands among mutations.
+Named catalog selections require a table; `all: true` can target one table or the full catalog.
+The request remains atomic, so a failed step publishes no changes.
 
 `no_action` may be deferred, while `restrict` is always immediate. `cascade` and `set_null` actions
 run as each operation is applied. This follows the timing distinction in PostgreSQL's foreign-key
@@ -263,7 +264,7 @@ The sidecar does not yet implement:
 - DBF layout migrations or schema versions beyond the current sidecar format.
 - Automatic selection between a DBF language driver and an override.
 
-HTTP in-batch constraint-mode changes, references across catalog roots, and DBF layout migrations remain future work.
+References across catalog roots and DBF layout migrations remain future work.
 
 SQLite's official [`CREATE TABLE` reference](https://sqlite.org/lang_createtable.html) distinguishes `NOT NULL`, `CHECK`, `UNIQUE`, `PRIMARY KEY`, and `FOREIGN KEY` constraints and documents their write-time behavior.
 

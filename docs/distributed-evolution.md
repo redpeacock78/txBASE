@@ -58,12 +58,22 @@ unsupported versions, read operations, empty batches, and non-positive
 positions. The catalog representation tag prevents an entry from being
 applied to a different catalog image.
 
+Mutation-only transactions retain the version 1 `operations` shape.
+A transaction containing `setConstraints` uses version 2 with an ordered
+`steps` array of mutation IR values and constraint commands.
+Version 2 preserves the request order and still requires at least one record
+mutation.
+Older readers reject version 2, so every follower must support it before the
+authority submits a constraint-mode transaction.
+
 `ReplicationLog` selects one fixed term as the local authority. `propose`
 commits a batch through the existing catalog journal and records it only after
 the commit succeeds. It journals the next `TXRP` sidecar image in the same
 catalog transaction, so the catalog data and local replication position recover
-together. `receive` accepts only the next index and transaction ID, checks the
-term and representation tag, and then applies the same atomic catalog commit.
+together. The ordered-step proposal path commits version 2 entries through the
+same journal boundary. `receive` accepts only the next index and transaction ID,
+checks the term and representation tag, and then applies the same atomic
+catalog commit while preserving step order.
 `receive_batch` validates one contiguous `ReplicationEntryBatch` and delivers
 its entries in order. The page is a transport boundary rather than a
 transaction boundary, so a failure may leave an already applied entry prefix

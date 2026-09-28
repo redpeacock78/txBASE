@@ -130,16 +130,11 @@ impl CatalogTransaction {
                 "catalog transaction is aborted after a failed operation".into(),
             ));
         }
-        if names.is_empty() {
-            return self.abort_with(CatalogTransactionError::Invalid(
-                "constraint name list must not be empty".into(),
-            ));
-        }
-        let targets = names
+        let names = names
             .iter()
-            .map(|name| (table_name.to_owned(), (*name).to_owned()))
+            .map(|name| (*name).to_owned())
             .collect::<Vec<_>>();
-        self.change_constraint_modes(&targets, mode)
+        self.change_constraint_modes(Some(table_name), &names, false, mode)
     }
 
     /// Changes the timing of every deferrable constraint in the catalog.
@@ -152,69 +147,27 @@ impl CatalogTransaction {
                 "catalog transaction is aborted after a failed operation".into(),
             ));
         }
-        let mut targets = Vec::new();
-        for (table_name, table) in &self.tables {
-            let modes = match table.deferrable_constraint_modes() {
-                Ok(modes) => modes,
-                Err(source) => {
-                    return self.abort_with(CatalogTransactionError::Catalog(
-                        CatalogError::Table {
-                            name: table_name.clone(),
-                            source,
-                        },
-                    ));
-                }
-            };
-            targets.extend(modes.into_keys().map(|name| (table_name.clone(), name)));
-        }
-        self.change_constraint_modes(&targets, mode)
+        self.change_constraint_modes(None, &[], true, mode)
     }
 
     fn change_constraint_modes(
         &mut self,
-        targets: &[(String, String)],
+        table_name: Option<&str>,
+        names: &[String],
+        all: bool,
         mode: ConstraintMode,
     ) -> Result<(), CatalogTransactionError> {
-        let mut next = self.deferred_constraints.clone();
-        for (table_name, name) in targets {
-            let Some(table) = self.tables.get(table_name) else {
-                return self.abort_with(CatalogTransactionError::Invalid(format!(
-                    "table not found: {table_name}"
-                )));
-            };
-            let modes = match table.deferrable_constraint_modes() {
-                Ok(modes) => modes,
-                Err(source) => {
-                    return self.abort_with(CatalogTransactionError::Catalog(
-                        CatalogError::Table {
-                            name: table_name.clone(),
-                            source,
-                        },
-                    ));
-                }
-            };
-            if !modes.contains_key(name) {
-                return self.abort_with(CatalogTransactionError::Invalid(format!(
-                    "constraint {name} is not deferrable in table {table_name}"
-                )));
-            }
-            let deferred = next.entry(table_name.clone()).or_default();
-            match mode {
-                ConstraintMode::Immediate => {
-                    deferred.remove(name);
-                }
-                ConstraintMode::Deferred => {
-                    deferred.insert(name.clone());
-                }
-            }
-        }
-        if mode == ConstraintMode::Immediate {
-            if let Err(error) =
-                super::constraints::validate_transaction_constraints(&self.tables, &next)
-            {
-                return self.abort_with(CatalogTransactionError::Catalog(error));
-            }
-        }
+        let next = match super::constraints::change_constraint_modes(
+            &self.tables,
+            &self.deferred_constraints,
+            table_name,
+            names,
+            all,
+            mode,
+        ) {
+            Ok(next) => next,
+            Err(error) => return self.abort_with(error),
+        };
         self.deferred_constraints = next;
         Ok(())
     }

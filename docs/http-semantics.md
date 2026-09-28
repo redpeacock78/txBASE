@@ -303,15 +303,23 @@ The current mutation path records a durable `TXOP` intent before its state paylo
 
 Startup recovery replays a supported intent when no state payload exists.
 
-`POST /transaction` applies all operations to a private table copy and persists one snapshot/WAL
-commit through `DbfTransaction`. If validation or any operation fails, the copy is discarded and
-the current DBF is not changed. The commit ID is durable for that DBF and resumes after restart
+`POST /transaction` applies ordered transaction steps to a private table copy and persists one
+snapshot/WAL commit through `DbfTransaction`. If validation or any step fails, the copy is discarded
+and the current DBF is not changed. The commit ID is durable for that DBF and resumes after restart
 or WAL recovery. The current boundary is one DBF table; it does not provide cross-table atomicity,
 catalog-wide transaction IDs, or MVCC visibility. The Rust API boundary is defined in
 [Snapshot transactions](transactions.md).
 
-The single-table and catalog transaction routes share the `OperationBatch` decoder with WASM.
-They reject empty batches and batches larger than 1,000 operations before applying any operation.
+The single-table and catalog transaction routes use the ordered `TransactionBatch` decoder; WASM
+continues to use the mutation-only `OperationBatch` decoder.
+The HTTP `operations` array accepts record mutations and `setConstraints` commands, requires at
+least one record mutation, and is limited to 1,000 steps.
+The response's `operations` count includes both mutation and command steps.
+Single-table `setConstraints` commands omit `table`; catalog commands require it for named
+constraints, while `all: true` can target one table or the whole catalog.
+Steps execute in array order, and switching a deferred constraint to immediate validates the current
+transaction image.
+The catalog route writes its journal only after every step and final constraint validation succeed.
 
 The catalog server's `POST /transaction` accepts `/table/records` and
 `/table/records/{id}` mutation paths. It prepares every affected table under one catalog lock,

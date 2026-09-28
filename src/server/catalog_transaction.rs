@@ -1,7 +1,7 @@
 use super::{HttpResponse, error, etag, header, json_response, read_json_body, request_header};
 use crate::catalog::{Catalog, CatalogError, CatalogTransactionError};
 use crate::replication::{ReplicationError, ReplicationLog};
-use crate::xbase::OperationBatch;
+use crate::xbase::{TransactionBatch, TransactionCommand, TransactionStep};
 use serde_json::json;
 use tiny_http::Request;
 
@@ -32,7 +32,7 @@ pub(super) fn response_with_replication(
         Ok(body) => body,
         Err(response) => return response,
     };
-    let transaction = match serde_json::from_slice::<OperationBatch>(&body) {
+    let transaction = match serde_json::from_slice::<TransactionBatch>(&body) {
         Ok(transaction) if !transaction.operations.is_empty() => transaction,
         Ok(_) => {
             return json_response(
@@ -54,23 +54,38 @@ pub(super) fn response_with_replication(
     };
 
     let operation_count = transaction.operations.len();
-    let operations = transaction.operations;
+    let steps = transaction.operations;
+    if steps.iter().any(|step| {
+        matches!(
+            step,
+            TransactionStep::Command(TransactionCommand::SetConstraints {
+                table: None,
+                all: false,
+                ..
+            })
+        )
+    }) {
+        return json_response(
+            422,
+            error(
+                "invalid_transaction",
+                "table is required when setting named constraints in a catalog transaction",
+            ),
+            false,
+        );
+    }
     let result = match replication {
         Some(replication) => replication
-            .propose_with_catalog_preconditions(
+            .propose_steps_with_catalog_preconditions(
                 catalog,
-                operations,
+                steps,
                 if_match.as_deref(),
                 if_none_match.as_deref(),
             )
             .map(|entry| entry.transaction_id)
             .map_err(CommitError::Replication),
         None => catalog
-            .commit_operations_with_preconditions(
-                &operations,
-                if_match.as_deref(),
-                if_none_match.as_deref(),
-            )
+            .commit_steps_with_preconditions(&steps, if_match.as_deref(), if_none_match.as_deref())
             .map_err(CommitError::Catalog),
     };
     match result {

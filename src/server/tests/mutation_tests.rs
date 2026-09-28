@@ -8,6 +8,22 @@ use serde_json::Value;
 use std::fs;
 use tiny_http::{Method, StatusCode, TestRequest};
 
+fn deferrable_name_schema() -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 2,
+        "fields": {},
+        "constraints": {
+            "deferrable": [{
+                "name": "users_name_unique",
+                "kind": "unique",
+                "fields": ["NAME"]
+            }]
+        }
+    }))
+    .unwrap()
+}
+
 #[test]
 fn mutation_endpoints_persist_and_delete_records() {
     let path = std::env::temp_dir().join(format!("txbase-server-test-{}.dbf", std::process::id()));
@@ -273,6 +289,86 @@ fn transaction_endpoint_discards_all_mutations_when_one_fails() {
     assert!(table.active_record(3).is_none());
     assert_eq!(fs::read(&path).unwrap(), before);
     fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn transaction_endpoint_changes_constraint_modes_in_request_order() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-server-constraint-modes-{}.dbf",
+        std::process::id()
+    ));
+    let schema_path = path.with_extension("txschema.json");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&schema_path);
+    fs::write(&path, fixture()).unwrap();
+    fs::write(&schema_path, deferrable_name_schema()).unwrap();
+    let mut table = DbfTable::from_path(&path).unwrap();
+    let mut request = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{"operations":[{"type":"setConstraints","all":true,"mode":"deferred"},{"method":"POST","path":"/records","body":{"ID":3,"NAME":"Bob","AGE":42,"ACTIVE":true}},{"method":"PATCH","path":"/records/1","body":{"NAME":"Bob"}},{"method":"PATCH","path":"/records/3","body":{"NAME":"Alice"}},{"type":"setConstraints","names":["users_name_unique"],"mode":"immediate"}]}"#,
+    );
+
+    let response = transaction::response(&mut request, &mut table, &path);
+    assert_eq!(response.status_code(), StatusCode(200));
+    let persisted = DbfTable::from_path(&path).unwrap();
+    assert_eq!(persisted.active_record(1).unwrap().values["NAME"], "Bob");
+    assert_eq!(persisted.active_record(3).unwrap().values["NAME"], "Alice");
+    fs::remove_file(path).unwrap();
+    fs::remove_file(schema_path).unwrap();
+}
+
+#[test]
+fn failed_immediate_constraint_change_discards_the_http_transaction() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-server-constraint-rollback-{}.dbf",
+        std::process::id()
+    ));
+    let schema_path = path.with_extension("txschema.json");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&schema_path);
+    fs::write(&path, fixture()).unwrap();
+    fs::write(&schema_path, deferrable_name_schema()).unwrap();
+    let before = fs::read(&path).unwrap();
+    let mut table = DbfTable::from_path(&path).unwrap();
+    let mut request = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{"operations":[{"type":"setConstraints","all":true,"mode":"deferred"},{"method":"POST","path":"/records","body":{"ID":3,"NAME":"Bob","AGE":42,"ACTIVE":true}},{"method":"PATCH","path":"/records/1","body":{"NAME":"Bob"}},{"type":"setConstraints","names":["users_name_unique"],"mode":"immediate"}]}"#,
+    );
+
+    let response = transaction::response(&mut request, &mut table, &path);
+    assert_eq!(response.status_code(), StatusCode(422));
+    assert!(table.active_record(3).is_none());
+    assert_eq!(fs::read(&path).unwrap(), before);
+    fs::remove_file(path).unwrap();
+    fs::remove_file(schema_path).unwrap();
+}
+
+#[test]
+fn single_table_transaction_rejects_a_table_scoped_constraint_command() {
+    let path = std::env::temp_dir().join(format!(
+        "txbase-server-constraint-table-scope-{}.dbf",
+        std::process::id()
+    ));
+    let schema_path = path.with_extension("txschema.json");
+    let _ = fs::remove_file(&path);
+    let _ = fs::remove_file(&schema_path);
+    fs::write(&path, fixture()).unwrap();
+    fs::write(&schema_path, deferrable_name_schema()).unwrap();
+    let before = fs::read(&path).unwrap();
+    let mut table = DbfTable::from_path(&path).unwrap();
+    let mut request = json_request(
+        Method::Post,
+        "/transaction",
+        r#"{"operations":[{"type":"setConstraints","table":"users","all":true,"mode":"deferred"},{"method":"PATCH","path":"/records/1","body":{"NAME":"Alice"}}]}"#,
+    );
+
+    let response = transaction::response(&mut request, &mut table, &path);
+    assert_eq!(response.status_code(), StatusCode(422));
+    assert_eq!(fs::read(&path).unwrap(), before);
+    fs::remove_file(path).unwrap();
+    fs::remove_file(schema_path).unwrap();
 }
 
 #[test]

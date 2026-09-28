@@ -3,7 +3,7 @@ use super::journal::{FileChange, commit, commit_files, next_transaction_id_locke
 use super::mvcc::{Snapshot, TableSnapshot};
 use super::{Catalog, CatalogError, CatalogTransactionError};
 use crate::dbf::DbfTable;
-use crate::xbase::{OperationIr, OperationMethod};
+use crate::xbase::{OperationIr, OperationMethod, TransactionCommand, TransactionStep};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -89,6 +89,7 @@ impl Catalog {
         .map_err(CatalogTransactionError::Catalog)
     }
 
+    #[cfg(test)]
     pub(crate) fn commit_operations_with_preconditions(
         &self,
         operations: &[OperationIr],
@@ -105,15 +106,31 @@ impl Catalog {
         )
     }
 
-    pub(crate) fn commit_operations_with_sidecar(
+    pub(crate) fn commit_steps_with_preconditions(
         &self,
-        operations: &[OperationIr],
+        steps: &[TransactionStep],
+        if_match: Option<&str>,
+        if_none_match: Option<&str>,
+    ) -> Result<u64, CatalogTransactionError> {
+        self.commit_steps_internal(
+            steps,
+            Some(CommitPrecondition::Catalog {
+                if_match,
+                if_none_match,
+            }),
+            None,
+        )
+    }
+
+    pub(crate) fn commit_steps_with_sidecar(
+        &self,
+        steps: &[TransactionStep],
         sidecar_name: &str,
         expected_sidecar: Option<Vec<u8>>,
         sidecar_after: Vec<u8>,
     ) -> Result<u64, CatalogTransactionError> {
-        self.commit_operations_internal(
-            operations,
+        self.commit_steps_internal(
+            steps,
             None,
             Some(SidecarChange {
                 name: sidecar_name.to_owned(),
@@ -123,17 +140,17 @@ impl Catalog {
         )
     }
 
-    pub(crate) fn commit_operations_with_preconditions_and_sidecar(
+    pub(crate) fn commit_steps_with_preconditions_and_sidecar(
         &self,
-        operations: &[OperationIr],
+        steps: &[TransactionStep],
         if_match: Option<&str>,
         if_none_match: Option<&str>,
         sidecar_name: &str,
         expected_sidecar: Option<Vec<u8>>,
         sidecar_after: Vec<u8>,
     ) -> Result<u64, CatalogTransactionError> {
-        self.commit_operations_internal(
-            operations,
+        self.commit_steps_internal(
+            steps,
             Some(CommitPrecondition::Catalog {
                 if_match,
                 if_none_match,
@@ -176,7 +193,21 @@ impl Catalog {
         precondition: Option<CommitPrecondition<'_>>,
         sidecar: Option<SidecarChange>,
     ) -> Result<u64, CatalogTransactionError> {
-        if operations.is_empty() {
+        let steps = operations
+            .iter()
+            .cloned()
+            .map(TransactionStep::Mutation)
+            .collect::<Vec<_>>();
+        self.commit_steps_internal(&steps, precondition, sidecar)
+    }
+
+    fn commit_steps_internal(
+        &self,
+        steps: &[TransactionStep],
+        precondition: Option<CommitPrecondition<'_>>,
+        sidecar: Option<SidecarChange>,
+    ) -> Result<u64, CatalogTransactionError> {
+        if steps.is_empty() {
             return Err(CatalogTransactionError::Invalid(
                 "operations must not be empty".into(),
             ));
@@ -248,16 +279,33 @@ impl Catalog {
         }
         let mut tables = before.clone();
         let mut touched = BTreeSet::new();
-        let deferred_constraints = super::constraints::initial_deferred_constraints(&tables)
+        let mut deferred_constraints = super::constraints::initial_deferred_constraints(&tables)
             .map_err(CatalogTransactionError::Catalog)?;
-        for operation in operations {
-            apply_operation_to_tables(
-                self,
-                &mut tables,
-                &mut touched,
-                operation,
-                &deferred_constraints,
-            )?;
+        for step in steps {
+            match step {
+                TransactionStep::Mutation(operation) => apply_operation_to_tables(
+                    self,
+                    &mut tables,
+                    &mut touched,
+                    operation,
+                    &deferred_constraints,
+                )?,
+                TransactionStep::Command(TransactionCommand::SetConstraints {
+                    table,
+                    all,
+                    names,
+                    mode,
+                }) => {
+                    deferred_constraints = super::constraints::change_constraint_modes(
+                        &tables,
+                        &deferred_constraints,
+                        table.as_deref(),
+                        names,
+                        *all,
+                        *mode,
+                    )?;
+                }
+            }
         }
         self.commit_loaded_tables_locked(
             before,

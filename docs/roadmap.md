@@ -73,7 +73,7 @@ The repository currently provides:
 - A bounded `ReplicationHttpClient` that validates authority status, pulls contiguous entry pages or a current snapshot, applies them through the local ordered replay contract, acknowledges follower progress over plain HTTP, and retries explicitly transient socket or HTTP failures within a bounded in-process policy.
 - A public `txbase replicate catch-up` command that opens a fixed-term follower catalog, resumes its journaled `TXRP` position, performs one bounded HTTP catch-up session, and reports the resulting progress as JSON.
 - Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit, after validating the declared primary or unique parent key; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
-- Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with per-transaction mode changes in the Rust transaction APIs; deferred `CHECK` is a txBASE extension, and HTTP batches use initial schema modes without an in-request mode-change operation.
+- Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with ordered per-transaction mode changes in the Rust and HTTP transaction APIs; deferred `CHECK` is a txBASE extension.
 
 The baseline intentionally does not include the following:
 
@@ -81,7 +81,7 @@ The baseline intentionally does not include the following:
 - Production WASI host lifecycle semantics, writable or provider-backed object-store adapters, and genuinely non-blocking storage I/O beyond the current read-only filesystem adapter.
 - Predicate-level locking and distributed serializable coordination.
 - Aggregation stages or accumulators beyond bounded input `$match`, `$unwind` with its documented top-level options, `$set`/`$addFields` with its documented expression subset, `$project`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, `$group`, `$bucket`, bounded scalar-expression `$bucketAuto` with finite numeric results, and bounded scalar-expression `$sortByCount` with bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
-- HTTP in-request constraint-mode changes and references across catalog roots.
+- References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
 - Quorum or consensus, quorum-coordinated snapshot/log retention, distributed follower reads, and distributed partitioning.
@@ -108,8 +108,8 @@ This phase keeps the database local and makes its operational boundary useful be
 Schema introspection, verification, sidecar-aware backup and restore, copy tooling, `PACK`, `RECALL`, read-only WAL inspection, and the first directory-catalog boundary are implemented as the first Phase 1 slice.
 
 Catalog transactions check non-deferred foreign keys after each operation and deferred foreign keys before publishing the journal commit.
-Rust transaction APIs can change named deferrable constraints during a transaction and validate them before switching to immediate mode.
-The HTTP `POST /transaction` routes use schema-selected initial modes but do not expose mode changes within request batches.
+Rust and HTTP transaction APIs can change named deferrable constraints during a transaction and validate them before switching to immediate mode.
+HTTP request batches preserve the order of `setConstraints` commands and record mutations.
 
 The catalog currently derives table identity from direct-child DBF filenames and does not persist a separate manifest.
 
@@ -266,7 +266,7 @@ The optional schema sidecar supports versions 1 and 2 without changing legacy DB
 It enforces one-field `primary`, `unique`, and `not_null` properties, bounded composite `primary` and `unique` keys, scalar defaults for omitted inserts, plus bounded table-level query-predicate `checks` on active records and mutation candidates.
 Version 2 adds named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints, plus named scalar and composite foreign keys.
 `DbfTransaction` and `CatalogTransaction` can change deferrable modes within a Rust transaction, and commit validates all constraints before publication.
-Deferred `CHECK` is a txBASE extension; HTTP `POST /transaction` uses initial schema modes but cannot change modes within its request batch.
+Deferred `CHECK` is a txBASE extension; HTTP `POST /transaction` supports ordered `setConstraints` commands within its request batch.
 Catalog-scoped scalar `references` and composite `constraints.foreign_keys` validation requires a declared primary or unique parent key.
 `restrict`, `cascade`, and `set_null` actions run inside the same catalog transaction and journal commit.
 The schema sidecar has a metadata-only edit command with active-record validation and atomic sidecar replacement.

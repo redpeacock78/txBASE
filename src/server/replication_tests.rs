@@ -20,6 +20,22 @@ fn fixture() -> Vec<u8> {
         .collect()
 }
 
+fn deferrable_name_schema() -> Vec<u8> {
+    serde_json::to_vec(&json!({
+        "format": "txbase-schema",
+        "version": 2,
+        "fields": {},
+        "constraints": {
+            "deferrable": [{
+                "name": "users_name_unique",
+                "kind": "unique",
+                "fields": ["NAME"]
+            }]
+        }
+    }))
+    .unwrap()
+}
+
 fn temporary_catalog(label: &str) -> PathBuf {
     let id = NEXT_REPLICATION_SERVER_ID.fetch_add(1, Ordering::Relaxed);
     let root = std::env::temp_dir().join(format!(
@@ -554,6 +570,51 @@ fn authority_captures_catalog_and_named_mutations_in_one_replication_log() {
     let recovered = ReplicationLog::open(&reloaded, 12).unwrap();
     assert_eq!(recovered.entries(), log.entries());
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn authority_replays_ordered_constraint_mode_steps_on_followers() {
+    let authority_root = temporary_catalog("constraint-authority");
+    let follower_root = temporary_catalog("constraint-follower");
+    for root in [&authority_root, &follower_root] {
+        fs::write(root.join("users.txschema.json"), deferrable_name_schema()).unwrap();
+    }
+    let authority = Catalog::from_path(&authority_root).unwrap();
+    let follower = Catalog::from_path(&follower_root).unwrap();
+    let mut log = ReplicationLog::new(14).unwrap();
+
+    let mut transaction = json_request(
+        Method::Post,
+        "/transaction",
+        br#"{"operations":[{"type":"setConstraints","table":"users","all":true,"mode":"deferred"},{"method":"POST","path":"/users/records","body":{"ID":3,"NAME":"Bob","AGE":42,"ACTIVE":true}},{"method":"PATCH","path":"/users/records/1","body":{"NAME":"Bob"}},{"method":"PATCH","path":"/users/records/3","body":{"NAME":"Alice"}},{"type":"setConstraints","table":"users","names":["users_name_unique"],"mode":"immediate"}]}"#.to_vec(),
+    );
+    let response = super::catalog_transaction::response_with_replication(
+        &mut transaction,
+        &authority,
+        Some(&mut log),
+    );
+    assert_eq!(response.status_code(), StatusCode(200));
+
+    let entry = log.entries().first().unwrap();
+    assert_eq!(entry.version, 2);
+    assert_eq!(entry.operations.len(), 0);
+    assert_eq!(entry.steps.len(), 5);
+    assert_eq!(authority.transaction_id().unwrap(), Some(1));
+    let entry =
+        serde_json::from_slice::<crate::replication::ReplicationEntry>(&entry.to_json().unwrap())
+            .unwrap();
+
+    let mut replica = ReplicationLog::new(14).unwrap();
+    replica.receive(&follower, entry).unwrap();
+    assert_eq!(follower.transaction_id().unwrap(), Some(1));
+    for catalog in [&authority, &follower] {
+        let table = catalog.open_table("users").unwrap();
+        assert_eq!(table.active_record(1).unwrap().values["NAME"], "Bob");
+        assert_eq!(table.active_record(3).unwrap().values["NAME"], "Alice");
+    }
+
+    fs::remove_dir_all(authority_root).unwrap();
+    fs::remove_dir_all(follower_root).unwrap();
 }
 
 #[test]

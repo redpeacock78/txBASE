@@ -73,7 +73,10 @@ APIはマージ方針を自動選択せず、ネットワーク応答を失っ�
 
 単一テーブルのHTTP `POST /transaction`経路は、この適用とcommitの境界を再利用します。
 
-この経路はWASM境界と`OperationBatch`デコーダーを共有し、空のバッチまたは1,000操作を超えるバッチを、操作の適用前に拒否します。
+両HTTPルートは、順序を保つ`TransactionBatch`デコーダーを使います。
+`operations`配列にはレコード更新と`setConstraints`コマンドを含められます。
+WASM境界は更新専用の`OperationBatch`デコーダーを引き続き使います。
+バッチには少なくとも1つのレコード更新が必要であり、1,000ステップを超える場合は拒否します。
 
 カタログの`POST /transaction`経路は、カタログロックの下でDBFとサイドカーのイメージを調整するため、テーブル間ジャーナルの別境界として残ります。
 
@@ -103,7 +106,15 @@ APIはマージ方針を自動選択せず、ネットワーク応答を失っ�
 `CatalogTransaction`は、検査時点の切り替えを含む操作が失敗するとabort状態になります。
 commitはテーブルやjournalの変更を公開する前に、すべての制約を検証します。
 
-HTTPの`POST /transaction`はスキーマで選んだ初期モードを使いますが、`OperationBatch`にはリクエスト内でモードを変える操作がありません。
+HTTPの`POST /transaction`は、順序付き`operations`配列で`setConstraints`コマンドを受け付けます。
+`{"type":"setConstraints","all":true,"mode":"deferred"}`は対象となる制約をすべて切り替えます。
+名前を指定する場合は、空でない`names`配列を使い、`all`を`false`にするか省略します。
+単一テーブルルートでは`table`を指定できません。
+カタログルートで制約名を指定する場合は`table`が必要です。
+`all: true`では、`table`を指定するとそのテーブルを対象にし、省略するとカタログ内のすべてのテーブルを対象にします。
+ルートは配列の順序どおりにコマンドと更新を適用します。
+延期モードから即時モードへ切り替える前に、現在のトランザクションイメージを検証します。
+コマンド、更新、最終検証のいずれかが失敗した場合、HTTPトランザクションはテーブルやjournalの変更を公開しません。
 名前付き`CHECK`制約の延期はtxBASE独自の拡張です。
 PostgreSQLでは`UNIQUE`、`PRIMARY KEY`、`EXCLUDE`、外部キー制約を延期できます。
 `CHECK`と`NOT NULL`は即時に検査します。
