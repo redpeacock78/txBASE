@@ -2,23 +2,16 @@ use super::{CatalogRaftConfig, RPC_TIMEOUT, RaftRuntime, config};
 use crate::replication::raft::{self, MAX_RAFT_RPC_BYTES, TypeConfig};
 use crate::server::{HttpResponse, error, header, json_response, read_json_body_with_limit};
 use openraft::raft::{AppendEntriesRequest, InstallSnapshotRequest, VoteRequest};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use tiny_http::{Method, Request, Server};
 
+mod membership;
+
 pub(in crate::server) struct PeerListener {
     server: Arc<Server>,
     thread: Option<JoinHandle<()>>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AddLearnerRequest {
-    version: u16,
-    cluster_id: String,
-    node_id: u64,
-    peer_address: String,
 }
 
 impl Drop for PeerListener {
@@ -92,14 +85,25 @@ impl RaftRuntime {
         if !path.starts_with("/raft/") {
             return None;
         }
-        if request.method() != &Method::Post {
+        let membership_route = path == raft::RAFT_MEMBERSHIP_PATH;
+        let method_allowed = request.method() == &Method::Post
+            || (membership_route && request.method() == &Method::Get);
+        if !method_allowed {
+            let allowed = if membership_route {
+                "GET, POST"
+            } else {
+                "POST"
+            };
             return Some(
                 json_response(
                     405,
-                    error("method_not_allowed", "Raft RPC requires POST"),
+                    error(
+                        "method_not_allowed",
+                        "Raft peer route does not allow this method",
+                    ),
                     false,
                 )
-                .with_header(header("Allow", "POST")),
+                .with_header(header("Allow", allowed)),
             );
         }
         if let Err(response) = crate::server::replication::authorize(request, &self.token) {
@@ -120,73 +124,12 @@ impl RaftRuntime {
             raft::RAFT_APPEND_PATH => self.append_entries(request),
             raft::RAFT_SNAPSHOT_PATH => self.install_snapshot(request),
             raft::RAFT_ADD_LEARNER_PATH => self.handle_add_learner(request),
+            raft::RAFT_MEMBERSHIP_PATH if request.method() == &Method::Get => {
+                self.membership_status_response()
+            }
+            raft::RAFT_MEMBERSHIP_PATH => self.handle_change_membership(request),
             _ => json_response(404, error("not_found", "Raft peer route not found"), false),
         })
-    }
-
-    fn handle_add_learner(&self, request: &mut Request) -> HttpResponse {
-        let bytes = match read_json_body_with_limit(
-            request,
-            raft::RAFT_ADD_LEARNER_PATH,
-            false,
-            MAX_RAFT_RPC_BYTES,
-        ) {
-            Ok(bytes) => bytes,
-            Err(response) => return response,
-        };
-        let rpc: AddLearnerRequest = match serde_json::from_slice(&bytes) {
-            Ok(rpc) => rpc,
-            Err(parse_error) => {
-                return json_response(
-                    400,
-                    error("invalid_raft_learner_request", &parse_error.to_string()),
-                    false,
-                );
-            }
-        };
-        if rpc.version != raft::RAFT_RPC_VERSION {
-            return json_response(
-                400,
-                error(
-                    "unsupported_raft_rpc_version",
-                    "Raft request version is unsupported",
-                ),
-                false,
-            );
-        }
-        if rpc.cluster_id != self.cluster_id {
-            return json_response(
-                403,
-                error(
-                    "raft_cluster_mismatch",
-                    "Raft request targets another cluster",
-                ),
-                false,
-            );
-        }
-        if rpc.node_id == 0 || rpc.node_id == self.node_id {
-            return json_response(
-                400,
-                error(
-                    "invalid_raft_learner_id",
-                    "learner node ID must be positive and different from this node",
-                ),
-                false,
-            );
-        }
-        match self.add_learner(rpc.node_id, &rpc.peer_address) {
-            Ok(added) => json_response(
-                if added { 202 } else { 200 },
-                serde_json::json!({
-                    "node_id": rpc.node_id,
-                    "status": if added { "learner_sync_started" } else { "already_member" }
-                }),
-                false,
-            ),
-            Err((status, message)) => {
-                json_response(status, error("raft_learner_add_failed", &message), false)
-            }
-        }
     }
 
     fn vote(&self, request: &mut Request) -> HttpResponse {

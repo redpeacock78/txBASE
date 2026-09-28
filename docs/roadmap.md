@@ -72,7 +72,10 @@ The repository currently provides:
 - A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, `ReplicationSnapshot`, and `ReplicationProgress` JSON formats, journaled `TXRP` data-plane and `TXRG` follower-progress sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, monotonic follower-progress acknowledgement with durable minimum-index coordinated compaction, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded entry-batch validation and ordered receiver application, bounded HTTP entry, contiguous entry-range, snapshot, and progress delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
 - A bounded `ReplicationHttpClient` that validates authority status, pulls contiguous entry pages or a current snapshot, applies them through the local ordered replay contract, acknowledges follower progress over HTTP or HTTPS, and retries explicitly transient socket or HTTP failures within a bounded in-process policy.
 - A public `txbase replicate catch-up` command that opens a fixed-term follower catalog, resumes its journaled `TXRP` position, performs one bounded HTTP catch-up session, and reports the resulting progress as JSON.
-- An optional OpenRaft mode for `serve-catalog` with explicit initial voters, quorum writes, linearizable reads, authenticated peer RPC, and peer HTTPS. Its authenticated peer API adds a prepared learner and starts log replication; joint voter changes, empty-catalog joining, and failure-injected failover coverage remain open; see [Raft consensus design](raft.md).
+- An optional OpenRaft mode for `serve-catalog` with explicit initial voters, quorum writes, linearizable reads, authenticated peer RPC, and peer HTTPS.
+  Its authenticated peer API adds prepared learners, reports local effective membership, and changes voter sets through joint consensus.
+  It waits for promoted learners to catch up and retains demoted voters as learners.
+  Empty-catalog joining and failure-injected failover coverage remain open; CLI membership commands are future work; see [Raft consensus design](raft.md).
 - Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit, after validating the declared primary or unique parent key; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
 - Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with ordered per-transaction mode changes in the Rust and HTTP transaction APIs; deferred `CHECK` is a txBASE extension.
 
@@ -450,14 +453,16 @@ index for coordinated compaction. This safety gate applies to the fixed-term `TX
 
 The optional Raft implementation is connected to `serve-catalog` and uses an explicitly configured initial voter set.
 It provides quorum-committed writes, a linearizable read barrier, authenticated peer RPC, peer HTTPS for non-loopback URLs, and an authenticated endpoint that adds a prepared learner and starts log replication.
-OpenRaft storage, the catalog state machine, snapshots, startup recovery, and a three-node integration path that adds a learner after a quorum commit are included in the CI test suite.
-Joint voter changes, empty-catalog learner joining, membership-status commands, TLS-specific integration coverage, and deterministic failure injection remain outstanding.
+An authenticated peer API reports local effective membership and supports compare-and-swap voter changes through OpenRaft joint consensus.
+The API waits for newly promoted learners to catch up and retains demoted voters as learners.
+OpenRaft storage, the catalog state machine, snapshots, startup recovery, and a three-node integration path covering promotion, demotion, and quorum writes after demotion are included in the CI test suite.
+Empty-catalog learner joining, CLI membership commands, TLS-specific integration coverage, interrupted-change recovery tests, and deterministic failure injection remain outstanding.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Extend the current OpenRaft integration with joint voter changes, empty-catalog learner joining, membership status, and multi-node failure testing; see [Raft consensus design](raft.md).
+- Extend the current OpenRaft integration with empty-catalog learner joining, CLI membership commands, peer TLS integration, interrupted-change recovery, and multi-node failure testing; see [Raft consensus design](raft.md).
 - TLS for the public catalog listener, mutual TLS, durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.

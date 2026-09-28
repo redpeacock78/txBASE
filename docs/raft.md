@@ -1,6 +1,6 @@
 # Raft consensus design
 
-Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API can add a prepared node as a learner and start log replication. Joint voter changes, membership-status commands, and failure-injection coverage remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
+Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API can add prepared learners, report effective membership, and change voters through joint consensus. CLI membership commands and failure-injection coverage remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
 
@@ -15,18 +15,18 @@ This document records the implemented Raft boundary and the remaining authority,
 - Snapshot build, transfer, and install carry the catalog image, applied position, membership, and client retry state together.
 - Catalog filesystem work runs through Tokio's blocking worker pool.
 - `serve-catalog` starts an OpenRaft node from an explicit node ID, cluster ID, node directory, peer address, and initial member map. Only `--raft-bootstrap` initializes cluster membership.
-- A separate peer listener handles vote, append, snapshot, and authenticated learner-add requests. It bounds requests to 2 MiB, applies a 10-second timeout, and checks bearer authentication, cluster and node identity, active membership, and a shared genesis-catalog fingerprint for Raft RPCs.
+- A separate peer listener handles vote, append, snapshot, learner-add, membership-status, and voter-change requests. It bounds requests to 2 MiB, applies a 10-second timeout, and checks bearer authentication, cluster and node identity, active membership, and a shared genesis-catalog fingerprint for Raft RPCs.
 - Peer traffic may use HTTPS with a node certificate and key. Bearer-authenticated HTTP is accepted only for loopback peer URLs. The public catalog listener remains HTTP.
 - Raft writes to `/transaction` and named-table mutation routes require `X-Txbase-Client-Id` and a positive `X-Txbase-Client-Sequence`. Exact retries return the stored result.
 - Normal catalog reads call OpenRaft's linearizable read barrier before reading the local catalog. The server does not provide an explicitly stale follower-read mode.
-- A three-node CI test exercises quorum commit, retry deduplication, authenticated learner addition after a commit, learner catch-up, and catalog convergence.
+- A three-node CI test exercises quorum commit and retry deduplication, learner catch-up before promotion, joint voter promotion and demotion, retained-learner shutdown, and quorum writes after demotion.
 - `RaftLogStore` durably stores votes, log entries, committed position, and the last purged log ID in a node-specific directory.
 - The log journal uses length-prefixed, SHA-256-checked JSON records, recovers an incomplete tail, and compacts purged history into a new generation.
 - The node directory has an exclusive process lock, and the storage tests include OpenRaft's `testing::Suite` plus restart-recovery cases.
 
 ### Not implemented
 
-- Voter promotion or removal through joint membership, and membership/status CLI commands.
+- CLI commands for requesting membership changes and inspecting cluster status.
 - Joining from an empty catalog. A learner must currently be prepared from the exact committed genesis image used by the cluster.
 - Deterministic tests for quorum loss, partitions, message loss or reordering, leader changes, restart recovery, and reads during leadership changes.
 - Dedicated peer HTTPS certificate and host-verification integration tests.
@@ -75,9 +75,25 @@ The endpoint returns `202` after OpenRaft starts replication, not after the lear
 If the current membership already contains the same node ID and address, the endpoint returns `200`; conflicting IDs or addresses are rejected.
 
 The learner must be prepared from the cluster's exact committed genesis image and initialized with `--raft-initialize-catalog`. A blank catalog cannot adopt a cluster fingerprint yet.
-The API does not promote or remove voters. A new voter must first catch up as a learner, then the cluster must commit the change through OpenRaft's joint-membership procedure. Editing local configuration alone cannot change voter authority.
 
-The startup CLI rejects duplicate node IDs, duplicate peer URLs, missing local membership, conflicting replication modes, conflicting node identities, and attempts to run two nodes against one data directory. Voter changes and membership-status commands remain future work.
+Use authenticated `GET /raft/v1/membership` to inspect a node's local effective membership. The response includes the node and leader IDs, server state, effective membership log index, voter configurations, voter and learner IDs, node addresses and roles, and whether a membership change is in progress. It reads local OpenRaft metrics rather than a linearizable cluster-wide view; a joint configuration appears as multiple voter sets.
+
+A voter change follows four steps:
+
+1. Read the effective voter set and membership log index from `GET /raft/v1/membership`.
+2. Send authenticated `POST /raft/v1/membership` to the current leader with `version`, `cluster_id`, `expected_membership_log_index`, `expected_voter_ids`, and the desired `voter_ids`.
+   For a non-no-op change from a stable configuration, the expected index and voter IDs act as a compare-and-swap guard.
+   A target set that is already stable returns `200`; an accepted change returns `202`.
+3. The handler waits for each learner being promoted to catch up with OpenRaft's blocking `add_learner` operation, then calls `change_membership`.
+   OpenRaft commits the joint configuration and then its uniform target configuration.
+   txBASE uses `retain=true`, so voters removed from the target set become learners and remain cluster members; their metadata is not erased and replication is not stopped.
+4. Poll `GET /raft/v1/membership` until `effective_voter_configs` contains one set and `membership_change_in_progress` is false.
+
+Stale requests, unknown nodes, requests sent to a non-leader, and conflicting joint changes return `409`.
+While a joint configuration is effective, a request for its target voter set resumes the change.
+Editing local configuration alone cannot change voter authority.
+
+The startup CLI rejects duplicate node IDs, duplicate peer URLs, missing local membership, conflicting replication modes, conflicting node identities, and attempts to run two nodes against one data directory. CLI commands for voter changes and membership status remain future work.
 
 ## 4. Durable log and catalog application
 
@@ -116,7 +132,7 @@ Normal catalog reads call `Raft::ensure_linearizable()` before reading the local
 
 ## 6. Peer transport and security
 
-Peer RPC uses a version 1 internal envelope for voting, log replication, and snapshot installation at `/raft/v1/vote`, `/raft/v1/append`, and `/raft/v1/snapshot`. The authenticated `POST /raft/v1/learner` control route uses the same peer listener and bearer token. The listener is separate from the public catalog listener, caps each request at 2 MiB, applies a 10-second RPC timeout, and checks Raft RPC senders against the active membership, cluster ID, and shared genesis fingerprint. It also checks that the OpenRaft vote identifies the same sender.
+Peer RPC uses a version 1 internal envelope for voting, log replication, and snapshot installation at `/raft/v1/vote`, `/raft/v1/append`, and `/raft/v1/snapshot`. The authenticated `POST /raft/v1/learner` and `GET`/`POST /raft/v1/membership` control routes use the same peer listener and bearer token. The listener is separate from the public catalog listener, caps each request at 2 MiB, applies a 10-second RPC timeout, and checks Raft RPC senders against the active membership, cluster ID, and shared genesis fingerprint. It also checks that the OpenRaft vote identifies the same sender.
 
 Every Raft peer request requires the `TXBASE_REPLICATION_TOKEN` bearer credential. Non-loopback peer URLs must use HTTPS with `--raft-peer-cert` and `--raft-peer-key`; the client verifies the certificate and host name with the operating system's trust facilities. Plain HTTP with a bearer token is allowed only for loopback URLs. This TLS configuration applies only to the peer listener; the public catalog listener still uses HTTP.
 
@@ -137,10 +153,10 @@ Migration from a fixed-term `TXRP` authority is manual. Stop the old writers, ch
 
 The state-machine CI tests cover catalog commit atomicity, restart-safe retries, sequence rejection, no-op and membership entries, and snapshot installation.
 The storage adapter's tests run OpenRaft's `testing::Suite` and restart-recovery checks.
-The three-node integration test exercises a quorum commit on two initial voters, authenticated learner addition, log catch-up, a repeated client command, and catalog convergence.
+The three-node integration test exercises a quorum commit on two initial voters, authenticated learner addition, catch-up as part of promotion, joint promotion and demotion, membership-status authorization and validation, retained-learner shutdown, and quorum writes with the remaining voters.
 It does not yet inject deterministic network delay, message loss, partitions, reordering, restarts, or leader changes.
 
-Acceptance requires tests for durable term and vote recovery, conflicting log replacement, quorum loss, leader change, client retry after a lost response, apply-marker recovery, snapshot installation and suffix retention, learner catch-up from a purged log through snapshot transfer, joint membership changes, and linearizable reads during leadership changes.
+Acceptance still requires tests for durable term and vote recovery, conflicting log replacement, quorum loss, leader change, client retry after a lost response, apply-marker recovery, snapshot installation and suffix retention, learner catch-up from a purged log through snapshot transfer, resuming an interrupted joint membership change, and linearizable reads during leadership changes.
 
 Crash injection must cover each boundary between log persistence, quorum commitment, catalog journal publication, applied-position persistence, and client response. A green single-node test or an in-memory protocol test does not establish these guarantees.
 

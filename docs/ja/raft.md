@@ -2,8 +2,8 @@
 
 状態：`serve-catalog`は、初期voter集合を明示する任意のOpenRaftモードを提供します。
 このモードではquorum更新、線形化可能な読み取りbarrier、認証付きの専用peer listenerを使います。
-peer APIは、準備済みnodeをlearnerとして追加し、ログ複製を開始できます。
-joint membershipによるvoter変更、membership状態確認CLI、障害注入テストは未実装です。
+peer APIは、準備済みlearnerの追加、有効なmembershipの照会、joint consensusによるvoter変更を提供します。
+membershipを操作・確認するCLIと障害注入テストは未実装です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -19,18 +19,18 @@ joint membershipによるvoter変更、membership状態確認CLI、障害注入�
 - snapshotの生成、転送、インストールで、カタログイメージ、適用位置、membership、再試行状態を一緒に扱う。
 - カタログのファイル操作にはTokioのblocking worker poolを使う。
 - `serve-catalog`は、node ID、cluster ID、専用データディレクトリ、peer address、初期membershipを指定してOpenRaft nodeを起動する。membershipの初期化には`--raft-bootstrap`を明示する。
-- 専用peer listenerはvote、append、snapshot RPCと認証付きlearner追加要求を処理する。要求を2 MiB、RPC timeoutを10秒に制限し、Bearer認証、cluster ID、node ID、有効なmembership、Raft RPCで全nodeが共有するgenesis catalog fingerprintを検証する。
-- peer通信ではnodeごとの証明書と秘密鍵を使うHTTPSを利用できる。Bearer token付きHTTPはloopback peer URLだけで許可する。公開catalog listenerはHTTPのままである。
-- `/transaction`と名前付きテーブル更新には`X-Txbase-Client-Id`と正の`X-Txbase-Client-Sequence`が必要である。同じ要求の再試行には記録済み結果を返す。
+- 専用peer listenerはvote、append、snapshot、learner追加、membership状態照会、voter変更の要求を処理する。要求を2 MiB、RPC timeoutを10秒に制限し、Bearer認証、cluster ID、node ID、有効なmembership、Raft RPCで全nodeが共有するgenesis catalog fingerprintを検証する。
+- peer通信ではnodeごとの証明書と秘密鍵を使うHTTPSを利用できる。Bearer token付きHTTPはloopback peer URLだけで許可する。公開catalog listenerにはTLSを設定しない。
+- `/transaction`と名前付きテーブル更新では`X-Txbase-Client-Id`と正の`X-Txbase-Client-Sequence`を指定する。同じ要求の再試行には記録済み結果を返す。
 - 通常のcatalog読み取り前にOpenRaftの線形化可能な読み取りbarrierを呼び出す。明示的にstaleなfollower読み取りは提供しない。
-- 3 nodeのCIテストでquorum commit、再試行の重複排除、commit後の認証付きlearner追加、learnerの追いつき、catalogの収束を検査する。
+- 3 nodeのCIテストでquorum commitと再試行の重複排除、昇格前のlearner同期、joint membershipによるvoter昇格と降格、learner停止後に残るvoterでのquorum更新を検査する。
 - `RaftLogStore`はnode専用ディレクトリにvote、ログエントリ、commit済み位置、最後にpurgeしたlog IDを永続化する。
 - ログjournalは長さ付きのSHA-256検証済みJSON recordを使う。不完全な末尾を復旧し、purge後は新しいgenerationへ圧縮する。
 - nodeディレクトリをプロセス間で排他ロックする。ストレージテストにはOpenRaftの`testing::Suite`と再起動後の復旧確認を含める。
 
 ### 未実装
 
-- joint membershipによるvoter昇格と削除、およびmembershipや状態を確認するCLI。
+- membership変更とcluster状態を照会するCLI。
 - 空のcatalogからの参加。learnerには現在、clusterと同一のcommit済みgenesis imageを事前に用意する必要がある。
 - quorum喪失、partition、メッセージ損失や並べ替え、leader交代、再起動、交代中の読み取りを検査する決定的な障害テスト。
 - peer HTTPSの証明書とホスト名検証を対象にした統合テスト。
@@ -108,12 +108,30 @@ JSON bodyには`version`、`cluster_id`、`node_id`、`peer_address`を含め、
 
 learnerにはclusterと同じcommit済みgenesis imageを事前に用意し、`--raft-initialize-catalog`で初期化します。
 空のcatalogからcluster fingerprintを引き継ぐ機能はありません。
-現在のAPIではvoterを昇格・削除できません。
-新しいvoterを昇格するときは、learnerが追いついた後にOpenRaftのjoint membership手順で変更をcommitします。
-ローカル設定の編集だけで投票権を変えることはできません。
+
+認証付き`GET /raft/v1/membership`で、nodeごとの有効なmembershipを確認する。
+応答にはnode ID、leader ID、server state、有効なmembership log index、voter config、voter IDとlearner ID、nodeのaddressとrole、membership変更の実行中状態を含む。
+応答はOpenRaft metricsに基づくnode単位の表示であり、cluster全体のlinearizable readではない。
+joint configは複数のvoter集合として返す。
+
+voter集合は次の4段階で変更する。
+
+1. `GET /raft/v1/membership`から、有効なvoter集合とmembership log indexを取得する。
+2. 現leaderに認証付き`POST /raft/v1/membership`を送り、`version`、`cluster_id`、`expected_membership_log_index`、`expected_voter_ids`、変更後の`voter_ids`を指定する。
+   安定したmembershipから実際に変更するときは、期待するindexとvoter ID集合をcompare-and-swap（CAS）の条件として検証する。
+   変更先のvoter集合が既に安定していれば`200`を返し、変更を受け付けた場合は`202`を返す。
+3. 昇格するlearnerは、OpenRaftのblocking `add_learner`操作で同期を待ってから`change_membership`へ渡す。
+   OpenRaftはjoint configをcommitした後に、変更先の単一configをcommitする。
+   txBASEは`retain=true`を指定するため、voter集合から外したnodeはlearnerへ降格し、cluster memberとして残る。
+   node metadataは削除せず、learnerへのログ複製も停止しない。
+4. `GET /raft/v1/membership`を繰り返し、`effective_voter_configs`が1集合になり、`membership_change_in_progress`が`false`になるまで待つ。
+
+古い要求、未知のnode、followerへの要求、競合するjoint変更には`409`を返す。
+joint configが有効な間は、その変更先と一致する要求で処理を再開できる。
+ローカル設定の編集だけで投票権は変わらない。
 
 起動CLIは、重複node ID、重複peer URL、local nodeのmembership欠落、レプリケーションmodeの混在、異なるnode identity、同じデータディレクトリを使う複数processの起動を拒否します。
-voter変更とmembership状態確認の操作は未実装です。
+voter変更とmembership状態確認のCLIは未実装です。
 
 ## 4. 永続ログとカタログへの適用
 
@@ -210,11 +228,11 @@ voter集合を推測したり、古いfollowerログを自動で昇格したり�
 
 CIのstate machineテストでは、カタログcommitの原子性、再起動後の再試行、sequence拒否、no-opとmembership、snapshotインストールを検証する。
 storage adapterのテストでは、OpenRaftの`testing::Suite`と再起動後の復旧確認を実行する。
-3 nodeの統合テストでは、初期voter 2 nodeでのquorum commit、認証付きlearner追加、ログの追いつき、要求再送、全catalogの収束を検査する。
+3 nodeの統合テストでは、初期voter 2 nodeでのquorum commit、認証付きlearner追加、昇格時のログ同期、joint membershipによる昇格と降格、状態照会の認証と入力検証、降格node停止後のquorum更新を検査する。
 メッセージ遅延、損失、partition、並べ替え、再起動、leader交代の注入は未実装です。
 
 完了には、termとvoteの永続復旧、競合ログの置換、quorum喪失、leader交代、応答消失後のclient再試行、適用位置の復旧をテストする。
-snapshotのインストールとsuffix保持、purge後のsnapshotを使ったlearnerの追いつき、joint membership変更、leader交代中のlinearizable readもテストする。
+snapshotのインストールとsuffix保持、purge後のsnapshotを使ったlearnerの追いつき、中断したjoint membership変更の再開、leader交代中のlinearizable readもテストする。
 
 ログ永続化、quorum commit、カタログジャーナル公開、適用済み位置の永続化、client応答の各境界でプロセスを強制終了し、再起動後の状態を検証する。
 単一nodeの成功やメモリ上のプロトコルテストだけでは、これらの保証を確認できない。

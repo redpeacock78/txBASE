@@ -28,6 +28,7 @@ pub(super) struct RaftRuntime {
     genesis_fingerprint: Vec<u8>,
     token: String,
     peer_tls: bool,
+    membership_change_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl RaftRuntime {
@@ -113,6 +114,7 @@ impl RaftRuntime {
             genesis_fingerprint,
             token,
             peer_tls,
+            membership_change_lock: Arc::new(tokio::sync::Mutex::new(())),
         })
     }
 
