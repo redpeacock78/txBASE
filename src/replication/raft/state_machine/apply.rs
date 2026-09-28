@@ -101,9 +101,9 @@ pub(super) fn apply_entries(
     let mut responses = Vec::with_capacity(entries.len());
     for entry in entries {
         match state.last_applied {
-            Some(previous) if entry.log_id.index != previous.index.saturating_add(1) => {
+            Some(previous) if entry.log_id.index <= previous.index => {
                 return Err(format!(
-                    "Raft apply log index {} does not follow {}",
+                    "Raft apply log index {} does not advance past {}",
                     entry.log_id.index, previous.index
                 ));
             }
