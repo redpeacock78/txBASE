@@ -5,6 +5,74 @@ use crate::replication::raft::{
 };
 
 #[test]
+fn empty_catalog_joins_an_empty_genesis_cluster() {
+    let root = temporary_cluster();
+    let addresses = (0..2).map(|_| free_address()).collect::<Vec<_>>();
+    let leader_url = format!("http://{}", addresses[0]);
+    let learner_url = format!("http://{}", addresses[1]);
+    let mut nodes = Vec::new();
+    let mut listeners = Vec::new();
+
+    for node_id in 1..=2 {
+        let catalog_root = root.join(format!("catalog-{node_id}"));
+        fs::create_dir(&catalog_root).unwrap();
+        let initial_members = if node_id == 1 {
+            BTreeMap::from([(1, leader_url.clone())])
+        } else {
+            BTreeMap::from([(1, leader_url.clone()), (2, learner_url.clone())])
+        };
+        let peer_address = addresses[(node_id - 1) as usize].clone();
+        let config = CatalogRaftConfig {
+            node_id,
+            cluster_id: "ci-raft-cluster".into(),
+            node_directory: root.join(format!("node-{node_id}")),
+            peer_bind: peer_address.clone(),
+            peer_advertise: format!("http://{peer_address}"),
+            initial_members,
+            bootstrap: node_id == 1,
+            initialize_catalog: false,
+            tls_certificate: None,
+            tls_private_key: None,
+        };
+        let raft =
+            RaftRuntime::start(&catalog_root, config.clone(), Some("ci-token".into())).unwrap();
+        let server = raft.bind_peer_listener(&config).unwrap();
+        listeners.push(raft.spawn_peer_listener(server).unwrap());
+        nodes.push(raft);
+    }
+
+    let leader_index = current_leader_index(&nodes, Duration::from_secs(20));
+    assert_eq!(nodes[leader_index].node_id, 1);
+    let client = RaftMembershipHttpClient::new(&leader_url, "ci-token").unwrap();
+    let request = RaftAddLearnerRequest::new("ci-raft-cluster", 2, learner_url).unwrap();
+    let response = client.add_learner(&request).unwrap();
+    assert_eq!(response.node_id, 2);
+    assert_eq!(
+        response.status,
+        crate::replication::raft::RaftLearnerAddStatus::LearnerSyncStarted
+    );
+    wait_for_membership(
+        &nodes,
+        &BTreeSet::from([1]),
+        &BTreeSet::from([2]),
+        Duration::from_secs(15),
+    );
+
+    for node_id in 1..=2 {
+        let catalog = Catalog::from_path(root.join(format!("catalog-{node_id}"))).unwrap();
+        assert!(catalog.tables().next().is_none());
+        assert_eq!(catalog.transaction_id().unwrap(), None);
+    }
+
+    drop(listeners);
+    for node in &nodes {
+        node.shutdown().unwrap();
+    }
+    drop(nodes);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
     let root = temporary_cluster();
     let addresses = (0..3).map(|_| free_address()).collect::<Vec<_>>();

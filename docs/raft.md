@@ -1,6 +1,6 @@
 # Raft consensus design
 
-Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API and `txbase raft membership` CLI can add prepared learners, report effective membership, and change voters through joint consensus. Empty-catalog joining and failure-injection coverage remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
+Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API and `txbase raft membership` CLI can add prepared learners, report effective membership, and change voters through joint consensus. An empty learner can join when the cluster's genesis catalog is also empty; joining a cluster with a non-empty genesis catalog from a blank catalog and failure-injection coverage remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
 
@@ -21,13 +21,14 @@ This document records the implemented Raft boundary and the remaining authority,
 - Raft writes to `/transaction` and named-table mutation routes require `X-Txbase-Client-Id` and a positive `X-Txbase-Client-Sequence`. Exact retries return the stored result.
 - Normal catalog reads call OpenRaft's linearizable read barrier before reading the local catalog. The server does not provide an explicitly stale follower-read mode.
 - A three-node CI test exercises quorum commit and retry deduplication, learner catch-up before promotion, joint voter promotion and demotion, retained-learner shutdown, and quorum writes after demotion.
+- A two-node CI test verifies that an empty-catalog learner can join a cluster with an empty genesis catalog.
 - `RaftLogStore` durably stores votes, log entries, committed position, and the last purged log ID in a node-specific directory.
 - The log journal uses length-prefixed, SHA-256-checked JSON records, recovers an incomplete tail, and compacts purged history into a new generation.
 - The node directory has an exclusive process lock, and the storage tests include OpenRaft's `testing::Suite` plus restart-recovery cases.
 
 ### Not implemented
 
-- Joining from an empty catalog. A learner must currently be prepared from the exact committed genesis image used by the cluster.
+- Joining a cluster with a non-empty genesis catalog from a blank learner. Such a learner must currently be prepared from the exact committed genesis image used by the cluster.
 - Deterministic tests for quorum loss, partitions, message loss or reordering, leader changes, restart recovery, and reads during leadership changes.
 - Dedicated peer HTTPS certificate and host-verification integration tests.
 - Mutual TLS and TLS for the public catalog listener.
@@ -38,9 +39,11 @@ The application state and complete snapshot are each limited to 64 MiB.
 Client retry records are retained indefinitely; reaching the state limit fails closed until a client-retirement protocol is defined.
 
 An empty catalog can initialize through `RaftCatalogStateMachine::open`.
+An empty learner can join when the cluster's genesis catalog is also empty; this case is covered by a two-node CI test.
+Joining a cluster with a non-empty genesis catalog from a blank learner remains unsupported because peer RPC requires a matching genesis fingerprint and the join flow has no pre-join catalog-image transfer.
 A non-empty catalog requires `--raft-bootstrap` on the initial node or `--raft-initialize-catalog` on a prepared peer, plus a committed catalog snapshot; a non-empty catalog at transaction ID 0 is rejected because it has no transferable MVCC image.
 Every initial voter and learner must start from the same catalog image. Peer RPC rejects a different genesis fingerprint.
-Prepare a learner from the committed catalog snapshot and initialize its Raft catalog state with `--raft-initialize-catalog` before adding it.
+For a cluster with a non-empty genesis catalog, prepare each learner from the committed genesis snapshot and initialize its Raft catalog state with `--raft-initialize-catalog` before adding it.
 Opening a catalog with data but no Raft state sidecar fails closed.
 The current reader accepts `TXRA` state version 2 and does not migrate version 1 sidecars automatically.
 
@@ -74,7 +77,9 @@ An authenticated cluster operator can add a prepared learner by sending `POST /r
 The endpoint returns `202` after OpenRaft starts replication, not after the learner catches up. The joining node's `--raft-initial-member` map must include its own address and the existing peer that sends its first RPC, so the node can authenticate that peer before learning the committed membership.
 If the current membership already contains the same node ID and address, the endpoint returns `200`; conflicting IDs or addresses are rejected.
 
-The learner must be prepared from the cluster's exact committed genesis image and initialized with `--raft-initialize-catalog`. A blank catalog cannot adopt a cluster fingerprint yet.
+An empty learner can join when the cluster's genesis catalog is also empty.
+For a cluster with a non-empty genesis catalog, prepare the learner from its exact committed genesis image and initialize it with `--raft-initialize-catalog`.
+A blank catalog cannot adopt a different cluster fingerprint because the peer RPC validates that fingerprint before processing replication or snapshot requests.
 
 Use authenticated `GET /raft/v1/membership` to inspect a node's local effective membership. The response includes the node and leader IDs, server state, effective membership log index, voter configurations, voter and learner IDs, node addresses and roles, and whether a membership change is in progress. It reads local OpenRaft metrics rather than a linearizable cluster-wide view; a joint configuration appears as multiple voter sets.
 
@@ -152,7 +157,7 @@ The existing `ReplicationSnapshot` contains catalog replication position but no 
 
 Startup validates the node identity and durable Raft state, restores the snapshot, and replays committed entries in order before the node serves reads or writes. A node whose catalog image and applied position disagree fails closed and requires recovery rather than choosing one copy silently.
 
-Migration from a fixed-term `TXRP` authority is manual. Stop the old writers, choose and validate one authoritative catalog image, back it up, and prepare every initial Raft voter from that same image. Bootstrap one node with the declared initial membership and initialize the other nodes' Raft state explicitly. The peer API can add a prepared learner, but the CLI cannot join an empty node or initialize one from a cluster snapshot. It must not infer a voter set or promote an old follower log automatically.
+Migration from a fixed-term `TXRP` authority is manual. Stop the old writers, choose and validate one authoritative catalog image, back it up, and prepare every initial Raft voter from that same image. Bootstrap one node with the declared initial membership and initialize the other nodes' Raft state explicitly. The peer API can add a prepared learner, or an empty learner when the cluster genesis catalog is empty, but it cannot initialize a blank node from a non-empty cluster snapshot. It must not infer a voter set or promote an old follower log automatically.
 
 ## 8. Verification and acceptance
 

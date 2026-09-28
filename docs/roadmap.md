@@ -457,13 +457,13 @@ It provides quorum-committed writes, a linearizable read barrier, authenticated 
 An authenticated peer API reports local effective membership and supports compare-and-swap voter changes through OpenRaft joint consensus.
 The API waits for newly promoted learners to catch up and retains demoted voters as learners.
 OpenRaft storage, the catalog state machine, snapshots, startup recovery, and a three-node integration path covering promotion, demotion, and quorum writes after demotion are included in the CI test suite.
-Empty-catalog learner joining, TLS-specific integration coverage, interrupted-change recovery tests, and deterministic failure injection remain outstanding.
+Joining a blank learner to a cluster with a non-empty genesis catalog, TLS-specific integration coverage, interrupted-change recovery tests, and deterministic failure injection remain outstanding. An empty learner can already join a cluster whose genesis catalog is empty.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Extend the current OpenRaft integration with empty-catalog learner joining, peer TLS integration, interrupted-change recovery, and multi-node failure testing; see [Raft consensus design](raft.md).
+- Extend the current OpenRaft integration so a blank learner can import a cluster's non-empty genesis catalog, then add peer TLS integration, interrupted-change recovery, and multi-node failure testing; see [Raft consensus design](raft.md).
 - TLS for the public catalog listener, mutual TLS, durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.

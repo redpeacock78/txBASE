@@ -3,7 +3,8 @@
 状態：`serve-catalog`は、初期voter集合を明示する任意のOpenRaftモードを提供します。
 このモードではquorum更新、線形化可能な読み取りbarrier、認証付きの専用peer listenerを使います。
 peer APIと`txbase raft membership` CLIは、準備済みlearnerの追加、有効なmembershipの照会、joint consensusによるvoter変更を提供します。
-空catalogからの参加と障害注入テストは未実装です。
+clusterのgenesis catalogが空なら、空catalogのlearnerが参加できます。
+非空genesis catalogを持つclusterへの空catalogのlearner参加と、障害注入テストは未実装です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -25,13 +26,14 @@ peer APIと`txbase raft membership` CLIは、準備済みlearnerの追加、有�
 - `/transaction`と名前付きテーブル更新では`X-Txbase-Client-Id`と正の`X-Txbase-Client-Sequence`を指定する。同じ要求の再試行には記録済み結果を返す。
 - 通常のcatalog読み取り前にOpenRaftの線形化可能な読み取りbarrierを呼び出す。明示的にstaleなfollower読み取りは提供しない。
 - 3 nodeのCIテストでquorum commitと再試行の重複排除、昇格前のlearner同期、joint membershipによるvoter昇格と降格、learner停止後に残るvoterでのquorum更新を検査する。
+- 2 nodeのCIテストで、genesis catalogが空のclusterへ空catalogのlearnerが参加できることを検査する。
 - `RaftLogStore`はnode専用ディレクトリにvote、ログエントリ、commit済み位置、最後にpurgeしたlog IDを永続化する。
 - ログjournalは長さ付きのSHA-256検証済みJSON recordを使う。不完全な末尾を復旧し、purge後は新しいgenerationへ圧縮する。
 - nodeディレクトリをプロセス間で排他ロックする。ストレージテストにはOpenRaftの`testing::Suite`と再起動後の復旧確認を含める。
 
 ### 未実装
 
-- 空のcatalogからの参加。learnerには現在、clusterと同一のcommit済みgenesis imageを事前に用意する必要がある。
+- genesis catalogが非空のclusterへの空catalogのlearner参加。現在はlearnerにclusterと同一のcommit済みgenesis imageを事前に用意する必要がある。
 - quorum喪失、partition、メッセージ損失や並べ替え、leader交代、再起動、交代中の読み取りを検査する決定的な障害テスト。
 - peer HTTPSの証明書とホスト名検証を対象にした統合テスト。
 - mutual TLSと公開catalog listenerのTLS。
@@ -45,11 +47,13 @@ transaction stepは1件から1,000件までで、少なくとも1件の更新を
 状態が上限に達すると、クライアントの記録を安全に削除する契約が定まるまでstate machineはfail-closedになります。
 
 空のカタログは`RaftCatalogStateMachine::open`で初期化できます。
+clusterのgenesis catalogも空なら、空catalogのlearnerを追加できます。この経路は2 nodeのCIテストで検証します。
+genesis catalogが非空のclusterへ空catalogのlearnerを参加させる機能はありません。peer RPCはgenesis fingerprintの一致を要求し、参加前にcatalog imageを転送する仕組みがないためです。
 データがあるカタログでは、初期nodeに`--raft-bootstrap`を、準備済みpeerに`--raft-initialize-catalog`を指定し、commit済みcatalog snapshotを用意します。
 transaction IDが0の非空カタログには転送できるMVCC imageがないため、初期化を拒否します。
 すべての初期voterとlearnerに同じcatalog imageを用意します。
 peer RPCはgenesis fingerprintが異なるnodeを拒否します。
-learnerを追加する前に、commit済みcatalog snapshotからcatalogを準備し、`--raft-initialize-catalog`でRaft catalog stateを初期化します。
+genesis catalogが非空のclusterでは、learnerを追加する前にcommit済みgenesis snapshotからcatalogを準備し、`--raft-initialize-catalog`でRaft catalog stateを初期化します。
 operatorが初期化を明示しない限り、Raft state sidecarがないデータ付きcatalogをfail-closedで開きます。
 現在のreaderは`TXRA` state version 2を受け付け、version 1のsidecarを自動移行しません。
 
@@ -106,8 +110,9 @@ JSON bodyには`version`、`cluster_id`、`node_id`、`peer_address`を含め、
 これにより、参加nodeはcommit済みmembershipを受け取る前に既存peerを認証できます。
 現在のmembershipに同じnode IDとpeer URLがある場合は`200`を返し、競合するIDまたはURLは拒否します。
 
-learnerにはclusterと同じcommit済みgenesis imageを事前に用意し、`--raft-initialize-catalog`で初期化します。
-空のcatalogからcluster fingerprintを引き継ぐ機能はありません。
+genesis catalogが空のclusterには、空catalogのlearnerを追加できます。
+genesis catalogが非空の場合は、learnerに同じcommit済みgenesis imageを事前に用意し、`--raft-initialize-catalog`で初期化します。
+peer RPCは複製やsnapshot要求を処理する前にgenesis fingerprintを検証するため、空catalogは異なるcluster fingerprintを引き継げません。
 
 認証付き`GET /raft/v1/membership`で、nodeごとの有効なmembershipを確認する。
 応答にはnode ID、leader ID、server state、有効なmembership log index、voter config、voter IDとlearner ID、nodeのaddressとrole、membership変更の実行中状態を含む。
@@ -225,7 +230,7 @@ snapshotを復元してからcommit済みエントリを順に再生する。
 既存writerを停止し、authorityのcatalog imageを1つ選んで検証とbackupを行います。
 すべての初期Raft voterを同じimageから準備します。
 初期membershipを指定して1 nodeをbootstrapし、他nodeのRaft stateを明示的に初期化します。
-peer APIは事前準備済みlearnerを追加できますが、空nodeの参加やcluster snapshotからの初期化には対応しません。
+peer APIは事前準備済みlearnerを追加できます。genesis catalogが空なら空catalogのlearnerも追加できますが、非空のcluster snapshotから空nodeを初期化する機能はありません。
 voter集合を推測したり、古いfollowerログを自動で昇格したりしません。
 
 ## 8. 検証と完了条件
