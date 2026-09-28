@@ -1,281 +1,89 @@
 # WASM and worker host boundary
 
-This document isolates the WASM and edge-runtime boundary.
+This document defines the boundary between the txBASE core and WebAssembly hosts.
 
-The repository now contains a host-independent DBF core slice, a
-runtime-neutral asynchronous object-store boundary, and a JavaScript host
-adapter for asynchronous XBF object-table commits. It also contains a
-Worker-compatible Fetch transport adapter with explicit timeout and
-cancellation mapping. It also contains a Worker-compatible Web Streams query
-adapter with bounded pull scheduling and `AbortSignal` cancellation. A WASI 0.3
-CLI component streams DBF and current or retained XBF queries through
-asynchronous stdout; the XBF path uses a read-only preopened filesystem store.
-Writable/provider-backed WASI storage, non-blocking filesystem I/O, and
-production host lifecycle behavior remain future work.
+The core ABI and current host adapters are described here.
+Object-store, streaming, Worker, and WASI details belong in their focused documents.
 
-## 0. Current implementation slice
+## 1. Current WASM API
 
-`wasm::WasmCore` owns an in-memory `DbfTable` and reuses the native parser,
-query validator, query executor, and mutation methods.
+`wasm::WasmCore` owns an in-memory `DbfTable` and reuses the native parser, query, and mutation implementations.
 
-The shared `DbfTable::apply_operation` implementation is owned by
-`src/dbf/operation.rs` and is used by DBF transactions, WAL recovery, catalog
-table application, and WASM. WASM does not maintain a second path or body
-validation implementation.
+The shared `DbfTable::apply_operation` implementation also serves DBF transactions, WAL recovery, catalog table application, and WASM.
 
-Its versioned boundary currently provides:
+The boundary uses `ABI_VERSION = 1`.
 
-- `ABI_VERSION = 1`;
-- all public JSON methods reject inputs larger than the shared
-  `MAX_JSON_INPUT_BYTES` limit, currently 1 MiB, before deserialization;
-- `open_dbf` and `snapshot` for byte-in/byte-out DBF state;
-- `query_json` for the existing bounded query document;
-- `query_stream_json` for a snapshot-owned stream that supports the existing
-  filter, projection, skip, and limit controls and returns one JSON record per
-  pull;
-- `apply_operation_json` for the existing `POST`, `PUT`, `PATCH`, and `DELETE`
-  operation IR;
-- `apply_operations_json` for the same operation IR in the bounded
-  `{"operations":[...]}` transaction document; it applies the whole batch to
-  a private copy and publishes a snapshot only when every operation succeeds.
-  The shared `MAX_OPERATION_BATCH` limit is 1,000 operations, and oversized
-  or empty batches are rejected before any operation is applied;
-- a `wasm-bindgen` `WasmDatabase` wrapper on `wasm32-unknown-unknown` with the same methods;
-- native contract tests;
-- a pinned Node.js `wasm-bindgen` smoke test that loads the generated wrapper,
-  checks the ABI version and snapshot round trip, exercises all four mutation
-  methods, and verifies atomic batch rollback;
-- a `WasmObjectTable` adapter that accepts a JavaScript object-store host,
-  bridges Promise-returning `get`, `putIfAbsent`, `compareAndSwap`, `delete`,
-  and `list` methods to `AsyncObjectStore`, and exposes XBF read, commit,
-  recovery, historical-read, retention, and orphan-cleanup methods;
-- a `createWorkerObjectStore` adapter that maps those five operations to an
-  HTTP object service through Web Fetch, conditional requests, strong
-  SHA-256 ETags, request timeouts, and `AbortSignal` cancellation;
-- a pinned Node.js host fixture that exercises compare-and-swap publication,
-  a failed WAL cleanup followed by recovery, historical reads, retention, and
-  host error mapping;
-- a pinned Node.js Web Fetch fixture that exercises the Worker transport
-  through the generated WASM wrapper, including timeout and cancellation;
-- a `createWorkerQueryStream` adapter that exposes the WASM snapshot stream as
-  a bounded Web `ReadableStream` of NDJSON chunks, with reader cancellation and
-  `AbortSignal` lifecycle handling, including cancellation of in-flight
-  object-store requests during snapshot loading;
-- runtime-neutral `AsyncObjectTable::query_stream` and `query_stream_at` adapters
-  that load the current or one retained committed XBF snapshot through
-  `AsyncObjectStore` and reuse the existing filter, projection, skip, and limit
-  query-stream semantics while mapping live XBF rows directly into the shared
-  JSON contract without requiring DBF export;
-- generated-wrapper `WasmObjectTable.query_stream_json` and
-  `query_stream_json_at` methods that expose those current and retained
-  generation streams as Promise-returning `WasmObjectQueryStream` values, plus
-  signal-aware variants that pass a per-query `AbortSignal` to host operations;
-- a pinned Node.js Web Streams fixture that exercises backpressure-shaped pull
-  scheduling, snapshot stability, invalid controls, and cancellation;
-- a WASI CLI query stream that reads DBF files or current and retained
-  XBF snapshots through a read-only preopened filesystem
-  store; pending WAL recovery that needs writes fails before row output;
-- a CI `wasm32-unknown-unknown` release build and wrapper smoke check.
+- `open_dbf` and `snapshot` convert between DBF bytes and in-memory state.
+- `query_json` runs the bounded query document.
+- `query_stream_json` returns one JSON row per pull for the supported filter, projection, skip, and limit controls.
+- `apply_operation_json` applies one `POST`, `PUT`, `PATCH`, or `DELETE` operation.
+- `apply_operations_json` rejects an empty batch, applies an `{"operations":[...]}` batch to a private copy, and returns a snapshot only after every operation succeeds.
 
-The core does not write files, access a network, schedule tasks, or commit a
-transaction. The host must persist the returned snapshot and provide
-serialization, retry, and concurrency control.
+Public JSON methods reject inputs above the shared 1 MiB `MAX_JSON_INPUT_BYTES` limit before deserialization.
 
-## 1. Core boundary
+The shared `MAX_OPERATION_BATCH` limit is 1,000 operations.
 
-The txBASE core should remain deterministic and mostly independent of its host.
+The generated `wasm-bindgen` `WasmDatabase` wrapper exposes the core API on `wasm32-unknown-unknown`.
 
-The host should provide HTTP, asynchronous storage, clocks, and platform-specific APIs.
+## 2. Core and host responsibilities
 
-The core should own format codecs, query semantics, mutation rules, WAL encoding, and transaction state transitions.
+`WasmCore` reads and updates in-memory DBF state but does not access host files, make network requests, schedule tasks, or persist a transaction.
 
-## 2. Host and core split
+The core owns DBF and XBF codecs, query semantics, mutation rules, and transaction-state transitions.
 
-A candidate arrangement is:
+The host owns persistence of returned snapshots, platform I/O, scheduling, concurrency control, and host-specific timeout and retry policy.
 
-```text
-JavaScript or TypeScript host
-        |
-        ├─ HTTP
-        ├─ asynchronous object storage
-        ├─ platform APIs
-        ↓
-     txbase.wasm
-        |
-        ├─ DBF and XBF codecs
-        ├─ query engine
-        ├─ mutation semantics
-        ├─ WAL codec
-        └─ transaction state machine
-```
+The host boundary must not make core behavior depend on POSIX files, a JavaScript runtime, or a particular WASI version.
 
-The host must not make the core depend on POSIX files or WASI-specific behavior.
+## 3. Implemented host adapters
 
-## 3. Reused contracts
+- `AsyncObjectStore` and `AsyncObjectTable` provide runtime-neutral XBF object operations, recovery, retained reads, and conditional publication.
+  The generated `WasmObjectTable` wrapper connects those operations to a JavaScript host whose methods return Promises.
+  See [edge storage](edge-storage.md) for the shared storage contract.
+- `createWorkerObjectStore` maps the object-store contract to Web Fetch and conditional HTTP requests.
+  `createR2ObjectStore` maps it to a Cloudflare R2 binding.
+  See [Worker object storage](worker-object-store.md) and [R2 object storage](r2-object-store.md) for host-specific behavior.
+- `AsyncObjectTable::query_stream` and `query_stream_at` stream rows from current or retained XBF snapshots without exporting DBF bytes.
+  The generated wrapper exposes these queries as `WasmObjectQueryStream`, and `createWorkerQueryStream` adapts them to bounded Web Streams with NDJSON chunks.
+- `AsyncObjectQueryStream` supports a runtime-neutral `CancellationToken`; dropping a read or list future does not guarantee that its host I/O stops.
+  The generated WASM Promise methods do not expose that Rust token.
+  Worker signal-aware queries pass a per-query `AbortSignal` to the host operations.
+  See [asynchronous streaming](async-streaming.md) and [Worker query streaming](worker-query-stream.md) for cancellation details.
+- The WASI 0.3 CLI component queries DBF files or current and retained XBF snapshots through a read-only preopened filesystem store.
+  It streams rows through asynchronous stdout, while filesystem reads remain synchronous.
+  See [WASI query streaming](wasi-query-stream.md) for its command and runtime contract.
 
-The WASM boundary should reuse the existing DBF and XBF codecs where supported.
+## 4. Verification boundary
 
-It should expose the same bounded query, mutation, validation, and recovery semantics as the native library.
+CI builds the `wasm32-unknown-unknown` wrapper and runs the generated-wrapper smoke tests with Node.js.
 
-It should not introduce a second query language, a second transaction model, or a host-specific interpretation of DBF bytes.
+Deterministic Node.js fixtures exercise the Worker Fetch, R2 binding, and Web Streams adapters.
 
-The runtime-neutral `AsyncQueryStream` contract provides the same query stream item semantics to a host poller without selecting an executor.
+The `wasi-query-stream` job builds the WASI 0.3 component and runs its CLI smoke test on the pinned Wasmtime runtime.
 
-Its in-memory implementations complete immediately.
-The WASI 0.3 CLI component drives the shared stream through asynchronous stdout with Component Model stream backpressure; other host-specific timeout, cancellation, and transport behavior remains outside this contract.
-See [WASI query streaming](wasi-query-stream.md) for its command arguments, CI smoke check, and limits.
+These checks cover generated bindings and local host fixtures.
+They do not establish compatibility with a deployed Worker, a live R2 service, or a production WASI host.
 
-The native `ThreadedQueryStream` adapter supplies bounded scheduling, wake-up, backpressure, and drop cancellation outside `wasm32`.
+The [quality matrix](quality-matrix.md) lists the assertions and their test names.
 
-It is a native host implementation of the shared contract and does not change the WASM ABI or provide worker/WASI host services.
+## 5. Unsupported host guarantees
 
-The Worker-compatible `createWorkerQueryStream` adapter uses the Web Streams
-pull boundary instead of a Rust executor. It advances the WASM snapshot by at
-most one record per pull, applies a positive queue high-water mark, emits
-UTF-8 NDJSON chunks, and maps reader or `AbortSignal` cancellation to the
-WASM stream lifecycle. It accepts both the synchronous in-memory `WasmDatabase`
-stream factory and the Promise-returning object-table factory, and can select a
-retained generation through `query_stream_json_at`.
+The repository does not claim production Worker deployment or live R2 service validation.
 
-When the database exposes `query_stream_json_with_signal` or
-`query_stream_json_at_with_signal`, the Worker adapter creates one
-`AbortController` per readable stream and passes its signal to that query.
-Reader cancellation and the caller's `AbortSignal` abort only that query's
-in-flight host operations.
+Writable or provider-backed WASI storage and non-blocking WASI filesystem I/O remain unimplemented.
 
-For an object-table stream, snapshot recovery and loading finish before the
-first row is emitted.
-The signal-aware WASM methods pass the per-query signal as a trailing argument
-to each object-store host operation.
-`createWorkerObjectStore` honors that signal and aborts the corresponding
-Fetch request.
-Custom hosts must accept and honor the optional trailing signal to cancel
-their own I/O.
-The Rust `AsyncObjectQueryStream` also provides a per-query `CancellationToken`;
-its default wrappers drop pending read and list futures when polled after
-cancellation, but cannot guarantee that the host's underlying I/O stops.
-The generated WASM Promise methods do not expose that Rust token.
-They use the signal-aware Worker/WASM host path above to abort matching Fetch
-requests.
-
-The object-store contract belongs below the shared table and transaction interfaces.
-The runtime-neutral `AsyncObjectStore` contract is implemented for the five primitive object operations.
-`AsyncObjectTable` reuses the manifest, generation, recovery, retention, and conditional-publication contract through those operations.
-Neither boundary selects an executor or turns blocking filesystem calls into non-blocking work.
-
-The `wasm-bindgen` JavaScript adapter uses the same five operations as a host
-object whose methods return Promises.
-`get` resolves to a `Uint8Array` or `null`; `list` resolves to string keys; the
-other methods resolve to `undefined`.
-Host rejection objects may provide `code` values `invalid`, `conflict`,
-`missing`, `unavailable`, or `cancelled`; the adapter maps them to the shared
-`ObjectStoreError` categories and maps untagged rejection to `unavailable`.
-The Worker Fetch adapter supplies HTTP transport, timeout, and cancellation
-mapping for configured and per-operation signals, while retry policy remains a
-host or provider concern.
-
-## 4. Target hosts
-
-The same core could eventually run behind:
-
-- native Rust APIs;
-- Cloudflare Workers or another worker runtime;
-- browser storage such as OPFS;
-- Node, Deno, or Bun adapters;
-- WASI-compatible runtimes;
-- another host that supplies the required storage primitives.
-
-The list is a compatibility target, not a promise that every host will be supported.
-
-## 5. Host services
-
-Before implementation, the boundary must define:
-
-- asynchronous range reads and writes;
-- immutable object publication;
-- conditional manifest updates;
-- bounded memory and payload limits;
-- cancellation and timeout behavior;
-- error and retry mapping;
-- deterministic clock or generation inputs for tests.
-
-The host owns scheduling and platform I/O.
-
-The core owns the meaning of a committed database state.
-
-## 6. Acceptance conditions
-
-The current core slice meets the following initial conditions:
-
-- a versioned host-neutral ABI;
-- one native host fixture;
-- identical query and mutation implementation paths across native and WASM;
-- an asynchronous object-table fixture using the runtime-neutral store contract;
-- a JavaScript host-backed asynchronous object-table fixture using the generated
-  `wasm-bindgen` wrapper;
-- a Worker-compatible Fetch object-store adapter and deterministic HTTP fixture;
-- a Cloudflare R2 binding adapter and deterministic in-memory binding fixture;
-- a Worker-compatible Web Streams query adapter and deterministic Node.js fixture;
-- a generated-wrapper query stream over current and retained XBF object-table snapshots;
-- runtime-neutral asynchronous-storage-backed query-stream adapters for current
-  and retained XBF snapshots, including XBF-only value mappings;
-- a WASI 0.3 CLI query-stream component and a pinned Wasmtime smoke test;
-- explicit malformed-input errors at the byte and JSON boundaries;
-- a Node.js host smoke test for the generated `wasm-bindgen` wrapper.
-
-The CI workflow builds and runs the WASI CLI component on a pinned Wasmtime runtime.
-The following conditions remain before calling a deployed worker or production WASI host complete:
-
-- a smoke test against the selected deployed worker or production WASI host;
-- writable or provider-backed WASI object-store adapters and genuinely
-  non-blocking storage I/O;
-- host-specific timeout and retry policy for non-Worker query streams;
-- live R2 service validation, provider integrations beyond R2, and provider-managed retention or retry policy.
-
-The Wasmtime smoke test does not establish a production deployment contract.
-Worker deployment and production WASI storage integration remain future work.
-
-## 7. Explicit non-goals
-
-This document does not promise a JavaScript ORM, a browser-only database, or a POSIX emulation layer inside WASM.
-
-Those would be separate products and would obscure the shared core contract.
+Browser storage, Node.js WASI, Deno, and Bun are not compatibility commitments.
 
 ## Primary references and scope
 
 - [WebAssembly Core Specification](https://webassembly.github.io/spec/core/)
-- [WASI](https://wasi.dev/)
-- [WASI 0.3 native async](https://wasi.dev/releases/wasi-p3)
-- [`wasip3` 0.9.0](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/)
-- [Rust `wasm32-wasip2` target](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
-- [Wasmtime CLI options](https://docs.wasmtime.dev/cli-options.html)
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
-- [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
-- [Cloudflare Workers fetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
-- [Cloudflare Workers web standards](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)
-- [Cloudflare Workers Request `AbortSignal`](https://developers.cloudflare.com/workers/runtime-apis/request/)
-- [Cloudflare R2 Workers API reference](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)
-- [Cloudflare R2 consistency model](https://developers.cloudflare.com/r2/reference/consistency/)
-- [Node.js WASI](https://nodejs.org/api/wasi.html)
+- [WASI 0.3 and native async](https://wasi.dev/releases/wasi-p3)
+- [Rust `wasm32-wasip2` target](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
 - [wasm-bindgen: Promises and Futures](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html)
-- [wasm-bindgen: exported Rust types](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/exported-rust-types.html)
-- [`wasm-bindgen-futures` API](https://docs.rs/wasm-bindgen-futures/latest/wasm_bindgen_futures/)
-- [`js-sys` `Function::apply` API](https://docs.rs/js-sys/latest/js_sys/struct.Function.html)
 
-The WebAssembly and WASI specifications define the core module and host-interface vocabulary.
-The Component Model and the Cloudflare Workers and Node.js pages are implementation references for possible hosts, not txBASE compatibility commitments.
+The Core Specification defines module behavior, and the Component Model guide provides component vocabulary.
 
-The repository has a WASM core implementation, a generated-wrapper Node.js
-smoke check, a JavaScript host-backed asynchronous object-table fixture, a
-Worker-compatible Fetch adapter and smoke fixture, a Cloudflare R2 binding
-adapter and in-memory smoke fixture, and runtime-neutral asynchronous
-object-store and object-table contracts. It also
-has runtime-neutral and generated-wrapper query-stream adapters for
-current or retained XBF snapshots without requiring DBF export, a Worker-compatible Web
-Streams adapter, and a WASI 0.3 CLI component. The WASI component reads XBF
-snapshots through a read-only preopened filesystem adapter and has a pinned
-Wasmtime smoke check.
-It does not claim support for a deployed worker or live R2 service, writable or
-provider-backed WASI object storage, non-blocking WASI storage I/O, provider
-integrations beyond R2, provider-managed retention or automatic retries, or a
-native recovery path.
+The WASI release page is the source for WASI version status.
+Use the Component Model guide for architecture and terminology; derive txBASE host compatibility from the adapter implementation and CI evidence.
+Host runtime and adapter guarantees are documented with the corresponding implementation.

@@ -197,6 +197,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 - [`wasm-bindgen-futures` API](https://docs.rs/wasm-bindgen-futures/latest/wasm_bindgen_futures/)
 - [`js-sys`の`Function::apply` API](https://docs.rs/js-sys/latest/js_sys/struct.Function.html)
 - [WASI](https://wasi.dev/)
+- [WASI 0.3のリリース情報](https://wasi.dev/releases/wasi-p3)
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
 - [Cloudflare Workersのfetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
@@ -208,6 +209,9 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 - [Fetch Standard](https://fetch.spec.whatwg.org/)
 - [DOM Standardの`AbortSignal`](https://dom.spec.whatwg.org/#interface-AbortSignal)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
+
+WASIのリリース状況はWASIのリリースページで確認し、Component Modelのガイドはアーキテクチャと用語の参照に使います。
+txBASEのホスト互換性は、アダプターの実装とCIの検査結果に基づいて判断します。
 
 ### 分散システム
 

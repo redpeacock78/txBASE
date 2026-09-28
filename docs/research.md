@@ -197,6 +197,7 @@ Second, POSIX durability language is limited to the Unix path; cross-platform re
 - [`wasm-bindgen-futures` API](https://docs.rs/wasm-bindgen-futures/latest/wasm_bindgen_futures/)
 - [`js-sys` `Function::apply` API](https://docs.rs/js-sys/latest/js_sys/struct.Function.html)
 - [WASI](https://wasi.dev/)
+- [WASI 0.3 releases](https://wasi.dev/releases/wasi-p3)
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [Cloudflare Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/)
 - [Cloudflare Workers fetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
@@ -208,6 +209,9 @@ Second, POSIX durability language is limited to the Unix path; cross-platform re
 - [Fetch Standard](https://fetch.spec.whatwg.org/)
 - [DOM Standard `AbortSignal`](https://dom.spec.whatwg.org/#interface-AbortSignal)
 - [Node.js WASI](https://nodejs.org/api/wasi.html)
+
+Use the WASI release page for release status and the Component Model guide for architecture and terminology.
+Derive txBASE host compatibility from the adapter implementation and CI evidence.
 
 ### Distributed systems
 
