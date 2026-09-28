@@ -1,6 +1,6 @@
 # Raft consensus design
 
-Status: The catalog Raft state machine is implemented, but the catalog server does not use it. The server remains a fixed-term, single-authority implementation.
+Status: The catalog Raft state machine and durable OpenRaft log store are implemented, but the catalog server does not use them. The server remains a fixed-term, single-authority implementation.
 
 This document defines the target authority, persistence, application, and operations contracts. It does not describe features as implemented.
 
@@ -14,16 +14,17 @@ This document defines the target authority, persistence, application, and operat
 - The state machine stores the latest response per client and enforces exact retry, conflict, old-sequence, and gap behavior.
 - Snapshot build, transfer, and install carry the catalog image, applied position, membership, and client retry state together.
 - Catalog filesystem work runs through Tokio's blocking worker pool.
+- `RaftLogStore` durably stores votes, log entries, committed position, and the last purged log ID in a node-specific directory.
+- The log journal uses length-prefixed, SHA-256-checked JSON records, recovers an incomplete tail, and compacts purged history into a new generation.
+- The node directory has an exclusive process lock, and the storage tests include OpenRaft's `testing::Suite` plus restart-recovery cases.
 
 The state-machine API is not connected to `serve-catalog` or a running Raft node.
 The current catalog server still uses the fixed-term, single-authority replication path.
 
 ### Not implemented
 
-- Durable Raft votes, logs, committed position, and log compaction.
 - Raft node startup, cluster initialization, peer RPC, authentication, and TLS.
 - CLI membership operations, quorum writes, linearizable reads, and multi-node failure tests.
-- OpenRaft's storage conformance suite, which requires the missing log-storage adapter.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
 The serialized command limit is 1 MiB.
@@ -66,7 +67,11 @@ The operational interface must expose explicit initialization, join, membership-
 
 ## 4. Durable log and catalog application
 
-The OpenRaft storage adapter must durably store votes, log entries, membership state, snapshots, and the committed and applied positions. A successful append or vote response means the corresponding state survives process restart. The log format must detect torn or corrupt records and recover only a validated prefix.
+`RaftLogStore` persists votes, log entries, the committed position, and the last purged log ID. `RaftCatalogStateMachine` persists membership, the applied position, catalog state, and retry results. An append callback completes only after the journal has been synchronized to disk.
+
+The journal stores length-prefixed JSON records with SHA-256 checksums. Startup truncates an incomplete final frame, but rejects a complete frame with a bad checksum or invalid log sequence. Purge writes a checkpoint into a new journal generation before removing the old generation.
+
+`RaftLogStore::open` holds an exclusive lock for its node directory, so a second process cannot open the same store. The log format and locking contract are implemented; node startup and protocol recovery remain unimplemented.
 
 The existing `FileWal` is not a drop-in Raft store: its LSN starts at zero, and its public maintenance operation clears the entire log rather than truncating a conflicting suffix or purging a snapshot-covered prefix. Reuse its framing and recovery code only if the storage contract is extended without changing the existing `TXWL` format.
 
@@ -115,7 +120,7 @@ Migration from a fixed-term `TXRP` authority is explicit. Stop the old writers, 
 ## 8. Verification and acceptance
 
 The state-machine CI tests cover catalog commit atomicity, restart-safe retries, sequence rejection, no-op and membership entries, and snapshot installation.
-The storage adapter must pass OpenRaft's `testing::Suite` before it is used by the server; this remains blocked on the missing Raft log store.
+The storage adapter's tests run OpenRaft's `testing::Suite` and restart-recovery checks.
 CI must also exercise multiple Raft nodes with deterministic network delay, message loss, partitions, reordering, and restart points.
 
 Acceptance requires tests for durable term and vote recovery, conflicting log replacement, quorum loss, leader change, client retry after a lost response, apply-marker recovery, snapshot installation and suffix retention, learner catch-up, joint membership changes, and linearizable reads during leadership changes.

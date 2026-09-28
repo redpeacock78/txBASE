@@ -499,15 +499,16 @@ authorityは、検証済みで単調なフォロワー適用位置を受け付�
 再起動後に位置を復元し、最小確認indexを調整された圧縮の上限として公開します。
 クォーラム安全な切り詰めは将来の作業です。
 
-Raftの実装は`src/replication/raft.rs`から始まっています。
-version付きコマンド型、カタログstate machine adapter、適用位置と再試行結果の原子的な永続化、snapshotの生成とインストールを実装しています。
-カタログサーバーや稼働中のRaft nodeには接続していません。
+Raftの実装には、version付きコマンド、カタログstate machine adapter、snapshotの生成とインストール、OpenRaft用の永続ログstoreがあります。
+ログstoreはvote、エントリ、commit済み位置、purge済み位置をchecksum付きjournalに保存し、再起動復旧、purge後の圧縮、nodeディレクトリの排他ロックを行います。
+OpenRaftのstorage suiteをCIテストに追加しました。
+Raft nodeはカタログサーバー、peer転送、membership CLIには未接続です。
 
 ### 候補範囲
 
 - テーブル間または分散環境の長寿命スナップショットトランザクション。
 - 現在のテーブル、カタログ、`TXRP`、`TXRG`サイドカーを超える永続WAL履歴。
-- OpenRaft 0.9.25の統合を完了する。永続コンセンサスストレージ、quorum commit、node runtimeとpeer transport、membership管理、複数nodeの障害テストが必要である。
+- OpenRaft 0.9.25の統合を完了する。quorum commit、node runtimeとpeer転送、membership管理、複数nodeの障害テストが必要である。
   詳細は[Raftコンセンサス設計](raft.md)に記載する。
 - TLS、永続的な再試行キュー、バックプレッシャー、クォーラム安全なログ切り詰め、authorityの検出。
 - 分散フォロワー読み取りの保証。

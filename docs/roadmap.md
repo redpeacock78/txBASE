@@ -447,15 +447,15 @@ It accepts validated monotonic follower progress, persists it in the metadata-on
 `TXRG` sidecar, restores it after restart, and exposes the minimum acknowledged
 index for coordinated compaction. Quorum-safe truncation remains future work.
 
-The Raft implementation has started in `src/replication/raft.rs`.
-It includes the versioned command types, a catalog state-machine adapter, atomic persistence of applied position and retry results, and snapshot build and install.
-It is not connected to the catalog server or a running Raft node.
+The Raft implementation includes versioned commands, a catalog state-machine adapter, snapshot build and install, and a durable OpenRaft log store for votes, entries, committed position, and purged-log position.
+The store uses a checksummed journal, restart recovery, purge compaction, and an exclusive node-directory lock; OpenRaft's storage suite is included in CI tests.
+The Raft node is not connected to the catalog server, peer transport, or membership CLI.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Complete the OpenRaft 0.9.25 integration with durable consensus storage, quorum commitment, node runtime and peer transport, membership administration, and multi-node failure testing; see [Raft consensus design](raft.md).
+- Complete the OpenRaft 0.9.25 integration with quorum commitment, node runtime and peer transport, membership administration, and multi-node failure testing; see [Raft consensus design](raft.md).
 - TLS, durable retry queues, backpressure, quorum-safe log truncation, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.

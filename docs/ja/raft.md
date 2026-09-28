@@ -1,6 +1,6 @@
 # Raftコンセンサス設計
 
-状態：カタログ用Raft state machineは実装済みですが、サーバーには接続していません。
+状態：カタログ用Raft state machineとOpenRaftの永続ログstoreを実装しましたが、サーバーには接続していません。
 サーバーは引き続き固定termの単一authorityを使います。
 
 この文書では、目標とする権威、永続化、適用、運用の契約を定義する。
@@ -16,13 +16,14 @@
 - クライアントごとの最新応答を保存し、同一要求の再試行、競合、古いsequence、飛び番を区別する。
 - snapshotの生成、転送、インストールで、カタログイメージ、適用位置、membership、再試行状態を一緒に扱う。
 - カタログのファイル操作にはTokioのblocking worker poolを使う。
+- `RaftLogStore`はnode専用ディレクトリにvote、ログエントリ、commit済み位置、最後にpurgeしたlog IDを永続化する。
+- ログjournalは長さ付きのSHA-256検証済みJSON recordを使う。不完全な末尾を復旧し、purge後は新しいgenerationへ圧縮する。
+- nodeディレクトリをプロセス間で排他ロックする。ストレージテストにはOpenRaftの`testing::Suite`と再起動後の復旧確認を含める。
 
 ### 未実装
 
-- Raftのvote、ログ、commit済み位置、ログ圧縮の永続化。
 - Raft nodeの起動、cluster初期化、peer RPC、認証、TLS。
 - membershipを操作するCLI、quorum更新、linearizable read、複数nodeの障害テスト。
-- 未実装のログstorage adapterを必要とするOpenRaftのstorage適合テスト。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
 正のsequenceと空でないカタログtagが必要です。
@@ -92,9 +93,16 @@ voterの削除や置換も同じcommit済みmembership経路を使う。
 
 ## 4. 永続ログとカタログへの適用
 
-OpenRaft用storage adapterは、vote、ログエントリ、membership状態、snapshot、commit済み位置、適用済み位置を永続化する。
-appendまたはvoteへの成功応答は、その状態がプロセス再起動後も残ることを意味する。
-ログ形式は途中で切れたレコードや破損を検出し、検証できたprefixだけから復旧する。
+`RaftLogStore`はvote、ログエントリ、commit済み位置、最後にpurgeしたlog IDを永続化する。
+`RaftCatalogStateMachine`はmembership、適用済み位置、カタログ状態、再試行結果を永続化する。
+append callbackはjournalをディスクへ同期してから完了する。
+
+journalは長さ付きJSON recordとSHA-256 checksumで構成する。
+起動時に不完全な末尾frameを切り詰めるが、checksum不一致や不正なログ連番を含む完全なframeでは起動を拒否する。
+purgeでは現在の状態を新しいjournal generationへcheckpointしてから、古いgenerationを削除する。
+
+`RaftLogStore::open`はnode専用ディレクトリを排他ロックするため、同じstoreを複数プロセスから同時に開けません。
+ログ形式とロックの契約は実装済みですが、Raft nodeの起動とプロトコル復旧は未実装です。
 
 既存の`FileWal`はRaft storageとしてそのまま使えない。
 LSNは0から始まり、公開されている保守操作はログ全体を消去するものです。
@@ -167,8 +175,7 @@ voter集合を推測したり、古いfollowerログを自動で昇格したり�
 ## 8. 検証と完了条件
 
 CIのstate machineテストでは、カタログcommitの原子性、再起動後の再試行、sequence拒否、no-opとmembership、snapshotインストールを検証する。
-storage adapterはサーバー接続前にOpenRaftの`testing::Suite`を通過する。
-Raftログstoreが未実装のため、このsuiteは実行できない。
+storage adapterのテストでは、OpenRaftの`testing::Suite`と再起動後の復旧確認を実行する。
 CIでは決定的な遅延、メッセージ損失、partition、並べ替え、再起動を設定した複数のRaft nodeも検証する。
 
 完了には、termとvoteの永続復旧、競合ログの置換、quorum喪失、leader交代、応答消失後のclient再試行、適用位置の復旧をテストする。
