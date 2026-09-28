@@ -33,20 +33,18 @@ fn write_table_with_records(path: &std::path::Path, schema: Vec<u8>) {
     cleanup(path);
     fs::write(path, fixture()).unwrap();
     let mut transaction = DbfTransaction::begin(path).unwrap();
-    for (id, name) in [(1, "Alice"), (2, "Bob")] {
-        transaction
-            .apply(&OperationIr {
-                method: OperationMethod::Post,
-                path: "/records".into(),
-                body: Some(json!({
-                    "ID": id,
-                    "NAME": name,
-                    "AGE": 42,
-                    "ACTIVE": true
-                })),
-            })
-            .unwrap();
-    }
+    transaction
+        .apply(&OperationIr {
+            method: OperationMethod::Post,
+            path: "/records".into(),
+            body: Some(json!({
+                "ID": 3,
+                "NAME": "Bob",
+                "AGE": 42,
+                "ACTIVE": true
+            })),
+        })
+        .unwrap();
     transaction.commit().unwrap();
     fs::write(path.with_extension("txschema.json"), schema).unwrap();
 }
@@ -71,13 +69,13 @@ fn initially_deferred_unique_allows_a_key_swap_before_commit() {
         .apply(&patch(1, json!({"NAME": "Bob"})))
         .unwrap();
     transaction
-        .apply(&patch(2, json!({"NAME": "Alice"})))
+        .apply(&patch(3, json!({"NAME": "Alice"})))
         .unwrap();
     transaction.commit().unwrap();
 
     let table = DbfTable::from_path(&path).unwrap();
     assert_eq!(table.active_record(1).unwrap().values["NAME"], "Bob");
-    assert_eq!(table.active_record(2).unwrap().values["NAME"], "Alice");
+    assert_eq!(table.active_record(3).unwrap().values["NAME"], "Alice");
     cleanup(&path);
 }
 
@@ -108,7 +106,7 @@ fn initially_immediate_unique_can_be_deferred_and_checked_before_commit() {
         .apply(&patch(1, json!({"NAME": "Bob"})))
         .unwrap();
     transaction
-        .apply(&patch(2, json!({"NAME": "Alice"})))
+        .apply(&patch(3, json!({"NAME": "Alice"})))
         .unwrap();
     transaction
         .set_constraints(&["users_name_unique"], ConstraintMode::Immediate)
@@ -117,7 +115,7 @@ fn initially_immediate_unique_can_be_deferred_and_checked_before_commit() {
 
     let table = DbfTable::from_path(&path).unwrap();
     assert_eq!(table.active_record(1).unwrap().values["NAME"], "Bob");
-    assert_eq!(table.active_record(2).unwrap().values["NAME"], "Alice");
+    assert_eq!(table.active_record(3).unwrap().values["NAME"], "Alice");
     cleanup(&path);
 }
 
@@ -147,7 +145,7 @@ fn failed_immediate_transition_keeps_the_constraint_deferred() {
     );
 
     transaction
-        .apply(&patch(2, json!({"NAME": "Alice"})))
+        .apply(&patch(3, json!({"NAME": "Alice"})))
         .unwrap();
     transaction
         .set_constraints(&["users_name_unique"], ConstraintMode::Immediate)
@@ -156,7 +154,7 @@ fn failed_immediate_transition_keeps_the_constraint_deferred() {
 
     let table = DbfTable::from_path(&path).unwrap();
     assert_eq!(table.active_record(1).unwrap().values["NAME"], "Bob");
-    assert_eq!(table.active_record(2).unwrap().values["NAME"], "Alice");
+    assert_eq!(table.active_record(3).unwrap().values["NAME"], "Alice");
     cleanup(&path);
 }
 
