@@ -12,6 +12,7 @@ mod entry;
 mod error;
 mod http;
 mod progress;
+pub mod raft;
 mod snapshot;
 mod transport;
 pub use entry::{REPLICATION_ENTRY_VERSION, ReplicationEntry};

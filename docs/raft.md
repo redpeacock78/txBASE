@@ -4,6 +4,13 @@ Status: Raft is the selected consensus protocol. The repository does not yet int
 
 This document defines the target authority, persistence, application, and operations contracts. It does not describe features as implemented.
 
+## Current implementation status
+
+The repository pins OpenRaft `=0.9.25` and defines a `TypeConfig`, version 1 client commands, and client responses.
+The command validator bounds client IDs to 128 ASCII bytes, requires a positive sequence and non-empty catalog tag, accepts 1–1,000 transaction steps with at least one mutation, validates request preconditions, and caps serialized commands at 1 MiB.
+These types are not connected to `serve-catalog`; durable Raft log storage, a catalog state-machine adapter, snapshots, and peer transport remain unimplemented.
+The current catalog server therefore remains a fixed-term, single-authority implementation.
+
 ## 1. Purpose and boundary
 
 Raft will make one catalog leader at a time accept mutations and will commit each mutation only after a quorum has durably stored its log entry.

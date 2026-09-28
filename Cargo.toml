@@ -25,6 +25,7 @@ unicode-normalization = "0.1.25"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 fs2 = "0.4"
+openraft = { version = "=0.9.25", default-features = false, features = ["serde", "single-term-leader", "storage-v2"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-platform-verifier = "0.7"
 tiny_http = "0.12"
