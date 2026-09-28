@@ -1,6 +1,6 @@
 # CLI command reference
 
-The CLI is a stable inspection and maintenance boundary over the Rust APIs.
+The CLI exposes commands for inspecting, mutating, and serving txBASE data through its Rust APIs.
 
 The design decisions behind the command surface are recorded in [CLI command architecture](cli-design.md).
 
@@ -33,58 +33,111 @@ The parser accepts only the options documented for the selected command.
 
 ## Command catalog
 
-The following table is the current command contract.
+The tables group the current command contract by responsibility.
+
+### Read and inspect files
 
 | Command | Current behavior and write boundary |
 | --- | --- |
 | `txbase read FILE [--encoding NAME]` | Prints active DBF records as JSON. Loading a path may complete pending WAL or schema-export recovery before reading. |
-| `txbase init FILE --field NAME:TYPE:LENGTH[:DECIMALS]...` | Creates a new classic DBF from repeated field specifications and refuses to overwrite an existing DBF. |
-| `txbase insert FILE JSON_OBJECT` | Appends one JSON object through the normal WAL-backed table persistence path. |
 | `txbase schema FILE [--encoding NAME]` | Verifies the loaded DBF and prints its schema and record metadata as JSON. |
-| `txbase schema apply FILE SCHEMA_JSON` | Validates a schema candidate against the current DBF and active records, then replaces only the schema sidecar. |
 | `txbase verify FILE [--encoding NAME]` | Verifies the DBF and, when present, the index sidecar. It reparses the serialized DBF and checks record boundaries. |
 | `txbase catalog DIRECTORY` | Prints the discovered catalog schema as JSON. |
 | `txbase verify-catalog DIRECTORY` | Verifies the discovered catalog and prints `{"valid":true}` on success. |
+
+### Create files and update schemas
+
+| Command | Current behavior and write boundary |
+| --- | --- |
+| `txbase init FILE --field NAME:TYPE:LENGTH[:DECIMALS]...` | Creates a new classic DBF from repeated field specifications and refuses to overwrite an existing DBF. |
+| `txbase insert FILE JSON_OBJECT` | Appends one JSON object through the normal WAL-backed table persistence path. |
+| `txbase schema apply FILE SCHEMA_JSON` | Validates a schema candidate against the current DBF and active records, then replaces only the schema sidecar. |
+
+### Change history and WAL
+
+| Command | Current behavior and write boundary |
+| --- | --- |
 | `txbase cdc FILE [--after TRANSACTION_ID]` | Prints committed single-table CDC events. `--after` is an exclusive transaction-ID cursor and does not acknowledge or retain consumer state. |
 | `txbase cdc catalog DIRECTORY [--after TRANSACTION_ID]` | Prints atomic multi-table catalog CDC events with the same exclusive cursor rule. |
+| `txbase wal inspect WAL` | Reads a WAL without creating or truncating it and reports complete records plus an incomplete final tail. |
+
+### Table MVCC history
+
+| Command | Current behavior and write boundary |
+| --- | --- |
 | `txbase mvcc list FILE` | Prints committed table snapshot IDs. |
 | `txbase mvcc read FILE TRANSACTION_ID` | Reads one committed historical table snapshot. |
 | `txbase mvcc row FILE RECORD` | Lists retained versions for one positive physical record number. |
 | `txbase mvcc row-at FILE TRANSACTION_ID EPOCH RECORD` | Reads one retained row version by committed transaction, row epoch, and physical record number. |
 | `txbase mvcc gc FILE --keep COUNT [--keep-rows COUNT]` | Retains the newest full-image snapshots and optionally older versions for each physical row. It replaces only the MVCC history sidecar. |
+
+### Catalog MVCC history
+
+| Command | Current behavior and write boundary |
+| --- | --- |
 | `txbase mvcc catalog list DIRECTORY` | Prints committed catalog snapshot IDs. |
 | `txbase mvcc catalog read DIRECTORY TRANSACTION_ID` | Reads one historical catalog snapshot and returns its tables and records. |
 | `txbase mvcc catalog gc DIRECTORY --keep COUNT` | Retains the newest catalog snapshots and replaces only the catalog MVCC history sidecar. |
-| `txbase wal inspect WAL` | Reads a WAL without creating or truncating it and reports complete records plus an incomplete final tail. |
+
+### Indexes
+
+| Command | Current behavior and write boundary |
+| --- | --- |
 | `txbase index build FILE FIELD... [--collation NAME]` | Builds and persists one scalar index sidecar for the named fields. `NAME` may be `unicode-lowercase`, `unicode-nfkc-lowercase`, or an ICU4X 2.1.1 Japanese, Chinese, or Korean identifier for ordered queries. |
 | `txbase index build-compound FILE NAME FIELD[:DIRECTION]... [--collation NAME]` | Builds one named compound index. A direction is `1` or `asc` for ascending and `-1` or `desc` for descending order. `NAME` accepts the same five collations. |
 | `txbase index verify FILE` | Validates an index sidecar and prints its schema as JSON. |
 | `txbase index rebuild FILE` | Rebuilds and persists an index sidecar from the current table. |
+
+### XBF conversion
+
+| Command | Current behavior and write boundary |
+| --- | --- |
 | `txbase xbf import DBF XBF [--encoding NAME]` | Converts a DBF into a bounded XBF snapshot. |
 | `txbase xbf export XBF DBF [--schema]` | Exports a representable XBF table. `--schema` preserves representable schema metadata through the recoverable export boundary. |
 | `txbase xbf report XBF` | Reports DBF representability without writing a DBF or schema sidecar. |
+
+### DBF maintenance and copying
+
+| Command | Current behavior and write boundary |
+| --- | --- |
 | `txbase pack FILE [--encoding NAME]` | Removes logically deleted records, compacts referenced memo blocks, refreshes an existing index, and persists the related snapshots through WAL. |
 | `txbase recall FILE RECORD [--encoding NAME]` | Restores one logically deleted record through the normal persistence boundary. |
 | `txbase backup SOURCE DEST` | Validates and copies a DBF with its supported memo, schema, CDC, state, MVCC, and valid index sidecars. |
 | `txbase restore SOURCE DEST` | Uses the same validated copy protocol with the backup as the source. |
+
+### Servers and replication
+
+| Command | Current behavior and write boundary |
+| --- | --- |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | Starts the single-table HTTP server. |
 | `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | Starts the catalog HTTP server and its bounded replication delivery and follower-progress routes. The default `authority` role captures `/transaction` and named-table mutation routes in the catalog journal and `TXRP` sidecar, and persists follower progress in the metadata-only `TXRG` sidecar; `follower` rejects direct catalog mutations and follower-progress acknowledgements with `409` while accepting replication delivery. `TERM` is a positive fixed local replication term and defaults to `1`. When `TXBASE_REPLICATION_TOKEN` is set, all replication routes require an RFC 6750 `Authorization: Bearer <token>` header. |
 | `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | Opens a follower catalog, pulls one bounded catch-up session from an authority, persists the applied catalog and `TXRP` position, acknowledges progress, and prints the synchronization result as JSON. `AUTHORITY_URL` accepts HTTP or HTTPS; HTTPS verifies the authority certificate and host name with the operating system's trust facilities. `TERM` must match the authority, `COUNT` is between `1` and `128`, and the optional `TXBASE_REPLICATION_TOKEN` environment variable supplies the Bearer credential. Bearer credentials require HTTPS except for loopback HTTP. |
 
 ## Option ownership
 
+### File and server options
+
 - `--field` belongs only to `init` and may be repeated.
 - `--encoding` belongs to path-loading commands that decode DBF text: `read`, `schema`, `verify`, `xbf import`, `pack`, `recall`, and `serve`.
 - `--schema` belongs only to `xbf export`.
 - `--bind` belongs only to `serve` and `serve-catalog`.
+
+### CDC and MVCC options
+
+- `--after` belongs only to `cdc` and `cdc catalog`.
+- `--keep` belongs to table and catalog MVCC garbage collection.
+- `--keep-rows` belongs only to table MVCC garbage collection.
+
+### Replication options
+
 - `--replication-term` belongs to `serve-catalog` and `replicate catch-up`; it selects the positive fixed local term for either operation.
 - `--replication-role` belongs only to `serve-catalog`; `authority` is the default write role, while `follower` rejects direct catalog mutations and progress acknowledgements and accepts replication delivery.
-- `TXBASE_REPLICATION_TOKEN` is an optional `serve-catalog` environment variable, not a CLI option; it protects the replication routes without exposing the token in the command line.
-- `--replication-term` and `--follower-id` belong to `replicate catch-up` and identify the local fixed-term follower session.
+- `--follower-id` belongs only to `replicate catch-up` and identifies the local follower session.
 - `--limit` and `--timeout-ms` belong only to `replicate catch-up`; they bound one pull session and its socket operations.
-- `TXBASE_REPLICATION_TOKEN` is also read by `replicate catch-up` when the authority requires Bearer authentication; use HTTPS except when the authority URL resolves to loopback.
-- `--after` belongs only to `cdc` and `cdc catalog`.
-- `--keep` belongs to table and catalog MVCC garbage collection; `--keep-rows` belongs only to table MVCC garbage collection.
+- `TXBASE_REPLICATION_TOKEN` is an optional environment variable for both replication commands, not a CLI option. `serve-catalog` enforces it on replication routes; `replicate catch-up` sends it when configured. The client refuses to send it over non-loopback HTTP.
+
+### Index options
+
 - `index build-compound` accepts `1` or `asc`, and `-1` or `desc`, for each field direction.
 - `index build` and `index build-compound` accept the two Unicode key modes and `--collation icu4x-2.1.1-ja`, `--collation icu4x-2.1.1-zh`, or `--collation icu4x-2.1.1-ko` for ordered query support.
 
@@ -118,15 +171,6 @@ persisted position and acknowledges the resulting progress.
 The single-table and catalog servers are long-running processes rather than one-shot inspection commands.
 
 Their HTTP contracts are defined in [HTTP method semantics](http-semantics.md), [the query model](query-model.md), [the multi-table catalog](catalog.md), and [distributed evolution](distributed-evolution.md) for replication delivery.
-
-## Responsibility groups
-
-| Group | Commands | Boundary |
-| --- | --- | --- |
-| Read and inspect | `read`, `cdc`, `cdc catalog`, `schema`, `verify`, `catalog`, `verify-catalog`, `wal inspect`, `mvcc list`, `mvcc read`, `mvcc row`, `mvcc row-at`, `mvcc catalog list`, `mvcc catalog read`, `xbf report`, `index verify` | Read-only output; these commands do not intentionally publish a mutation. |
-| Create and mutate | `init`, `insert`, `pack`, `recall`, `schema apply`, `mvcc gc`, `mvcc catalog gc`, `index build`, `index build-compound`, `index rebuild`, `xbf import`, `xbf export` | May write DBF bytes, sidecars, or durable history according to the command contract. |
-| Copy and serve | `backup`, `restore`, `serve`, `serve-catalog` | Copy or expose data through a separately documented boundary. |
-| Replicate | `replicate catch-up` | Mutate a follower catalog through the bounded HTTP replication boundary. |
 
 `schema apply` is deliberately separate from `schema`: `schema` inspects the current metadata, while `schema apply` validates and installs a candidate sidecar.
 

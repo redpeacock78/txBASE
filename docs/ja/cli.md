@@ -1,6 +1,6 @@
 # CLIコマンドリファレンス
 
-CLIは、Rust APIの上にある検査と保守の境界です。
+CLIは、Rust APIを通してtxBASEデータの検査、更新、提供を行うコマンドを公開します。
 
 コマンド体系の設計判断は[CLIコマンド体系の設計](cli-design.md)に記載します。
 
@@ -22,7 +22,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 
 ## 呼び出しの契約
 
-コマンドを指定しない場合、`-h`、`--help`を指定した場合は、ルートの使用方法を表示して成功します。
+コマンドを指定しない場合、または`-h`か`--help`を指定した場合は、ルートの使用方法を表示して成功します。
 
 未知のトップレベルコマンドまたはオプションはエラーになります。
 
@@ -34,58 +34,111 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 
 ## コマンド一覧
 
-次の表が現在のコマンド契約です。
+次の表は、現在のコマンド契約を責務ごとに分けたものです。
+
+### ファイルの読み取りと検査
 
 | コマンド | 現在の動作と書き込み境界 |
 | --- | --- |
 | `txbase read FILE [--encoding NAME]` | DBFのアクティブレコードをJSONで表示する。パスのロード時に、読み取り前に保留中のWALまたはスキーマエクスポートを復旧することがある。 |
-| `txbase init FILE --field NAME:TYPE:LENGTH[:DECIMALS]...` | 繰り返し指定したフィールド仕様からclassic DBFを作成し、既存DBFの上書きを拒否する。 |
-| `txbase insert FILE JSON_OBJECT` | 1つのJSONオブジェクトを通常のWAL付きテーブル永続化経路で追加する。 |
 | `txbase schema FILE [--encoding NAME]` | ロードしたDBFを検証し、スキーマとレコードメタデータをJSONで表示する。 |
-| `txbase schema apply FILE SCHEMA_JSON` | 現在のDBFとアクティブレコードに対してスキーマ候補を検証し、スキーマサイドカーだけを置き換える。 |
 | `txbase verify FILE [--encoding NAME]` | DBFと、存在する場合はインデックスサイドカーを検証する。シリアライズしたDBFを再解析し、レコード境界も検査する。 |
 | `txbase catalog DIRECTORY` | 検出したカタログのスキーマをJSONで表示する。 |
 | `txbase verify-catalog DIRECTORY` | 検出したカタログを検証し、成功時に`{"valid":true}`を表示する。 |
+
+### ファイルとスキーマの更新
+
+| コマンド | 現在の動作と書き込み境界 |
+| --- | --- |
+| `txbase init FILE --field NAME:TYPE:LENGTH[:DECIMALS]...` | 繰り返し指定したフィールド仕様からclassic DBFを作成し、既存DBFの上書きを拒否する。 |
+| `txbase insert FILE JSON_OBJECT` | 1つのJSONオブジェクトを通常のWAL付きテーブル永続化経路で追加する。 |
+| `txbase schema apply FILE SCHEMA_JSON` | 現在のDBFとアクティブレコードに対してスキーマ候補を検証し、スキーマサイドカーだけを置き換える。 |
+
+### 変更履歴とWAL
+
+| コマンド | 現在の動作と書き込み境界 |
+| --- | --- |
 | `txbase cdc FILE [--after TRANSACTION_ID]` | 単一テーブルのcommit済みCDCイベントを表示する。`--after`は排他的なトランザクションIDカーソルであり、利用者の確認応答やカーソル状態の保存は行わない。 |
 | `txbase cdc catalog DIRECTORY [--after TRANSACTION_ID]` | 同じ排他的カーソル規則で、複数テーブルの原子的なカタログCDCイベントを表示する。 |
+| `txbase wal inspect WAL` | WALを作成も切り詰めもせずに読み取り、完全なレコードと不完全な末尾を表示する。 |
+
+### テーブルのMVCC履歴
+
+| コマンド | 現在の動作と書き込み境界 |
+| --- | --- |
 | `txbase mvcc list FILE` | commit済みテーブルスナップショットのIDを表示する。 |
 | `txbase mvcc read FILE TRANSACTION_ID` | commit済みの過去のテーブルスナップショットを1つ読み取る。 |
 | `txbase mvcc row FILE RECORD` | 正の物理レコード番号1つについて、保持中のバージョンを表示する。 |
 | `txbase mvcc row-at FILE TRANSACTION_ID EPOCH RECORD` | commit済みトランザクション、行epoch、物理レコード番号で、保持中の行バージョンを1つ読み取る。 |
 | `txbase mvcc gc FILE --keep COUNT [--keep-rows COUNT]` | 新しい完全イメージを保持し、任意で物理行ごとの古いバージョンを保持する。MVCC履歴サイドカーだけを置き換える。 |
+
+### カタログのMVCC履歴
+
+| コマンド | 現在の動作と書き込み境界 |
+| --- | --- |
 | `txbase mvcc catalog list DIRECTORY` | commit済みカタログスナップショットのIDを表示する。 |
 | `txbase mvcc catalog read DIRECTORY TRANSACTION_ID` | 過去のカタログスナップショットを1つ読み取り、テーブルとレコードを返す。 |
 | `txbase mvcc catalog gc DIRECTORY --keep COUNT` | 新しいカタログスナップショットを保持し、カタログMVCC履歴サイドカーだけを置き換える。 |
-| `txbase wal inspect WAL` | WALを作成も切り詰めもせずに読み取り、完全なレコードと不完全な末尾を表示する。 |
+
+### インデックス
+
+| コマンド | 現在の動作と書き込み境界 |
+| --- | --- |
 | `txbase index build FILE FIELD... [--collation NAME]` | 指定したフィールド群のスカラーインデックスサイドカーを作成して永続化する。`NAME`には`unicode-lowercase`、`unicode-nfkc-lowercase`、またはICU4X 2.1.1の日本語、中国語、韓国語識別子を指定でき、順序付きクエリに使う。 |
 | `txbase index build-compound FILE NAME FIELD[:DIRECTION]... [--collation NAME]` | 名前付き複合インデックスを1つ作成する。方向には昇順の`1`または`asc`、降順の`-1`または`desc`を指定する。`NAME`には同じ5つの照合を指定できる。 |
 | `txbase index verify FILE` | インデックスサイドカーを検証し、そのスキーマをJSONで表示する。 |
 | `txbase index rebuild FILE` | 現在のテーブルからインデックスサイドカーを再構築して永続化する。 |
+
+### XBF変換
+
+| コマンド | 現在の動作と書き込み境界 |
+| --- | --- |
 | `txbase xbf import DBF XBF [--encoding NAME]` | DBFを有界なXBFスナップショットへ変換する。 |
 | `txbase xbf export XBF DBF [--schema]` | 表現可能なXBFテーブルを出力する。`--schema`は復旧可能なエクスポート境界を通して、表現可能なスキーマメタデータを保つ。 |
 | `txbase xbf report XBF` | DBFまたはスキーマサイドカーを書き込まずに、DBFとしての表現可能性を報告する。 |
+
+### DBFの保守とコピー
+
+| コマンド | 現在の動作と書き込み境界 |
+| --- | --- |
 | `txbase pack FILE [--encoding NAME]` | 論理削除レコードを取り除き、参照中のmemoブロックを圧縮し、既存インデックスを更新し、関連スナップショットをWALで永続化する。 |
 | `txbase recall FILE RECORD [--encoding NAME]` | 論理削除されたレコードを1つ、通常の永続化境界で復元する。 |
 | `txbase backup SOURCE DEST` | DBFと対応するmemo、スキーマ、CDC、状態、MVCC、有効なインデックスサイドカーを検証してコピーする。 |
 | `txbase restore SOURCE DEST` | バックアップをソースとして、同じ検証済みコピー手順を使う。 |
+
+### サーバーとレプリケーション
+
+| コマンド | 現在の動作と書き込み境界 |
+| --- | --- |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | 単一テーブルHTTPサーバーを起動する。 |
 | `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | カタログHTTPサーバーと有界なレプリケーション配送およびフォロワー適用位置確認ルートを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、フォロワー位置をメタデータだけの`TXRG`サイドカーへ保存する。`follower`ロールは直接のカタログ更新とフォロワー適用位置確認を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。`TXBASE_REPLICATION_TOKEN`を設定した場合、すべてのレプリケーションルートにRFC 6750の`Authorization: Bearer <token>`ヘッダーが必要になる。 |
 | `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | フォロワーカタログを開き、authorityから有界な1回のcatch-upを取得し、適用済みカタログと`TXRP`位置を永続化し、適用位置を確認して、同期結果をJSONで表示する。`AUTHORITY_URL`ではHTTPとHTTPSを使えます。HTTPSではOSの信頼ストアを使って証明書と接続先のホスト名を検証します。`TERM`はauthorityと一致する必要があり、`COUNT`は`1`から`128`の範囲で指定します。authorityがBearer認証を要求する場合は、任意の`TXBASE_REPLICATION_TOKEN`環境変数を使います。Bearer認証情報を送る場合は、loopback HTTP以外ではHTTPSを使います。 |
 
 ## オプションの所有範囲
 
+### ファイルとサーバーのオプション
+
 - `--field`は`init`だけが所有し、繰り返し指定できる。
 - `--encoding`はDBFテキストをデコードするパスロードコマンドの`read`、`schema`、`verify`、`xbf import`、`pack`、`recall`、`serve`に属する。
 - `--schema`は`xbf export`だけに属する。
 - `--bind`は`serve`と`serve-catalog`だけに属する。
+
+### CDCとMVCCのオプション
+
+- `--after`は`cdc`と`cdc catalog`だけに属する。
+- `--keep`はテーブルとカタログのMVCCガベージコレクションに属する。
+- `--keep-rows`はテーブルMVCCガベージコレクションだけに属する。
+
+### レプリケーションのオプション
+
 - `--replication-term`は`serve-catalog`と`replicate catch-up`に属し、どちらの操作でも正の固定ローカルtermを選択する。
 - `--replication-role`は`serve-catalog`だけに属し、既定の`authority`は書き込みロール、`follower`は直接のカタログ更新と適用位置確認を拒否してレプリケーション配送を受け付ける。
-- `TXBASE_REPLICATION_TOKEN`は`serve-catalog`の任意の環境変数であり、CLIオプションではない。コマンドラインにトークンを露出させずにレプリケーションルートを保護する。
-- `--replication-term`と`--follower-id`は`replicate catch-up`だけに属し、ローカルの固定termとフォロワーセッションを指定する。
+- `--follower-id`は`replicate catch-up`だけに属し、ローカルのフォロワーセッションを指定する。
 - `--limit`と`--timeout-ms`は`replicate catch-up`だけに属し、1回のpullセッションとソケット操作を制限する。
-- `TXBASE_REPLICATION_TOKEN`は`replicate catch-up`でも読み取り、authorityのBearer認証に使う。authority URLがloopbackでない場合はHTTPSを使う。
-- `--after`は`cdc`と`cdc catalog`だけに属する。
-- `--keep`はテーブルとカタログのMVCCガベージコレクションに属し、`--keep-rows`はテーブルMVCCガベージコレクションだけに属する。
+- `TXBASE_REPLICATION_TOKEN`は両レプリケーションコマンドで使う任意の環境変数であり、CLIオプションではない。`serve-catalog`はレプリケーションルートでトークンを検証し、`replicate catch-up`は設定されたトークンを送信する。クライアントはloopback以外のHTTPでトークンを送信しない。
+
+### インデックスのオプション
+
 - `index build-compound`は、各フィールドの方向に`1`または`asc`、`-1`または`desc`を受け付ける。
 - `index build`と`index build-compound`は、順序付きクエリ向けに`--collation unicode-lowercase`、`--collation unicode-nfkc-lowercase`、`--collation icu4x-2.1.1-ja`、`--collation icu4x-2.1.1-zh`、`--collation icu4x-2.1.1-ko`を受け付ける。
 
@@ -124,15 +177,6 @@ WALの作成や切り詰めは行いません。
 単一テーブルサーバーとカタログサーバーは、一度だけ検査するコマンドではなく、長時間動作するプロセスです。
 
 HTTP契約は、[HTTPメソッドの意味](http-semantics.md)、[クエリモデル](query-model.md)、[複数テーブルカタログ](catalog.md)、レプリケーション配送については[分散化の進化](distributed-evolution.md)で定義します。
-
-## 責務のグループ
-
-| グループ | コマンド | 境界 |
-| --- | --- | --- |
-| 読み取りと検査 | `read`、`cdc`、`cdc catalog`、`schema`、`verify`、`catalog`、`verify-catalog`、`wal inspect`、`mvcc list`、`mvcc read`、`mvcc row`、`mvcc row-at`、`mvcc catalog list`、`mvcc catalog read`、`xbf report`、`index verify` | 読み取り指向の出力です。上記の通常復旧に関する注意を伴います。 |
-| 作成と更新 | `init`、`insert`、`pack`、`recall`、`schema apply`、`mvcc gc`、`mvcc catalog gc`、`index build`、`index build-compound`、`index rebuild`、`xbf import`、`xbf export` | コマンド契約に従って、DBFバイト列、サイドカー、永続履歴を書き換えることがあります。 |
-| コピーと提供 | `backup`、`restore`、`serve`、`serve-catalog` | 別の文書で定義する境界を通して、データをコピーまたは公開します。 |
-| レプリケーション | `replicate catch-up` | 有界なHTTPレプリケーション境界を通して、フォロワーカタログを更新します。 |
 
 `schema apply`を`schema`から分けているのは意図的です。
 `schema`は現在のメタデータを検査し、`schema apply`は候補サイドカーを検証してインストールします。
