@@ -91,6 +91,30 @@ fn journal_replays_conflicting_append_as_suffix_replacement() {
 }
 
 #[test]
+fn append_discards_a_purged_prefix_and_keeps_the_new_suffix() {
+    let directory = TempDirectory::new().unwrap();
+    let mut store = StoreInner::open(&directory.0).unwrap();
+    store
+        .append_entries((0..=2).map(blank_entry).collect())
+        .unwrap();
+    store.purge(log_id(1)).unwrap();
+
+    let replacement = Entry::new_blank(LogId::new(CommittedLeaderId::new(2, 1), 2));
+    store
+        .append_entries(vec![blank_entry(1), replacement.clone()])
+        .unwrap();
+    drop(store);
+
+    let store = StoreInner::open(&directory.0).unwrap();
+
+    assert_eq!(Some(&replacement), store.state.entries.get(&2));
+    assert_eq!(
+        vec![2],
+        store.state.entries.keys().copied().collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn journal_discards_an_incomplete_final_frame() {
     let directory = TempDirectory::new().unwrap();
     let path = directory.0.join("raft");

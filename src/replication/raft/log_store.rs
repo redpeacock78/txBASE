@@ -152,20 +152,38 @@ impl StoreInner {
     }
 
     fn append_entries(&mut self, entries: Vec<Entry<TypeConfig>>) -> io::Result<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        let mut previous: Option<u64> = None;
+        for entry in &entries {
+            if let Some(previous) = previous {
+                let expected = previous
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("Raft log index overflow"))?;
+                if entry.log_id.index != expected {
+                    return Err(invalid_data(format!(
+                        "Raft log append expected index {expected}, got {}",
+                        entry.log_id.index
+                    )));
+                }
+            }
+            previous = Some(entry.log_id.index);
+        }
+
+        let entries = if let Some(purged) = self.state.last_purged {
+            entries
+                .into_iter()
+                .skip_while(|entry| entry.log_id.index <= purged.index)
+                .collect::<Vec<_>>()
+        } else {
+            entries
+        };
         let Some(first) = entries.first() else {
             return Ok(());
         };
         let first_index = first.log_id.index;
-        if let Some(purged) = self
-            .state
-            .last_purged
-            .filter(|purged| first_index <= purged.index)
-        {
-            return Err(invalid_data(format!(
-                "Raft log append index {first_index} cannot replace purged index {}",
-                purged.index
-            )));
-        }
         if let Some(committed) = self
             .state
             .committed
@@ -187,22 +205,6 @@ impl StoreInner {
                     )));
                 }
             }
-        }
-
-        let mut previous: Option<u64> = None;
-        for entry in &entries {
-            if let Some(previous) = previous {
-                let expected = previous
-                    .checked_add(1)
-                    .ok_or_else(|| invalid_data("Raft log index overflow"))?;
-                if entry.log_id.index != expected {
-                    return Err(invalid_data(format!(
-                        "Raft log append expected index {expected}, got {}",
-                        entry.log_id.index
-                    )));
-                }
-            }
-            previous = Some(entry.log_id.index);
         }
 
         self.persist_records(entries.iter().cloned().map(JournalRecord::Append))?;
