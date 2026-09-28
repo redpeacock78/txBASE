@@ -4,7 +4,8 @@
 このモードではquorum更新、線形化可能な読み取りbarrier、認証付きの専用peer listenerを使います。
 peer APIと`txbase raft membership` CLIは、learner追加、有効なmembershipの照会、joint consensusによるvoter変更を提供します。
 空catalogのlearnerは、genesis catalogが空または非空のclusterへ参加できます。
-決定的な障害注入テストは未実装です。
+3 nodeの決定的な障害テストで、quorum喪失、leader交代、ログの再同期、分断されたnodeの再起動を検査します。
+RPCの遅延や並べ替え、クラッシュ境界の注入、応答を失った要求の再試行は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -34,7 +35,7 @@ peer APIと`txbase raft membership` CLIは、learner追加、有効なmembership
 
 ### 未実装
 
-- quorum喪失、partition、メッセージ損失や並べ替え、leader交代、再起動、交代中の読み取りを検査する決定的な障害テスト。
+- RPCの遅延や並べ替え、commit応答を失った後の再試行、中断したjoint membershipの復旧、leader交代中の読み取りを検査する決定的なテスト。
 - peer HTTPSの証明書とホスト名検証を対象にした統合テスト。
 - mutual TLSと公開catalog listenerのTLS。
 
@@ -246,13 +247,11 @@ voter集合を推測したり、古いfollowerログを自動で昇格したり�
 
 CIのstate machineテストでは、カタログcommitの原子性、再起動後の再試行、sequence拒否、no-opとmembership、snapshotインストールを検証する。
 storage adapterのテストでは、OpenRaftの`testing::Suite`と再起動後の復旧確認を実行する。
-3 nodeの統合テストでは、初期voter 2 nodeでのquorum commit、空catalogのlearner追加、非空genesis catalogとcommit済み更新のsnapshot転送、昇格時のログ同期、joint membershipによる昇格と降格、状態照会の認証と入力検証、降格node停止後のquorum更新を検査する。
+membershipの統合テストでは、quorum commit、空learnerへのsnapshot転送、昇格と降格、降格後に残るvoterでのquorum更新を検査する。
+failoverの統合テストでは、現在のleaderを他の2 nodeから分断し、leader側の更新がカタログへ適用されないこと、残るquorumが次のclient sequenceをcommitすること、分断の解消後にログが再同期すること、分断されたnodeの再起動後にカタログとmembershipが収束することを検査する。
 2 nodeのテストでは、genesis catalogが空のclusterへのlearner参加を引き続き検査する。
 統合テストは、状態照会、learner追加、昇格、冪等な再試行、降格で型付きmembership clientも検査する。CLIテストはコマンド振り分けとvoter IDの入力検証を確認する。
-メッセージ遅延、損失、partition、並べ替え、再起動、leader交代の注入は未実装です。
-
-完了には、termとvoteの永続復旧、競合ログの置換、quorum喪失、leader交代、応答消失後のclient再試行、適用位置の復旧をテストする。
-snapshotのインストールとsuffix保持、log purge後のsnapshot転送、中断したjoint membership変更の再開、leader交代中のlinearizable readもテストする。
+完了には、遅延または並べ替えたRPC、commit応答を失った後のclient再試行、ログ永続化からquorum commit、カタログ公開、適用位置の永続化、応答までのクラッシュ注入、purge後のsnapshot転送、中断したjoint membership変更の再開、leader交代中のlinearizable readを検証する。
 
 ログ永続化、quorum commit、カタログジャーナル公開、適用済み位置の永続化、client応答の各境界でプロセスを強制終了し、再起動後の状態を検証する。
 単一nodeの成功やメモリ上のプロトコルテストだけでは、これらの保証を確認できない。

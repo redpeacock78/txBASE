@@ -150,6 +150,11 @@ impl RaftRuntime {
             .map_err(|error| format!("cannot stop OpenRaft node: {error}"))
     }
 
+    #[cfg(test)]
+    pub(super) fn set_peer_blocked(&self, peer_id: u64, blocked: bool) -> Result<(), String> {
+        self.network_factory.set_peer_blocked(peer_id, blocked)
+    }
+
     pub(super) fn propose_request(
         &self,
         request: &Request,

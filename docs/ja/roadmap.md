@@ -97,7 +97,9 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
   voterへ昇格するlearnerの同期を待ち、降格したvoterはlearnerとして保持する。
   `txbase raft membership` CLIは、このpeer control planeを通じて状態照会、learner追加、voter変更を提供する。
   状態照会は接続先nodeのローカルmetricsを返し、変更操作は現在のleaderへ送る。
-  空catalogのlearnerは、空または非空のgenesis catalogを持つclusterへ参加できる。非空clusterからのsnapshot転送は3 nodeのCIで検証する。障害注入によるフェイルオーバー検証は残る。[Raftコンセンサス設計](raft.md)を参照する。
+  空catalogのlearnerは、空または非空のgenesis catalogを持つclusterへ参加できる。
+  3 nodeの障害注入テストでquorum喪失、leader交代、partition復旧、分断nodeの再起動を検査する。
+  遅延または並べ替えたRPCとクラッシュ境界の検証は残る。詳細は[Raftコンセンサス設計](raft.md)を参照する。
 
 ベースラインには意図的に、次を含めません。
 
@@ -512,8 +514,9 @@ authorityは、検証済みで単調なフォロワー適用位置を受け付�
 認証付きpeer APIでnodeごとの有効なmembershipを照会し、compare-and-swap条件付きのvoter変更をjoint consensusで行えます。
 昇格するlearnerの同期を待ち、降格したvoterはlearnerとして保持します。
 OpenRaft storage suite、カタログstate machine、スナップショット、起動時復旧、3 nodeでの昇格・降格と降格後のquorum更新をCIで検査します。
-3 nodeテストではlearnerを空catalogから起動し、通常のログ複製を始める前に、非空genesis catalogとcommit済み更新をsnapshot転送します。
-peer TLS統合テスト、中断した変更の復旧、決定的な障害注入は残っています。
+membershipテストではlearnerを空catalogから起動し、通常のログ複製を始める前に非空genesis catalogとcommit済み更新をsnapshot転送します。
+failoverテストでは3 nodeを分断し、quorum喪失とleader交代を確認してからpartitionを復旧し、分断したnodeを再起動して状態の収束を検査します。
+peer TLS統合テスト、遅延または並べ替えたRPC、中断したmembership変更の復旧、クラッシュ境界の注入は残っています。
 
 ### 候補範囲
 

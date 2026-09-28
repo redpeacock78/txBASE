@@ -1,6 +1,6 @@
 # Raft consensus design
 
-Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API and `txbase raft membership` CLI can add learners, report effective membership, and change voters through joint consensus. A blank learner can join clusters with either an empty or non-empty genesis catalog. Deterministic failure-injection coverage remains outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
+Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API and `txbase raft membership` CLI can add learners, report effective membership, and change voters through joint consensus. A blank learner can join clusters with either an empty or non-empty genesis catalog. A deterministic three-node test now covers quorum loss, leader replacement, log reconciliation, and restart of the isolated node. Delay and reordering faults, crash-boundary injection, and lost-response retries remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
 
@@ -29,7 +29,7 @@ This document records the implemented Raft boundary and the remaining authority,
 
 ### Not implemented
 
-- Deterministic tests for quorum loss, partitions, message loss or reordering, leader changes, restart recovery, and reads during leadership changes.
+- Deterministic tests for delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, and reads while leadership changes.
 - Dedicated peer HTTPS certificate and host-verification integration tests.
 - Mutual TLS and TLS for the public catalog listener.
 
@@ -170,12 +170,11 @@ Migration from a fixed-term `TXRP` authority is manual. Stop the old writers, ch
 
 The state-machine CI tests cover catalog commit atomicity, restart-safe retries, sequence rejection, no-op and membership entries, and snapshot installation.
 The storage adapter's tests run OpenRaft's `testing::Suite` and restart-recovery checks.
-The three-node integration test exercises a quorum commit on two initial voters, authenticated addition of a blank learner, snapshot transfer of the non-empty genesis catalog and a committed update, catch-up as part of promotion, joint promotion and demotion, membership-status authorization and validation, retained-learner shutdown, and quorum writes with the remaining voters.
+The membership integration test exercises a quorum commit, blank-learner snapshot transfer, promotion and demotion, and quorum writes after a voter is demoted.
+The failover integration test isolates the current leader from both peers, verifies that its write does not reach the catalog, commits the next client sequence on the remaining quorum, heals the partition, and restarts the isolated node before checking catalog and membership convergence.
 The two-node test continues to cover blank-learner joining when the genesis catalog is empty.
 It also exercises the typed membership client for status, learner addition, promotion, idempotent retry, and demotion; CLI argument tests cover command routing and voter-ID validation.
-It does not yet inject deterministic network delay, message loss, partitions, reordering, restarts, or leader changes.
-
-Acceptance still requires tests for durable term and vote recovery, conflicting log replacement, quorum loss, leader change, client retry after a lost response, apply-marker recovery, snapshot installation and suffix retention, snapshot transfer after log purging, resuming an interrupted joint membership change, and linearizable reads during leadership changes.
+Acceptance still requires delayed and reordered RPC delivery, client retry after a committed response is lost, crash injection between log persistence, quorum commitment, catalog publication, applied-position persistence, and client response, snapshot transfer after log purging, resuming an interrupted joint membership change, and linearizable reads during a leader transition.
 
 Crash injection must cover each boundary between log persistence, quorum commitment, catalog journal publication, applied-position persistence, and client response. A green single-node test or an in-memory protocol test does not establish these guarantees.
 

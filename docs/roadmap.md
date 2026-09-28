@@ -76,7 +76,7 @@ The repository currently provides:
   Its authenticated peer API adds learners, reports local effective membership, and changes voter sets through joint consensus.
   It waits for promoted learners to catch up and retains demoted voters as learners.
   The `txbase raft membership` CLI exposes status, learner addition, and voter changes through this peer control plane; status reports the contacted node's local metrics, and mutations target the current leader.
-  Blank learners can join clusters with empty or non-empty genesis catalogs; deterministic failure-injected failover coverage remains open. See [Raft consensus design](raft.md).
+  Blank learners can join clusters with empty or non-empty genesis catalogs. A three-node failure-injection test now covers quorum loss, leader replacement, partition healing, and restart of the isolated node; delayed or reordered RPCs and crash-boundary coverage remain open. See [Raft consensus design](raft.md).
 - Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit, after validating the declared primary or unique parent key; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
 - Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with ordered per-transaction mode changes in the Rust and HTTP transaction APIs; deferred `CHECK` is a txBASE extension.
 
@@ -457,8 +457,9 @@ It provides quorum-committed writes, a linearizable read barrier, authenticated 
 An authenticated peer API reports local effective membership and supports compare-and-swap voter changes through OpenRaft joint consensus.
 The API waits for newly promoted learners to catch up and retains demoted voters as learners.
 OpenRaft storage, the catalog state machine, snapshots, startup recovery, and three-node integration coverage are included in the CI test suite.
-The three-node test now starts a learner from an empty catalog and verifies snapshot transfer of the non-empty genesis catalog and a committed update before normal log replication.
-TLS-specific integration coverage, interrupted-change recovery tests, and deterministic failure injection remain outstanding.
+The membership test starts a learner from an empty catalog and verifies snapshot transfer of the non-empty genesis catalog and a committed update before normal log replication.
+The failover test injects a three-node partition, checks quorum loss and leader replacement, heals the partition, and restarts the isolated node before checking convergence.
+TLS-specific integration coverage, delayed or reordered RPCs, interrupted-change recovery tests, and crash-boundary injection remain outstanding.
 
 ### Candidate scope
 

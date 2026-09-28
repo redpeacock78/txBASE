@@ -13,6 +13,8 @@ use openraft::raft::{
 use openraft::{Snapshot, Vote};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use std::collections::BTreeSet;
 use std::io;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -77,6 +79,8 @@ pub struct RaftHttpNetworkFactory {
     sender_id: u64,
     genesis_fingerprint: Arc<RwLock<Vec<u8>>>,
     bearer_token: String,
+    #[cfg(test)]
+    blocked_targets: Arc<RwLock<BTreeSet<u64>>>,
 }
 
 impl RaftHttpNetworkFactory {
@@ -90,7 +94,23 @@ impl RaftHttpNetworkFactory {
             sender_id: self.sender_id,
             genesis_fingerprint: Arc::clone(&self.genesis_fingerprint),
             client,
+            #[cfg(test)]
+            blocked_targets: Arc::clone(&self.blocked_targets),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_peer_blocked(&self, target: u64, blocked: bool) -> Result<(), String> {
+        let mut targets = self
+            .blocked_targets
+            .write()
+            .map_err(|error| format!("test network fault lock poisoned: {error}"))?;
+        if blocked {
+            targets.insert(target);
+        } else {
+            targets.remove(&target);
+        }
+        Ok(())
     }
 
     pub(crate) fn prepare_learner(
@@ -228,6 +248,8 @@ impl RaftHttpNetworkFactory {
             sender_id,
             genesis_fingerprint,
             bearer_token: bearer_token.into(),
+            #[cfg(test)]
+            blocked_targets: Arc::new(RwLock::new(BTreeSet::new())),
         })
     }
 }
@@ -255,9 +277,25 @@ pub struct RaftHttpNetwork {
     sender_id: u64,
     genesis_fingerprint: Arc<RwLock<Vec<u8>>>,
     client: Result<ReplicationHttpClient, String>,
+    #[cfg(test)]
+    blocked_targets: Arc<RwLock<BTreeSet<u64>>>,
 }
 
 impl RaftHttpNetwork {
+    #[cfg(test)]
+    fn check_network(&self, operation: &str) -> Result<(), String> {
+        let blocked = self
+            .blocked_targets
+            .read()
+            .map_err(|error| format!("test network fault lock poisoned: {error}"))?
+            .contains(&self.target_id);
+        if blocked {
+            Err(format!("test network dropped {operation} RPC"))
+        } else {
+            Ok(())
+        }
+    }
+
     fn rpc<Q, T, E>(
         &self,
         path: &str,
@@ -325,6 +363,10 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
         rpc: AppendEntriesRequest<TypeConfig>,
         option: RPCOption,
     ) -> Result<AppendEntriesResponse<u64>, RPCError<u64, BasicNode, RaftError<u64>>> {
+        #[cfg(test)]
+        if let Err(error) = self.check_network("append-entries") {
+            return map_rpc_result(self.target_id, Err(error));
+        }
         let network = self.clone();
         let result = tokio::task::spawn_blocking(move || {
             network.rpc::<_, _, RaftError<u64>>(RAFT_APPEND_PATH, rpc, option.hard_ttl())
@@ -343,6 +385,10 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
         InstallSnapshotResponse<u64>,
         RPCError<u64, BasicNode, RaftError<u64, InstallSnapshotError>>,
     > {
+        #[cfg(test)]
+        if let Err(error) = self.check_network("snapshot") {
+            return map_rpc_result(self.target_id, Err(error));
+        }
         let network = self.clone();
         let result = tokio::task::spawn_blocking(move || {
             network.rpc::<_, _, RaftError<u64, InstallSnapshotError>>(
@@ -362,6 +408,10 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
         rpc: VoteRequest<u64>,
         option: RPCOption,
     ) -> Result<VoteResponse<u64>, RPCError<u64, BasicNode, RaftError<u64>>> {
+        #[cfg(test)]
+        if let Err(error) = self.check_network("vote") {
+            return map_rpc_result(self.target_id, Err(error));
+        }
         let network = self.clone();
         let result = tokio::task::spawn_blocking(move || {
             network.rpc::<_, _, RaftError<u64>>(RAFT_VOTE_PATH, rpc, option.hard_ttl())
