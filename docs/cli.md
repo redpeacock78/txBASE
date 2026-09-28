@@ -1,6 +1,6 @@
 # CLI command reference
 
-The CLI exposes commands for inspecting, mutating, and serving txBASE data through its Rust APIs.
+The CLI uses the Rust APIs to inspect and mutate txBASE data and start its servers.
 
 The design decisions behind the command surface are recorded in [CLI command architecture](cli-design.md).
 
