@@ -32,6 +32,17 @@ wasmtime run --dir "$temp_dir::/data" "$component" \
 cmp "$temp_dir/expected-xbf.ndjson" "$temp_dir/retained-xbf.ndjson"
 
 if wasmtime run --dir "$temp_dir::/data" "$component" \
+  --object-store /data/object-store ../users '{"projection":{"NAME":1}}' \
+  > "$temp_dir/traversal.stdout" 2> "$temp_dir/traversal.stderr"; then
+  printf '%s\n' 'object store unexpectedly accepted a traversal namespace' >&2
+  exit 1
+fi
+
+test ! -s "$temp_dir/traversal.stdout"
+grep -q 'object-store namespace must contain ordinary non-empty key components' \
+  "$temp_dir/traversal.stderr"
+
+if wasmtime run --dir "$temp_dir::/data" "$component" \
   /data/users.dbf '{"sort":{"NAME":1}}' \
   > "$temp_dir/invalid.stdout" 2> "$temp_dir/invalid.stderr"; then
   printf '%s\n' 'unsupported streaming controls unexpectedly succeeded' >&2

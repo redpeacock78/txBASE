@@ -33,6 +33,9 @@ object-storeのrootには、`--dir`で公開したディレクトリを指定し
 既存のオブジェクトテーブル配置では、スナップショットを`namespace/snapshots/`に、復旧記録を`namespace/wal/`に置きます。
 ファイルシステムアダプターは読み取り専用であり、`SyncObjectStoreAdapter`を介して同期`std::fs`操作を使います。
 このアダプターは操作を非同期traitへ接続しますが、ファイルシステムI/Oをノンブロッキングにはしません。
+アダプターはnamespaceとobject keyの各componentを検証し、`.`と`..`を拒否します。
+symbolic linkも辿りません。
+スモーク検査では、`..`を含むnamespaceとsymbolic linkを通じたsnapshot読み込みが、stdoutへ行を出さずに失敗することを確認します。
 クエリの実行中にobject storeが変更されないようにしてください。
 このアダプターは同時書き込みを調整しません。
 `AsyncObjectTable`は読み取り前に保留中のWAL記録を復旧するため、マニフェストの公開やWAL記録の削除が必要な場合、読み取り専用ストアでは失敗します。

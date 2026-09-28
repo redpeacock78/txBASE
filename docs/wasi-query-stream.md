@@ -30,6 +30,8 @@ The object-store form reads `namespace/manifest.json`, its XBF snapshot, and the
 Its store root must be a directory exposed by `--dir`; the existing object-table layout places snapshots under `namespace/snapshots/` and recovery records under `namespace/wal/`.
 The filesystem adapter is read-only and uses synchronous `std::fs` operations through `SyncObjectStoreAdapter`.
 That adapter makes the calls fit the async trait but does not make filesystem I/O non-blocking.
+The adapter validates namespace and object-key components, rejects `.` and `..`, and refuses to traverse symbolic links.
+The smoke test verifies that a `..` namespace and a symlinked snapshot fail without writing rows to stdout.
 The object store must remain stable during the query; this adapter does not coordinate with concurrent writers.
 Because `AsyncObjectTable` recovers pending WAL records before reading, a recovery that needs to publish a manifest or delete a WAL record fails on the read-only store.
 Snapshot loading and recovery finish before the first row is emitted.
