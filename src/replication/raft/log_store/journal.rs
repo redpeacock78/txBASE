@@ -37,7 +37,7 @@ where
         .create(true)
         .truncate(true)
         .read(true)
-        .append(true)
+        .write(true)
         .open(&temporary)?;
     let result = (|| {
         file.write_all(JOURNAL_MAGIC)?;

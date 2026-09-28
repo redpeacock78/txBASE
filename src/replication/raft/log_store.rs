@@ -64,13 +64,11 @@ impl StoreInner {
             .create(true)
             .read(true)
             .write(true)
+            .truncate(false)
             .open(directory.join(LOCK_NAME))?;
         FileExt::try_lock_exclusive(&lock_file)?;
 
-        let generation = match latest_generation(directory)? {
-            Some(generation) => generation,
-            None => 0,
-        };
+        let generation = latest_generation(directory)?.unwrap_or_default();
         let path = journal_path(directory, generation);
         let journal = if path.exists() {
             OpenOptions::new().read(true).append(true).open(&path)?
