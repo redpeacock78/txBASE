@@ -129,10 +129,13 @@ fn three_nodes_commit_over_authenticated_peer_rpc_and_deduplicate_retry() {
     .unwrap();
     let first = leader
         .runtime
-        .block_on(tokio::time::timeout(
-            Duration::from_secs(15),
-            leader.node.client_write(command.clone()),
-        ))
+        .block_on(async {
+            tokio::time::timeout(
+                Duration::from_secs(15),
+                leader.node.client_write(command.clone()),
+            )
+            .await
+        })
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -142,10 +145,9 @@ fn three_nodes_commit_over_authenticated_peer_rpc_and_deduplicate_retry() {
 
     let retry = leader
         .runtime
-        .block_on(tokio::time::timeout(
-            Duration::from_secs(15),
-            leader.node.client_write(command),
-        ))
+        .block_on(async {
+            tokio::time::timeout(Duration::from_secs(15), leader.node.client_write(command)).await
+        })
         .unwrap()
         .unwrap();
     assert_eq!(

@@ -1,7 +1,9 @@
 use super::CatalogRaftConfig;
 use crate::replication::ReplicationHttpClient;
 use std::collections::BTreeSet;
-use std::fs::{self, File, OpenOptions};
+#[cfg(unix)]
+use std::fs::File;
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 
@@ -86,6 +88,8 @@ pub(super) fn bind_node_identity(
             file.write_all(expected.as_bytes())
                 .and_then(|()| file.sync_all())
                 .map_err(|error| format!("cannot persist Raft node identity: {error}"))?;
+            // The identity file is synced everywhere; std::fs can sync its parent directory on Unix.
+            #[cfg(unix)]
             File::open(path)
                 .and_then(|directory| directory.sync_all())
                 .map_err(|error| format!("cannot sync Raft node directory: {error}"))?;
