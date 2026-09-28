@@ -29,10 +29,32 @@ fn write_table(path: &std::path::Path, schema: Vec<u8>) {
     fs::write(path.with_extension("txschema.json"), schema).unwrap();
 }
 
+fn write_table_with_records(path: &std::path::Path, schema: Vec<u8>) {
+    cleanup(path);
+    fs::write(path, fixture()).unwrap();
+    let mut transaction = DbfTransaction::begin(path).unwrap();
+    for (id, name) in [(1, "Alice"), (2, "Bob")] {
+        transaction
+            .apply(&OperationIr {
+                method: OperationMethod::Post,
+                path: "/records".into(),
+                body: Some(json!({
+                    "ID": id,
+                    "NAME": name,
+                    "AGE": 42,
+                    "ACTIVE": true
+                })),
+            })
+            .unwrap();
+    }
+    transaction.commit().unwrap();
+    fs::write(path.with_extension("txschema.json"), schema).unwrap();
+}
+
 #[test]
 fn initially_deferred_unique_allows_a_key_swap_before_commit() {
     let path = temporary_path();
-    write_table(
+    write_table_with_records(
         &path,
         schema(json!({
             "deferrable": [{
@@ -62,7 +84,7 @@ fn initially_deferred_unique_allows_a_key_swap_before_commit() {
 #[test]
 fn initially_immediate_unique_can_be_deferred_and_checked_before_commit() {
     let path = temporary_path();
-    write_table(
+    write_table_with_records(
         &path,
         schema(json!({
             "deferrable": [{
@@ -102,7 +124,7 @@ fn initially_immediate_unique_can_be_deferred_and_checked_before_commit() {
 #[test]
 fn failed_immediate_transition_keeps_the_constraint_deferred() {
     let path = temporary_path();
-    write_table(
+    write_table_with_records(
         &path,
         schema(json!({
             "deferrable": [{
