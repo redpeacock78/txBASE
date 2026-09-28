@@ -174,6 +174,24 @@ fn rejects_malformed_xbf_sections_and_directory() {
     let error = decode(&unordered_sections).unwrap_err();
     assert!(error.to_string().contains("sections are unordered"));
 
+    let mut schema_before_header = encoded.clone();
+    put_u64(&mut schema_before_header, 16, super::HEADER_SIZE as u64 - 1);
+    refresh_header_checksum(&mut schema_before_header);
+    let error = decode(&schema_before_header).unwrap_err();
+    assert!(error.to_string().contains("sections are unordered"));
+
+    let mut directory_overlaps_data = encoded.clone();
+    let directory_offset = get_u64(&directory_overlaps_data, 36);
+    put_u64(&mut directory_overlaps_data, 56, directory_offset);
+    refresh_header_checksum(&mut directory_overlaps_data);
+    let error = decode(&directory_overlaps_data).unwrap_err();
+    assert!(error.to_string().contains("sections are unordered"));
+
+    let mut trailing_bytes = encoded.clone();
+    trailing_bytes.push(0);
+    let error = decode(&trailing_bytes).unwrap_err();
+    assert!(error.to_string().contains("trailing bytes"));
+
     let mut mismatched_directory = encoded.clone();
     put_u64(&mut mismatched_directory, 76, 3);
     refresh_header_checksum(&mut mismatched_directory);
@@ -211,6 +229,14 @@ fn rejects_xbf_section_and_record_bounds_overflow() {
     let error = decode(&invalid_section).unwrap_err();
     assert!(error.to_string().contains("schema"), "got {error}");
 
+    for (offset_field, label) in [(36, "record directory"), (56, "record data")] {
+        let mut invalid_section = encoded.clone();
+        put_u64(&mut invalid_section, offset_field, u64::MAX);
+        refresh_header_checksum(&mut invalid_section);
+        let error = decode(&invalid_section).unwrap_err();
+        assert!(error.to_string().contains(label), "got {error}");
+    }
+
     let mut excessive_count = encoded.clone();
     put_u64(&mut excessive_count, 76, u64::MAX);
     refresh_header_checksum(&mut excessive_count);
@@ -232,6 +258,20 @@ fn rejects_xbf_section_and_record_bounds_overflow() {
     assert!(error.to_string().contains("overflows"), "got {error}");
 
     let data_end = get_u64(&encoded, 56) + get_u64(&encoded, 64);
+    let mut before_data_entry = encoded.clone();
+    put_u64(
+        &mut before_data_entry,
+        directory_offset,
+        get_u64(&encoded, 56) - 1,
+    );
+    put_u64(&mut before_data_entry, directory_offset + 8, 1);
+    refresh_directory_checksum(&mut before_data_entry);
+    let error = decode(&before_data_entry).unwrap_err();
+    assert!(
+        error.to_string().contains("outside record data"),
+        "got {error}"
+    );
+
     let mut out_of_range_entry = encoded;
     put_u64(&mut out_of_range_entry, directory_offset, data_end);
     put_u64(&mut out_of_range_entry, directory_offset + 8, 1);
