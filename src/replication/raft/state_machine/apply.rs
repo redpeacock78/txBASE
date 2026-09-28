@@ -107,12 +107,6 @@ pub(super) fn apply_entries(
                     entry.log_id.index, previous.index
                 ));
             }
-            None if entry.log_id.index != 0 => {
-                return Err(format!(
-                    "first Raft apply index must be 0, got {}",
-                    entry.log_id.index
-                ));
-            }
             _ => {}
         }
         let mut next = state.clone();
