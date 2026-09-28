@@ -10,7 +10,7 @@
 ## 1. 目的と境界
 
 Raft導入後は、更新を受け付けるカタログ**leader**は同時に1つです。
-leaderは、現在のmembershipが定める**quorum**がログエントリを永続化した後に更新をcommitする。
+leaderは、現在のmembershipで定まる**quorum**を構成するnodeでログエントリの永続化を確認してから、更新をcommitする。
 安定したmembershipでは**voter**（投票権を持つnode）の過半数をquorumとする。
 **joint membership**では、旧configと新configの双方で過半数を要求する。
 
@@ -109,7 +109,7 @@ peer listenerは公開カタログlistenerと分離する。
 host境界を越えるpeer通信は認証と暗号化が必要です。
 平文のBearer tokenではcredentialとカタログ更新をネットワーク上から読み取れるため、保護として不十分です。
 既存のRustls依存は転送層に利用できる。
-現在のHTTPレプリケーションルートはRaft RPCもserver側TLSも提供しない。
+現在のHTTPレプリケーションルートはRaft RPCとserver側TLSのいずれも提供しない。
 
 ## 7. snapshot、復旧、移行
 
