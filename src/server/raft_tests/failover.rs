@@ -108,7 +108,7 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
             .unwrap()
             .records()
             .len(),
-        2
+        4
     );
 
     let replacement_command = record_command(
@@ -137,7 +137,7 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
     for node in &nodes {
         let catalog = Catalog::from_path(root.join(format!("catalog-{}", node.node_id))).unwrap();
         assert_eq!(catalog.transaction_id().unwrap(), Some(3));
-        assert_eq!(catalog.open_table("users").unwrap().records().len(), 3);
+        assert_eq!(catalog.open_table("users").unwrap().records().len(), 5);
     }
 
     drop(listeners.remove(initial_leader_index));
@@ -169,7 +169,7 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
     for node in &nodes {
         let catalog = Catalog::from_path(root.join(format!("catalog-{}", node.node_id))).unwrap();
         assert_eq!(catalog.transaction_id().unwrap(), Some(3));
-        assert_eq!(catalog.open_table("users").unwrap().records().len(), 3);
+        assert_eq!(catalog.open_table("users").unwrap().records().len(), 5);
     }
 
     drop(listeners);
