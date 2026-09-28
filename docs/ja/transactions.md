@@ -152,9 +152,9 @@ HTTP経路とこのRust APIは、同じテーブル更新および永続化経�
 
 - [PostgreSQLのトランザクション分離](https://www.postgresql.org/docs/current/transaction-iso.html)
 - [PostgreSQLの並行性制御](https://www.postgresql.org/docs/current/mvcc.html)
-- [PostgreSQLの外部キー動作と検査延期](https://www.postgresql.org/docs/18/ddl-constraints.html)
 - [SQLiteの分離](https://sqlite.org/isolation.html)
 - [SQLiteのWAL](https://sqlite.org/wal.html)
+- [PostgreSQLの外部キー動作と検査延期](https://www.postgresql.org/docs/18/ddl-constraints.html)
 - [MVCCと過去スナップショット](mvcc.md)
 - [更新モデル](mutation-model.md)
 - [HTTPメソッドの意味とQUERY](http-semantics.md)

@@ -306,14 +306,14 @@ fn serializable_transaction_defers_foreign_keys_until_commit() {
         catalog
             .open_table("posts")
             .unwrap()
-            .active_record(5)
+            .active_record(3)
             .is_some()
     );
     assert!(
         catalog
             .open_table("users")
             .unwrap()
-            .active_record(5)
+            .active_record(3)
             .is_some()
     );
     fs::remove_dir_all(root).unwrap();

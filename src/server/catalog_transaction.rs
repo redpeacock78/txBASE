@@ -1,5 +1,5 @@
 use super::{HttpResponse, error, etag, header, json_response, read_json_body, request_header};
-use crate::catalog::{Catalog, CatalogTransactionError};
+use crate::catalog::{Catalog, CatalogError, CatalogTransactionError};
 use crate::replication::{ReplicationError, ReplicationLog};
 use crate::xbase::OperationBatch;
 use serde_json::json;
@@ -152,6 +152,9 @@ fn commit_error_response(commit_error: CommitError) -> HttpResponse {
                 ),
                 false,
             )
+        }
+        CommitError::Catalog(CatalogTransactionError::Catalog(CatalogError::Invalid(message))) => {
+            json_response(422, error("invalid_transaction", &message), false)
         }
         CommitError::Catalog(CatalogTransactionError::Catalog(catalog_error)) => json_response(
             500,
