@@ -89,7 +89,7 @@ The baseline intentionally does not include the following:
 - References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
-- Additional Raft failure coverage for delayed or reordered RPCs, lost committed responses, interrupted joint-membership recovery, reads during leadership changes, and crash boundaries; distributed follower reads and partitioning.
+- Additional Raft failure coverage for delayed or reordered RPCs, interrupted joint-membership recovery, reads during leadership changes, and crash boundaries; distributed follower reads and partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -460,13 +460,14 @@ OpenRaft storage, the catalog state machine, snapshots, startup recovery, and th
 The membership test starts a learner from an empty catalog and verifies snapshot transfer of the non-empty genesis catalog and a committed update before normal log replication.
 The failover test injects a three-node partition, checks quorum loss and leader replacement, heals the partition, and restarts the isolated node before checking convergence.
 The peer-RPC HTTPS integration test accepts a certificate trusted by its test root and rejects an untrusted certificate or a hostname mismatch.
-Delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain outstanding.
+A three-node `/transaction` test discards the successful handler response after commit, verifies an identical retry returns the original transaction ID without a duplicate mutation, and rejects a different payload at the same client sequence.
+Delayed or reordered RPCs, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain outstanding.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Add peer TLS integration and deterministic tests for delayed or reordered RPCs, lost committed responses, interrupted joint-membership recovery, reads during leadership changes, and crash boundaries; see [Raft consensus design](raft.md).
+- Add deterministic tests for delayed or reordered RPCs, interrupted joint-membership recovery, reads during leadership changes, and crash boundaries; see [Raft consensus design](raft.md).
 - TLS for the public catalog listener, mutual TLS, durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.

@@ -1,4 +1,5 @@
 mod failover;
+mod idempotency;
 mod membership;
 
 use super::raft::RaftRuntime;

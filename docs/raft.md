@@ -1,6 +1,6 @@
 # Raft consensus design
 
-Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API and `txbase raft membership` CLI can add learners, report effective membership, and change voters through joint consensus. A blank learner can join clusters with either an empty or non-empty genesis catalog. A deterministic three-node test now covers quorum loss, leader replacement, log reconciliation, and restart of the isolated node. Delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
+Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API and `txbase raft membership` CLI can add learners, report effective membership, and change voters through joint consensus. A blank learner can join clusters with either an empty or non-empty genesis catalog. A deterministic three-node test covers quorum loss, leader replacement, log reconciliation, and restart of the isolated node. A three-node `/transaction` test drops the successful handler response after commit, verifies that an exact retry returns the original transaction ID without applying twice, and rejects a different payload at the same client sequence. Delayed or reordered RPCs, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
 
@@ -21,6 +21,7 @@ This document records the implemented Raft boundary and the remaining authority,
 - Raft writes to `/transaction` and named-table mutation routes require `X-Txbase-Client-Id` and a positive `X-Txbase-Client-Sequence`. Exact retries return the stored result.
 - Normal catalog reads call OpenRaft's linearizable read barrier before reading the local catalog. The server does not provide an explicitly stale follower-read mode.
 - A three-node CI test exercises quorum commit and retry deduplication, learner catch-up before promotion, joint voter promotion and demotion, retained-learner shutdown, and quorum writes after demotion.
+- A three-node `/transaction` test discards the handler response after commit, verifies that an identical retry returns the same transaction ID without a duplicate mutation, and rejects a different payload at the same client sequence.
 - A two-node CI test verifies that an empty-catalog learner can join a cluster with an empty genesis catalog.
 - A three-node CI test verifies that a blank learner receives the non-empty genesis catalog and a committed update before it joins as a learner.
 - A peer-RPC HTTPS integration test accepts a certificate trusted by its test root and rejects an untrusted certificate or a certificate whose SAN does not match the peer host.
@@ -30,7 +31,7 @@ This document records the implemented Raft boundary and the remaining authority,
 
 ### Not implemented
 
-- Deterministic tests for delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, reads while leadership changes, and crash-boundary injection.
+- Deterministic tests for delayed or reordered RPCs, interrupted joint-membership recovery, reads while leadership changes, and crash-boundary injection.
 - Mutual TLS and TLS for the public catalog listener.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
@@ -172,9 +173,10 @@ The state-machine CI tests cover catalog commit atomicity, restart-safe retries,
 The storage adapter's tests run OpenRaft's `testing::Suite` and restart-recovery checks.
 The membership integration test exercises a quorum commit, blank-learner snapshot transfer, promotion and demotion, and quorum writes after a voter is demoted.
 The failover integration test isolates the current leader from both peers, verifies that its write does not reach the catalog, commits the next client sequence on the remaining quorum, heals the partition, and restarts the isolated node before checking catalog and membership convergence.
+The `/transaction` retry test discards the successful handler response after commit and verifies exact retry and same-sequence conflict behavior; it does not exercise a socket-level disconnect.
 The two-node test continues to cover blank-learner joining when the genesis catalog is empty.
 It also exercises the typed membership client for status, learner addition, promotion, idempotent retry, and demotion; CLI argument tests cover command routing and voter-ID validation.
-Acceptance still requires delayed and reordered RPC delivery, client retry after a committed response is lost, crash injection between log persistence, quorum commitment, catalog publication, applied-position persistence, and client response, snapshot transfer after log purging, resuming an interrupted joint membership change, and linearizable reads during a leader transition.
+Acceptance still requires delayed and reordered RPC delivery, crash injection between log persistence, quorum commitment, catalog publication, applied-position persistence, and client response, snapshot transfer after log purging, resuming an interrupted joint membership change, and linearizable reads during a leader transition.
 
 Crash injection must cover each boundary between log persistence, quorum commitment, catalog journal publication, applied-position persistence, and client response. A green single-node test or an in-memory protocol test does not establish these guarantees.
 

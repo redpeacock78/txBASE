@@ -5,7 +5,8 @@
 peer APIと`txbase raft membership` CLIは、learner追加、有効なmembershipの照会、joint consensusによるvoter変更を提供します。
 空catalogのlearnerは、genesis catalogが空または非空のclusterへ参加できます。
 3 nodeの決定的な障害テストで、quorum喪失、leader交代、ログの再同期、分断されたnodeの再起動を検査します。
-RPCの遅延や順序変更、commit応答を失った後の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入は未検証です。
+3 nodeの`/transaction`テストでは、commit後にhandlerが返した成功応答を破棄し、同じ要求の再試行が元のtransaction IDを返して更新を重複適用しないことと、同じclient sequenceで異なる本文を拒否することを検査します。
+RPCの遅延や順序変更、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -29,6 +30,7 @@ RPCの遅延や順序変更、commit応答を失った後の再試行、中断�
 - 3 nodeのCIテストでquorum commitと再試行の重複排除、昇格前のlearner同期、joint membershipによるvoter昇格と降格、learner停止後に残るvoterでのquorum更新を検査する。
 - 2 nodeのCIテストで、genesis catalogが空のclusterへ空catalogのlearnerが参加できることを検査する。
 - 3 nodeのCIテストで、空catalogのlearnerに非空genesis catalogとcommit済み更新をsnapshot転送することを検査する。
+- 3 nodeの`/transaction`テストで、commit後にhandler応答を破棄し、同一要求の再試行、更新の重複排除、同じsequenceに対する異なる要求の拒否を検査する。
 - peer RPCのHTTPS統合テストで、テスト用rootで信頼した証明書を受け入れ、未信頼証明書とpeer URLのhostに一致しないSANを拒否する。
 - `RaftLogStore`はnode専用ディレクトリにvote、ログエントリ、commit済み位置、最後にpurgeしたlog IDを永続化する。
 - ログjournalは長さ付きのSHA-256検証済みJSON recordを使う。不完全な末尾を復旧し、purge後は新しいgenerationへ圧縮する。
@@ -36,7 +38,7 @@ RPCの遅延や順序変更、commit応答を失った後の再試行、中断�
 
 ### 未実装
 
-- RPCの遅延や順序変更、commit応答を失った後の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入を検査する決定的なテスト。
+- RPCの遅延や順序変更、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入を検査する決定的なテスト。
 - mutual TLSと公開catalog listenerのTLS。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
@@ -251,7 +253,8 @@ membershipの統合テストでは、quorum commit、空learnerへのsnapshot転
 failoverの統合テストでは、現在のleaderを他の2 nodeから分断し、leader側の更新がカタログへ適用されないこと、残るquorumが次のclient sequenceをcommitすること、分断の解消後にログが再同期すること、分断されたnodeの再起動後にカタログとmembershipが収束することを検査する。
 2 nodeのテストでは、genesis catalogが空のclusterへのlearner参加を引き続き検査する。
 統合テストは、状態照会、learner追加、昇格、冪等な再試行、降格で型付きmembership clientも検査する。CLIテストはコマンド振り分けとvoter IDの入力検証を確認する。
-完了には、遅延または並べ替えたRPC、commit応答を失った後のclient再試行、ログ永続化からquorum commit、カタログ公開、適用位置の永続化、応答までのクラッシュ注入、purge後のsnapshot転送、中断したjoint membership変更の再開、leader交代中のlinearizable readを検証する。
+再試行テストはhandlerが返した応答を破棄する。ソケット切断は直接検査しない。
+完了には、遅延または並べ替えたRPC、ログ永続化からquorum commit、カタログ公開、適用位置の永続化、client応答までのクラッシュ注入、purge後のsnapshot転送、中断したjoint membership変更の再開、leader交代中のlinearizable readを検証する。
 
 ログ永続化、quorum commit、カタログジャーナル公開、適用済み位置の永続化、client応答の各境界でプロセスを強制終了し、再起動後の状態を検証する。
 単一nodeの成功やメモリ上のプロトコルテストだけでは、これらの保証を確認できない。
