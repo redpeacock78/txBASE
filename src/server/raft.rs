@@ -66,9 +66,11 @@ impl RaftRuntime {
             genesis_fingerprint.clone(),
             token.clone(),
         )?;
-        let mut raft_config = openraft::Config::default();
-        raft_config.cluster_name = config.cluster_id.clone();
-        raft_config.max_payload_entries = 1;
+        let raft_config = openraft::Config {
+            cluster_name: config.cluster_id.clone(),
+            max_payload_entries: 1,
+            ..openraft::Config::default()
+        };
         let raft_config = Arc::new(
             raft_config
                 .validate()
@@ -116,10 +118,9 @@ impl RaftRuntime {
 
     pub(super) fn linearizable_read(&self) -> Result<(), String> {
         self.runtime
-            .block_on(tokio::time::timeout(
-                RPC_TIMEOUT,
-                self.node.ensure_linearizable(),
-            ))
+            .block_on(async {
+                tokio::time::timeout(RPC_TIMEOUT, self.node.ensure_linearizable()).await
+            })
             .map_err(|_| "Raft read barrier timed out".to_owned())?
             .map(|_| ())
             .map_err(|error| format!("Raft read barrier failed: {error}"))
@@ -169,10 +170,9 @@ impl RaftRuntime {
         };
         let response = self
             .runtime
-            .block_on(tokio::time::timeout(
-                RPC_TIMEOUT,
-                self.node.client_write(command),
-            ))
+            .block_on(async {
+                tokio::time::timeout(RPC_TIMEOUT, self.node.client_write(command)).await
+            })
             .map_err(|_| {
                 json_response(
                     503,

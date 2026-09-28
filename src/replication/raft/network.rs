@@ -233,6 +233,8 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
     }
 }
 
+// OpenRaft's Network trait requires RPCError to be returned by value.
+#[allow(clippy::result_large_err)]
 fn map_rpc_result<T, E>(
     target_id: u64,
     result: Result<Result<T, E>, String>,

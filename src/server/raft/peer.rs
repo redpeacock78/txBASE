@@ -130,10 +130,9 @@ impl RaftRuntime {
             Ok(_) => return rejected_peer(),
             Err(response) => return response,
         };
-        match self.runtime.block_on(tokio::time::timeout(
-            RPC_TIMEOUT,
-            self.node.vote(rpc.payload),
-        )) {
+        match self.runtime.block_on(async {
+            tokio::time::timeout(RPC_TIMEOUT, self.node.vote(rpc.payload)).await
+        }) {
             Ok(result) => self.rpc_response(result),
             Err(_) => json_response(504, error("raft_rpc_timeout", "vote RPC timed out"), false),
         }
@@ -156,10 +155,9 @@ impl RaftRuntime {
                 Ok(_) => return rejected_peer(),
                 Err(response) => return response,
             };
-        match self.runtime.block_on(tokio::time::timeout(
-            RPC_TIMEOUT,
-            self.node.append_entries(rpc.payload),
-        )) {
+        match self.runtime.block_on(async {
+            tokio::time::timeout(RPC_TIMEOUT, self.node.append_entries(rpc.payload)).await
+        }) {
             Ok(result) => self.rpc_response(result),
             Err(_) => json_response(
                 504,
@@ -187,10 +185,9 @@ impl RaftRuntime {
                 Ok(_) => return rejected_peer(),
                 Err(response) => return response,
             };
-        match self.runtime.block_on(tokio::time::timeout(
-            RPC_TIMEOUT,
-            self.node.install_snapshot(rpc.payload),
-        )) {
+        match self.runtime.block_on(async {
+            tokio::time::timeout(RPC_TIMEOUT, self.node.install_snapshot(rpc.payload)).await
+        }) {
             Ok(result) => self.rpc_response(result),
             Err(_) => json_response(
                 504,
