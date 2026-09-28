@@ -156,18 +156,25 @@ impl StoreInner {
             return Ok(());
         };
         let first_index = first.log_id.index;
-        if self
+        if let Some(purged) = self
             .state
             .last_purged
-            .is_some_and(|purged| first_index <= purged.index)
-            || self
-                .state
-                .committed
-                .is_some_and(|committed| first_index <= committed.index)
+            .filter(|purged| first_index <= purged.index)
         {
-            return Err(invalid_data(
-                "Raft log append cannot replace a purged or committed entry",
-            ));
+            return Err(invalid_data(format!(
+                "Raft log append index {first_index} cannot replace purged index {}",
+                purged.index
+            )));
+        }
+        if let Some(committed) = self
+            .state
+            .committed
+            .filter(|committed| first_index <= committed.index)
+        {
+            return Err(invalid_data(format!(
+                "Raft log append index {first_index} cannot replace committed index {}",
+                committed.index
+            )));
         }
         if let Some(last) = self.last_log_index() {
             if first_index > last {
