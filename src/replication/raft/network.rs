@@ -440,3 +440,7 @@ where
         )))),
     }
 }
+
+#[cfg(test)]
+#[path = "network_tests.rs"]
+mod tests;

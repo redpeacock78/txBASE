@@ -29,6 +29,7 @@ RPCの遅延や順序変更、commit応答を失った後の再試行、中断�
 - 3 nodeのCIテストでquorum commitと再試行の重複排除、昇格前のlearner同期、joint membershipによるvoter昇格と降格、learner停止後に残るvoterでのquorum更新を検査する。
 - 2 nodeのCIテストで、genesis catalogが空のclusterへ空catalogのlearnerが参加できることを検査する。
 - 3 nodeのCIテストで、空catalogのlearnerに非空genesis catalogとcommit済み更新をsnapshot転送することを検査する。
+- peer RPCのHTTPS統合テストで、テスト用rootで信頼した証明書を受け入れ、未信頼証明書とpeer URLのhostに一致しないSANを拒否する。
 - `RaftLogStore`はnode専用ディレクトリにvote、ログエントリ、commit済み位置、最後にpurgeしたlog IDを永続化する。
 - ログjournalは長さ付きのSHA-256検証済みJSON recordを使う。不完全な末尾を復旧し、purge後は新しいgenerationへ圧縮する。
 - nodeディレクトリをプロセス間で排他ロックする。ストレージテストにはOpenRaftの`testing::Suite`と再起動後の復旧確認を含める。
@@ -36,7 +37,6 @@ RPCの遅延や順序変更、commit応答を失った後の再試行、中断�
 ### 未実装
 
 - RPCの遅延や順序変更、commit応答を失った後の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入を検査する決定的なテスト。
-- peer HTTPSの証明書とホスト名検証を対象にした統合テスト。
 - mutual TLSと公開catalog listenerのTLS。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。

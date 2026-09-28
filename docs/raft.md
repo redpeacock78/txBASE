@@ -23,6 +23,7 @@ This document records the implemented Raft boundary and the remaining authority,
 - A three-node CI test exercises quorum commit and retry deduplication, learner catch-up before promotion, joint voter promotion and demotion, retained-learner shutdown, and quorum writes after demotion.
 - A two-node CI test verifies that an empty-catalog learner can join a cluster with an empty genesis catalog.
 - A three-node CI test verifies that a blank learner receives the non-empty genesis catalog and a committed update before it joins as a learner.
+- A peer-RPC HTTPS integration test accepts a certificate trusted by its test root and rejects an untrusted certificate or a certificate whose SAN does not match the peer host.
 - `RaftLogStore` durably stores votes, log entries, committed position, and the last purged log ID in a node-specific directory.
 - The log journal uses length-prefixed, SHA-256-checked JSON records, recovers an incomplete tail, and compacts purged history into a new generation.
 - The node directory has an exclusive process lock, and the storage tests include OpenRaft's `testing::Suite` plus restart-recovery cases.
@@ -30,7 +31,6 @@ This document records the implemented Raft boundary and the remaining authority,
 ### Not implemented
 
 - Deterministic tests for delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, reads while leadership changes, and crash-boundary injection.
-- Dedicated peer HTTPS certificate and host-verification integration tests.
 - Mutual TLS and TLS for the public catalog listener.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.

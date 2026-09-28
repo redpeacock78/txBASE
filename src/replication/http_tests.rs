@@ -115,7 +115,7 @@ fn read_request(stream: &mut impl Read) -> Vec<u8> {
     request
 }
 
-fn tls_config_pair() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
+pub(in crate::replication) fn tls_config_pair() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
     let rcgen::CertifiedKey { cert, key_pair } =
         rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
     let certificate = cert.der().clone();
@@ -135,7 +135,10 @@ fn tls_config_pair() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
     (Arc::new(client), Arc::new(server))
 }
 
-fn spawn_tls_status(body: Vec<u8>, config: Arc<ServerConfig>) -> (String, JoinHandle<String>) {
+pub(in crate::replication) fn spawn_tls_status(
+    body: Vec<u8>,
+    config: Arc<ServerConfig>,
+) -> (String, JoinHandle<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let handle = thread::spawn(move || {
@@ -151,7 +154,10 @@ fn spawn_tls_status(body: Vec<u8>, config: Arc<ServerConfig>) -> (String, JoinHa
     (format!("https://localhost:{port}/api/"), handle)
 }
 
-fn spawn_untrusted_tls_server(config: Arc<ServerConfig>) -> (String, JoinHandle<bool>) {
+pub(in crate::replication) fn spawn_tls_handshake_probe(
+    config: Arc<ServerConfig>,
+    host: &str,
+) -> (String, JoinHandle<bool>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let handle = thread::spawn(move || {
@@ -162,7 +168,7 @@ fn spawn_untrusted_tls_server(config: Arc<ServerConfig>) -> (String, JoinHandle<
         let mut connection = ServerConnection::new(config).unwrap();
         connection.complete_io(&mut socket).is_err()
     });
-    (format!("https://localhost:{port}/api/"), handle)
+    (format!("https://{host}:{port}/api/"), handle)
 }
 
 #[test]
@@ -235,7 +241,7 @@ fn client_sends_authenticated_status_over_verified_https() {
 #[test]
 fn client_rejects_untrusted_https_certificate_without_retrying_as_http() {
     let (_, server_tls) = tls_config_pair();
-    let (url, server) = spawn_untrusted_tls_server(server_tls);
+    let (url, server) = spawn_tls_handshake_probe(server_tls, "localhost");
     let client = ReplicationHttpClient::new(&url)
         .unwrap()
         .with_bearer_token("secret")

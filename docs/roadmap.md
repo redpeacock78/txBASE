@@ -459,7 +459,8 @@ The API waits for newly promoted learners to catch up and retains demoted voters
 OpenRaft storage, the catalog state machine, snapshots, startup recovery, and three-node integration coverage are included in the CI test suite.
 The membership test starts a learner from an empty catalog and verifies snapshot transfer of the non-empty genesis catalog and a committed update before normal log replication.
 The failover test injects a three-node partition, checks quorum loss and leader replacement, heals the partition, and restarts the isolated node before checking convergence.
-TLS-specific integration coverage, delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain outstanding.
+The peer-RPC HTTPS integration test accepts a certificate trusted by its test root and rejects an untrusted certificate or a hostname mismatch.
+Delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain outstanding.
 
 ### Candidate scope
 

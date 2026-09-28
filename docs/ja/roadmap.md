@@ -516,7 +516,8 @@ authorityは、検証済みで単調なフォロワー適用位置を受け付�
 OpenRaft storage suite、カタログstate machine、スナップショット、起動時復旧、3 nodeでの昇格・降格と降格後のquorum更新をCIで検査します。
 membershipテストではlearnerを空catalogから起動し、通常のログ複製を始める前に非空genesis catalogとcommit済み更新をsnapshot転送します。
 failoverテストでは3 nodeを分断し、quorum喪失とleader交代を確認してからpartitionを復旧し、分断したnodeを再起動して状態の収束を検査します。
-peer TLS統合テスト、遅延または順序変更されたRPC、commit後に失われた応答の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入は未検証です。
+peer RPCのHTTPS統合テストでは、テスト用rootで信頼した証明書を受け入れ、未信頼証明書とホスト名不一致を拒否します。
+遅延または順序変更されたRPC、commit後に失われた応答の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入は未検証です。
 
 ### 候補範囲
 
