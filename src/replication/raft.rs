@@ -2,6 +2,9 @@ mod command;
 mod log_store;
 mod membership;
 mod network;
+#[cfg(test)]
+#[path = "raft/network_faults.rs"]
+mod network_faults;
 mod snapshot;
 mod state_machine;
 #[cfg(test)]
@@ -24,6 +27,8 @@ pub(crate) use network::{
     RAFT_ADD_LEARNER_PATH, RAFT_APPEND_PATH, RAFT_MEMBERSHIP_PATH, RAFT_PREPARE_LEARNER_PATH,
     RAFT_RPC_VERSION, RAFT_SNAPSHOT_PATH, RAFT_VOTE_PATH, RpcRequestWire, reply as raft_rpc_reply,
 };
+#[cfg(test)]
+pub(crate) use network_faults::AppendDelayHandle;
 pub use snapshot::CatalogSnapshotBuilder;
 pub(crate) use state_machine::client_result as raft_client_result;
 pub(crate) use state_machine::genesis_fingerprint as raft_genesis_fingerprint;

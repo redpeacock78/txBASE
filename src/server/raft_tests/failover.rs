@@ -59,6 +59,14 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
 
     let initial_leader_index = current_leader_index(&nodes, Duration::from_secs(20));
     let initial_leader_id = nodes[initial_leader_index].node_id;
+    let delayed_peer_id = nodes
+        .iter()
+        .find(|node| node.node_id != initial_leader_id)
+        .unwrap()
+        .node_id;
+    let mut delayed_append = nodes[initial_leader_index]
+        .delay_next_append_entries(delayed_peer_id)
+        .unwrap();
 
     for node in &nodes {
         if node.node_id == initial_leader_id {
@@ -77,10 +85,6 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         .filter(|node| node.node_id != initial_leader_id)
         .cloned()
         .collect::<Vec<_>>();
-    let replacement_index = current_leader_index(&majority, Duration::from_secs(20));
-    let replacement_id = majority[replacement_index].node_id;
-    assert_ne!(replacement_id, initial_leader_id);
-
     let uncommitted = record_command(
         &root.join(format!("catalog-{initial_leader_id}")),
         2,
@@ -88,17 +92,22 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         "NoQuorum",
         44,
     );
+    let isolated_leader = nodes[initial_leader_index].clone();
+    let isolated_node = isolated_leader.node.clone();
+    let mut no_quorum_write = isolated_leader
+        .runtime
+        .spawn(async move { isolated_node.client_write(uncommitted).await });
+    delayed_append
+        .wait_until_paused(Duration::from_secs(10))
+        .unwrap();
     let no_quorum_result = nodes[initial_leader_index].runtime.block_on(async {
-        tokio::time::timeout(
-            Duration::from_secs(3),
-            nodes[initial_leader_index].node.client_write(uncommitted),
-        )
-        .await
+        tokio::time::timeout(Duration::from_secs(3), &mut no_quorum_write).await
     });
     assert!(
-        !matches!(no_quorum_result, Ok(Ok(_))),
+        !matches!(no_quorum_result, Ok(Ok(Ok(_)))),
         "isolated leader reported a write committed without a quorum"
     );
+    no_quorum_write.abort();
     let isolated_catalog =
         Catalog::from_path(root.join(format!("catalog-{initial_leader_id}"))).unwrap();
     assert_eq!(isolated_catalog.transaction_id().unwrap(), Some(2));
@@ -111,6 +120,9 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         4
     );
 
+    let replacement_index = current_leader_index(&majority, Duration::from_secs(20));
+    let replacement_id = majority[replacement_index].node_id;
+    assert_ne!(replacement_id, initial_leader_id);
     let replacement_command = record_command(
         &root.join(format!("catalog-{replacement_id}")),
         2,
@@ -123,6 +135,10 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         RaftResponseResult::Applied { transaction_id: 3 }
     );
     wait_for_transaction(&majority, &root, 3, Duration::from_secs(15));
+    delayed_append.release();
+    delayed_append
+        .wait_for_completion(Duration::from_secs(10))
+        .unwrap();
 
     for source in &nodes {
         for target_id in 1..=3 {
@@ -137,7 +153,10 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
     for node in &nodes {
         let catalog = Catalog::from_path(root.join(format!("catalog-{}", node.node_id))).unwrap();
         assert_eq!(catalog.transaction_id().unwrap(), Some(3));
-        assert_eq!(catalog.open_table("users").unwrap().records().len(), 5);
+        let table = catalog.open_table("users").unwrap();
+        assert_eq!(table.records().len(), 5);
+        assert_eq!(table.active_record(6).unwrap().values["NAME"], "Failover");
+        assert!(table.active_record(5).is_err());
     }
 
     drop(listeners.remove(initial_leader_index));
@@ -169,7 +188,10 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
     for node in &nodes {
         let catalog = Catalog::from_path(root.join(format!("catalog-{}", node.node_id))).unwrap();
         assert_eq!(catalog.transaction_id().unwrap(), Some(3));
-        assert_eq!(catalog.open_table("users").unwrap().records().len(), 5);
+        let table = catalog.open_table("users").unwrap();
+        assert_eq!(table.records().len(), 5);
+        assert_eq!(table.active_record(6).unwrap().values["NAME"], "Failover");
+        assert!(table.active_record(5).is_err());
     }
 
     drop(listeners);

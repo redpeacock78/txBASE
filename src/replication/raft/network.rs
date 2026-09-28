@@ -1,4 +1,6 @@
 use super::TypeConfig;
+#[cfg(test)]
+use super::network_faults::{AppendDelay, AppendDelayHandle, FaultController};
 use crate::replication::{
     MAX_REPLICATION_SNAPSHOT_BYTES, ReplicationHttpClient, ReplicationHttpError,
     ReplicationRetryPolicy,
@@ -13,8 +15,6 @@ use openraft::raft::{
 use openraft::{Snapshot, Vote};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-#[cfg(test)]
-use std::collections::BTreeSet;
 use std::io;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -80,7 +80,7 @@ pub struct RaftHttpNetworkFactory {
     genesis_fingerprint: Arc<RwLock<Vec<u8>>>,
     bearer_token: String,
     #[cfg(test)]
-    blocked_targets: Arc<RwLock<BTreeSet<u64>>>,
+    faults: Arc<FaultController>,
 }
 
 impl RaftHttpNetworkFactory {
@@ -95,22 +95,21 @@ impl RaftHttpNetworkFactory {
             genesis_fingerprint: Arc::clone(&self.genesis_fingerprint),
             client,
             #[cfg(test)]
-            blocked_targets: Arc::clone(&self.blocked_targets),
+            faults: Arc::clone(&self.faults),
         }
     }
 
     #[cfg(test)]
     pub(crate) fn set_peer_blocked(&self, target: u64, blocked: bool) -> Result<(), String> {
-        let mut targets = self
-            .blocked_targets
-            .write()
-            .map_err(|error| format!("test network fault lock poisoned: {error}"))?;
-        if blocked {
-            targets.insert(target);
-        } else {
-            targets.remove(&target);
-        }
-        Ok(())
+        self.faults.set_peer_blocked(target, blocked)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn delay_next_append_entries(
+        &self,
+        target: u64,
+    ) -> Result<AppendDelayHandle, String> {
+        self.faults.delay_next_append_entries(target)
     }
 
     pub(crate) fn prepare_learner(
@@ -249,7 +248,7 @@ impl RaftHttpNetworkFactory {
             genesis_fingerprint,
             bearer_token: bearer_token.into(),
             #[cfg(test)]
-            blocked_targets: Arc::new(RwLock::new(BTreeSet::new())),
+            faults: Arc::new(FaultController::default()),
         })
     }
 }
@@ -278,22 +277,13 @@ pub struct RaftHttpNetwork {
     genesis_fingerprint: Arc<RwLock<Vec<u8>>>,
     client: Result<ReplicationHttpClient, String>,
     #[cfg(test)]
-    blocked_targets: Arc<RwLock<BTreeSet<u64>>>,
+    faults: Arc<FaultController>,
 }
 
 impl RaftHttpNetwork {
     #[cfg(test)]
     fn check_network(&self, operation: &str) -> Result<(), String> {
-        let blocked = self
-            .blocked_targets
-            .read()
-            .map_err(|error| format!("test network fault lock poisoned: {error}"))?
-            .contains(&self.target_id);
-        if blocked {
-            Err(format!("test network dropped {operation} RPC"))
-        } else {
-            Ok(())
-        }
+        self.faults.check_network(self.target_id, operation)
     }
 
     fn rpc<Q, T, E>(
@@ -364,12 +354,34 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
         option: RPCOption,
     ) -> Result<AppendEntriesResponse<u64>, RPCError<u64, BasicNode, RaftError<u64>>> {
         #[cfg(test)]
-        if let Err(error) = self.check_network("append-entries") {
-            return map_rpc_result(self.target_id, Err(error));
+        let delay = if rpc.entries.is_empty() {
+            None
+        } else {
+            match self.faults.take_append_delay(self.target_id) {
+                Ok(delay) => delay,
+                Err(error) => return map_rpc_result(self.target_id, Err(error)),
+            }
+        };
+        #[cfg(test)]
+        if delay.is_none() {
+            if let Err(error) = self.check_network("append-entries") {
+                return map_rpc_result(self.target_id, Err(error));
+            }
         }
         let network = self.clone();
         let result = tokio::task::spawn_blocking(move || {
-            network.rpc::<_, _, RaftError<u64>>(RAFT_APPEND_PATH, rpc, option.hard_ttl())
+            #[cfg(test)]
+            if let Some(delay) = &delay {
+                // The blocking worker survives the Raft timeout and sends this RPC after release.
+                delay.pause();
+            }
+            let result =
+                network.rpc::<_, _, RaftError<u64>>(RAFT_APPEND_PATH, rpc, option.hard_ttl());
+            #[cfg(test)]
+            if let Some(delay) = delay {
+                delay.complete(result.as_ref().map(|_| ()).map_err(Clone::clone));
+            }
+            result
         })
         .await
         .map_err(|error| error.to_string())
