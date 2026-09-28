@@ -6,7 +6,8 @@ use crate::xbase::{OperationIr, OperationMethod, TransactionStep};
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::fs;
-use std::net::TcpListener;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
@@ -28,6 +29,31 @@ fn free_address() -> String {
         .local_addr()
         .unwrap()
         .to_string()
+}
+
+fn post_add_learner(peer_url: &str, learner_url: &str) -> String {
+    let authority = peer_url.strip_prefix("http://").unwrap();
+    let body = serde_json::to_vec(&json!({
+        "version": crate::replication::raft::RAFT_RPC_VERSION,
+        "cluster_id": "ci-raft-cluster",
+        "node_id": 3,
+        "peer_address": learner_url,
+    }))
+    .unwrap();
+    let mut stream = TcpStream::connect(authority).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(15)))
+        .unwrap();
+    write!(
+        stream,
+        "POST /raft/v1/learner HTTP/1.1\r\nHost: {authority}\r\nAuthorization: Bearer ci-token\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .unwrap();
+    stream.write_all(&body).unwrap();
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response).unwrap();
+    String::from_utf8(response).unwrap()
 }
 
 fn prepare_catalog(root: &Path) {
@@ -63,10 +89,15 @@ fn three_nodes_commit_over_authenticated_peer_rpc_and_deduplicate_retry() {
         .enumerate()
         .map(|(index, address)| (index as u64 + 1, format!("http://{address}")))
         .collect::<BTreeMap<_, _>>();
+    let voters = members
+        .iter()
+        .filter(|(node_id, _)| **node_id <= 2)
+        .map(|(node_id, address)| (*node_id, address.clone()))
+        .collect::<BTreeMap<_, _>>();
     let mut nodes = Vec::new();
     let mut listeners = Vec::new();
 
-    for node_id in 1..=3 {
+    for node_id in 1..=2 {
         let catalog_root = root.join(format!("catalog-{node_id}"));
         prepare_catalog(&catalog_root);
         let config = CatalogRaftConfig {
@@ -75,7 +106,7 @@ fn three_nodes_commit_over_authenticated_peer_rpc_and_deduplicate_retry() {
             node_directory: root.join(format!("node-{node_id}")),
             peer_bind: addresses[(node_id - 1) as usize].clone(),
             peer_advertise: members[&node_id].clone(),
-            initial_members: members.clone(),
+            initial_members: voters.clone(),
             bootstrap: node_id == 1,
             initialize_catalog: node_id != 1,
             tls_certificate: None,
@@ -155,6 +186,42 @@ fn three_nodes_commit_over_authenticated_peer_rpc_and_deduplicate_retry() {
         RaftResponseResult::Applied { transaction_id: 2 }
     );
 
+    let learner_id = 3;
+    let leader_id = leader.node_id;
+    let learner_url = members[&learner_id].clone();
+    let learner_config = CatalogRaftConfig {
+        node_id: learner_id,
+        cluster_id: "ci-raft-cluster".into(),
+        node_directory: root.join(format!("node-{learner_id}")),
+        peer_bind: addresses[(learner_id - 1) as usize].clone(),
+        peer_advertise: learner_url.clone(),
+        initial_members: BTreeMap::from([
+            (leader_id, members[&leader_id].clone()),
+            (learner_id, learner_url.clone()),
+        ]),
+        bootstrap: false,
+        initialize_catalog: true,
+        tls_certificate: None,
+        tls_private_key: None,
+    };
+    let learner_catalog_root = root.join(format!("catalog-{learner_id}"));
+    prepare_catalog(&learner_catalog_root);
+    let learner = RaftRuntime::start(
+        &learner_catalog_root,
+        learner_config.clone(),
+        Some("ci-token".into()),
+    )
+    .unwrap();
+    let learner_server = learner.bind_peer_listener(&learner_config).unwrap();
+    listeners.push(learner.spawn_peer_listener(learner_server).unwrap());
+    let response = post_add_learner(&members[&leader_id], &learner_url);
+    assert!(response.starts_with("HTTP/1.1 202"), "{response}");
+    let response_body = response.split_once("\r\n\r\n").unwrap().1;
+    let response: serde_json::Value = serde_json::from_str(response_body).unwrap();
+    assert_eq!(response["node_id"], learner_id);
+    assert_eq!(response["status"], "learner_sync_started");
+    nodes.push(learner);
+
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
         let applied_everywhere = (1..=3).all(|node_id| {
@@ -163,7 +230,17 @@ fn three_nodes_commit_over_authenticated_peer_rpc_and_deduplicate_retry() {
                 .and_then(|catalog| catalog.transaction_id().ok().flatten())
                 == Some(2)
         });
-        if applied_everywhere {
+        let learner_registered = nodes
+            .iter()
+            .find(|node| node.node_id == leader_id)
+            .unwrap()
+            .node
+            .metrics()
+            .borrow()
+            .membership_config
+            .nodes()
+            .any(|(node_id, _)| *node_id == learner_id);
+        if applied_everywhere && learner_registered {
             break;
         }
         assert!(
@@ -172,6 +249,11 @@ fn three_nodes_commit_over_authenticated_peer_rpc_and_deduplicate_retry() {
         );
         thread::sleep(Duration::from_millis(100));
     }
+    let repeated = post_add_learner(&members[&leader_id], &learner_url);
+    assert!(repeated.starts_with("HTTP/1.1 200"), "{repeated}");
+    let response_body = repeated.split_once("\r\n\r\n").unwrap().1;
+    let response: serde_json::Value = serde_json::from_str(response_body).unwrap();
+    assert_eq!(response["status"], "already_member");
     for node_id in 1..=3 {
         let catalog = Catalog::from_path(root.join(format!("catalog-{node_id}"))).unwrap();
         assert_eq!(catalog.open_table("users").unwrap().records().len(), 4);

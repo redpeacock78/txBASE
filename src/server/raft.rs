@@ -126,6 +126,52 @@ impl RaftRuntime {
             .map_err(|error| format!("Raft read barrier failed: {error}"))
     }
 
+    pub(super) fn add_learner(
+        &self,
+        node_id: u64,
+        peer_address: &str,
+    ) -> Result<bool, (u16, String)> {
+        if node_id == 0 || node_id == self.node_id {
+            return Err((
+                400,
+                "learner node ID must be positive and different from this node".into(),
+            ));
+        }
+        config::validate_peer_url(peer_address, &self.token).map_err(|error| (422, error))?;
+        {
+            let metrics = self.node.metrics();
+            let metrics = metrics.borrow();
+            let membership = &metrics.membership_config;
+            if let Some((_, node)) = membership.nodes().find(|(id, _)| **id == node_id) {
+                if node.addr == peer_address {
+                    return Ok(false);
+                }
+                return Err((
+                    409,
+                    format!("Raft node ID {node_id} is already in the membership"),
+                ));
+            }
+            if membership
+                .nodes()
+                .any(|(_, node)| node.addr == peer_address)
+            {
+                return Err((409, "Raft learner URL is already in the membership".into()));
+            }
+        }
+        self.runtime
+            .block_on(async {
+                tokio::time::timeout(
+                    RPC_TIMEOUT,
+                    self.node
+                        .add_learner(node_id, BasicNode::new(peer_address), false),
+                )
+                .await
+            })
+            .map_err(|_| (504, "Raft learner addition timed out".to_owned()))?
+            .map(|_| true)
+            .map_err(|error| (503, format!("cannot add Raft learner: {error}")))
+    }
+
     #[cfg(test)]
     pub(super) fn shutdown(&self) -> Result<(), String> {
         self.runtime

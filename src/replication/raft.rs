@@ -15,8 +15,8 @@ pub use command::{
 pub use log_store::RaftLogStore;
 pub use network::{MAX_RAFT_RPC_BYTES, RaftHttpNetworkFactory};
 pub(crate) use network::{
-    RAFT_APPEND_PATH, RAFT_RPC_VERSION, RAFT_SNAPSHOT_PATH, RAFT_VOTE_PATH, RpcRequestWire,
-    reply as raft_rpc_reply,
+    RAFT_ADD_LEARNER_PATH, RAFT_APPEND_PATH, RAFT_RPC_VERSION, RAFT_SNAPSHOT_PATH, RAFT_VOTE_PATH,
+    RpcRequestWire, reply as raft_rpc_reply,
 };
 pub use snapshot::CatalogSnapshotBuilder;
 pub(crate) use state_machine::client_result as raft_client_result;

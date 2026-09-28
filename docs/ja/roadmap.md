@@ -91,7 +91,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
   外部インフラなしの決定的なleader/followerフィクスチャも提供する。
 - 有界な`ReplicationHttpClient`がauthorityの状態を検証し、連続したエントリページまたは現在のスナップショットを取得し、ローカルの順序付き再生契約で適用し、HTTPまたはHTTPSでフォロワー適用位置を確認し、一時的なソケットまたはHTTPの失敗をプロセス内の有界な方針で再試行する。
 - 公開`txbase replicate catch-up`コマンドが固定termのフォロワーカタログを開き、ジャーナル化された`TXRP`位置を再開し、有界なHTTP catch-upを1回実行して、結果の適用位置をJSONで表示する。
-- `serve-catalog`向けに、初期membershipを固定した任意のOpenRaftモードを実装済みである。クォーラム書き込み、線形化可能な読み取り、認証付きpeer RPC、peer HTTPSを提供する。learner参加、動的membership、障害注入によるフェイルオーバー検証は残る。[Raftコンセンサス設計](raft.md)を参照する。
+- `serve-catalog`向けに、初期voter集合を明示する任意のOpenRaftモードを実装済みである。クォーラム書き込み、線形化可能な読み取り、認証付きpeer RPC、peer HTTPSを提供する。認証付きpeer APIは、準備済みlearnerを追加してログ複製を開始する。joint voter変更、空catalogからの参加、障害注入によるフェイルオーバー検証は残る。[Raftコンセンサス設計](raft.md)を参照する。
 
 ベースラインには意図的に、次を含めません。
 
@@ -104,7 +104,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - カタログルートをまたぐ参照は未対応である。
 - XBF出力とtxBASEロックを無視する読み手に対する、厳密な複数ファイル読み取りアトミック性。
 - R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針、永続的な再試行キュー。
-- learner参加、動的Raft membership、クォーラム喪失とleader交代の障害注入テスト、分散フォロワー読み取り、分散パーティショニング。
+- joint Raft voter変更、空catalogからのlearner参加、クォーラム喪失とleader交代の障害注入テスト、分散フォロワー読み取り、分散パーティショニング。
 
 ## 3. フェーズ 1：小さなローカル DBMS を完成させる
 
@@ -500,16 +500,17 @@ authorityは、検証済みで単調なフォロワー適用位置を受け付�
 再起動後に位置を復元し、最小確認indexを調整された圧縮の上限として公開します。
 この安全確認は固定termの`TXRP`ログに適用します。任意のRaftモードはOpenRaft独自のログとスナップショット契約を使います。
 
-任意のRaftモードは`serve-catalog`に統合し、初期voter集合を固定して起動します。
+任意のRaftモードは`serve-catalog`に統合し、初期voter集合を明示して起動します。
 クォーラム書き込み、線形化可能な読み取りbarrier、認証付きpeer RPC、loopback以外のURLに対するpeer HTTPSを提供します。
-OpenRaft storage suite、カタログstate machine、スナップショット、起動時復旧、3 nodeの認証付きloopback統合経路をCIで検査します。
-learner参加、動的membership管理、TLSの統合テスト、決定的な障害注入は残っています。
+認証付きpeer APIは、準備済みlearnerを追加してログ複製を開始します。
+OpenRaft storage suite、カタログstate machine、スナップショット、起動時復旧、quorum commit後にlearnerを追加する3 node統合経路をCIで検査します。
+joint voter変更、空catalogからのlearner参加、membership状態確認、TLSの統合テスト、決定的な障害注入は残っています。
 
 ### 候補範囲
 
 - テーブル間または分散環境の長寿命スナップショットトランザクション。
 - 現在のテーブル、カタログ、`TXRP`、`TXRG`サイドカーを超える永続WAL履歴。
-- 現在のOpenRaft統合にlearner参加、動的membership管理、複数nodeの障害テストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
+- 現在のOpenRaft統合にjoint voter変更、空catalogからのlearner参加、membership状態確認、複数nodeの障害テストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
 - 公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、バックプレッシャー、authorityの検出。
 - 分散フォロワー読み取りの保証。
 - 分散パーティショニング。

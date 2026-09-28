@@ -46,9 +46,7 @@ pub(super) fn validate_config(
         if !addresses.insert(address) {
             return Err("Raft initial members must use distinct peer URLs".into());
         }
-        ReplicationHttpClient::new(address)
-            .and_then(|client| client.with_bearer_token(token.to_owned()))
-            .map_err(|error| format!("invalid Raft peer URL {address}: {error}"))?;
+        validate_peer_url(address, token)?;
     }
     if config.tls_certificate.is_some() != config.tls_private_key.is_some() {
         return Err("Raft peer TLS requires both a certificate and private key".into());
@@ -70,6 +68,13 @@ pub(super) fn validate_config(
         return Err("Raft node directory and catalog directory must be separate".into());
     }
     Ok(peer_tls)
+}
+
+pub(super) fn validate_peer_url(address: &str, token: &str) -> Result<(), String> {
+    ReplicationHttpClient::new(address)
+        .and_then(|client| client.with_bearer_token(token.to_owned()))
+        .map(|_| ())
+        .map_err(|error| format!("invalid Raft peer URL {address}: {error}"))
 }
 
 pub(super) fn bind_node_identity(

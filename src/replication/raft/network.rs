@@ -16,6 +16,7 @@ pub(crate) const RAFT_RPC_VERSION: u16 = 1;
 pub(crate) const RAFT_VOTE_PATH: &str = "/raft/v1/vote";
 pub(crate) const RAFT_APPEND_PATH: &str = "/raft/v1/append";
 pub(crate) const RAFT_SNAPSHOT_PATH: &str = "/raft/v1/snapshot";
+pub(crate) const RAFT_ADD_LEARNER_PATH: &str = "/raft/v1/learner";
 pub const MAX_RAFT_RPC_BYTES: usize = crate::MAX_JSON_INPUT_BYTES * 2;
 
 #[derive(Serialize)]
