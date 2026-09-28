@@ -17,6 +17,27 @@ const TABLE_STATE_EXTENSIONS: [&str; 5] = [
 type SnapshotSidecar<'a> = (&'a str, Option<Vec<u8>>, Option<Vec<u8>>);
 
 impl Catalog {
+    pub(crate) fn export_snapshot_with_sidecars(
+        &self,
+        sidecar_names: &[&str],
+    ) -> Result<(u64, Option<Vec<u8>>, Vec<Option<Vec<u8>>>), CatalogError> {
+        let _lock = self.acquire_read_lock()?;
+        let transaction_id = super::journal::read_transaction_id_locked(&self.root)?.unwrap_or(0);
+        let snapshot = if transaction_id == 0 {
+            None
+        } else {
+            Some(mvcc::snapshot_bytes(&self.root, transaction_id)?)
+        };
+        let sidecars = sidecar_names
+            .iter()
+            .map(|name| {
+                let path = super::transaction::sidecar_path(&self.root, name)?;
+                super::transaction::read_optional(&path)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((transaction_id, snapshot, sidecars))
+    }
+
     pub(crate) fn export_snapshot_at(&self, transaction_id: u64) -> Result<Vec<u8>, CatalogError> {
         let _lock = self.acquire_read_lock()?;
         mvcc::snapshot_bytes(&self.root, transaction_id)

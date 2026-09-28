@@ -1,21 +1,41 @@
 # Raftコンセンサス設計
 
-状態：**Raft**をコンセンサスプロトコルとして選択した。
-リポジトリにはRaft runtimeをまだ組み込んでいない。
-現在のカタログサーバーは固定termの単一authorityです。
+状態：カタログ用Raft state machineは実装済みですが、サーバーには接続していません。
+サーバーは引き続き固定termの単一authorityを使います。
 
 この文書では、目標とする権威、永続化、適用、運用の契約を定義する。
 未実装の機能を実装済みとは記述しない。
 
 ## 現在の実装状況
 
-リポジトリはOpenRaft `=0.9.25`を固定し、`TypeConfig`、version 1のクライアントコマンド、クライアント応答を定義します。
-コマンド検証はclient IDを128 ASCII byteまでに制限し、正のsequenceと空でないカタログtagを要求します。
-transaction stepは1件から1,000件まで受け付け、少なくとも1件の更新を含めます。
-検証では要求preconditionも確認し、シリアライズ後のコマンドを1 MiBまでに制限します。
-これらの型は`serve-catalog`に接続していません。
-永続Raftログ、カタログstate machineアダプター、スナップショット、peer transportは未実装です。
-そのため、現在のカタログサーバーは固定termの単一authorityです。
+### 実装済み
+
+- OpenRaft `=0.9.25`を固定し、`TypeConfig`、version 1のクライアントコマンド、応答を定義する。
+- `RaftCatalogStateMachine`はcommit済みコマンドを適用し、カタログ更新、適用済みRaft位置、クライアントの再試行結果を1つのカタログjournal commitで永続化する。
+- 空エントリ、membershipエントリ、拒否したコマンドの適用位置を保存する。これらはカタログtransaction IDを進めない。
+- クライアントごとの最新応答を保存し、同一要求の再試行、競合、古いsequence、飛び番を区別する。
+- snapshotの生成、転送、インストールで、カタログイメージ、適用位置、membership、再試行状態を一緒に扱う。
+- カタログのファイル操作にはTokioのblocking worker poolを使う。
+
+### 未実装
+
+- Raftのvote、ログ、commit済み位置、ログ圧縮の永続化。
+- Raft nodeの起動、cluster初期化、peer RPC、認証、TLS。
+- membershipを操作するCLI、quorum更新、linearizable read、複数nodeの障害テスト。
+- 未実装のログstorage adapterを必要とするOpenRaftのstorage適合テスト。
+
+コマンドはASCIIのclient IDを128 byteまで受け付けます。
+正のsequenceと空でないカタログtagが必要です。
+transaction stepは1件から1,000件までで、少なくとも1件の更新を含めます。
+シリアライズ後のコマンドは1 MiBまでです。
+アプリケーション状態とsnapshot全体は、それぞれ64 MiBまでです。
+クライアントの再試行記録は期限なく保持します。
+状態が上限に達すると、クライアントの記録を安全に削除する契約が定まるまでstate machineはfail-closedになります。
+
+空のカタログは`RaftCatalogStateMachine::open`で初期化できます。
+データがあるカタログには、commit済みカタログsnapshotと明示的な`initialize`が必要です。
+transaction IDが0の非空カタログには転送できるMVCC imageがないため、初期化を拒否します。
+データがあるのにRaft state sidecarがないカタログは、暗黙に初期化せずfail-closedで開きます。
 
 ## 1. 目的と境界
 
@@ -50,8 +70,9 @@ storage adapterの移行が済むまで、依存versionとfeature集合を固定
 依存versionとlockfileを固定し、この文書に記載したストレージスイートと複数nodeの障害テストを通さずに更新しない。
 
 プロトコル処理にはOpenRaftのTokio runtimeを使う。
-カタログとログのファイル操作でruntimeのexecutor threadを塞がない。
-必要な永続書き込みが完了する前にRPCの成功を返さない。
+実装済みstate machineは`tokio::task::spawn_blocking`でカタログのファイル操作を行う。
+プロトコルruntimeとRPC経路は未実装です。
+将来のRPCは、必要な永続書き込みが完了する前に成功を返しません。
 
 ## 3. ノードIDとmembership
 
@@ -80,19 +101,20 @@ LSNは0から始まり、公開されている保守操作はログ全体を消�
 競合suffixの切り詰めやsnapshotで置き換えたprefixの破棄には対応しない。
 既存の`TXWL`形式を変えずにstorage契約を拡張できる場合に限り、frame形式と復旧処理を再利用する。
 
-Raftの適用エントリには、有界なカタログ更新step、期待するカタログ表現、requestの事前条件、client ID、sequenceを格納する。
-state machineはcommit済みエントリだけを適用する。
-成功した更新と**適用済みRaft位置**および再試行結果を、カタログジャーナルで原子的に公開する。
+Raftの適用エントリには、有界なカタログ更新step、期待するカタログschema tag、requestの事前条件、client ID、単調増加するsequenceを格納する。
+実装済みstate machineは、OpenRaftのapply interfaceから渡されたエントリを適用します。
+カタログのwrite lock内で、期待するカタログtransaction IDとschema tagを検査します。
+成功したカタログ更新、**適用済みRaft位置**、再試行結果を1つのjournal commitで公開します。
 
-事前条件によって拒否したrequestも、適用済みRaft位置を進めて安定した応答を記録する。
-ただし、カタログtransaction IDは進めない。
+古いカタログtag、requestの事前条件違反、不正なtransactionなど、決定的に拒否したコマンドも適用済みRaft位置を進めて応答を記録する。
+カタログtransaction IDは進めない。
 membershipエントリやプロトコル上のno-opもRaft位置だけを進め、カタログtransactionとして扱わない。
 
-再試行可能な更新には、clientごとの単調増加sequenceを持たせる。
-clientは同じIDについて同時に1つだけ更新を送る。
-state machineはclientごとの最新sequenceと応答を保存する。
-最新sequenceと同じ再試行には保存した応答を返し、古いsequenceは再適用せず拒否し、飛び番のsequenceも拒否する。
-clientのsequence状態はsnapshotに含め、client IDを再利用しない。
+再試行可能な更新にはclientごとの単調増加sequenceを持たせる。
+state machineはclientごとの最新sequence、request fingerprint、応答を保存する。
+同一要求の再試行には保存した応答を返します。
+競合する再試行、古いsequence、飛び番のsequenceは、更新を再適用せずに拒否します。
+clientのsequence状態はsnapshotに含め、client IDを再利用しません。
 
 適用済み位置とrequest結果はカタログ更新とともに永続化する。
 クラッシュ後の再生はその位置より後から始める。
@@ -123,8 +145,10 @@ host境界を越えるpeer通信は認証と暗号化が必要です。
 
 ## 7. snapshot、復旧、移行
 
-Raft snapshotには、カタログイメージ、最後に適用したRaft log ID、有効なmembership、アプリケーションの重複排除状態を含める。
-受信側は、対象範囲のログprefixを削除する前に、これらを一緒に公開する。
+Raft snapshotには、カタログMVCC image、最後に適用したRaft log ID、有効なmembership、アプリケーションの重複排除状態を含めます。
+現在のadapterはアプリケーション状態を`.txbase.raft-state`に保存し、version付きsnapshotを`.txbase.raft-snapshot`に保存します。
+snapshot payloadは`TXRF` version 1 headerを使い、`TXRA` version 1のアプリケーション状態を含みます。
+インストール時はカタログイメージと両方のsidecarを一緒に公開します。
 
 既存の`ReplicationSnapshot`にはカタログのレプリケーション位置がある。
 しかし、Raft membershipとcommit済みRaft log IDは含まない。
@@ -142,8 +166,10 @@ voter集合を推測したり、古いfollowerログを自動で昇格したり�
 
 ## 8. 検証と完了条件
 
-サーバーで使う前に、storage adapterはOpenRaftの`testing::Suite`を通過する。
-CIでは、決定的な遅延、メッセージ損失、partition、並べ替え、再起動を設定できる複数のRaft nodeも検証する。
+CIのstate machineテストでは、カタログcommitの原子性、再起動後の再試行、sequence拒否、no-opとmembership、snapshotインストールを検証する。
+storage adapterはサーバー接続前にOpenRaftの`testing::Suite`を通過する。
+Raftログstoreが未実装のため、このsuiteは実行できない。
+CIでは決定的な遅延、メッセージ損失、partition、並べ替え、再起動を設定した複数のRaft nodeも検証する。
 
 完了には、termとvoteの永続復旧、競合ログの置換、quorum喪失、leader交代、応答消失後のclient再試行、適用位置の復旧をテストする。
 snapshotのインストールとsuffix保持、learnerの追いつき、joint membership変更、leader交代中のlinearizable readもテストする。
@@ -156,6 +182,8 @@ snapshotのインストールとsuffix保持、learnerの追いつき、joint me
 - [In Search of an Understandable Consensus Algorithm（Raft）](https://raft.github.io/raft.pdf)は、コンセンサスプロトコルとjoint-consensusによるmembership変更を定義する。
 - [OpenRaft 0.9.25の文書](https://docs.rs/openraft/0.9.25/openraft/)は、選択した実装とversion 1.0前のAPI状態を説明する。
 - [OpenRaftのfeature flags](https://docs.rs/openraft/0.9.25/openraft/docs/feature_flags/)は、標準Raft modeと一時的な`storage-v2` APIを説明する。
+- [OpenRaft `RaftLogStorage`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftLogStorage.html)は、永続ログstorageの契約を定義する。
+- [OpenRaft `RaftStateMachine`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftStateMachine.html)は、適用済み状態、エントリの適用、snapshotの契約を定義する。
 - [OpenRaftの導入手順とストレージテストスイート](https://docs.rs/openraft/0.9.25/openraft/docs/getting_started/)は、アプリケーション用ストレージとネットワークのadapter、および`testing::Suite`を説明する。
 - [OpenRaftの動的membership](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/dynamic_membership/)は、learnerの追いつきとvoter変更を定義する。
 

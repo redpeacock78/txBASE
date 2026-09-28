@@ -381,6 +381,7 @@ pub(super) fn replication_error_response(error: ReplicationError) -> HttpRespons
         ReplicationError::Commit(
             CatalogTransactionError::SidecarPreconditionFailed { .. }
             | CatalogTransactionError::TransactionPreconditionFailed { .. }
+            | CatalogTransactionError::CatalogTagChanged { .. }
             | CatalogTransactionError::TableSetChanged,
         ) => (409, None),
         ReplicationError::Commit(CatalogTransactionError::Catalog(_)) => (500, None),
@@ -405,6 +406,7 @@ fn error_json(replication_error: &ReplicationError) -> serde_json::Value {
         ReplicationError::Commit(
             CatalogTransactionError::SidecarPreconditionFailed { .. }
             | CatalogTransactionError::TransactionPreconditionFailed { .. }
+            | CatalogTransactionError::CatalogTagChanged { .. }
             | CatalogTransactionError::TableSetChanged,
         ) => "catalog_changed",
         ReplicationError::Commit(CatalogTransactionError::Catalog(_)) => "replication_storage",

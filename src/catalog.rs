@@ -17,6 +17,8 @@ mod serializable;
 mod snapshot;
 mod transaction;
 
+pub(crate) use transaction::CommitPrecondition;
+
 pub use cdc::{CatalogChangeEvent, CatalogTableChange};
 pub use read_transaction::CatalogReadTransaction;
 pub use serializable::CatalogTransaction;
@@ -64,6 +66,7 @@ impl From<std::io::Error> for CatalogError {
 #[derive(Debug)]
 pub enum CatalogTransactionError {
     Invalid(String),
+    CatalogTagChanged { expected: String, actual: String },
     PreconditionFailed { tag: String },
     SidecarPreconditionFailed { name: String },
     TransactionPreconditionFailed { expected: u64, actual: u64 },
@@ -75,6 +78,10 @@ impl Display for CatalogTransactionError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Invalid(message) => write!(formatter, "invalid catalog transaction: {message}"),
+            Self::CatalogTagChanged { expected, actual } => write!(
+                formatter,
+                "catalog tag changed: expected {expected}, got {actual}"
+            ),
             Self::PreconditionFailed { .. } => {
                 write!(formatter, "catalog transaction precondition failed")
             }
@@ -101,6 +108,7 @@ impl Error for CatalogTransactionError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Invalid(_)
+            | Self::CatalogTagChanged { .. }
             | Self::PreconditionFailed { .. }
             | Self::SidecarPreconditionFailed { .. }
             | Self::TransactionPreconditionFailed { .. }

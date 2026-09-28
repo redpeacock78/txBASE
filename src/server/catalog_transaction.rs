@@ -148,6 +148,14 @@ fn commit_error_response(commit_error: CommitError) -> HttpResponse {
             ),
             false,
         ),
+        CommitError::Catalog(CatalogTransactionError::CatalogTagChanged { .. }) => json_response(
+            409,
+            error(
+                "catalog_changed",
+                "the catalog schema changed during the transaction",
+            ),
+            false,
+        ),
         CommitError::Catalog(CatalogTransactionError::SidecarPreconditionFailed { .. }) => {
             json_response(
                 409,

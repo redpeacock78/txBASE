@@ -11,15 +11,26 @@ use std::path::{Component, Path, PathBuf};
 struct SidecarChange {
     name: String,
     before: Option<Vec<u8>>,
-    after: Vec<u8>,
+    after: Box<dyn FnOnce(u64) -> Vec<u8> + Send>,
 }
 
-enum CommitPrecondition<'a> {
+pub(super) struct PreparedSidecarChange {
+    path: PathBuf,
+    before: Option<Vec<u8>>,
+    after: Box<dyn FnOnce(u64) -> Vec<u8> + Send>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum CommitPrecondition<'a> {
     Catalog {
+        expected_transaction_id: Option<u64>,
+        expected_catalog_tag: Option<&'a str>,
         if_match: Option<&'a str>,
         if_none_match: Option<&'a str>,
     },
     Table {
+        expected_transaction_id: Option<u64>,
+        expected_catalog_tag: Option<&'a str>,
         name: &'a str,
         if_match: Option<&'a str>,
         if_none_match: Option<&'a str>,
@@ -59,6 +70,25 @@ impl Catalog {
         expected_sidecar: Option<Vec<u8>>,
         sidecar_after: Option<Vec<u8>>,
     ) -> Result<(), CatalogTransactionError> {
+        self.update_sidecars_without_transaction(vec![(
+            sidecar_name.to_owned(),
+            expected_sidecar,
+            sidecar_after,
+        )])
+    }
+
+    pub(crate) fn update_sidecars_without_transaction(
+        &self,
+        sidecars: Vec<(String, Option<Vec<u8>>, Option<Vec<u8>>)>,
+    ) -> Result<(), CatalogTransactionError> {
+        self.update_sidecars_at_transaction(None, sidecars)
+    }
+
+    pub(crate) fn update_sidecars_at_transaction(
+        &self,
+        expected_transaction_id: Option<u64>,
+        sidecars: Vec<(String, Option<Vec<u8>>, Option<Vec<u8>>)>,
+    ) -> Result<(), CatalogTransactionError> {
         if self.is_historical() {
             return Err(CatalogTransactionError::Invalid(
                 "historical catalog snapshots are read-only".into(),
@@ -67,26 +97,42 @@ impl Catalog {
         let _lock = self
             .acquire_write_lock()
             .map_err(CatalogTransactionError::Catalog)?;
-        let path =
-            sidecar_path(&self.root, sidecar_name).map_err(CatalogTransactionError::Catalog)?;
-        let actual = read_optional(&path).map_err(CatalogTransactionError::Catalog)?;
-        if actual != expected_sidecar {
-            return Err(CatalogTransactionError::SidecarPreconditionFailed {
-                name: sidecar_name.to_owned(),
-            });
+        if let Some(expected) = expected_transaction_id {
+            let actual = super::journal::read_transaction_id_locked(&self.root)
+                .map_err(CatalogTransactionError::Catalog)?
+                .unwrap_or(0);
+            if actual != expected {
+                return Err(CatalogTransactionError::TransactionPreconditionFailed {
+                    expected,
+                    actual,
+                });
+            }
         }
-        if actual == sidecar_after {
+        let mut changes = Vec::with_capacity(sidecars.len());
+        let mut names = BTreeSet::new();
+        for (name, expected, after) in sidecars {
+            if !names.insert(name.clone()) {
+                return Err(CatalogTransactionError::Invalid(format!(
+                    "duplicate catalog sidecar: {name}"
+                )));
+            }
+            let path = sidecar_path(&self.root, &name).map_err(CatalogTransactionError::Catalog)?;
+            let actual = read_optional(&path).map_err(CatalogTransactionError::Catalog)?;
+            if actual != expected {
+                return Err(CatalogTransactionError::SidecarPreconditionFailed { name });
+            }
+            if actual != after {
+                changes.push(FileChange {
+                    target: path,
+                    before: actual,
+                    after,
+                });
+            }
+        }
+        if changes.is_empty() {
             return Ok(());
         }
-        commit_files(
-            &self.root,
-            vec![FileChange {
-                target: path,
-                before: actual,
-                after: sidecar_after,
-            }],
-        )
-        .map_err(CatalogTransactionError::Catalog)
+        commit_files(&self.root, changes).map_err(CatalogTransactionError::Catalog)
     }
 
     #[cfg(test)]
@@ -99,6 +145,8 @@ impl Catalog {
         self.commit_operations_internal(
             operations,
             Some(CommitPrecondition::Catalog {
+                expected_transaction_id: None,
+                expected_catalog_tag: None,
                 if_match,
                 if_none_match,
             }),
@@ -115,11 +163,14 @@ impl Catalog {
         self.commit_steps_internal(
             steps,
             Some(CommitPrecondition::Catalog {
+                expected_transaction_id: None,
+                expected_catalog_tag: None,
                 if_match,
                 if_none_match,
             }),
             None,
         )
+        .map(|(transaction_id, _)| transaction_id)
     }
 
     pub(crate) fn commit_steps_with_sidecar(
@@ -135,9 +186,10 @@ impl Catalog {
             Some(SidecarChange {
                 name: sidecar_name.to_owned(),
                 before: expected_sidecar,
-                after: sidecar_after,
+                after: Box::new(move |_| sidecar_after),
             }),
         )
+        .map(|(transaction_id, _)| transaction_id)
     }
 
     pub(crate) fn commit_steps_with_preconditions_and_sidecar(
@@ -152,15 +204,46 @@ impl Catalog {
         self.commit_steps_internal(
             steps,
             Some(CommitPrecondition::Catalog {
+                expected_transaction_id: None,
+                expected_catalog_tag: None,
                 if_match,
                 if_none_match,
             }),
             Some(SidecarChange {
                 name: sidecar_name.to_owned(),
                 before: expected_sidecar,
-                after: sidecar_after,
+                after: Box::new(move |_| sidecar_after),
             }),
         )
+        .map(|(transaction_id, _)| transaction_id)
+    }
+
+    pub(crate) fn commit_steps_with_sidecar_factory<F>(
+        &self,
+        steps: &[TransactionStep],
+        precondition: CommitPrecondition<'_>,
+        sidecar_name: &str,
+        expected_sidecar: Option<Vec<u8>>,
+        sidecar_after: F,
+    ) -> Result<(u64, Vec<u8>), CatalogTransactionError>
+    where
+        F: FnOnce(u64) -> Vec<u8> + Send + 'static,
+    {
+        let (transaction_id, sidecar_after) = self.commit_steps_internal(
+            steps,
+            Some(precondition),
+            Some(SidecarChange {
+                name: sidecar_name.to_owned(),
+                before: expected_sidecar,
+                after: Box::new(sidecar_after),
+            }),
+        )?;
+        let Some(sidecar_after) = sidecar_after else {
+            return Err(CatalogTransactionError::Invalid(
+                "catalog transaction did not produce its state sidecar".into(),
+            ));
+        };
+        Ok((transaction_id, sidecar_after))
     }
 
     pub(crate) fn commit_operations_with_sidecar_and_table_preconditions(
@@ -175,6 +258,8 @@ impl Catalog {
         self.commit_operations_internal(
             operations,
             Some(CommitPrecondition::Table {
+                expected_transaction_id: None,
+                expected_catalog_tag: None,
                 name: table_name,
                 if_match,
                 if_none_match,
@@ -182,7 +267,7 @@ impl Catalog {
             Some(SidecarChange {
                 name: sidecar_name.to_owned(),
                 before: expected_sidecar,
-                after: sidecar_after,
+                after: Box::new(move |_| sidecar_after),
             }),
         )
     }
@@ -199,6 +284,7 @@ impl Catalog {
             .map(TransactionStep::Mutation)
             .collect::<Vec<_>>();
         self.commit_steps_internal(&steps, precondition, sidecar)
+            .map(|(transaction_id, _)| transaction_id)
     }
 
     fn commit_steps_internal(
@@ -206,7 +292,7 @@ impl Catalog {
         steps: &[TransactionStep],
         precondition: Option<CommitPrecondition<'_>>,
         sidecar: Option<SidecarChange>,
-    ) -> Result<u64, CatalogTransactionError> {
+    ) -> Result<(u64, Option<Vec<u8>>), CatalogTransactionError> {
         if steps.is_empty() {
             return Err(CatalogTransactionError::Invalid(
                 "operations must not be empty".into(),
@@ -220,6 +306,29 @@ impl Catalog {
         let _lock = self
             .acquire_write_lock()
             .map_err(CatalogTransactionError::Catalog)?;
+        if let Some(precondition) = precondition {
+            let expected_transaction_id = match precondition {
+                CommitPrecondition::Catalog {
+                    expected_transaction_id,
+                    ..
+                }
+                | CommitPrecondition::Table {
+                    expected_transaction_id,
+                    ..
+                } => expected_transaction_id,
+            };
+            if let Some(expected) = expected_transaction_id {
+                let actual = super::journal::read_transaction_id_locked(&self.root)
+                    .map_err(CatalogTransactionError::Catalog)?
+                    .unwrap_or(0);
+                if actual != expected {
+                    return Err(CatalogTransactionError::TransactionPreconditionFailed {
+                        expected,
+                        actual,
+                    });
+                }
+            }
+        }
         let sidecar_change = sidecar
             .map(|sidecar| {
                 let path = sidecar_path(&self.root, &sidecar.name)
@@ -230,10 +339,10 @@ impl Catalog {
                         name: sidecar.name,
                     });
                 }
-                Ok(FileChange {
-                    target: path,
+                Ok(PreparedSidecarChange {
+                    path,
                     before: actual,
-                    after: Some(sidecar.after),
+                    after: sidecar.after,
                 })
             })
             .transpose()?;
@@ -246,20 +355,49 @@ impl Catalog {
             );
         }
         if let Some(precondition) = precondition {
+            let expected_catalog_tag = match precondition {
+                CommitPrecondition::Catalog {
+                    expected_catalog_tag,
+                    ..
+                }
+                | CommitPrecondition::Table {
+                    expected_catalog_tag,
+                    ..
+                } => expected_catalog_tag,
+            };
+            let schema_tag = if expected_catalog_tag.is_some()
+                || matches!(precondition, CommitPrecondition::Catalog { .. })
+            {
+                Some(
+                    self.schema_representation_unlocked()
+                        .map_err(CatalogTransactionError::Catalog)?
+                        .1,
+                )
+            } else {
+                None
+            };
+            if let (Some(expected), Some(actual)) = (expected_catalog_tag, schema_tag.as_deref()) {
+                if expected != actual {
+                    return Err(CatalogTransactionError::CatalogTagChanged {
+                        expected: expected.to_owned(),
+                        actual: actual.to_owned(),
+                    });
+                }
+            }
             let (if_match, if_none_match, tag) = match precondition {
                 CommitPrecondition::Catalog {
                     if_match,
                     if_none_match,
+                    ..
                 } => {
-                    let (_, tag) = self
-                        .schema_representation_unlocked()
-                        .map_err(CatalogTransactionError::Catalog)?;
+                    let tag = schema_tag.expect("catalog precondition loaded its schema tag");
                     (if_match, if_none_match, tag)
                 }
                 CommitPrecondition::Table {
                     name,
                     if_match,
                     if_none_match,
+                    ..
                 } => {
                     let table = before.get(name).ok_or_else(|| {
                         CatalogTransactionError::Invalid(format!("table not found: {name}"))
@@ -312,7 +450,8 @@ impl Catalog {
             tables,
             touched,
             false,
-            sidecar_change.into_iter().collect(),
+            Vec::new(),
+            sidecar_change,
             &deferred_constraints,
         )
     }
@@ -394,12 +533,28 @@ impl Catalog {
         mut touched: BTreeSet<String>,
         reuse_loaded_tables: bool,
         extra_changes: Vec<FileChange>,
+        sidecar: Option<PreparedSidecarChange>,
         deferred_constraints: &BTreeMap<String, BTreeSet<String>>,
-    ) -> Result<u64, CatalogTransactionError> {
+    ) -> Result<(u64, Option<Vec<u8>>), CatalogTransactionError> {
         if touched.is_empty() {
-            return super::journal::read_transaction_id_locked(&self.root)
+            let transaction_id = super::journal::read_transaction_id_locked(&self.root)
                 .map(|transaction_id| transaction_id.unwrap_or(0))
                 .map_err(CatalogTransactionError::Catalog);
+            let transaction_id = transaction_id?;
+            let mut changes = extra_changes;
+            let sidecar_after = sidecar.map(|sidecar| {
+                let after = (sidecar.after)(transaction_id);
+                changes.push(FileChange {
+                    target: sidecar.path,
+                    before: sidecar.before,
+                    after: Some(after.clone()),
+                });
+                after
+            });
+            if !changes.is_empty() {
+                commit_files(&self.root, changes).map_err(CatalogTransactionError::Catalog)?;
+            }
+            return Ok((transaction_id, sidecar_after));
         }
         let before_snapshots =
             super::constraint_actions::snapshot_referenced_tables(&before, &tables)
@@ -432,6 +587,15 @@ impl Catalog {
         let transaction_id =
             next_transaction_id_locked(&self.root).map_err(CatalogTransactionError::Catalog)?;
         let mut changes = Vec::new();
+        let sidecar_after = sidecar.map(|sidecar| {
+            let after = (sidecar.after)(transaction_id);
+            changes.push(FileChange {
+                target: sidecar.path,
+                before: sidecar.before,
+                after: Some(after.clone()),
+            });
+            after
+        });
         for (name, table) in &mut replacements {
             let path = self
                 .table_path(name)
@@ -537,7 +701,9 @@ impl Catalog {
             after: Some(cdc_after),
         });
         changes.extend(extra_changes);
-        commit(&self.root, changes).map_err(CatalogTransactionError::Catalog)
+        commit(&self.root, changes)
+            .map(|transaction_id| (transaction_id, sidecar_after))
+            .map_err(CatalogTransactionError::Catalog)
     }
 }
 
@@ -572,7 +738,7 @@ fn transaction_operation_path(path: &str) -> Option<(&str, String)> {
     }
 }
 
-fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, CatalogError> {
+pub(super) fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, CatalogError> {
     match fs::read(path) {
         Ok(bytes) => Ok(Some(bytes)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),

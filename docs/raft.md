@@ -1,15 +1,38 @@
 # Raft consensus design
 
-Status: Raft is the selected consensus protocol. The repository does not yet integrate a Raft runtime; the current catalog server remains a fixed-term, single-authority implementation.
+Status: The catalog Raft state machine is implemented, but the catalog server does not use it. The server remains a fixed-term, single-authority implementation.
 
 This document defines the target authority, persistence, application, and operations contracts. It does not describe features as implemented.
 
 ## Current implementation status
 
-The repository pins OpenRaft `=0.9.25` and defines a `TypeConfig`, version 1 client commands, and client responses.
-The command validator bounds client IDs to 128 ASCII bytes, requires a positive sequence and non-empty catalog tag, accepts 1–1,000 transaction steps with at least one mutation, validates request preconditions, and caps serialized commands at 1 MiB.
-These types are not connected to `serve-catalog`; durable Raft log storage, a catalog state-machine adapter, snapshots, and peer transport remain unimplemented.
-The current catalog server therefore remains a fixed-term, single-authority implementation.
+### Implemented
+
+- OpenRaft `=0.9.25` is pinned, and the repository defines `TypeConfig`, version 1 client commands, and responses.
+- `RaftCatalogStateMachine` applies committed commands and persists catalog changes, the applied Raft position, and client retry results in one catalog journal commit.
+- Blank entries, membership entries, and rejected commands persist their applied position without advancing the catalog transaction ID.
+- The state machine stores the latest response per client and enforces exact retry, conflict, old-sequence, and gap behavior.
+- Snapshot build, transfer, and install carry the catalog image, applied position, membership, and client retry state together.
+- Catalog filesystem work runs through Tokio's blocking worker pool.
+
+The state-machine API is not connected to `serve-catalog` or a running Raft node.
+The current catalog server still uses the fixed-term, single-authority replication path.
+
+### Not implemented
+
+- Durable Raft votes, logs, committed position, and log compaction.
+- Raft node startup, cluster initialization, peer RPC, authentication, and TLS.
+- CLI membership operations, quorum writes, linearizable reads, and multi-node failure tests.
+- OpenRaft's storage conformance suite, which requires the missing log-storage adapter.
+
+Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
+The serialized command limit is 1 MiB.
+The application state and complete snapshot are each limited to 64 MiB.
+Client retry records are retained indefinitely; reaching the state limit fails closed until a client-retirement protocol is defined.
+
+An empty catalog can initialize through `RaftCatalogStateMachine::open`.
+A non-empty catalog requires explicit `initialize` and a committed catalog snapshot; a non-empty catalog at transaction ID 0 is rejected because it has no transferable MVCC image.
+Opening a catalog with data but no Raft state sidecar fails closed.
 
 ## 1. Purpose and boundary
 
@@ -29,7 +52,7 @@ OpenRaft provides the protocol engine, dynamic-membership operations, and a conf
 
 The selected OpenRaft release documents its API as unstable before version 1.0. Pin the exact dependency and lockfile version; upgrade it only with the storage suite and the multi-node failure tests in this document.
 
-Use OpenRaft's Tokio runtime for protocol tasks. Catalog and log filesystem operations must not block the runtime's executor threads, and an RPC success must not be returned before the required durable write completes.
+Use OpenRaft's Tokio runtime for protocol tasks. The implemented state machine sends catalog filesystem work to `tokio::task::spawn_blocking`; the protocol runtime and RPC path remain unimplemented. A future RPC success must not be returned before the required durable write completes.
 
 ## 3. Node identity and membership
 
@@ -47,11 +70,16 @@ The OpenRaft storage adapter must durably store votes, log entries, membership s
 
 The existing `FileWal` is not a drop-in Raft store: its LSN starts at zero, and its public maintenance operation clears the entire log rather than truncating a conflicting suffix or purging a snapshot-covered prefix. Reuse its framing and recovery code only if the storage contract is extended without changing the existing `TXWL` format.
 
-Raft application entries carry bounded catalog mutation steps, the expected catalog representation, request preconditions, a stable client ID, and a monotonically increasing client sequence. The state machine applies only committed entries and uses the catalog journal to atomically publish a successful catalog mutation with its last-applied Raft position and retry result.
+Raft application entries carry bounded catalog mutation steps, the expected catalog schema tag, request preconditions, a stable client ID, and a monotonically increasing client sequence. The implemented state machine applies only entries passed to OpenRaft's apply interface.
+It checks the expected catalog transaction ID and schema tag under the catalog write lock.
+It publishes a successful catalog mutation, its last-applied Raft position, and the retry result in one journal commit.
 
-A rejected precondition still advances the applied Raft position and records its stable response without advancing the catalog transaction ID. Membership entries and protocol no-ops also advance Raft position without pretending to be catalog transactions.
+A deterministic command rejection, including a stale catalog tag, failed request precondition, or invalid transaction, advances the applied Raft position and records its stable response without advancing the catalog transaction ID.
+Membership entries and protocol no-ops also advance the Raft position without pretending to be catalog transactions.
 
-Each client may have one outstanding sequence. The state machine persists the latest sequence and response for each client: an exact retry returns the stored response, an older sequence is rejected without reapplication, and a sequence gap is rejected. Client IDs are not reused, and this state is included in snapshots.
+Each client may have one outstanding sequence. The state machine persists the latest sequence, request fingerprint, and response for each client.
+An exact retry returns the stored response; a conflicting retry, an older sequence, or a sequence gap is rejected without reapplying the mutation.
+Client IDs are not reused, and this state is included in snapshots.
 
 The applied-position marker and request result must be durable with the catalog mutation. After a crash, replay resumes after that marker; it must not apply a committed mutation twice or report an uncommitted mutation as successful.
 
@@ -73,7 +101,10 @@ Peer traffic must be authenticated and encrypted when it crosses a host boundary
 
 ## 7. Snapshots, recovery, and migration
 
-A Raft snapshot contains the catalog image, the last-applied Raft log ID, the effective membership, and the application deduplication state. Installation publishes these together before the receiver discards the covered log prefix.
+A Raft snapshot contains the catalog MVCC image, the last-applied Raft log ID, the effective membership, and the application deduplication state.
+The current adapter stores application state in `.txbase.raft-state` and the versioned snapshot in `.txbase.raft-snapshot`.
+Snapshot payloads use the `TXRF` version 1 header and embed the `TXRA` version 1 application state.
+Installation publishes the catalog image and both sidecars together.
 
 The existing `ReplicationSnapshot` contains catalog replication position but no Raft membership or committed Raft log ID. It is not a complete Raft snapshot and must not be installed as one.
 
@@ -83,7 +114,9 @@ Migration from a fixed-term `TXRP` authority is explicit. Stop the old writers, 
 
 ## 8. Verification and acceptance
 
-The storage adapter must pass OpenRaft's `testing::Suite` before it is used by the server. CI must also exercise multiple real Raft nodes with deterministic network delay, message loss, partitions, reordering, and restart points.
+The state-machine CI tests cover catalog commit atomicity, restart-safe retries, sequence rejection, no-op and membership entries, and snapshot installation.
+The storage adapter must pass OpenRaft's `testing::Suite` before it is used by the server; this remains blocked on the missing Raft log store.
+CI must also exercise multiple Raft nodes with deterministic network delay, message loss, partitions, reordering, and restart points.
 
 Acceptance requires tests for durable term and vote recovery, conflicting log replacement, quorum loss, leader change, client retry after a lost response, apply-marker recovery, snapshot installation and suffix retention, learner catch-up, joint membership changes, and linearizable reads during leadership changes.
 
@@ -94,6 +127,8 @@ Crash injection must cover each boundary between log persistence, quorum commitm
 - [In Search of an Understandable Consensus Algorithm (Raft)](https://raft.github.io/raft.pdf) defines the consensus protocol and joint-consensus membership change.
 - [OpenRaft 0.9.25 documentation](https://docs.rs/openraft/0.9.25/openraft/) documents the selected implementation and its pre-1.0 API status.
 - [OpenRaft feature flags](https://docs.rs/openraft/0.9.25/openraft/docs/feature_flags/) documents standard Raft mode and the temporary `storage-v2` API.
+- [OpenRaft `RaftLogStorage`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftLogStorage.html) defines durable log-store behavior.
+- [OpenRaft `RaftStateMachine`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftStateMachine.html) defines applied-state, entry application, and snapshot behavior.
 - [OpenRaft getting started and storage test suite](https://docs.rs/openraft/0.9.25/openraft/docs/getting_started/) defines the application storage and network adapters and points to `testing::Suite`.
 - [OpenRaft dynamic membership](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/dynamic_membership/) defines learner catch-up and voter changes.
 
