@@ -14,6 +14,7 @@ mod etag;
 mod explain;
 mod json_patch;
 mod merge_patch;
+mod raft;
 mod range;
 mod records;
 mod replication;
@@ -29,6 +30,20 @@ const JSON_PATCH_MEDIA_TYPE: &str = "application/json-patch+json";
 pub enum CatalogReplicationRole {
     Authority,
     Follower,
+}
+
+#[derive(Clone, Debug)]
+pub struct CatalogRaftConfig {
+    pub node_id: u64,
+    pub cluster_id: String,
+    pub node_directory: std::path::PathBuf,
+    pub peer_bind: String,
+    pub peer_advertise: String,
+    pub initial_members: std::collections::BTreeMap<u64, String>,
+    pub bootstrap: bool,
+    pub initialize_catalog: bool,
+    pub tls_certificate: Option<std::path::PathBuf>,
+    pub tls_private_key: Option<std::path::PathBuf>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -120,6 +135,14 @@ pub fn serve_catalog_with_replication_config(
         role,
         replication_token_from_env()?,
     )
+}
+
+pub fn serve_catalog_with_raft(
+    root: impl AsRef<Path>,
+    bind: &str,
+    config: CatalogRaftConfig,
+) -> Result<(), String> {
+    catalog::serve_with_raft(root, bind, config, replication_token_from_env()?)
 }
 
 fn replication_token_from_env() -> Result<Option<String>, String> {
@@ -255,6 +278,9 @@ mod tests;
 
 #[cfg(test)]
 mod catalog_tests;
+
+#[cfg(test)]
+mod raft_tests;
 
 #[cfg(test)]
 mod etag_tests;

@@ -1,7 +1,8 @@
 use crate::xbase::{MAX_OPERATION_BATCH, TransactionStep};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
-pub const RAFT_COMMAND_VERSION: u16 = 1;
+pub const RAFT_COMMAND_VERSION: u16 = 2;
 pub const MAX_RAFT_CLIENT_ID_BYTES: usize = 128;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,6 +27,7 @@ pub struct RaftCommand {
     pub sequence: u64,
     pub expected_catalog_tag: String,
     pub precondition: Option<RaftCommandPrecondition>,
+    pub request_fingerprint: Vec<u8>,
     pub steps: Vec<TransactionStep>,
 }
 
@@ -62,16 +64,37 @@ impl RaftCommand {
         precondition: Option<RaftCommandPrecondition>,
         steps: Vec<TransactionStep>,
     ) -> Result<Self, String> {
-        let command = Self {
+        let mut command = Self {
             version: RAFT_COMMAND_VERSION,
             client_id,
             sequence,
             expected_catalog_tag,
             precondition,
+            request_fingerprint: Vec::new(),
             steps,
         };
+        command.request_fingerprint =
+            Self::request_fingerprint(&command.precondition, &command.steps)?;
         command.validate()?;
         Ok(command)
+    }
+
+    pub fn request_fingerprint(
+        precondition: &Option<RaftCommandPrecondition>,
+        steps: &[TransactionStep],
+    ) -> Result<Vec<u8>, String> {
+        let bytes = serde_json::to_vec(&("txbase-raft-command-v2", precondition, steps))
+            .map_err(|error| error.to_string())?;
+        Ok(Sha256::digest(bytes).to_vec())
+    }
+
+    pub fn with_request_fingerprint(mut self, fingerprint: Vec<u8>) -> Result<Self, String> {
+        if fingerprint.len() != 32 {
+            return Err("request_fingerprint must be a SHA-256 digest".into());
+        }
+        self.request_fingerprint = fingerprint;
+        self.validate()?;
+        Ok(self)
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -97,6 +120,9 @@ impl RaftCommand {
         }
         if self.expected_catalog_tag.trim().is_empty() {
             return Err("expected_catalog_tag must not be empty".into());
+        }
+        if self.request_fingerprint.len() != 32 {
+            return Err("request_fingerprint must be a SHA-256 digest".into());
         }
         if self.steps.is_empty() || self.steps.len() > MAX_OPERATION_BATCH {
             return Err(format!(
@@ -164,6 +190,43 @@ impl RaftCommand {
         let command: Self = serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
         command.validate()?;
         Ok(command)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::xbase::{OperationIr, OperationMethod};
+    use serde_json::json;
+
+    #[test]
+    fn request_fingerprint_ignores_catalog_tag_but_tracks_mutation() {
+        let operation = |age| {
+            TransactionStep::Mutation(OperationIr {
+                method: OperationMethod::Post,
+                path: "/users/records".into(),
+                body: Some(json!({"AGE": age})),
+            })
+        };
+        let command = |catalog_tag, age| {
+            RaftCommand::new(
+                "client".into(),
+                1,
+                catalog_tag.into(),
+                None,
+                vec![operation(age)],
+            )
+            .unwrap()
+        };
+
+        assert_eq!(
+            command("catalog-before", 42).request_fingerprint,
+            command("catalog-after", 42).request_fingerprint
+        );
+        assert_ne!(
+            command("catalog-before", 42).request_fingerprint,
+            command("catalog-before", 43).request_fingerprint
+        );
     }
 }
 

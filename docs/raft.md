@@ -1,30 +1,35 @@
 # Raft consensus design
 
-Status: The catalog Raft state machine and durable OpenRaft log store are implemented, but the catalog server does not use them. The server remains a fixed-term, single-authority implementation.
+Status: `serve-catalog` has an optional OpenRaft mode with explicit static voter membership, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. Peer TLS and a three-node happy-path CI test are implemented. Dynamic membership operations and failure-injection coverage remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
-This document defines the target authority, persistence, application, and operations contracts. It does not describe features as implemented.
+This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
 
 ## Current implementation status
 
 ### Implemented
 
-- OpenRaft `=0.9.25` is pinned, and the repository defines `TypeConfig`, version 1 client commands, and responses.
+- OpenRaft `=0.9.25` is pinned, and the repository defines `TypeConfig`, version 2 client commands, and responses.
 - `RaftCatalogStateMachine` applies committed commands and persists catalog changes, the applied Raft position, and client retry results in one catalog journal commit.
 - Blank entries, membership entries, and rejected commands persist their applied position without advancing the catalog transaction ID.
 - The state machine stores the latest response per client and enforces exact retry, conflict, old-sequence, and gap behavior.
 - Snapshot build, transfer, and install carry the catalog image, applied position, membership, and client retry state together.
 - Catalog filesystem work runs through Tokio's blocking worker pool.
+- `serve-catalog` starts an OpenRaft node from an explicit node ID, cluster ID, node directory, peer address, and initial member map. Only `--raft-bootstrap` initializes cluster membership.
+- A separate peer listener handles vote, append, and snapshot RPCs. It bounds requests to 2 MiB, applies a 10-second timeout, checks bearer authentication, cluster and node identity, active membership, and a shared genesis-catalog fingerprint.
+- Peer traffic may use HTTPS with a node certificate and key. Bearer-authenticated HTTP is accepted only for loopback peer URLs. The public catalog listener remains HTTP.
+- Raft writes to `/transaction` and named-table mutation routes require `X-Txbase-Client-Id` and a positive `X-Txbase-Client-Sequence`. Exact retries return the stored result.
+- Normal catalog reads call OpenRaft's linearizable read barrier before reading the local catalog. The server does not provide an explicitly stale follower-read mode.
+- A three-node CI test exercises authenticated peer RPC, quorum commit, retry deduplication, and catalog convergence.
 - `RaftLogStore` durably stores votes, log entries, committed position, and the last purged log ID in a node-specific directory.
 - The log journal uses length-prefixed, SHA-256-checked JSON records, recovers an incomplete tail, and compacts purged history into a new generation.
 - The node directory has an exclusive process lock, and the storage tests include OpenRaft's `testing::Suite` plus restart-recovery cases.
 
-The state-machine API is not connected to `serve-catalog` or a running Raft node.
-The current catalog server still uses the fixed-term, single-authority replication path.
-
 ### Not implemented
 
-- Raft node startup, cluster initialization, peer RPC, authentication, and TLS.
-- CLI membership operations, quorum writes, linearizable reads, and multi-node failure tests.
+- Learner join and catch-up, membership changes, and membership/status CLI commands. The current mode accepts only a statically declared initial voter set.
+- Deterministic tests for quorum loss, partitions, message loss or reordering, leader changes, restart recovery, and reads during leadership changes.
+- Dedicated peer HTTPS certificate and host-verification integration tests.
+- Mutual TLS and TLS for the public catalog listener.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
 The serialized command limit is 1 MiB.
@@ -32,12 +37,14 @@ The application state and complete snapshot are each limited to 64 MiB.
 Client retry records are retained indefinitely; reaching the state limit fails closed until a client-retirement protocol is defined.
 
 An empty catalog can initialize through `RaftCatalogStateMachine::open`.
-A non-empty catalog requires explicit `initialize` and a committed catalog snapshot; a non-empty catalog at transaction ID 0 is rejected because it has no transferable MVCC image.
+A non-empty catalog requires `--raft-bootstrap` on the initial node or `--raft-initialize-catalog` on a prepared peer, plus a committed catalog snapshot; a non-empty catalog at transaction ID 0 is rejected because it has no transferable MVCC image.
+Every initial voter must start from the same catalog image. Peer RPC rejects a different genesis fingerprint.
 Opening a catalog with data but no Raft state sidecar fails closed.
+The current reader accepts `TXRA` state version 2 and does not migrate version 1 sidecars automatically.
 
 ## 1. Purpose and boundary
 
-Raft will make one catalog leader at a time accept mutations and will commit each mutation only after a quorum has durably stored its log entry.
+In Raft mode, one catalog leader accepts mutations and commits each mutation only after a quorum has durably stored its log entry.
 
 The replicated state machine remains the catalog. Raft supplies leadership and an ordered committed log; it does not replace `OperationIr`, `TransactionStep`, or the catalog journal.
 
@@ -53,17 +60,17 @@ OpenRaft provides the protocol engine, dynamic-membership operations, and a conf
 
 The selected OpenRaft release documents its API as unstable before version 1.0. Pin the exact dependency and lockfile version; upgrade it only with the storage suite and the multi-node failure tests in this document.
 
-Use OpenRaft's Tokio runtime for protocol tasks. The implemented state machine sends catalog filesystem work to `tokio::task::spawn_blocking`; the protocol runtime and RPC path remain unimplemented. A future RPC success must not be returned before the required durable write completes.
+The server creates a Tokio multi-thread runtime for OpenRaft. The state machine sends catalog filesystem work to `tokio::task::spawn_blocking`, and the synchronous peer HTTP client runs in Tokio's blocking pool. A write response is returned only after OpenRaft commits the command and the state machine durably applies it.
 
 ## 3. Node identity and membership
 
-Each node has a stable positive node ID, a client address, a peer-RPC address, and a dedicated persistent data directory. One process at a time may own a node data directory.
+Each node has a stable positive node ID, a client address, a peer-RPC address, and a dedicated persistent data directory. One process at a time may own a node data directory. The directory records the cluster and node identity and must be separate from the catalog directory.
 
-Cluster initialization is an explicit one-time operation over a declared initial voter set. Restarting a node must never initialize or replace cluster membership implicitly.
+Cluster initialization is an explicit one-time operation over a declared initial voter set. Pass the same `--raft-initial-member ID=URL` set to every initial node and use `--raft-bootstrap` on exactly one node. Restarting a node must never initialize or replace cluster membership implicitly.
 
-Adding a voter first adds the node as a learner and catches it up. The cluster then commits a membership change using OpenRaft's joint-membership procedure. Removing or replacing a voter uses the same committed membership path; editing local configuration alone cannot change voter authority.
+The CLI currently cannot add learners or change membership. When those operations are added, a new voter must first join as a learner and catch up; the cluster then commits the change through OpenRaft's joint-membership procedure. Editing local configuration alone cannot change voter authority.
 
-The operational interface must expose explicit initialization, join, membership-change, and status operations. It must reject duplicate node IDs, conflicting cluster identities, and attempts to run two nodes against one data directory.
+The current CLI rejects duplicate node IDs, duplicate peer URLs, missing local membership, conflicting replication modes, conflicting node identities, and attempts to run two nodes against one data directory. Explicit join, membership-change, and status operations remain future work.
 
 ## 4. Durable log and catalog application
 
@@ -73,7 +80,7 @@ Entries at or below the purged index are discarded from an append batch; the sto
 
 The journal stores length-prefixed JSON records with SHA-256 checksums. Startup truncates an incomplete final frame, but rejects a complete frame with a bad checksum or invalid log sequence. Purge writes a checkpoint into a new journal generation before removing the old generation.
 
-`RaftLogStore::open` holds an exclusive lock for its node directory, so a second process cannot open the same store. The log format and locking contract are implemented; node startup and protocol recovery remain unimplemented.
+`RaftLogStore::open` holds an exclusive lock for its node directory, so a second process cannot open the same store. Startup opens the durable log store and state machine before serving requests.
 
 The existing `FileWal` is not a drop-in Raft store: its LSN starts at zero, and its public maintenance operation clears the entire log rather than truncating a conflicting suffix or purging a snapshot-covered prefix. Reuse its framing and recovery code only if the storage contract is extended without changing the existing `TXWL` format.
 
@@ -96,34 +103,35 @@ The existing `TXRP` sidecar remains a pre-consensus replication format. It canno
 
 A mutation succeeds only after Raft commits it on a quorum and the local state machine durably applies it. Without a quorum, the server returns an unavailable or not-leader response and does not fall back to a local write.
 
-Every retryable mutation includes a bounded client ID and sequence. Clients serialize writes per ID; the state machine persists the latest sequence and response so a client can safely retry after losing the response to a committed write.
+Every Raft mutation includes a bounded client ID and positive sequence. Clients serialize writes per ID and retry an uncertain request with the same ID, sequence, body, and precondition headers. The state machine retains the latest sequence and response for each client; a client must receive or resolve one sequence before advancing to the next.
 
-Normal catalog reads require a linearizable quorum-confirmed read or a leader read barrier before reading the local applied state. A follower may serve an explicitly stale or historical read, but the response must expose its applied position and must not claim linearizability.
+Normal catalog reads call `Raft::ensure_linearizable()` before reading the local applied state. If the node cannot satisfy the barrier, the server returns `503` instead of serving a possibly stale read. The current HTTP mode does not redirect reads to a leader or expose a stale follower-read option.
 
 ## 6. Peer transport and security
 
-Peer RPC uses a versioned internal protocol for voting, log replication, and snapshot installation. The peer listener is separate from the public catalog listener, bounds request sizes and timeouts, and identifies the sending node against the active membership.
+Peer RPC uses a version 1 internal envelope for voting, log replication, and snapshot installation at `/raft/v1/vote`, `/raft/v1/append`, and `/raft/v1/snapshot`. The peer listener is separate from the public catalog listener, caps each request at 2 MiB, applies a 10-second RPC timeout, and checks the sender against the active membership, cluster ID, and shared genesis fingerprint. It also checks that the OpenRaft vote identifies the same sender.
 
-Peer traffic must be authenticated and encrypted when it crosses a host boundary. A bearer token over plaintext is not sufficient because it exposes credentials and catalog mutations to network observers. The existing Rustls dependencies can support the transport, but the current HTTP replication routes do not provide Raft RPCs or native server-side TLS.
+Every Raft peer request requires the `TXBASE_REPLICATION_TOKEN` bearer credential. Non-loopback peer URLs must use HTTPS with `--raft-peer-cert` and `--raft-peer-key`; the client verifies the certificate and host name with the operating system's trust facilities. Plain HTTP with a bearer token is allowed only for loopback URLs. This TLS configuration applies only to the peer listener; the public catalog listener still uses HTTP.
 
 ## 7. Snapshots, recovery, and migration
 
 A Raft snapshot contains the catalog MVCC image, the last-applied Raft log ID, the effective membership, and the application deduplication state.
 The current adapter stores application state in `.txbase.raft-state` and the versioned snapshot in `.txbase.raft-snapshot`.
-Snapshot payloads use the `TXRF` version 1 header and embed the `TXRA` version 1 application state.
+Snapshot payloads use the `TXRF` version 1 header and embed the `TXRA` version 2 application state.
 Installation publishes the catalog image and both sidecars together.
 
 The existing `ReplicationSnapshot` contains catalog replication position but no Raft membership or committed Raft log ID. It is not a complete Raft snapshot and must not be installed as one.
 
 Startup validates the node identity and durable Raft state, restores the snapshot, and replays committed entries in order before the node serves reads or writes. A node whose catalog image and applied position disagree fails closed and requires recovery rather than choosing one copy silently.
 
-Migration from a fixed-term `TXRP` authority is explicit. Stop the old writers, choose and validate one authoritative catalog image, back it up, initialize a Raft cluster from that image, and install the resulting snapshot on other nodes. The system must not infer a voter set or promote an old follower log automatically.
+Migration from a fixed-term `TXRP` authority is manual. Stop the old writers, choose and validate one authoritative catalog image, back it up, and prepare every initial Raft voter from that same image. Bootstrap one node with the declared initial membership and initialize the other nodes' Raft state explicitly. The current CLI cannot join an empty node or install a cluster snapshot, and it must not infer a voter set or promote an old follower log automatically.
 
 ## 8. Verification and acceptance
 
 The state-machine CI tests cover catalog commit atomicity, restart-safe retries, sequence rejection, no-op and membership entries, and snapshot installation.
 The storage adapter's tests run OpenRaft's `testing::Suite` and restart-recovery checks.
-CI must also exercise multiple Raft nodes with deterministic network delay, message loss, partitions, reordering, and restart points.
+The three-node integration test exercises peer RPC, quorum commit, a repeated client command, and catalog convergence.
+It does not yet inject deterministic network delay, message loss, partitions, reordering, restarts, or leader changes.
 
 Acceptance requires tests for durable term and vote recovery, conflicting log replacement, quorum loss, leader change, client retry after a lost response, apply-marker recovery, snapshot installation and suffix retention, learner catch-up, joint membership changes, and linearizable reads during leadership changes.
 
@@ -137,6 +145,8 @@ Crash injection must cover each boundary between log persistence, quorum commitm
 - [OpenRaft `RaftLogStorage`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftLogStorage.html) defines durable log-store behavior.
 - [OpenRaft `RaftStateMachine`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftStateMachine.html) defines applied-state, entry application, and snapshot behavior.
 - [OpenRaft getting started and storage test suite](https://docs.rs/openraft/0.9.25/openraft/docs/getting_started/) defines the application storage and network adapters and points to `testing::Suite`.
+- [OpenRaft cluster formation](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/cluster_formation/) defines the one-time `Raft::initialize()` operation.
+- [OpenRaft network traits](https://docs.rs/openraft/0.9.25/openraft/network/) define the peer RPC adapter.
 - [OpenRaft dynamic membership](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/dynamic_membership/) defines learner catch-up and voter changes.
 
 The Raft paper is the protocol source. OpenRaft documentation is the source for the selected library's API and adapter requirements. txBASE owns the catalog command format, durable storage layout, HTTP behavior, migration procedure, and compatibility guarantees.

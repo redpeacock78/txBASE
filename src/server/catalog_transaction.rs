@@ -1,5 +1,6 @@
 use super::{HttpResponse, error, etag, header, json_response, read_json_body, request_header};
 use crate::catalog::{Catalog, CatalogError, CatalogTransactionError};
+use crate::replication::raft::RaftCommandPrecondition;
 use crate::replication::{ReplicationError, ReplicationLog};
 use crate::xbase::{TransactionBatch, TransactionCommand, TransactionStep};
 use serde_json::json;
@@ -14,6 +15,23 @@ pub(super) fn response_with_replication(
     request: &mut Request,
     catalog: &Catalog,
     replication: Option<&mut ReplicationLog>,
+) -> HttpResponse {
+    response_with_writer(request, catalog, replication, None)
+}
+
+pub(super) fn response_with_raft(
+    request: &mut Request,
+    catalog: &Catalog,
+    raft: &super::raft::RaftRuntime,
+) -> HttpResponse {
+    response_with_writer(request, catalog, None, Some(raft))
+}
+
+fn response_with_writer(
+    request: &mut Request,
+    catalog: &Catalog,
+    replication: Option<&mut ReplicationLog>,
+    raft: Option<&super::raft::RaftRuntime>,
 ) -> HttpResponse {
     if catalog.is_historical() {
         return json_response(
@@ -74,19 +92,35 @@ pub(super) fn response_with_replication(
             false,
         );
     }
-    let result = match replication {
-        Some(replication) => replication
-            .propose_steps_with_catalog_preconditions(
-                catalog,
-                steps,
-                if_match.as_deref(),
-                if_none_match.as_deref(),
-            )
-            .map(|entry| entry.transaction_id)
-            .map_err(CommitError::Replication),
-        None => catalog
-            .commit_steps_with_preconditions(&steps, if_match.as_deref(), if_none_match.as_deref())
-            .map_err(CommitError::Catalog),
+    let raft_precondition = match (if_match.clone(), if_none_match.clone()) {
+        (None, None) => None,
+        (if_match, if_none_match) => Some(RaftCommandPrecondition::Catalog {
+            if_match,
+            if_none_match,
+        }),
+    };
+    let result = if let Some(raft) = raft {
+        raft.propose_request(request, catalog, steps, raft_precondition, None)
+            .map_err(CommitError::Raft)
+    } else {
+        match replication {
+            Some(replication) => replication
+                .propose_steps_with_catalog_preconditions(
+                    catalog,
+                    steps,
+                    if_match.as_deref(),
+                    if_none_match.as_deref(),
+                )
+                .map(|entry| entry.transaction_id)
+                .map_err(CommitError::Replication),
+            None => catalog
+                .commit_steps_with_preconditions(
+                    &steps,
+                    if_match.as_deref(),
+                    if_none_match.as_deref(),
+                )
+                .map_err(CommitError::Catalog),
+        }
     };
     match result {
         Ok(transaction_id) => {
@@ -103,7 +137,26 @@ pub(super) fn response_with_replication(
                 "X-Txbase-Transaction-Id",
                 &transaction_id.to_string(),
             ));
-            match catalog.schema_representation() {
+            let snapshot = if raft.is_some() {
+                match Catalog::from_path_at(catalog.root(), transaction_id) {
+                    Ok(snapshot) => Some(snapshot),
+                    Err(catalog_error) => {
+                        return json_response(
+                            410,
+                            error(
+                                "raft_retry_snapshot_unavailable",
+                                &format!(
+                                    "the committed command is retained but its response snapshot is unavailable: {catalog_error}"
+                                ),
+                            ),
+                            false,
+                        );
+                    }
+                }
+            } else {
+                None
+            };
+            match snapshot.as_ref().unwrap_or(catalog).schema_representation() {
                 Ok((_, tag)) => etag::with_tag(response, &tag),
                 Err(catalog_error) => json_response(
                     500,
@@ -119,11 +172,13 @@ pub(super) fn response_with_replication(
 enum CommitError {
     Catalog(CatalogTransactionError),
     Replication(ReplicationError),
+    Raft(HttpResponse),
 }
 
 fn commit_error_response(commit_error: CommitError) -> HttpResponse {
     match commit_error {
         CommitError::Replication(error) => super::replication::replication_error_response(error),
+        CommitError::Raft(response) => response,
         CommitError::Catalog(CatalogTransactionError::PreconditionFailed { tag }) => {
             etag::with_tag(
                 json_response(

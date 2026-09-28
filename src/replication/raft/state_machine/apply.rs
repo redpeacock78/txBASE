@@ -7,7 +7,6 @@ use super::{
 };
 use crate::catalog::{Catalog, CatalogError, CatalogTransactionError, CommitPrecondition};
 use openraft::{Entry, EntryPayload, StoredMembership};
-use sha2::{Digest, Sha256};
 
 #[derive(Debug)]
 enum SequenceDecision {
@@ -142,8 +141,7 @@ fn apply_command(
 ) -> Result<RaftResponse, String> {
     let sequence = command.sequence;
     let client_id = command.client_id.clone();
-    let encoded = serde_json::to_vec(&command).map_err(|error| error.to_string())?;
-    let fingerprint = Sha256::digest(encoded).to_vec();
+    let fingerprint = command.request_fingerprint.clone();
     if !valid_client_id(&command.client_id) || command.sequence == 0 {
         let response = rejected(sequence, RaftRejection::InvalidTransaction);
         *state_bytes = save_state(catalog, state_bytes, &next)?;

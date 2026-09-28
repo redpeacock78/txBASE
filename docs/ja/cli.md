@@ -111,7 +111,8 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 | コマンド | 現在の動作と書き込み境界 |
 | --- | --- |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | 単一テーブルHTTPサーバーを起動する。 |
-| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | カタログHTTPサーバーと有界なレプリケーション配送およびフォロワー適用位置確認ルートを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、フォロワー位置をメタデータだけの`TXRG`サイドカーへ保存する。`follower`ロールは直接のカタログ更新とフォロワー適用位置確認を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。`TXBASE_REPLICATION_TOKEN`を設定した場合、すべてのレプリケーションルートにRFC 6750の`Authorization: Bearer <token>`ヘッダーが必要になる。 |
+| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | 固定termレプリケーションモードでカタログHTTPサーバーを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、フォロワー位置をメタデータだけの`TXRG`サイドカーへ保存する。`follower`ロールは直接のカタログ更新とフォロワー適用位置確認を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。`TXBASE_REPLICATION_TOKEN`を設定した場合、すべてのレプリケーションルートにRFC 6750の`Authorization: Bearer <token>`ヘッダーが必要になる。 |
+| `txbase serve-catalog DIRECTORY --raft-node-id ID --raft-cluster-id ID --raft-data-directory DIR --raft-peer-bind ADDRESS --raft-peer-advertise URL --raft-initial-member ID=URL ...` | 初期voter集合を固定した任意のOpenRaftモードと、独立したpeer listenerを起動する。Raftオプションと`--replication-*`は併用できない。bootstrapとTLSのオプションは後述する。 |
 | `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | フォロワーカタログを開き、authorityから有界な1回のcatch-upを取得し、適用済みカタログと`TXRP`位置を永続化し、適用位置を確認して、同期結果をJSONで表示する。`AUTHORITY_URL`ではHTTPとHTTPSを使えます。HTTPSではOSの信頼ストアを使って証明書と接続先のホスト名を検証します。`TERM`はauthorityと一致する必要があり、`COUNT`は`1`から`128`の範囲で指定します。authorityがBearer認証を要求する場合は、任意の`TXBASE_REPLICATION_TOKEN`環境変数を使います。Bearer認証情報を送る場合は、loopback HTTP以外ではHTTPSを使います。 |
 
 ## オプションの所有範囲
@@ -135,7 +136,15 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 - `--replication-role`は`serve-catalog`だけに属し、既定の`authority`は書き込みロール、`follower`は直接のカタログ更新と適用位置確認を拒否してレプリケーション配送を受け付ける。
 - `--follower-id`は`replicate catch-up`だけに属し、ローカルのフォロワーセッションを指定する。
 - `--limit`と`--timeout-ms`は`replicate catch-up`だけに属し、1回のpullセッションとソケット操作を制限する。
-- `TXBASE_REPLICATION_TOKEN`は両レプリケーションコマンドで使う任意の環境変数であり、CLIオプションではない。`serve-catalog`はレプリケーションルートでトークンを検証し、`replicate catch-up`は設定されたトークンを送信する。クライアントはloopback以外のHTTPでトークンを送信しない。
+- `TXBASE_REPLICATION_TOKEN`はCLIオプションではない環境変数である。固定termのレプリケーションルートでは任意、Raft peer RPCでは必須であり、`replicate catch-up`は設定されている場合に読み取る。クライアントはloopback以外のHTTPでトークンを送信しない。
+
+### Raftのオプション
+
+- `--raft-node-id`、`--raft-cluster-id`、`--raft-data-directory`、`--raft-peer-bind`、`--raft-peer-advertise`は、いずれかの`--raft-*`でRaftモードを選ぶ場合に必須である。nodeディレクトリはカタログディレクトリと分け、広告URLを初期membership内の自nodeのURLと一致させる。
+- `--raft-initial-member ID=URL`をvoterごとに繰り返し、すべての初期nodeで同じ集合を指定する。`--raft-bootstrap`を指定するnodeは1つだけにする。
+- データのあるカタログでは、最初のnodeに`--raft-bootstrap`を指定し、準備済みpeerには`--raft-initialize-catalog`を指定する。すべてのnodeを同じカタログイメージから開始する。
+- 広告URLがHTTPSの場合は`--raft-peer-cert`と`--raft-peer-key`の両方を指定し、HTTPの場合はどちらも指定しない。peer clientはOSの信頼機構で証明書とホスト名を検証する。
+- Raft peer RPCでは`TXBASE_REPLICATION_TOKEN`が必要である。learnerの参加と動的membershipのオプションは未実装である。
 
 ### インデックスのオプション
 

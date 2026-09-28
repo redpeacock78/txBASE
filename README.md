@@ -98,7 +98,7 @@ Large direct equality joins can use fresh compatible ordered indexes for merge e
 The planner falls back to bounded hash or index-probe paths when that merge path is unavailable or more expensive.
 
 The catalog server also exposes `GET /replication/status`, `GET /replication/snapshot`, `POST /replication/entry`, `POST /replication/snapshot`, and authority-only `POST /replication/progress` for versioned, bounded replication delivery and follower progress acknowledgements.
-In the default `authority` role, `/transaction` and named-table mutation routes construct replication entries and journal the catalog change with the matching `TXRP` position. `--replication-role follower` rejects direct catalog mutations and accepts changes through replication delivery. Set `TXBASE_REPLICATION_TOKEN` to require an RFC 6750 Bearer token on the replication routes; TLS, quorum, and consensus are not provided.
+In the default `authority` role, `/transaction` and named-table mutation routes construct replication entries and journal the catalog change with the matching `TXRP` position. `--replication-role follower` rejects direct catalog mutations and accepts changes through replication delivery. Set `TXBASE_REPLICATION_TOKEN` to require an RFC 6750 Bearer token on these fixed-term replication routes; the public catalog listener uses HTTP, and this mode does not provide quorum or consensus. Supplying `--raft-*` options selects optional static-membership OpenRaft mode, with quorum writes, a linearizable read barrier, and authenticated peer RPC; peer HTTPS is supported. Dynamic membership and failure-injection coverage remain out of scope.
 
 See the [query model](docs/query-model.md), [aggregation model](docs/aggregation.md), [join model](docs/joins.md), and [query planning](docs/query-planning.md) for the exact boundary.
 
@@ -314,7 +314,7 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 
 The current implementation prioritizes bounded, recoverable local operations over an unbounded database server.
 
-It also includes a process-local fixed-term replication authority and follower boundary over the catalog journal, with journaled `TXRP` data-plane and `TXRG` follower-progress sidecars, automatic authority capture for catalog mutations, retained-snapshot export, suffix-preserving local log compaction, follower progress acknowledgements, bounded historical follower reads, and bounded HTTP entry, snapshot, and progress delivery; quorum, consensus, networked snapshot transfer, and distributed follower-read guarantees remain outside the current slice.
+It also includes fixed-term replication and optional static-membership Raft modes. The fixed-term path provides bounded HTTP entry, snapshot, and progress delivery over journaled `TXRP` and `TXRG` sidecars. The Raft path provides quorum writes, a linearizable read barrier, and authenticated peer RPC. Dynamic membership, failure-injection coverage, and TLS for the public catalog listener remain outside the current slice.
 
 The roadmap still leaves the following areas as future work:
 

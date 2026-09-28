@@ -43,6 +43,26 @@ pub(super) fn serve(
     Ok(())
 }
 
+pub(super) fn serve_with_raft(
+    root: impl AsRef<Path>,
+    bind: &str,
+    config: super::CatalogRaftConfig,
+    replication_token: Option<String>,
+) -> Result<(), String> {
+    let root = root.as_ref();
+    let mut catalog =
+        Catalog::from_path(root).map_err(|error| format!("cannot open catalog: {error}"))?;
+    let raft = super::raft::RaftRuntime::start(root, config.clone(), replication_token)?;
+    let peer_server = raft.bind_peer_listener(&config)?;
+    let _peer_listener = raft.spawn_peer_listener(peer_server)?;
+    let server = Server::http(bind).map_err(|error| format!("cannot bind {bind}: {error}"))?;
+    eprintln!("listening on http://{bind}");
+    for request in server.incoming_requests() {
+        handle_raft_request(request, &mut catalog, &raft);
+    }
+    Ok(())
+}
+
 fn handle_request(
     mut request: Request,
     catalog: &mut Catalog,
@@ -108,6 +128,69 @@ fn handle_request(
                         error(
                             "method_not_allowed",
                             "only GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, and QUERY catalog routes are available",
+                        ),
+                        true,
+                    )
+                    .with_header(header(
+                        "Allow",
+                        "GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY",
+                    ))
+                }
+            }
+        }
+    };
+    if let Err(error) = request.respond(response) {
+        eprintln!("failed to send HTTP response: {error}");
+    }
+}
+
+fn handle_raft_request(
+    mut request: Request,
+    catalog: &mut Catalog,
+    raft: &super::raft::RaftRuntime,
+) {
+    let url = request.url().to_owned();
+    let path = url.split('?').next().unwrap_or("/").to_owned();
+    let response = if request.method().as_str() == "OPTIONS" {
+        options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY")
+    } else if is_catalog_mutation(request.method(), &path) {
+        if matches!(request.method(), Method::Post) && path == "/transaction" {
+            super::catalog_transaction::response_with_raft(&mut request, catalog, raft)
+        } else {
+            super::catalog_mutation::response_with_raft(&mut request, &path, catalog, raft)
+        }
+    } else if let Err(message) = raft.linearizable_read() {
+        json_response(503, error("raft_unavailable", &message), false)
+            .with_header(header("Retry-After", "1"))
+    } else if matches!(request.method(), Method::Get | Method::Head) && path == "/cdc" {
+        super::cdc::catalog_response(&url, catalog)
+    } else {
+        match catalog_for_url(&url, request.method(), catalog) {
+            Err(response) => response,
+            Ok(snapshot) => {
+                let catalog = snapshot.as_ref().unwrap_or(catalog);
+                if matches!(request.method(), Method::Get | Method::Head) && path == "/catalog" {
+                    schema_response(&request, catalog)
+                } else if matches!(request.method(), Method::Get | Method::Head)
+                    && record_route(&path).is_some()
+                {
+                    table_response(&request, &path, catalog)
+                } else if request.method().as_str() == "QUERY" && path == "/join/stream" {
+                    join_stream_response(&mut request, catalog)
+                } else if request.method().as_str() == "QUERY" && path == "/join" {
+                    join_response(&mut request, catalog)
+                } else if request.method().as_str() == "QUERY"
+                    && table_explain_route(&path).is_some()
+                {
+                    table_explain_response(&mut request, &path, catalog)
+                } else if request.method().as_str() == "QUERY" && record_route(&path).is_some() {
+                    table_query_response(&mut request, &path, catalog)
+                } else {
+                    json_response(
+                        405,
+                        error(
+                            "method_not_allowed",
+                            "only GET, HEAD, OPTIONS, and QUERY catalog reads are available",
                         ),
                         true,
                     )

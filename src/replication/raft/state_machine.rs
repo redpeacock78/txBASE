@@ -7,6 +7,7 @@ use openraft::{
     StoredMembership,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
@@ -17,7 +18,7 @@ use apply::apply_entries;
 pub const RAFT_STATE_SIDECAR_NAME: &str = ".txbase.raft-state";
 pub(super) const RAFT_SNAPSHOT_SIDECAR_NAME: &str = ".txbase.raft-snapshot";
 const STATE_MAGIC: &[u8; 4] = b"TXRA";
-const STATE_VERSION: u8 = 1;
+const STATE_VERSION: u8 = 2;
 
 pub(super) type SharedCatalog = Arc<Mutex<Catalog>>;
 
@@ -35,6 +36,7 @@ pub(super) struct RaftApplicationState {
     pub(super) last_applied: Option<LogId<u64>>,
     pub(super) last_membership: StoredMembership<u64, BasicNode>,
     pub(super) catalog_transaction_id: u64,
+    pub(super) genesis_fingerprint: Vec<u8>,
     genesis: bool,
     clients: BTreeMap<String, ClientResult>,
 }
@@ -45,6 +47,7 @@ impl Default for RaftApplicationState {
             last_applied: None,
             last_membership: StoredMembership::default(),
             catalog_transaction_id: 0,
+            genesis_fingerprint: vec![0; 32],
             genesis: true,
             clients: BTreeMap::new(),
         }
@@ -91,6 +94,9 @@ impl RaftApplicationState {
     }
 
     fn validate(&self) -> Result<(), String> {
+        if self.genesis_fingerprint.len() != 32 {
+            return Err("Raft genesis fingerprint must be a SHA-256 digest".into());
+        }
         if self.genesis != self.last_applied.is_none() {
             return Err("Raft genesis marker disagrees with the applied log position".into());
         }
@@ -179,8 +185,25 @@ impl RaftCatalogStateMachine {
         if transaction_id == 0 && catalog.tables().next().is_some() {
             return Err("a non-empty genesis catalog must have a committed snapshot".into());
         }
+        let export = catalog
+            .export_snapshot_with_sidecars(&[])
+            .map_err(|error| error.to_string())?;
+        if export.transaction_id != transaction_id {
+            return Err("Raft genesis snapshot is at a different catalog transaction".into());
+        }
+        let mut digest = Sha256::new();
+        digest.update(transaction_id.to_le_bytes());
+        match export.catalog_snapshot {
+            Some(snapshot) => {
+                digest.update([1]);
+                digest.update(snapshot);
+            }
+            None => digest.update([0]),
+        }
+        let genesis_fingerprint = digest.finalize().to_vec();
         let state = RaftApplicationState {
             catalog_transaction_id: transaction_id,
+            genesis_fingerprint,
             ..RaftApplicationState::default()
         };
         let bytes = state.to_bytes()?;
@@ -194,6 +217,24 @@ impl RaftCatalogStateMachine {
             catalog: Arc::new(Mutex::new(catalog)),
         })
     }
+}
+
+pub(crate) fn genesis_fingerprint(catalog: &Catalog) -> Result<Vec<u8>, String> {
+    read_state(catalog).map(|(state, _)| state.genesis_fingerprint)
+}
+
+pub(crate) fn client_result(
+    catalog: &Catalog,
+    client_id: &str,
+) -> Result<Option<(u64, Vec<u8>, RaftResponseResult)>, String> {
+    let (state, _) = read_state(catalog)?;
+    Ok(state.clients.get(client_id).map(|result| {
+        (
+            result.sequence,
+            result.fingerprint.clone(),
+            result.response.result.clone(),
+        )
+    }))
 }
 
 pub(super) fn lock_catalog(

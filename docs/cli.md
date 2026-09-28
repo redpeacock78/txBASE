@@ -110,7 +110,8 @@ The tables group the current command contract by responsibility.
 | Command | Current behavior and write boundary |
 | --- | --- |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | Starts the single-table HTTP server. |
-| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | Starts the catalog HTTP server and its bounded replication delivery and follower-progress routes. The default `authority` role captures `/transaction` and named-table mutation routes in the catalog journal and `TXRP` sidecar, and persists follower progress in the metadata-only `TXRG` sidecar; `follower` rejects direct catalog mutations and follower-progress acknowledgements with `409` while accepting replication delivery. `TERM` is a positive fixed local replication term and defaults to `1`. When `TXBASE_REPLICATION_TOKEN` is set, all replication routes require an RFC 6750 `Authorization: Bearer <token>` header. |
+| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | Starts the catalog HTTP server in fixed-term replication mode. The default `authority` role captures `/transaction` and named-table mutation routes in the catalog journal and `TXRP` sidecar, and persists follower progress in the metadata-only `TXRG` sidecar; `follower` rejects direct catalog mutations and follower-progress acknowledgements with `409` while accepting replication delivery. `TERM` is a positive fixed local replication term and defaults to `1`. When `TXBASE_REPLICATION_TOKEN` is set, all replication routes require an RFC 6750 `Authorization: Bearer <token>` header. |
+| `txbase serve-catalog DIRECTORY --raft-node-id ID --raft-cluster-id ID --raft-data-directory DIR --raft-peer-bind ADDRESS --raft-peer-advertise URL --raft-initial-member ID=URL ...` | Starts optional OpenRaft mode with a statically configured voter set and a separate peer listener. Raft flags cannot be combined with `--replication-*`; the remaining bootstrap and TLS options are described below. |
 | `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | Opens a follower catalog, pulls one bounded catch-up session from an authority, persists the applied catalog and `TXRP` position, acknowledges progress, and prints the synchronization result as JSON. `AUTHORITY_URL` accepts HTTP or HTTPS; HTTPS verifies the authority certificate and host name with the operating system's trust facilities. `TERM` must match the authority, `COUNT` is between `1` and `128`, and the optional `TXBASE_REPLICATION_TOKEN` environment variable supplies the Bearer credential. Bearer credentials require HTTPS except for loopback HTTP. |
 
 ## Option ownership
@@ -134,7 +135,15 @@ The tables group the current command contract by responsibility.
 - `--replication-role` belongs only to `serve-catalog`; `authority` is the default write role, while `follower` rejects direct catalog mutations and progress acknowledgements and accepts replication delivery.
 - `--follower-id` belongs only to `replicate catch-up` and identifies the local follower session.
 - `--limit` and `--timeout-ms` belong only to `replicate catch-up`; they bound one pull session and its socket operations.
-- `TXBASE_REPLICATION_TOKEN` is an optional environment variable for both replication commands, not a CLI option. `serve-catalog` enforces it on replication routes; `replicate catch-up` sends it when configured. The client refuses to send it over non-loopback HTTP.
+- `TXBASE_REPLICATION_TOKEN` is an environment variable, not a CLI option. It is optional for fixed-term replication routes, required for every Raft peer RPC, and read by `replicate catch-up` when configured. The client refuses to send it over non-loopback HTTP.
+
+### Raft options
+
+- `--raft-node-id`, `--raft-cluster-id`, `--raft-data-directory`, `--raft-peer-bind`, and `--raft-peer-advertise` are required when any `--raft-*` option selects Raft mode. The node directory must be separate from the catalog directory, and the advertised URL must match this node's initial-member entry.
+- Repeat `--raft-initial-member ID=URL` for every voter and use the same set on every initial node. Exactly one node uses `--raft-bootstrap`.
+- For a populated catalog, use `--raft-bootstrap` on the first node and `--raft-initialize-catalog` on each prepared peer so they start from the same catalog image.
+- `--raft-peer-cert` and `--raft-peer-key` are both required when the advertised URL uses HTTPS and must be omitted for HTTP. Peer clients verify the certificate and host name with the operating system's trust facilities.
+- Raft mode requires `TXBASE_REPLICATION_TOKEN` for authenticated peer RPC. Learner join and dynamic membership options are not implemented.
 
 ### Index options
 

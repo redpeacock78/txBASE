@@ -370,6 +370,15 @@ impl ReplicationHttpClient {
         }
     }
 
+    pub(in crate::replication) fn post_json_bytes(
+        &self,
+        path: &str,
+        body: &[u8],
+        max_response_body_bytes: usize,
+    ) -> Result<Vec<u8>, ReplicationHttpError> {
+        self.request("POST", path, Some(body), max_response_body_bytes)
+    }
+
     fn request_once(
         &self,
         method: &str,

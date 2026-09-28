@@ -88,7 +88,13 @@ curl -i -X QUERY \
 そのmerge経路を使えない場合、またはコストが高い場合は、有界なhash経路またはindex probe経路にフォールバックします。
 
 カタログサーバーは、バージョン付きで有界なレプリケーション配送とフォロワー適用位置の確認のために、`GET /replication/status`、`GET /replication/snapshot`、`POST /replication/entry`、`POST /replication/snapshot`、authorityだけが使える`POST /replication/progress`も公開します。
-既定の`authority` roleでは、`/transaction`と名前付きテーブルの更新ルートがレプリケーションエントリを構築し、対応する`TXRP`位置とカタログ更新を一緒にジャーナル化します。`--replication-role follower`は直接のカタログ更新を拒否し、レプリケーション配送で変更を受け付けます。`TXBASE_REPLICATION_TOKEN`を設定すると、レプリケーションルートにRFC 6750 Bearerトークンを要求できます。TLS、クォーラム、コンセンサスは提供しません。
+既定の`authority` roleでは、`/transaction`と名前付きテーブルの更新ルートがレプリケーションエントリを構築し、対応する`TXRP`位置とカタログ更新を一緒にジャーナル化します。
+`--replication-role follower`は直接のカタログ更新を拒否し、レプリケーション配送で変更を受け付けます。
+`TXBASE_REPLICATION_TOKEN`を設定すると、この固定term方式のレプリケーションルートにRFC 6750 Bearerトークンを要求できます。
+公開catalog listenerはHTTPを使い、この方式はquorumやconsensusを提供しません。
+`--raft-*`を指定すると、初期membership固定のOpenRaft方式を選択できます。
+この方式はquorum書き込み、linearizable read barrier、認証付きpeer RPCに対応し、peer HTTPSも利用できます。
+dynamic membership、故障注入テスト、公開catalog listenerのTLSは未対応です。
 
 正確な境界は、[クエリモデル](docs/ja/query-model.md)、[集約モデル](docs/ja/aggregation.md)、[結合モデル](docs/ja/joins.md)、[クエリ計画](docs/ja/query-planning.md)を参照してください。
 
@@ -305,10 +311,10 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 
 現在の実装は、無制限のデータベースサーバーよりも、有界で復旧可能なローカル処理を優先します。
 
-カタログジャーナル上のプロセス内固定termによるレプリケーションauthorityとfollowerの境界を提供します。
-通常のカタログ更新のauthority捕捉、保持済みスナップショットの出力、suffixを保つローカルログ圧縮、フォロワー適用位置の確認も提供します。
-検証済みカタログスナップショットのローカルインストール、ジャーナル化された`TXRP`サイドカー、適用済み位置に限定した過去時点フォロワー読み取りも提供します。
-クォーラム、コンセンサス、ネットワーク経由のスナップショット転送、分散フォロワー読み取りの保証は現在のスライスに含みません。
+固定termレプリケーションと、初期membership固定のRaft方式を提供します。
+固定term方式は、ジャーナル化された`TXRP`と`TXRG`サイドカーを使い、有界なHTTPでエントリ、スナップショット、進捗を配送します。
+Raft方式はquorum書き込み、linearizable read barrier、認証付きpeer RPCを提供します。
+dynamic membership、故障注入テスト、公開catalog listenerのTLSは未対応です。
 
 次の領域は引き続き将来の作業です。
 

@@ -68,6 +68,9 @@ The response does not authorize a method on a resource that its route rules woul
 | `POST /replication/entry` (catalog server) | Versioned `ReplicationEntry` JSON | `200` apply or duplicate result |
 | `POST /replication/snapshot` (catalog server) | Versioned `ReplicationSnapshot` JSON | `200` install or duplicate result |
 | `POST /replication/progress` (catalog server) | Versioned `ReplicationProgress` JSON | `200` acknowledgement with the current safe compaction index |
+| `POST /raft/v1/vote` (Raft peer listener) | Version 1 Raft RPC JSON envelope | OpenRaft vote response |
+| `POST /raft/v1/append` (Raft peer listener) | Version 1 Raft RPC JSON envelope | OpenRaft append response |
+| `POST /raft/v1/snapshot` (Raft peer listener) | Version 1 Raft RPC JSON envelope | OpenRaft snapshot-install response |
 | `POST /records` | JSON object with known fields | `201 Created` and `Location` |
 | `POST /transaction` | JSON object containing a non-empty `operations` array | `200` after one-table atomic snapshot commit |
 | `PUT /records/{id}` | JSON object replacing fields | Resulting record |
@@ -102,7 +105,16 @@ The configured value must be an ASCII `b64token`; txBASE validates it before the
 Missing, malformed, or non-matching credentials return `401 Unauthorized` with `WWW-Authenticate: Bearer` and a JSON error code.
 The other catalog routes are not covered by this token boundary.
 When the environment variable is absent, the replication routes remain unauthenticated for local development compatibility.
-This is application-layer authentication only; the catalog server still does not provide TLS, so a bearer token must not be sent over an untrusted plain-HTTP network.
+This is application-layer authentication only; the public catalog listener does not provide TLS, so a bearer token must not be sent over an untrusted plain-HTTP network.
+
+### Raft peer transport and authentication
+
+Raft mode starts a peer listener separate from the public catalog listener.
+Every `POST /raft/v1/vote`, `/raft/v1/append`, and `/raft/v1/snapshot` request requires the `TXBASE_REPLICATION_TOKEN` Bearer credential, even when the legacy replication routes do not require it.
+The peer listener limits request bodies to 2 MiB and each RPC to 10 seconds, then validates the cluster, sender, active membership, and genesis-catalog fingerprint.
+Loopback peer URLs may use HTTP; non-loopback peer URLs must use HTTPS with both `--raft-peer-cert` and `--raft-peer-key` configured.
+Peer clients verify the certificate and host name with the operating system's trust facilities.
+This transport does not provide mutual TLS, and it does not change the public catalog listener from HTTP.
 
 `DELETE` is a logical DBF deletion.
 

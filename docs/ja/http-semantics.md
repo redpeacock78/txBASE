@@ -68,6 +68,9 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 | `POST /replication/entry`（カタログサーバー） | バージョン付き`ReplicationEntry` JSON | 適用または重複確認の`200` |
 | `POST /replication/snapshot`（カタログサーバー） | バージョン付き`ReplicationSnapshot` JSON | インストールまたは重複確認の`200` |
 | `POST /replication/progress`（カタログサーバー） | バージョン付き`ReplicationProgress` JSON | 現在の安全な圧縮indexを含む確認応答の`200` |
+| `POST /raft/v1/vote`（Raft peer listener） | version 1 Raft RPC JSON envelope | OpenRaftのvote応答 |
+| `POST /raft/v1/append`（Raft peer listener） | version 1 Raft RPC JSON envelope | OpenRaftのappend応答 |
+| `POST /raft/v1/snapshot`（Raft peer listener） | version 1 Raft RPC JSON envelope | OpenRaftのsnapshot install応答 |
 | `POST /records` | 既知のフィールドを持つ JSON オブジェクト | `201 Created`と`Location` |
 | `POST /transaction` | 空でない`operations`配列を含む JSON オブジェクト | 一つのテーブルのアトミックスナップショットコミット後に`200` |
 | `PUT /records/{id}` | フィールドを置き換える JSON オブジェクト | 結果のレコード |
@@ -102,7 +105,16 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 認証情報がない、不正な形式である、または一致しない場合は、`WWW-Authenticate: Bearer`とJSONエラーコードを伴う`401 Unauthorized`を返します。
 その他のカタログルートは、このトークン境界の対象ではありません。
 環境変数を設定しない場合、ローカル開発との互換性のため、レプリケーションルートは認証なしのままです。
-これはアプリケーション層の認証だけです。カタログサーバーはTLSを提供しないため、信頼できない平文HTTPネットワークへBearerトークンを送ってはなりません。
+これはアプリケーション層の認証だけです。公開カタログlistenerはTLSを提供しないため、信頼できない平文HTTPネットワークへBearerトークンを送ってはなりません。
+
+### Raft peerの転送と認証
+
+Raftモードは、公開カタログlistenerと分離したpeer listenerを起動します。
+`POST /raft/v1/vote`、`/raft/v1/append`、`/raft/v1/snapshot`には、従来のレプリケーションルートで認証を省略できる場合も`TXBASE_REPLICATION_TOKEN`のBearer認証情報が必要です。
+peer listenerはリクエスト本文を2 MiB、各RPCを10秒に制限し、cluster、送信node、有効なmembership、genesis catalog fingerprintを検証します。
+loopbackのpeer URLにはHTTPを使えますが、loopback以外では`--raft-peer-cert`と`--raft-peer-key`を設定したHTTPSが必要です。
+peer clientはOSの信頼機構で証明書とホスト名を検証します。
+この転送は相互TLSを提供せず、公開カタログlistenerもHTTPのままです。
 
 `DELETE`はDBFの論理削除です。
 

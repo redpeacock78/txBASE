@@ -2,14 +2,14 @@
 
 This document isolates the replication and distributed-database boundary.
 
-txBASE now has a local, process-scoped replication slice and a bounded HTTP
-delivery surface with a matching client. It defines the versioned entry,
-single-authority replay, snapshot installation, follower progress
-acknowledgements, and versioned transport contracts, but it is not quorum
-replication or consensus.
+txBASE has a process-scoped fixed-term replication mode with bounded HTTP
+delivery, plus an optional OpenRaft mode for a statically configured initial
+voter set. The latter provides quorum writes, a linearizable read barrier,
+authenticated peer RPC, and peer HTTPS. It does not yet provide learner join,
+dynamic membership operations, or failure-injected failover coverage.
 
-Raft is the selected future authority protocol, but it is not implemented.
-Its txBASE-specific design is documented in [Raft consensus design](raft.md).
+The fixed-term mode is not consensus. The current Raft boundary and remaining
+work are documented in [Raft consensus design](raft.md).
 
 ## 1. Prerequisites
 
@@ -38,7 +38,9 @@ replicated log (current local replay slice)
       ↓
 bounded HTTP status, contiguous entry-range, entry, snapshot, and progress delivery plus one-shot client catch-up (current transport slice)
       ↓
-Raft consensus (selected; see [Raft consensus design](raft.md))
+optional static-membership Raft mode (current implementation; see [Raft consensus design](raft.md))
+      ↓
+learner join, dynamic membership, and deterministic failure testing (remaining Raft work)
 ```
 
 Each step needs a standalone contract before the next step depends on it.
@@ -209,11 +211,13 @@ for missing or invalid credentials. Without that environment variable, the route
 remain unauthenticated for local development compatibility. The replication client
 supports HTTPS and verifies certificates and host names with the operating
 system's trust facilities. Bearer tokens require HTTPS, except for loopback
-HTTP. The catalog server itself remains HTTP-only, so deployments that need
+HTTP. The public catalog listener remains HTTP-only, so deployments that need
 network encryption must terminate TLS at a reverse proxy and protect the
-proxy-to-server connection, for example by keeping it on loopback. The
-transport still has no mutual TLS, streaming, durable retry queue, backpressure,
-quorum, or authority discovery.
+proxy-to-server connection, for example by keeping it on loopback. These
+limits apply to fixed-term replication: it has no mutual TLS, streaming,
+durable retry queue, backpressure, quorum, or authority discovery. Optional
+Raft mode uses a separate authenticated peer listener and supports peer HTTPS;
+see [Raft consensus design](raft.md).
 
 ### HTTP client
 
@@ -256,8 +260,9 @@ under the delivery contracts; conflict responses and malformed responses are
 terminal. `ReplicationRetryPolicy` allows at most eight total attempts and a
 30-second backoff cap. This is an in-process request policy, not a durable
 retry queue.
-It does not implement native server-side TLS, mutual TLS, streaming,
-backpressure, authority discovery, quorum, or consensus.
+The fixed-term catalog listener does not terminate TLS, and this client does
+not implement mutual TLS, streaming, backpressure, authority discovery, quorum,
+or consensus. The optional Raft peer transport is separate.
 
 ## 4. Co-location before distributed joins
 
@@ -299,15 +304,16 @@ The local slice defines the following initial contracts:
 - transport: the catalog server exposes bounded status and contiguous entry-range reads, accepts versioned entry, snapshot, and progress JSON through HTTP routes with explicit conflict statuses, and `ReplicationHttpClient::catch_up` connects those routes to local ordered replay;
 - authority capture: the default authority role journals `/transaction` and named-table mutations with `TXRP` state, while the follower role rejects direct catalog mutations;
 - authentication: `TXBASE_REPLICATION_TOKEN` optionally protects the replication routes with RFC 6750 Bearer credentials;
+- Raft mode: peer RPC requires that Bearer credential, uses HTTPS for non-loopback peer URLs, and checks cluster, sender, membership, and genesis-catalog identity;
 - transport retry: `ReplicationHttpClient` retries bounded transient socket and HTTP failures, while exact replication POST duplicates remain safe and no durable retry queue is claimed;
 - deterministic failure fixture: the CI test suite delivers the second entry before the first and then recovers.
 
 The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
-- native server-side TLS, mutual TLS, streaming, durable retry queues, backpressure, quorum-safe log truncation, and authority discovery;
+- TLS for the public catalog listener, mutual TLS, streaming, durable retry queues, backpressure, and authority discovery;
+- learner catch-up, dynamic Raft membership, and quorum-loss and leadership-change behavior under injected network faults;
 - observability for lag and transport state;
-- quorum and network failure behavior.
 
 Change data capture, persistent WAL history, and replication must share the same ordering contract.
 
@@ -332,17 +338,21 @@ The initial local replication slice is complete because it has:
 - explicit write consistency: only the next catalog transaction can commit;
 - a leader/follower fixture that fails and recovers without external infrastructure.
 
-Quorum replication, full MVCC coordination, distributed follower-read
-guarantees, and distributed partitioning remain future work.
+These acceptance conditions cover only the fixed-term slice.
+Raft quorum writes and linearizable catalog reads have separate acceptance
+boundaries in [Raft consensus design](raft.md); dynamic membership and
+fault-injected failover remain outstanding.
 
 ## 7. Explicit non-goals
 
-This document describes the pre-consensus slice; it does not claim an
-implementation of Raft, quorum, multi-region writes, global
-transactions, networked log truncation, distributed follower-read guarantees,
-automatic partition balancing, native server-side TLS, mutual TLS, durable retry queues, or authority discovery.
+This document describes the fixed-term replication slice and does not define
+the optional Raft protocol. It does not claim multi-region writes, global
+transactions, automatic partition balancing, TLS for the public catalog
+listener, mutual TLS, durable retry queues, or authority discovery.
 
-The Raft target is specified separately; the remaining features need their own authority and recovery contracts.
+The implemented Raft boundary and its remaining dynamic-membership and failure
+testing work are specified separately. Other distributed features need their
+own authority and recovery contracts.
 
 ## Primary references and scope
 
@@ -352,15 +362,11 @@ The Raft target is specified separately; the remaining features need their own a
 - [Rustls platform verifier](https://github.com/rustls/rustls-platform-verifier)
 - [Rustls `StreamOwned`](https://docs.rs/rustls/0.23.45/rustls/struct.StreamOwned.html)
 
-The Raft paper defines the selected protocol; [Raft consensus design](raft.md)
-records the txBASE decision and its implementation boundary.
+The Raft paper defines the protocol; [Raft consensus design](raft.md)
+records the txBASE decision, current implementation, and remaining work.
 
-The current repository has a local entry/replay implementation, a versioned
-snapshot installation primitive, journaled `TXRP` and `TXRG` sidecars, bounded HTTP
-status and contiguous entry-range delivery routes, a bounded HTTP client with
-transient-request retry,
-follower watermark acknowledgements, default authority capture for catalog
-mutations, a read-only follower role, and a bounded historical follower-read
-primitive, but no consensus, quorum, distributed follower-read guarantee, or
-distributed-join implementation.
-Those statements remain design constraints rather than compatibility claims.
+The repository has the fixed-term `TXRP` path and an optional static-membership
+Raft path. Raft mode provides authenticated peer RPC, peer HTTPS, quorum writes,
+and a linearizable read barrier. Dynamic membership and failure-injected
+failover remain incomplete; the public catalog listener remains HTTP.
+These boundaries are design constraints rather than compatibility guarantees.

@@ -70,8 +70,9 @@ The repository currently provides:
 - A committed single-table change-data-capture sidecar with ordered `TXCD` events, WAL recovery, idempotent publication, torn-tail repair, backup and restore support, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A committed catalog change-data-capture sidecar with ordered `TXCC` envelopes for explicit multi-table catalog transactions, journal recovery, idempotent publication, a read-only API and CLI cursor, and a bounded HTTP read route.
 - A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, `ReplicationSnapshot`, and `ReplicationProgress` JSON formats, journaled `TXRP` data-plane and `TXRG` follower-progress sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, monotonic follower-progress acknowledgement with durable minimum-index coordinated compaction, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded entry-batch validation and ordered receiver application, bounded HTTP entry, contiguous entry-range, snapshot, and progress delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
-- A bounded `ReplicationHttpClient` that validates authority status, pulls contiguous entry pages or a current snapshot, applies them through the local ordered replay contract, acknowledges follower progress over plain HTTP, and retries explicitly transient socket or HTTP failures within a bounded in-process policy.
+- A bounded `ReplicationHttpClient` that validates authority status, pulls contiguous entry pages or a current snapshot, applies them through the local ordered replay contract, acknowledges follower progress over HTTP or HTTPS, and retries explicitly transient socket or HTTP failures within a bounded in-process policy.
 - A public `txbase replicate catch-up` command that opens a fixed-term follower catalog, resumes its journaled `TXRP` position, performs one bounded HTTP catch-up session, and reports the resulting progress as JSON.
+- An optional OpenRaft mode for `serve-catalog` with static initial membership, quorum writes, linearizable reads, authenticated peer RPC, and peer HTTPS. Learner join, dynamic membership, and failure-injected failover coverage remain open; see [Raft consensus design](raft.md).
 - Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit, after validating the declared primary or unique parent key; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
 - Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with ordered per-transaction mode changes in the Rust and HTTP transaction APIs; deferred `CHECK` is a txBASE extension.
 
@@ -84,7 +85,7 @@ The baseline intentionally does not include the following:
 - References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
-- Quorum or consensus, quorum-coordinated snapshot/log retention, distributed follower reads, and distributed partitioning.
+- Learner join, dynamic Raft membership, failure-injected quorum-loss and leader-change coverage, distributed follower reads, and distributed partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -439,32 +440,35 @@ at the snapshot's next index and transaction.
 The catalog server also exposes version 1 `status`, contiguous entry-range delivery, single-entry delivery, snapshot-export, snapshot-install, and follower-progress routes as bounded HTTP JSON.
 The default `authority` role routes `/transaction` and named-table mutations through the same catalog journal commit as `TXRP` state and rechecks table ETags before commit.
 The `follower` role reports its role through `status`, rejects direct catalog mutations with `409`, and still accepts replication delivery.
-Optional RFC 6750 Bearer authentication protects the replication routes when `TXBASE_REPLICATION_TOKEN` is configured; bounded in-process transient retries are provided, while TLS, quorum, consensus, and durable retry queues are not.
+Optional RFC 6750 Bearer authentication protects these fixed-term replication routes when `TXBASE_REPLICATION_TOKEN` is configured; bounded in-process transient retries are provided, but this path has no quorum, consensus, or durable retry queue.
 The public `txbase replicate catch-up` command provides a one-shot operational
 client for the same routes and resumes an already persisted follower prefix.
 The authority can export a retained snapshot at an applied index and compact the local `TXRP` prefix through that exact image while preserving the suffix and catalog transaction ID.
 It accepts validated monotonic follower progress, persists it in the metadata-only
 `TXRG` sidecar, restores it after restart, and exposes the minimum acknowledged
-index for coordinated compaction. Quorum-safe truncation remains future work.
+index for coordinated compaction. This safety gate applies to the fixed-term `TXRP` log; the optional Raft mode uses OpenRaft's separate log and snapshot contract.
 
-The Raft implementation includes versioned commands, a catalog state-machine adapter, snapshot build and install, and a durable OpenRaft log store for votes, entries, committed position, and purged-log position.
-The store uses a checksummed journal, restart recovery, purge compaction, and an exclusive node-directory lock; OpenRaft's storage suite is included in CI tests.
-The Raft node is not connected to the catalog server, peer transport, or membership CLI.
+The optional Raft implementation is connected to `serve-catalog` and uses a statically configured initial voter set.
+It provides quorum-committed writes, a linearizable read barrier, authenticated peer RPC, and peer HTTPS for non-loopback URLs.
+OpenRaft storage, the catalog state machine, snapshots, startup recovery, and a three-node authenticated loopback integration path are included in the CI test suite.
+Learner join, dynamic membership administration, TLS-specific integration coverage, and deterministic failure injection remain outstanding.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Complete the OpenRaft 0.9.25 integration with quorum commitment, node runtime and peer transport, membership administration, and multi-node failure testing; see [Raft consensus design](raft.md).
-- TLS, durable retry queues, backpressure, quorum-safe log truncation, and authority discovery.
+- Extend the current OpenRaft integration with learner join, dynamic membership administration, and multi-node failure testing; see [Raft consensus design](raft.md).
+- TLS for the public catalog listener, mutual TLS, durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.
 
-The remaining distributed features require quorum or consensus authority,
-network conflict semantics, schema-version handling, log truncation, recovery
+Distributed features beyond the current static-membership Raft mode still need
+contracts for network conflict semantics, schema-version handling, recovery
 procedures, transport observability, and follower-read guarantees.
 
-No consensus or multi-region feature is implied by the current exclusive table lock.
+The exclusive table lock and fixed-term replication mode do not imply consensus
+or multi-region behavior; the optional Raft mode provides only the boundary
+specified in [Raft consensus design](raft.md).
 
 The detailed future boundary is described in [distributed evolution](distributed-evolution.md).
 

@@ -64,7 +64,7 @@ pub(super) fn response_with_auth(
     })
 }
 
-fn authorize(request: &Request, expected_token: &str) -> Result<(), HttpResponse> {
+pub(super) fn authorize(request: &Request, expected_token: &str) -> Result<(), HttpResponse> {
     let Some(value) = request_header(request, "Authorization") else {
         return Err(unauthorized(
             "replication_auth_required",
