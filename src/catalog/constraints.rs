@@ -68,6 +68,14 @@ fn validate_loaded_tables_with_deferred(
                     )));
                 }
             }
+            if !parent.has_unique_key(&foreign_key.parent_fields) {
+                return Err(CatalogError::Invalid(format!(
+                    "table {child_name} foreign key {} references parent key {} on table {}, which is not declared primary or unique",
+                    format_fields(&foreign_key.local_fields),
+                    format_fields(&foreign_key.parent_fields),
+                    foreign_key.parent_table
+                )));
+            }
             if foreign_key.deferred && !include_deferred {
                 continue;
             }

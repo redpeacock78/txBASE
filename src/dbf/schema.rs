@@ -18,6 +18,13 @@ impl DbfTable {
             .map_or_else(|| Ok(Vec::new()), SchemaMetadata::foreign_keys)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn has_unique_key(&self, fields: &[String]) -> bool {
+        self.schema
+            .as_ref()
+            .is_some_and(|metadata| metadata.has_unique_key(fields))
+    }
+
     pub fn schema_json(&self) -> Value {
         let declared_encoding = encoding_name(self.header.language_driver);
         let effective_encoding = self.encoding_override.as_deref().or(declared_encoding);

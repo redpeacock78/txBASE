@@ -37,6 +37,24 @@ fn composite_foreign_key() -> Vec<u8> {
     .unwrap()
 }
 
+fn scalar_parent_key() -> Vec<u8> {
+    serde_json::to_vec(&json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {"ID": {"primary": true}}
+    }))
+    .unwrap()
+}
+
+fn composite_parent_key() -> Vec<u8> {
+    serde_json::to_vec(&json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "constraints": {"unique": [["AGE", "ID"]]}
+    }))
+    .unwrap()
+}
+
 fn operation(method: OperationMethod, path: &str, body: Option<serde_json::Value>) -> OperationIr {
     OperationIr {
         method,
@@ -61,6 +79,7 @@ fn insert_record(path: &str, id: i64, age: i64) -> OperationIr {
 fn foreign_key_catalog(deferred: bool, on_delete: &str) -> (std::path::PathBuf, Catalog) {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("users.txschema.json"), scalar_parent_key()).unwrap();
     fs::write(root.join("posts.dbf"), fixture()).unwrap();
     fs::write(
         root.join("posts.txschema.json"),
@@ -123,6 +142,7 @@ fn deferred_scalar_foreign_key_is_checked_at_the_catalog_commit() {
 fn deferred_composite_foreign_key_accepts_parent_inserted_later() {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("users.txschema.json"), composite_parent_key()).unwrap();
     fs::write(root.join("posts.dbf"), fixture()).unwrap();
     fs::write(root.join("posts.txschema.json"), composite_foreign_key()).unwrap();
     let catalog = Catalog::from_path(&root).unwrap();

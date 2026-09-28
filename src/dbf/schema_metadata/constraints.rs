@@ -152,6 +152,23 @@ impl SchemaMetadata {
         Ok(foreign_keys)
     }
 
+    pub(in crate::dbf) fn has_unique_key(&self, fields: &[String]) -> bool {
+        if fields.len() == 1
+            && self
+                .fields
+                .get(&fields[0])
+                .is_some_and(|metadata| metadata.primary || metadata.unique)
+        {
+            return true;
+        }
+
+        let matches_key = |key: &[String]| {
+            key.len() == fields.len() && key.iter().all(|field| fields.contains(field))
+        };
+        matches_key(&self.constraints.primary)
+            || self.constraints.unique.iter().any(|key| matches_key(key))
+    }
+
     pub(in crate::dbf) fn apply_defaults(&self, values: &mut Map<String, Value>) {
         for (name, metadata) in &self.fields {
             if let Some(default) = &metadata.default {

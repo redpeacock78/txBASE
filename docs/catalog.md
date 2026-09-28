@@ -268,6 +268,10 @@ A schema sidecar can also declare `constraints.foreign_keys` with equal-length c
 field lists. The catalog compares the complete tuple, skips the check when any child value is null,
 and applies the same actions to parent updates and logical deletes.
 
+Every scalar or composite foreign key must target a primary or unique key declared in the parent
+table's schema sidecar. The field-set requirement and its ordering rules are defined in
+[Schema metadata](schema-metadata.md).
+
 Cascades are applied recursively inside one catalog transaction and journal commit.
 Constraint failures or a non-converging cascade are rejected before any table is published.
 Direct single-table routes cannot resolve these cross-table rules.

@@ -67,10 +67,62 @@ fn composite_foreign_key_metadata_with_actions(on_delete: &str, on_update: &str)
     .unwrap()
 }
 
+fn scalar_parent_key_metadata() -> Vec<u8> {
+    serde_json::to_vec(&json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {"ID": {"unique": true}}
+    }))
+    .unwrap()
+}
+
+fn composite_parent_key_metadata() -> Vec<u8> {
+    serde_json::to_vec(&json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "constraints": {"unique": [["AGE", "ID"]]}
+    }))
+    .unwrap()
+}
+
+#[test]
+fn catalog_foreign_keys_reject_parent_fields_without_a_declared_key() {
+    let root = temporary_catalog();
+    fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.dbf"), fixture()).unwrap();
+    fs::write(root.join("posts.txschema.json"), foreign_key_metadata()).unwrap();
+    let catalog = Catalog::from_path(&root).unwrap();
+
+    let error = catalog
+        .commit_operations_with_preconditions(
+            &[OperationIr {
+                method: OperationMethod::Post,
+                path: "/posts/records".into(),
+                body: Some(json!({
+                    "ID": 3,
+                    "NAME": "Reference",
+                    "AGE": 42,
+                    "ACTIVE": true
+                })),
+            }],
+            None,
+            None,
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("not declared primary or unique"));
+    assert_eq!(catalog.transaction_id().unwrap(), None);
+    fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn catalog_foreign_keys_validate_mutations_and_parent_removal() {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(
+        root.join("users.txschema.json"),
+        scalar_parent_key_metadata(),
+    )
+    .unwrap();
     fs::write(root.join("posts.dbf"), fixture()).unwrap();
     fs::write(root.join("posts.txschema.json"), foreign_key_metadata()).unwrap();
     let catalog = Catalog::from_path(&root).unwrap();
@@ -164,6 +216,11 @@ fn catalog_foreign_keys_validate_mutations_and_parent_removal() {
 fn catalog_composite_foreign_keys_validate_tuples_and_parent_removal() {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(
+        root.join("users.txschema.json"),
+        composite_parent_key_metadata(),
+    )
+    .unwrap();
     fs::write(root.join("posts.dbf"), fixture()).unwrap();
     fs::write(
         root.join("posts.txschema.json"),
@@ -237,6 +294,11 @@ fn catalog_composite_foreign_keys_validate_tuples_and_parent_removal() {
 fn catalog_foreign_key_actions_cascade_parent_changes_and_deletes() {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(
+        root.join("users.txschema.json"),
+        scalar_parent_key_metadata(),
+    )
+    .unwrap();
     fs::write(root.join("posts.dbf"), fixture()).unwrap();
     fs::write(
         root.join("posts.txschema.json"),
@@ -299,6 +361,11 @@ fn catalog_foreign_key_actions_cascade_parent_changes_and_deletes() {
 fn catalog_foreign_key_set_null_action_clears_children_atomically() {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(
+        root.join("users.txschema.json"),
+        scalar_parent_key_metadata(),
+    )
+    .unwrap();
     fs::write(root.join("posts.dbf"), fixture()).unwrap();
     fs::write(
         root.join("posts.txschema.json"),
@@ -343,6 +410,11 @@ fn catalog_foreign_key_set_null_action_clears_children_atomically() {
 fn catalog_composite_foreign_key_actions_follow_parent_tuples() {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(
+        root.join("users.txschema.json"),
+        composite_parent_key_metadata(),
+    )
+    .unwrap();
     fs::write(root.join("posts.dbf"), fixture()).unwrap();
     fs::write(
         root.join("posts.txschema.json"),

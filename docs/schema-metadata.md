@@ -87,7 +87,7 @@ The current version accepts the following field properties:
 | `unique` | Rejects a non-null value already used by another active record |
 | `not_null` | Rejects JSON `null` on insert, replace, patch, or recall |
 | `default` | Supplies a scalar value when the field is omitted from an insert |
-| `references` | Declares a catalog-scoped `TABLE.FIELD` foreign-key target |
+| `references` | Declares a catalog-scoped `TABLE.FIELD` foreign-key target whose parent field must be declared primary or unique |
 | `deferred` | Defers a scalar foreign-key check until the catalog transaction commits; defaults to `false` |
 | `on_delete` | Selects `restrict` (the default), `no_action`, `cascade`, or `set_null` for a scalar reference |
 | `on_update` | Selects `restrict` (the default), `no_action`, `cascade`, or `set_null` for a scalar reference |
@@ -101,7 +101,15 @@ The optional root `constraints` object accepts bounded composite keys:
 | --- | --- |
 | `primary` | Requires two or more field names; all values must be non-null and the tuple must be unique |
 | `unique` | Accepts arrays of two or more field names; a non-null tuple may not repeat among active records |
-| `foreign_keys` | Accepts composite child and parent field lists with equal length, optional `deferred`, and optional update/delete actions |
+| `foreign_keys` | Accepts composite child and parent field lists with equal length; the parent fields must match a declared primary or unique key |
+
+Every scalar reference must target a field marked `primary` or `unique` in the parent table's schema sidecar.
+
+A composite reference must target the same field set as one `constraints.primary` or `constraints.unique` entry in that sidecar.
+
+The declaration order may differ from the reference order, but child and parent fields still pair positionally when their values are compared.
+
+Current data that happens to be unique is insufficient, and the `.txidx` sidecar does not declare a unique key.
 
 The sidecar's `encoding` property is not a field constraint.
 
@@ -123,6 +131,7 @@ Composite unique constraints use the existing scalar comparison rules. A tuple c
 value does not participate in uniqueness, matching the existing single-field unique behavior.
 
 `references` is resolved by the directory catalog after each named-table mutation statement and at catalog transaction commit.
+Before comparing values, the catalog rejects a target that is not declared primary or unique in the parent schema sidecar.
 Non-null child values must match an active record in the referenced table; null values are allowed.
 
 `on_delete` and `on_update` apply to scalar references, default to `restrict`, and accept
@@ -207,7 +216,8 @@ Runtime constraint-timing changes, deferred `UNIQUE`, `PRIMARY KEY`, and `CHECK`
 
 SQLite's official [`CREATE TABLE` reference](https://sqlite.org/lang_createtable.html) distinguishes `NOT NULL`, `CHECK`, `UNIQUE`, `PRIMARY KEY`, and `FOREIGN KEY` constraints and documents their write-time behavior.
 
-Its [foreign-key reference](https://www.sqlite.org/foreignkeys.html) also makes the referenced-table existence contract explicit.
+Its [foreign-key reference](https://www.sqlite.org/foreignkeys.html) requires the parent fields to be a primary key or collectively unique.
+txBASE applies that target-key invariant through schema metadata and does not treat standalone index sidecars as unique-key declarations.
 
 txBASE uses those distinctions as design references, but does not claim SQLite compatibility.
 

@@ -41,6 +41,15 @@ fn deferred_foreign_key_metadata() -> Vec<u8> {
     .unwrap()
 }
 
+fn parent_key_metadata() -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "format": "txbase-schema",
+        "version": 1,
+        "fields": {"ID": {"primary": true}}
+    }))
+    .unwrap()
+}
+
 fn temporary_catalog() -> std::path::PathBuf {
     let id = NEXT_CATALOG_ID.fetch_add(1, Ordering::Relaxed);
     let path =
@@ -404,6 +413,7 @@ fn catalog_server_mutates_named_tables_with_single_table_semantics() {
 fn catalog_server_rejects_orphan_foreign_key_mutations() {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("users.txschema.json"), parent_key_metadata()).unwrap();
     fs::write(root.join("posts.dbf"), fixture()).unwrap();
     fs::write(root.join("posts.txschema.json"), foreign_key_metadata()).unwrap();
     let catalog = crate::catalog::Catalog::from_path(&root).unwrap();
@@ -480,6 +490,7 @@ fn catalog_server_transaction_commits_multiple_named_tables() {
 fn catalog_server_transaction_allows_a_deferred_parent_insert_later_in_the_batch() {
     let root = temporary_catalog();
     fs::write(root.join("users.dbf"), fixture()).unwrap();
+    fs::write(root.join("users.txschema.json"), parent_key_metadata()).unwrap();
     fs::write(root.join("posts.dbf"), fixture()).unwrap();
     fs::write(
         root.join("posts.txschema.json"),
