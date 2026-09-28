@@ -2,6 +2,7 @@ use super::*;
 use std::fs;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+mod constraint_timing;
 mod deferred_constraints;
 mod discovery;
 mod foreign_keys;

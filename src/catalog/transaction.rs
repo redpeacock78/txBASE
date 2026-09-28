@@ -248,8 +248,16 @@ impl Catalog {
         }
         let mut tables = before.clone();
         let mut touched = BTreeSet::new();
+        let deferred_constraints = super::constraints::initial_deferred_constraints(&tables)
+            .map_err(CatalogTransactionError::Catalog)?;
         for operation in operations {
-            apply_operation_to_tables(self, &mut tables, &mut touched, operation)?;
+            apply_operation_to_tables(
+                self,
+                &mut tables,
+                &mut touched,
+                operation,
+                &deferred_constraints,
+            )?;
         }
         self.commit_loaded_tables_locked(
             before,
@@ -257,6 +265,7 @@ impl Catalog {
             touched,
             false,
             sidecar_change.into_iter().collect(),
+            &deferred_constraints,
         )
     }
 }
@@ -266,6 +275,7 @@ pub(super) fn apply_operation_to_tables(
     tables: &mut BTreeMap<String, DbfTable>,
     touched: &mut BTreeSet<String>,
     operation: &OperationIr,
+    deferred_constraints: &BTreeMap<String, BTreeSet<String>>,
 ) -> Result<(), CatalogTransactionError> {
     let Some((name, local_path)) = transaction_operation_path(&operation.path) else {
         return Err(CatalogTransactionError::Invalid(format!(
@@ -300,22 +310,29 @@ pub(super) fn apply_operation_to_tables(
         .get_mut(name)
         .expect("catalog transaction table was inserted");
     table
-        .apply_operation(&OperationIr {
-            method: operation.method,
-            path: local_path,
-            body: operation.body.clone(),
-        })
+        .apply_operation_with_deferred_constraints(
+            &OperationIr {
+                method: operation.method,
+                path: local_path,
+                body: operation.body.clone(),
+            },
+            deferred_constraints.get(name).unwrap_or(&BTreeSet::new()),
+        )
         .map_err(|error| CatalogTransactionError::Invalid(format!("table {name}: {error}")))?;
 
     let before = before_snapshot
         .map(|records| BTreeMap::from([(name.to_owned(), records)]))
         .unwrap_or_default();
-    let cascaded = super::constraint_actions::apply_actions(&before, tables)
+    let cascaded = super::constraint_actions::apply_actions(&before, tables, deferred_constraints)
         .map_err(CatalogTransactionError::Catalog)?;
     let mut changed_tables = BTreeSet::from([name.to_owned()]);
     changed_tables.extend(cascaded.iter().cloned());
-    super::constraints::validate_statement_constraints(tables, &changed_tables)
-        .map_err(CatalogTransactionError::Catalog)?;
+    super::constraints::validate_statement_constraints(
+        tables,
+        &changed_tables,
+        deferred_constraints,
+    )
+    .map_err(CatalogTransactionError::Catalog)?;
     touched.insert(name.to_owned());
     touched.extend(cascaded);
     Ok(())
@@ -329,6 +346,7 @@ impl Catalog {
         mut touched: BTreeSet<String>,
         reuse_loaded_tables: bool,
         extra_changes: Vec<FileChange>,
+        deferred_constraints: &BTreeMap<String, BTreeSet<String>>,
     ) -> Result<u64, CatalogTransactionError> {
         if touched.is_empty() {
             return super::journal::read_transaction_id_locked(&self.root)
@@ -339,8 +357,12 @@ impl Catalog {
             super::constraint_actions::snapshot_referenced_tables(&before, &tables)
                 .map_err(CatalogTransactionError::Catalog)?;
         touched.extend(
-            super::constraint_actions::apply_actions(&before_snapshots, &mut tables)
-                .map_err(CatalogTransactionError::Catalog)?,
+            super::constraint_actions::apply_actions(
+                &before_snapshots,
+                &mut tables,
+                deferred_constraints,
+            )
+            .map_err(CatalogTransactionError::Catalog)?,
         );
         if reuse_loaded_tables {
             super::constraints::validate_loaded_tables(&tables)

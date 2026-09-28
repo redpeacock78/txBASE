@@ -62,6 +62,7 @@ pub(crate) fn snapshot_referenced_table(
 pub(crate) fn apply_actions(
     before: &BTreeMap<String, Vec<DbfRecord>>,
     tables: &mut BTreeMap<String, DbfTable>,
+    deferred_constraints: &BTreeMap<String, BTreeSet<String>>,
 ) -> Result<BTreeSet<String>, CatalogError> {
     let mut cascade_before = BTreeMap::<String, Vec<DbfRecord>>::new();
     let relationship_count = tables
@@ -81,6 +82,7 @@ pub(crate) fn apply_actions(
     let mut changed_tables = BTreeSet::new();
 
     // ponytail: bounded full-table cascade scan; add relationship indexes if catalog scale requires it.
+    let empty_deferred = BTreeSet::new();
     for _ in 0..max_passes {
         let mut pass_changed = false;
         let child_names = tables.keys().cloned().collect::<Vec<_>>();
@@ -127,7 +129,16 @@ pub(crate) fn apply_actions(
                     let Some(child) = tables.get_mut(&child_name) else {
                         continue;
                     };
-                    if apply_action(child, &child_name, &foreign_key, &change, action)? {
+                    if apply_action(
+                        child,
+                        &child_name,
+                        &foreign_key,
+                        &change,
+                        action,
+                        deferred_constraints
+                            .get(&child_name)
+                            .unwrap_or(&empty_deferred),
+                    )? {
                         if let Some(child_before) = child_before {
                             cascade_before.insert(child_name.clone(), child_before);
                         }
@@ -188,6 +199,7 @@ fn apply_action(
     foreign_key: &ForeignKey,
     change: &ParentChange,
     action: &ForeignKeyAction,
+    deferred_constraints: &BTreeSet<String>,
 ) -> Result<bool, CatalogError> {
     let matching_records = child
         .active_records()
@@ -217,7 +229,11 @@ fn apply_action(
             ForeignKeyAction::Cascade => {
                 if let Some(new) = &change.new {
                     child
-                        .patch_record(*record_number, fields_patch(&foreign_key.local_fields, new))
+                        .patch_record_with_deferred_constraints(
+                            *record_number,
+                            fields_patch(&foreign_key.local_fields, new),
+                            deferred_constraints,
+                        )
                         .map_err(|source| CatalogError::Table {
                             name: child_name.to_owned(),
                             source,
@@ -233,12 +249,13 @@ fn apply_action(
             }
             ForeignKeyAction::SetNull => {
                 child
-                    .patch_record(
+                    .patch_record_with_deferred_constraints(
                         *record_number,
                         fields_patch(
                             &foreign_key.local_fields,
                             &vec![Value::Null; foreign_key.local_fields.len()],
                         ),
+                        deferred_constraints,
                     )
                     .map_err(|source| CatalogError::Table {
                         name: child_name.to_owned(),

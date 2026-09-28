@@ -1,4 +1,5 @@
 use super::{Catalog, CatalogError};
+use crate::ConstraintMode;
 use crate::dbf::DbfTable;
 use crate::json_order::compare_scalar_values;
 use serde_json::Value;
@@ -23,22 +24,62 @@ pub(crate) fn validate_replacements(
 pub(super) fn validate_loaded_tables(
     tables: &BTreeMap<String, DbfTable>,
 ) -> Result<(), CatalogError> {
-    validate_loaded_tables_with_deferred(tables, true, None)
+    validate_loaded_tables_with_deferred(tables, None, None)
+}
+
+pub(super) fn initial_deferred_constraints(
+    tables: &BTreeMap<String, DbfTable>,
+) -> Result<BTreeMap<String, BTreeSet<String>>, CatalogError> {
+    let mut deferred = BTreeMap::new();
+    for (table_name, table) in tables {
+        let modes = table
+            .deferrable_constraint_modes()
+            .map_err(|source| CatalogError::Table {
+                name: table_name.clone(),
+                source,
+            })?;
+        let names = modes
+            .into_iter()
+            .filter_map(|(name, mode)| (mode == ConstraintMode::Deferred).then_some(name))
+            .collect::<BTreeSet<_>>();
+        deferred.insert(table_name.clone(), names);
+    }
+    Ok(deferred)
 }
 
 pub(super) fn validate_statement_constraints(
     tables: &BTreeMap<String, DbfTable>,
     changed_tables: &BTreeSet<String>,
+    deferred_constraints: &BTreeMap<String, BTreeSet<String>>,
 ) -> Result<(), CatalogError> {
-    validate_loaded_tables_with_deferred(tables, false, Some(changed_tables))
+    validate_loaded_tables_with_deferred(tables, Some(deferred_constraints), Some(changed_tables))
+}
+
+pub(super) fn validate_transaction_constraints(
+    tables: &BTreeMap<String, DbfTable>,
+    deferred_constraints: &BTreeMap<String, BTreeSet<String>>,
+) -> Result<(), CatalogError> {
+    validate_loaded_tables_with_deferred(tables, Some(deferred_constraints), None)
 }
 
 fn validate_loaded_tables_with_deferred(
     tables: &BTreeMap<String, DbfTable>,
-    include_deferred: bool,
+    deferred_constraints: Option<&BTreeMap<String, BTreeSet<String>>>,
     changed_tables: Option<&BTreeSet<String>>,
 ) -> Result<(), CatalogError> {
     for (child_name, child) in tables {
+        if changed_tables.is_none_or(|changed| changed.contains(child_name)) {
+            child
+                .validate_schema_constraints(
+                    deferred_constraints
+                        .and_then(|constraints| constraints.get(child_name))
+                        .unwrap_or(&BTreeSet::new()),
+                )
+                .map_err(|source| CatalogError::Table {
+                    name: child_name.clone(),
+                    source,
+                })?;
+        }
         let foreign_keys = child.foreign_keys().map_err(|source| CatalogError::Table {
             name: child_name.clone(),
             source,
@@ -76,7 +117,11 @@ fn validate_loaded_tables_with_deferred(
                     foreign_key.parent_table
                 )));
             }
-            if foreign_key.deferred && !include_deferred {
+            let is_deferred = foreign_key.deferrable
+                && deferred_constraints
+                    .and_then(|constraints| constraints.get(child_name))
+                    .is_some_and(|names| names.contains(&foreign_key.name));
+            if is_deferred {
                 continue;
             }
             for record in child.active_records() {

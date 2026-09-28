@@ -58,6 +58,11 @@ The current sidecar is versioned independently from DBF:
 }
 ```
 
+Schema version 1 remains supported.
+Version 2 adds named, deferrable constraints without changing the DBF bytes.
+The `deferred` foreign-key property shown above is also accepted in version 1.
+Version 1 cannot use the version 2 naming or `deferrable` properties.
+
 The optional root `encoding` property is an explicit override for the four declared multibyte codecs
 plus strict Shift_JIS, EUC-JP, GB18030, and ISO-2022-JP.
 
@@ -79,7 +84,7 @@ An unknown field name, unsupported format, or unsupported version is rejected wh
 
 ## 2. Current constraint slice
 
-The current version accepts the following field properties:
+Versions 1 and 2 accept the following field properties:
 
 | Property | Behavior |
 | --- | --- |
@@ -88,7 +93,9 @@ The current version accepts the following field properties:
 | `not_null` | Rejects JSON `null` on insert, replace, patch, or recall |
 | `default` | Supplies a scalar value when the field is omitted from an insert |
 | `references` | Declares a catalog-scoped `TABLE.FIELD` foreign-key target whose parent field must be declared primary or unique |
-| `deferred` | Defers a scalar foreign-key check until the catalog transaction commits; defaults to `false` |
+| `constraint_name` | Version 2 only; names this scalar foreign key for runtime mode changes |
+| `deferrable` | Version 2 only; allows a scalar foreign key to switch between immediate and deferred mode |
+| `deferred` | Sets a foreign key's initial mode; `true` implies `deferrable`, and defaults to `false` |
 | `on_delete` | Selects `restrict` (the default), `no_action`, `cascade`, or `set_null` for a scalar reference |
 | `on_update` | Selects `restrict` (the default), `no_action`, `cascade`, or `set_null` for a scalar reference |
 
@@ -101,7 +108,41 @@ The optional root `constraints` object accepts bounded composite keys:
 | --- | --- |
 | `primary` | Requires two or more field names; all values must be non-null and the tuple must be unique |
 | `unique` | Accepts arrays of two or more field names; a non-null tuple may not repeat among active records |
-| `foreign_keys` | Accepts composite child and parent field lists with equal length; the parent fields must match a declared primary or unique key |
+| `foreign_keys` | Accepts composite child and parent field lists with equal length; version 2 also accepts `name` and `deferrable` |
+| `deferrable` | Version 2 only; declares named local `unique`, `primary_key`, or `check` constraints |
+
+Version 2 local constraints use this shape:
+
+```json
+{
+  "format": "txbase-schema",
+  "version": 2,
+  "fields": {
+    "MANAGER_ID": {
+      "references": "users.ID",
+      "constraint_name": "users_manager_fk",
+      "deferrable": true
+    }
+  },
+  "constraints": {
+    "deferrable": [
+      {"name": "users_name_unique", "kind": "unique", "fields": ["NAME"]},
+      {
+        "name": "users_age_nonnegative",
+        "kind": "check",
+        "predicate": {"AGE": {"$gte": 0}},
+        "deferred": true
+      }
+    ]
+  }
+}
+```
+
+Each local entry requires a unique `name` and a `kind`.
+`unique` and `primary_key` require `fields`; `check` requires a `predicate`.
+The optional `deferred` flag defaults to `false`, so these constraints begin each transaction in immediate mode unless set to `true`.
+Constraint names must be unique within a table, including names generated for unnamed foreign keys.
+Unnamed foreign keys receive `fk_<index>` in sorted field-name order, followed by `constraints.foreign_keys` order; use explicit names when an identifier must remain stable as the schema changes.
 
 Every scalar reference must target a field marked `primary` or `unique` in the parent table's schema sidecar.
 
@@ -120,8 +161,12 @@ The same eight codecs can be selected temporarily by the public
 
 It does not add collation or an automatic conversion policy.
 
-Field, unique, primary-key, and `checks` constraints run before the in-memory record is changed.
-Catalog foreign keys are checked after each operation unless marked `deferred`, then all foreign keys are checked again before the catalog commit.
+Non-deferrable field constraints and the root `checks` array run before the in-memory record is changed.
+Named deferrable constraints run after each operation in immediate mode and are checked against the complete transaction image at commit when deferred.
+All constraints are checked before a commit is published.
+
+Deferrable `primary_key` uniqueness can be postponed, but its non-null requirement remains immediate.
+The named `check` kind is a txBASE extension; PostgreSQL does not defer `CHECK` or `NOT NULL` constraints.
 
 Scalar `default` values are applied only to fields omitted from an insert. An explicit JSON `null`
 is not replaced, and replace, patch, and recall use the candidate values they already produce.
@@ -143,21 +188,27 @@ to every local key field and therefore requires those fields not to be `not_null
 primary key.
 
 `constraints.foreign_keys` declares a composite reference with a `fields` child list and a
-`references` object containing `table` and `fields` parent values. It accepts optional `deferred`,
-`on_delete`, and `on_update` properties.
+`references` object containing `table` and `fields` parent values. Version 2 also accepts an optional
+`name` and `deferrable`; both schema versions accept `deferred`, `on_delete`, and `on_update`.
 
 The two field lists must contain at least two distinct names and have the same length.
 
 If any child value is null, the composite reference is not checked; otherwise every child value
 must match the corresponding value in one active parent record.
 
-Foreign-key checks are immediate by default. Set `deferred` to `true` on a scalar or composite
-foreign key to skip its check after each operation in an atomic catalog transaction and validate
-it before the catalog journal commit. This permits a child to be inserted before its parent, or a
-`no_action` parent change to be repaired by a later operation in the same transaction. A failed
-final check publishes no table or sidecar changes. A standalone mutation has one operation and
-therefore still has to satisfy every foreign key before it commits. `deferred` is a fixed schema
-policy; txBASE does not yet expose a runtime `SET CONSTRAINTS` switch.
+Foreign-key checks are immediate by default. A deferrable scalar or composite foreign key can start
+in either mode and can change mode by name in a Rust transaction. Deferred checks run against the
+complete catalog image before the journal commit. This permits a child to be inserted before its
+parent, or a `no_action` parent change to be repaired by a later operation in the same transaction.
+A failed final check publishes no table or sidecar changes. A standalone mutation has one operation
+and therefore still has to satisfy every foreign key before it commits.
+
+`DbfTransaction::set_constraints` changes local named constraints, and
+`DbfTransaction::set_all_constraints` changes every deferrable local constraint. The catalog
+counterparts accept a table name and can also change every deferrable constraint in the catalog.
+Changing a mode to immediate validates the current transaction image before the mode changes.
+The HTTP `POST /transaction` routes use each schema's initial modes but do not accept an in-batch
+mode-change operation.
 
 `no_action` may be deferred, while `restrict` is always immediate. `cascade` and `set_null` actions
 run as each operation is applied. This follows the timing distinction in PostgreSQL's foreign-key
@@ -212,7 +263,7 @@ The sidecar does not yet implement:
 - DBF layout migrations or schema versions beyond the current sidecar format.
 - Automatic selection between a DBF language driver and an override.
 
-Runtime constraint-timing changes, deferred `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints, and references across catalog roots remain future work.
+HTTP in-batch constraint-mode changes, references across catalog roots, and DBF layout migrations remain future work.
 
 SQLite's official [`CREATE TABLE` reference](https://sqlite.org/lang_createtable.html) distinguishes `NOT NULL`, `CHECK`, `UNIQUE`, `PRIMARY KEY`, and `FOREIGN KEY` constraints and documents their write-time behavior.
 
@@ -225,6 +276,7 @@ txBASE uses those distinctions as design references, but does not claim SQLite c
 
 - [SQLite `CREATE TABLE`](https://sqlite.org/lang_createtable.html)
 - [SQLite foreign-key support](https://www.sqlite.org/foreignkeys.html)
-- [PostgreSQL foreign-key actions and deferral](https://www.postgresql.org/docs/18/ddl-constraints.html)
+- [PostgreSQL `SET CONSTRAINTS`](https://www.postgresql.org/docs/18/sql-set-constraints.html)
+- [PostgreSQL `CREATE TABLE` constraint deferrability](https://www.postgresql.org/docs/18/sql-createtable.html)
 - [DBF compatibility boundary](dbf-compatibility.md)
 - [Roadmap and explicit non-goals](roadmap.md)

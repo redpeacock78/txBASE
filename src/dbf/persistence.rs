@@ -219,6 +219,7 @@ impl DbfTable {
             }
             Err(error) => return Err(error),
         }
+        self.validate_schema_constraints(&BTreeSet::new())?;
         let transaction_id = next_transaction_id(current_transaction_id)?;
         let mut prepared = self.clone();
         prepared.transaction_id = Some(transaction_id);

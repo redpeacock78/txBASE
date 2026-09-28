@@ -7,6 +7,14 @@ use update::expand_update;
 
 impl DbfTable {
     pub fn insert_record(&mut self, values: Map<String, Value>) -> Result<usize, DbfError> {
+        self.insert_record_with_deferred_constraints(values, &BTreeSet::new())
+    }
+
+    pub(crate) fn insert_record_with_deferred_constraints(
+        &mut self,
+        values: Map<String, Value>,
+        deferred_constraints: &BTreeSet<String>,
+    ) -> Result<usize, DbfError> {
         let mut values = values;
         if let Some(schema) = &self.schema {
             schema.apply_defaults(&mut values);
@@ -51,7 +59,12 @@ impl DbfTable {
             auto_increment_updates.push((descriptor_offset, following));
         }
         if let Some(schema) = &self.schema {
-            schema.validate_candidate(&values, &self.records, None)?;
+            schema.validate_candidate_with_deferred(
+                &values,
+                &self.records,
+                None,
+                deferred_constraints,
+            )?;
         }
         let number = self
             .records
@@ -123,12 +136,26 @@ impl DbfTable {
         number: usize,
         values: Map<String, Value>,
     ) -> Result<(), DbfError> {
+        self.replace_record_with_deferred_constraints(number, values, &BTreeSet::new())
+    }
+
+    pub(crate) fn replace_record_with_deferred_constraints(
+        &mut self,
+        number: usize,
+        values: Map<String, Value>,
+        deferred_constraints: &BTreeSet<String>,
+    ) -> Result<(), DbfError> {
         let index = self.active_index(number)?;
         let changed_fields = values.keys().cloned().collect::<BTreeSet<_>>();
         let mut values = self.normalize_values(&values)?;
         self.preserve_auto_increment_fields(index, &mut values, &changed_fields)?;
         if let Some(schema) = &self.schema {
-            schema.validate_candidate(&values, &self.records, Some(index))?;
+            schema.validate_candidate_with_deferred(
+                &values,
+                &self.records,
+                Some(index),
+                deferred_constraints,
+            )?;
         }
         let (storage_values, memo_updates) = self.prepare_existing_storage(index, &values, None)?;
         self.write_existing_record(index, &values, &storage_values)?;
@@ -141,12 +168,26 @@ impl DbfTable {
         number: usize,
         patch: Map<String, Value>,
     ) -> Result<(), DbfError> {
+        self.patch_record_with_deferred_constraints(number, patch, &BTreeSet::new())
+    }
+
+    pub(crate) fn patch_record_with_deferred_constraints(
+        &mut self,
+        number: usize,
+        patch: Map<String, Value>,
+        deferred_constraints: &BTreeSet<String>,
+    ) -> Result<(), DbfError> {
         let index = self.active_index(number)?;
         let (values, changed_fields) = expand_update(&self.records[index].values, patch)?;
         let mut values = self.normalize_values(&values)?;
         self.preserve_auto_increment_fields(index, &mut values, &changed_fields)?;
         if let Some(schema) = &self.schema {
-            schema.validate_candidate(&values, &self.records, Some(index))?;
+            schema.validate_candidate_with_deferred(
+                &values,
+                &self.records,
+                Some(index),
+                deferred_constraints,
+            )?;
         }
         let (storage_values, memo_updates) =
             self.prepare_existing_storage(index, &values, Some(&changed_fields))?;

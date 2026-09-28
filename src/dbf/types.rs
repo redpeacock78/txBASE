@@ -117,11 +117,13 @@ pub(crate) enum ForeignKeyAction {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ForeignKey {
+    pub(crate) name: String,
     pub(crate) local_fields: Vec<String>,
     pub(crate) parent_table: String,
     pub(crate) parent_fields: Vec<String>,
     pub(crate) on_delete: ForeignKeyAction,
     pub(crate) on_update: ForeignKeyAction,
+    pub(crate) deferrable: bool,
     pub(crate) deferred: bool,
 }
 

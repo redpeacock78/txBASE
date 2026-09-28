@@ -1,9 +1,18 @@
 use super::{DbfError, DbfTable};
 use crate::xbase::{OperationIr, OperationMethod};
 use serde_json::{Map, Value};
+use std::collections::BTreeSet;
 
 impl DbfTable {
     pub(crate) fn apply_operation(&mut self, operation: &OperationIr) -> Result<(), DbfError> {
+        self.apply_operation_with_deferred_constraints(operation, &BTreeSet::new())
+    }
+
+    pub(crate) fn apply_operation_with_deferred_constraints(
+        &mut self,
+        operation: &OperationIr,
+        deferred_constraints: &BTreeSet<String>,
+    ) -> Result<(), DbfError> {
         match operation.method {
             OperationMethod::Post => {
                 if operation.path != "/records" {
@@ -12,15 +21,23 @@ impl DbfTable {
                     ));
                 }
                 let values = operation_object(operation, "POST")?;
-                self.insert_record(values)?;
+                self.insert_record_with_deferred_constraints(values, deferred_constraints)?;
             }
             OperationMethod::Put => {
                 let number = operation_record_id(&operation.path)?;
-                self.replace_record(number, operation_object(operation, "PUT")?)?;
+                self.replace_record_with_deferred_constraints(
+                    number,
+                    operation_object(operation, "PUT")?,
+                    deferred_constraints,
+                )?;
             }
             OperationMethod::Patch => {
                 let number = operation_record_id(&operation.path)?;
-                self.patch_record(number, operation_object(operation, "PATCH")?)?;
+                self.patch_record_with_deferred_constraints(
+                    number,
+                    operation_object(operation, "PATCH")?,
+                    deferred_constraints,
+                )?;
             }
             OperationMethod::Delete => {
                 if operation.body.is_some() {

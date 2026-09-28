@@ -59,6 +59,11 @@ txbase schema apply users.dbf users.txschema.candidate.json
 }
 ```
 
+スキーマバージョン1は引き続き利用できます。
+バージョン2では、DBFのバイト列を変えずに名前付きの延期可能な制約を追加します。
+上の例にある外部キーの`deferred`プロパティは、バージョン1でも受け付けます。
+バージョン1では、バージョン2で追加した名前指定と`deferrable`プロパティを使えません。
+
 任意のルート`encoding`プロパティは、宣言済みの4つのマルチバイトコーデックに加えて、strict Shift_JIS、EUC-JP、GB18030、ISO-2022-JPを明示的に選びます。
 
 受け付けるラベルは`windows-31j`または`cp932`、`shift_jis`、`shift-jis`、`sjis`、`gbk`または`cp936`、`euc-kr`または`cp949`、`big5`または`cp950`、`euc-jp`、`gb18030`、`iso-2022-jp`または`iso2022-jp`です。
@@ -83,7 +88,7 @@ DBFヘッダーやメタデータサイドカーには保存しません。
 
 ## 2. 現在の制約スライス
 
-現在のバージョンは次のフィールドプロパティを受け付けます。
+バージョン1と2は次のフィールドプロパティを受け付けます。
 
 | プロパティ | 動作 |
 | --- | --- |
@@ -92,7 +97,9 @@ DBFヘッダーやメタデータサイドカーには保存しません。
 | `not_null` | insert、replace、patch、recall で JSON `null`を拒否する |
 | `default` | insert でフィールドが省略されたとき、スカラー値を補う |
 | `references` | 親側で主キーまたは一意キーとして宣言した`TABLE.FIELD`外部キー対象を宣言する |
-| `deferred` | スカラー外部キー検査をカタログtransactionのcommitまで延期する。既定は`false` |
+| `constraint_name` | バージョン2のみ。実行時に検査時点を切り替えるスカラー外部キーの名前を指定する |
+| `deferrable` | バージョン2のみ。スカラー外部キーを即時検査と延期検査の間で切り替え可能にする |
+| `deferred` | 外部キーの初期検査時点を指定する。`true`は`deferrable`も意味し、既定値は`false` |
 | `on_delete` | スカラー参照の削除動作を`restrict`（既定）、`no_action`、`cascade`、`set_null`から選ぶ |
 | `on_update` | スカラー参照の更新動作を`restrict`（既定）、`no_action`、`cascade`、`set_null`から選ぶ |
 
@@ -105,6 +112,42 @@ DBFヘッダーやメタデータサイドカーには保存しません。
 | `primary` | 二つ以上のフィールド名を要求し、すべての値が非 null でタプルが一意であることを要求する |
 | `unique` | 二つ以上のフィールド名の配列を受け付け、非 null のタプルがアクティブレコード間で重複することを拒否する |
 | `foreign_keys` | 同じ長さの子と親のフィールド列を受け付ける。親側のフィールドは宣言済みの主キーまたは一意キーに一致させる |
+| `deferrable` | バージョン2のみ。名前付きのローカル`unique`、`primary_key`、`check`制約を宣言する |
+
+バージョン2のローカル制約は次の形式で記述します。
+
+```json
+{
+  "format": "txbase-schema",
+  "version": 2,
+  "fields": {
+    "MANAGER_ID": {
+      "references": "users.ID",
+      "constraint_name": "users_manager_fk",
+      "deferrable": true
+    }
+  },
+  "constraints": {
+    "deferrable": [
+      {"name": "users_name_unique", "kind": "unique", "fields": ["NAME"]},
+      {
+        "name": "users_age_nonnegative",
+        "kind": "check",
+        "predicate": {"AGE": {"$gte": 0}},
+        "deferred": true
+      }
+    ]
+  }
+}
+```
+
+ローカル制約には、それぞれ一意な`name`と`kind`が必要です。
+`unique`と`primary_key`には`fields`を指定し、`check`には`predicate`を指定します。
+省略可能な`deferred`の既定値は`false`です。
+そのため、`true`を指定しなければ各トランザクションは即時検査で始まります。
+外部キーに自動生成した名前を含め、制約名はテーブル内で一意でなければなりません。
+名前のない外部キーには、フィールド名の昇順、続いて`constraints.foreign_keys`の宣言順で`fk_<index>`を割り当てます。
+スキーマ変更後も同じ名前を使う場合は、明示名を指定します。
 
 スカラー参照は、親テーブルのスキーマサイドカーで`primary`または`unique`を指定したフィールドを対象にします。
 
@@ -123,9 +166,13 @@ DBFヘッダーやメタデータサイドカーには保存しません。
 
 照合や自動変換方針は追加しません。
 
-フィールド、一意性、主キー、`checks`の制約は、メモリ上のレコードを変更する前に検査します。
+延期不可のフィールド制約とルートの`checks`配列は、メモリ上のレコードを変更する前に検査します。
+名前付きの延期可能な制約は即時モードでは各操作後に検査し、延期モードではcommit時にトランザクション全体を検査します。
+commitを公開する前に、すべての制約を検査します。
 
-カタログ外部キーは、`deferred`の指定がなければ各操作の後に検査し、カタログcommit前にも全件を再検査します。
+延期可能な`primary_key`では一意性の検査を延期できますが、非nullの要件は延期しません。
+名前付き`check`はtxBASE独自の拡張です。
+PostgreSQLは`CHECK`制約と`NOT NULL`制約の検査を延期しません。
 
 スカラー `default`値はinsertで省略されたフィールドにだけ適用します。
 
@@ -155,26 +202,25 @@ nullは許可します。
 `set_null`はすべてのローカルキーへJSON `null`を書き込むため、対象フィールドを`not_null`にしたり主キーの一部にしたりできません。
 
 `constraints.foreign_keys`は、子側の`fields`列と、親側の`table`および`fields`を持つ`references`オブジェクトで複合参照を宣言します。
-
-この要素は`deferred`、`on_delete`、`on_update`を任意に持ちます。
+バージョン2では`name`と`deferrable`も指定できます。
+両方のバージョンで`deferred`、`on_delete`、`on_update`を指定できます。
 
 2つのフィールド列は、それぞれ2つ以上の異なる名前を持ち、同じ長さでなければなりません。
 
 子側の値のいずれかがnullなら複合参照を検査せず、それ以外ではすべての子側の値が1つのアクティブな親レコードの対応する値と一致しなければなりません。
 
-外部キーは既定で各操作の後に検査します。
-
-スカラーまたは複合外部キーに`deferred: true`を指定すると、原子的なカタログトランザクション中は各操作後の検査を省略し、カタログjournalのcommit前に検査します。
-
+外部キーは既定で即時に検査します。
+延期可能なスカラーまたは複合外部キーは、初期モードを指定し、RustのトランザクションAPIから名前で切り替えられます。
+延期した外部キーは、カタログjournalのcommit前にカタログ全体を検査します。
 この設定により、同じトランザクション内で親より先に子を追加したり、`no_action`の親変更を後続操作で修復したりできます。
-
 最終検査に失敗した場合、テーブルやサイドカーは公開しません。
-
 単独の更新は1つの操作からなるため、commit前にすべての外部キーを満たす必要があります。
 
-`deferred`は固定のスキーマ方針です。
-
-txBASEは実行時に制約の検査時点を切り替える`SET CONSTRAINTS`をまだ提供しません。
+`DbfTransaction::set_constraints`は名前付きローカル制約を切り替えます。
+`DbfTransaction::set_all_constraints`は延期可能なローカル制約をすべて切り替えます。
+カタログ側のAPIはテーブル名を受け取り、カタログ内の延期可能な制約すべても切り替えられます。
+検査時点を即時に変える前に、現在のトランザクション全体を検証します。
+HTTPの`POST /transaction`は各スキーマの初期モードを使いますが、リクエスト内で検査時点を切り替える操作は受け付けません。
 
 `no_action`は検査を延期できますが、`restrict`は常に直ちに検査します。
 
@@ -232,7 +278,7 @@ DBFとメタデータファイルは別々のファイルです。
 - DBFレイアウトの移行、または現在のサイドカーフォーマットを超えるスキーマバージョン。
 - DBF言語ドライバーとオーバーライドの自動選択。
 
-実行時の検査時点切り替え、延期可能な`UNIQUE`、`PRIMARY KEY`、`CHECK`制約、カタログルートをまたぐ参照は今後の課題です。
+HTTPリクエスト内の検査時点切り替え、カタログルートをまたぐ参照、DBFレイアウトの移行は今後の課題です。
 
 SQLiteの公式[`CREATE TABLE`リファレンス](https://sqlite.org/lang_createtable.html)は、`NOT NULL`、`CHECK`、`UNIQUE`、`PRIMARY KEY`、`FOREIGN KEY`の制約を区別し、書き込み時の動作を文書化しています。
 
@@ -244,6 +290,7 @@ txBASEはそれらを設計上の参照としますが、SQLite互換性は主�
 
 - [SQLite `CREATE TABLE`](https://sqlite.org/lang_createtable.html)
 - [SQLite foreign-key support](https://www.sqlite.org/foreignkeys.html)
-- [PostgreSQLの外部キー動作と検査延期](https://www.postgresql.org/docs/18/ddl-constraints.html)
+- [PostgreSQL `SET CONSTRAINTS`](https://www.postgresql.org/docs/18/sql-set-constraints.html)
+- [PostgreSQL `CREATE TABLE`の制約延期](https://www.postgresql.org/docs/18/sql-createtable.html)
 - [DBF 互換性の境界](dbf-compatibility.md)
 - [ロードマップと明示的な非目標](roadmap.md)

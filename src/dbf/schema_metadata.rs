@@ -1,6 +1,7 @@
 use super::DbfError;
 use super::codec::canonical_encoding_name;
 use super::types::ForeignKeyAction;
+use crate::ConstraintMode;
 use crate::query::validate_filter;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -9,7 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const SCHEMA_FORMAT: &str = "txbase-schema";
-const SCHEMA_VERSION: u8 = 1;
+const CURRENT_SCHEMA_VERSION: u8 = 2;
 
 #[path = "schema_metadata/constraints.rs"]
 mod constraints;
@@ -42,6 +43,10 @@ struct FieldMetadata {
     default: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     references: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    constraint_name: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    deferrable: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     deferred: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -59,19 +64,46 @@ struct ConstraintMetadata {
     unique: Vec<Vec<String>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     foreign_keys: Vec<CompositeForeignKeyMetadata>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    deferrable: Vec<DeferrableConstraintMetadata>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CompositeForeignKeyMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
     fields: Vec<String>,
     references: ForeignKeyTargetMetadata,
+    #[serde(default, skip_serializing_if = "is_false")]
+    deferrable: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     deferred: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     on_delete: Option<ForeignKeyAction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     on_update: Option<ForeignKeyAction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeferrableConstraintMetadata {
+    name: String,
+    kind: DeferrableConstraintKind,
+    #[serde(default)]
+    fields: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    predicate: Option<Map<String, Value>>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    deferred: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum DeferrableConstraintKind {
+    Unique,
+    PrimaryKey,
+    Check,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -95,11 +127,27 @@ impl SchemaMetadata {
                 metadata.format
             )));
         }
-        if metadata.version != SCHEMA_VERSION {
+        if !matches!(metadata.version, 1..=CURRENT_SCHEMA_VERSION) {
             return Err(DbfError::Invalid(format!(
                 "unsupported schema metadata version: {}",
                 metadata.version
             )));
+        }
+        if metadata.version < CURRENT_SCHEMA_VERSION
+            && (!metadata.constraints.deferrable.is_empty()
+                || metadata
+                    .fields
+                    .values()
+                    .any(|field| field.constraint_name.is_some() || field.deferrable)
+                || metadata
+                    .constraints
+                    .foreign_keys
+                    .iter()
+                    .any(|key| key.name.is_some() || key.deferrable))
+        {
+            return Err(DbfError::Invalid(
+                "named deferrable constraints require schema metadata version 2".into(),
+            ));
         }
         if let Some(encoding) = metadata.encoding.as_deref() {
             let canonical = canonical_encoding_name(encoding).ok_or_else(|| {
@@ -137,9 +185,12 @@ impl SchemaMetadata {
             || !self.constraints.primary.is_empty()
             || !self.constraints.unique.is_empty()
             || !self.constraints.foreign_keys.is_empty()
+            || !self.constraints.deferrable.is_empty()
             || self.fields.values().any(|field| {
                 field.default.is_some()
                     || field.references.is_some()
+                    || field.constraint_name.is_some()
+                    || field.deferrable
                     || field.deferred
                     || field.on_delete.is_some()
                     || field.on_update.is_some()
@@ -154,6 +205,23 @@ impl SchemaMetadata {
             .iter()
             .map(|(name, field)| (name.clone(), (field.primary, field.unique, field.not_null)))
             .collect())
+    }
+
+    pub(super) fn local_deferrable_constraint_modes(&self) -> BTreeMap<String, ConstraintMode> {
+        self.constraints
+            .deferrable
+            .iter()
+            .map(|constraint| {
+                (
+                    constraint.name.clone(),
+                    if constraint.deferred {
+                        ConstraintMode::Deferred
+                    } else {
+                        ConstraintMode::Immediate
+                    },
+                )
+            })
+            .collect()
     }
 }
 

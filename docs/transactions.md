@@ -89,6 +89,29 @@ are checked before the journal commit.
 operation in the same transaction to repair.
 A failed `apply` aborts this Rust transaction, and a failed final validation publishes no files.
 
+### Constraint timing
+
+Schema version 2 can mark named local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints, as well as
+scalar or composite foreign keys, as deferrable.
+Each deferrable constraint starts in its schema-selected immediate or deferred mode.
+
+`DbfTransaction::set_constraints` changes named local constraints, and
+`DbfTransaction::set_all_constraints` changes every deferrable local constraint.
+`CatalogTransaction::set_constraints` changes named constraints on one table, including foreign
+keys; `CatalogTransaction::set_all_constraints` changes every deferrable constraint in the catalog.
+Both APIs use `ConstraintMode::{Immediate, Deferred}`.
+
+Changing a deferred constraint to immediate validates the current transaction image before the
+mode changes.
+If that validation fails, `DbfTransaction` keeps its previous mode and remains usable.
+`CatalogTransaction` aborts after any failed operation, including a failed mode change.
+Commit validates every constraint before publishing table or journal changes.
+
+The HTTP `POST /transaction` routes begin with the schema-selected modes, but `OperationBatch` has no
+operation for changing those modes within a request.
+The named `CHECK` constraint is a txBASE extension; PostgreSQL supports deferrable `UNIQUE`,
+`PRIMARY KEY`, `EXCLUDE`, and foreign-key constraints, while `CHECK` and `NOT NULL` remain immediate.
+
 The catalog HTTP `POST /transaction` route uses the same per-operation and commit-time foreign-key
 checks. A deferred key can therefore reference a parent inserted later in the same request batch.
 
@@ -157,7 +180,8 @@ The HTTP route and this Rust API share the same table mutation and persistence p
 - [PostgreSQL concurrency control](https://www.postgresql.org/docs/current/mvcc.html)
 - [SQLite isolation](https://sqlite.org/isolation.html)
 - [SQLite write-ahead logging](https://sqlite.org/wal.html)
-- [PostgreSQL foreign-key actions and deferral](https://www.postgresql.org/docs/18/ddl-constraints.html)
+- [PostgreSQL `SET CONSTRAINTS`](https://www.postgresql.org/docs/18/sql-set-constraints.html)
+- [SQLite foreign-key timing](https://www.sqlite.org/foreignkeys.html)
 - [MVCC and historical snapshots](mvcc.md)
 - [Mutation model](mutation-model.md)
 - [HTTP method semantics and QUERY](http-semantics.md)

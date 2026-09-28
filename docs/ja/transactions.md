@@ -87,6 +87,27 @@ APIはマージ方針を自動選択せず、ネットワーク応答を失っ�
 
 `apply`が失敗したRustトランザクションはabort状態になり、最終検査に失敗した場合はファイルを公開しません。
 
+### 制約の検査時点
+
+スキーマバージョン2では、名前付きローカル`UNIQUE`、`PRIMARY KEY`、`CHECK`制約と、スカラー外部キーおよび複合外部キーを延期可能にできます。
+各制約はスキーマで選んだ即時モードまたは延期モードでトランザクションを開始します。
+
+`DbfTransaction::set_constraints`は名前付きローカル制約を切り替えます。
+`DbfTransaction::set_all_constraints`は延期可能なローカル制約をすべて切り替えます。
+`CatalogTransaction::set_constraints`は1つのテーブルで名前付き制約を切り替え、外部キーも対象にします。
+`CatalogTransaction::set_all_constraints`はカタログ全体の延期可能な制約を切り替えます。
+両APIは`ConstraintMode::{Immediate, Deferred}`を使います。
+
+延期モードから即時モードへ変える前に、現在のトランザクション全体を検証します。
+検証に失敗した場合、`DbfTransaction`は以前のモードを保ち、引き続き操作できます。
+`CatalogTransaction`は、検査時点の切り替えを含む操作が失敗するとabort状態になります。
+commitはテーブルやjournalの変更を公開する前に、すべての制約を検証します。
+
+HTTPの`POST /transaction`はスキーマで選んだ初期モードを使いますが、`OperationBatch`にはリクエスト内でモードを変える操作がありません。
+名前付き`CHECK`制約の延期はtxBASE独自の拡張です。
+PostgreSQLでは`UNIQUE`、`PRIMARY KEY`、`EXCLUDE`、外部キー制約を延期できます。
+`CHECK`と`NOT NULL`は即時に検査します。
+
 カタログHTTP `POST /transaction`も同じタイミングで外部キーを検査します。
 
 そのため延期した外部キーでは、同じリクエストの後続操作で追加する親レコードを参照できます。
@@ -154,7 +175,8 @@ HTTP経路とこのRust APIは、同じテーブル更新および永続化経�
 - [PostgreSQLの並行性制御](https://www.postgresql.org/docs/current/mvcc.html)
 - [SQLiteの分離](https://sqlite.org/isolation.html)
 - [SQLiteのWAL](https://sqlite.org/wal.html)
-- [PostgreSQLの外部キー動作と検査延期](https://www.postgresql.org/docs/18/ddl-constraints.html)
+- [PostgreSQL `SET CONSTRAINTS`](https://www.postgresql.org/docs/18/sql-set-constraints.html)
+- [SQLiteの外部キー検査時点](https://www.sqlite.org/foreignkeys.html)
 - [MVCCと過去スナップショット](mvcc.md)
 - [更新モデル](mutation-model.md)
 - [HTTPメソッドの意味とQUERY](http-semantics.md)

@@ -8,6 +8,7 @@ use super::{
 };
 use crate::index::{IndexFile, sidecar_path};
 use serde_json::{Map, Value};
+use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -193,6 +194,14 @@ fn remove_file_if_exists(path: &Path) -> Result<(), std::io::Error> {
 
 impl DbfTable {
     pub fn recall_record(&mut self, number: usize) -> Result<(), DbfError> {
+        self.recall_record_with_deferred_constraints(number, &BTreeSet::new())
+    }
+
+    pub(crate) fn recall_record_with_deferred_constraints(
+        &mut self,
+        number: usize,
+        deferred_constraints: &BTreeSet<String>,
+    ) -> Result<(), DbfError> {
         let index = number
             .checked_sub(1)
             .ok_or_else(|| DbfError::Invalid("record id must be a positive integer".into()))?;
@@ -203,7 +212,12 @@ impl DbfTable {
             return Err(DbfError::Invalid("record is not deleted".into()));
         }
         if let Some(schema) = &self.schema {
-            schema.validate_candidate(&record.values, &self.records, Some(index))?;
+            schema.validate_candidate_with_deferred(
+                &record.values,
+                &self.records,
+                Some(index),
+                deferred_constraints,
+            )?;
         }
         let offset = self.record_offset(index)?;
         let mut bytes = self.bytes.clone();

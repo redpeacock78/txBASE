@@ -18,6 +18,8 @@ mod codepages;
 #[cfg(test)]
 mod compatibility_tests;
 #[cfg(test)]
+mod constraint_timing_tests;
+#[cfg(test)]
 mod encoding_name_tests;
 mod initializer;
 mod lock;

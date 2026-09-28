@@ -1,7 +1,9 @@
 use super::{DbfError, DbfTable, TableLock};
+use crate::ConstraintMode;
 use crate::query::{self, QueryError, QueryRequest};
 use crate::xbase::OperationIr;
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 /// An optimistic snapshot transaction for one path-backed DBF table.
@@ -13,6 +15,7 @@ use std::path::{Path, PathBuf};
 pub struct DbfTransaction {
     path: PathBuf,
     table: DbfTable,
+    deferred_constraints: BTreeSet<String>,
     serializable_lock: Option<TableLock>,
 }
 
@@ -21,9 +24,11 @@ impl DbfTransaction {
     pub fn begin(path: impl AsRef<Path>) -> Result<Self, DbfError> {
         let path = path.as_ref().to_path_buf();
         let table = DbfTable::from_path(&path)?;
+        let deferred_constraints = initially_deferred(&table);
         Ok(Self {
             path,
             table,
+            deferred_constraints,
             serializable_lock: None,
         })
     }
@@ -35,9 +40,11 @@ impl DbfTransaction {
         let lock = TableLock::acquire(&path)?;
         super::recover_path_with_lock_held(&path)?;
         let table = super::load_path_with_lock_held(&path)?;
+        let deferred_constraints = initially_deferred(&table);
         Ok(Self {
             path,
             table,
+            deferred_constraints,
             serializable_lock: Some(lock),
         })
     }
@@ -45,16 +52,80 @@ impl DbfTransaction {
     /// Creates a transaction from an already loaded current table.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn from_table(path: impl AsRef<Path>, table: DbfTable) -> Self {
+        let deferred_constraints = initially_deferred(&table);
         Self {
             path: path.as_ref().to_path_buf(),
             table,
+            deferred_constraints,
             serializable_lock: None,
         }
     }
 
     /// Applies one mutation to the private transaction snapshot.
     pub fn apply(&mut self, operation: &OperationIr) -> Result<(), DbfError> {
-        self.table.apply_operation(operation)
+        self.table
+            .apply_operation_with_deferred_constraints(operation, &self.deferred_constraints)
+    }
+
+    /// Changes the timing of named deferrable constraints in this table.
+    ///
+    /// A transition to Immediate validates the current transaction image
+    /// before changing the mode.
+    pub fn set_constraints(
+        &mut self,
+        names: &[&str],
+        mode: ConstraintMode,
+    ) -> Result<(), DbfError> {
+        if names.is_empty() {
+            return Err(DbfError::Invalid(
+                "constraint name list must not be empty".into(),
+            ));
+        }
+        let names = names
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<Vec<_>>();
+        self.change_constraint_modes(&names, mode)
+    }
+
+    /// Changes the timing of every deferrable local constraint in this table.
+    pub fn set_all_constraints(&mut self, mode: ConstraintMode) -> Result<(), DbfError> {
+        let names = self
+            .table
+            .local_deferrable_constraint_modes()
+            .into_keys()
+            .collect::<Vec<_>>();
+        self.change_constraint_modes(&names, mode)
+    }
+
+    fn change_constraint_modes(
+        &mut self,
+        names: &[String],
+        mode: ConstraintMode,
+    ) -> Result<(), DbfError> {
+        let modes = self.table.local_deferrable_constraint_modes();
+        if names.iter().any(|name| !modes.contains_key(name)) {
+            return Err(DbfError::Invalid(
+                "constraint name does not identify a deferrable constraint in this table".into(),
+            ));
+        }
+        let mut deferred_constraints = self.deferred_constraints.clone();
+        for name in names {
+            match mode {
+                ConstraintMode::Immediate => {
+                    deferred_constraints.remove(name);
+                }
+                ConstraintMode::Deferred => {
+                    deferred_constraints.insert(name.clone());
+                }
+            }
+        }
+        if mode == ConstraintMode::Immediate {
+            self.table
+                .validate_schema_constraints(&deferred_constraints)?;
+        }
+        self.deferred_constraints = deferred_constraints;
+        Ok(())
     }
 
     /// Executes a query against the transaction's private snapshot.
@@ -88,6 +159,14 @@ impl DbfTransaction {
 
     /// Discards the private snapshot without touching the path.
     pub fn rollback(self) {}
+}
+
+fn initially_deferred(table: &DbfTable) -> BTreeSet<String> {
+    table
+        .local_deferrable_constraint_modes()
+        .into_iter()
+        .filter_map(|(name, mode)| (mode == ConstraintMode::Deferred).then_some(name))
+        .collect()
 }
 
 impl crate::query::QueryExecutor for DbfTransaction {

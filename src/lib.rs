@@ -23,5 +23,12 @@ mod query_path;
 
 pub use collation::Collation;
 
+/// Constraint-checking mode for a transaction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConstraintMode {
+    Immediate,
+    Deferred,
+}
+
 /// Maximum size of a JSON request accepted by public parser boundaries.
 pub const MAX_JSON_INPUT_BYTES: usize = 1024 * 1024;
