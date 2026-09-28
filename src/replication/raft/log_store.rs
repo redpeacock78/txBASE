@@ -71,7 +71,7 @@ impl StoreInner {
         let generation = latest_generation(directory)?.unwrap_or_default();
         let path = journal_path(directory, generation);
         let journal = if path.exists() {
-            OpenOptions::new().read(true).append(true).open(&path)?
+            OpenOptions::new().read(true).write(true).open(&path)?
         } else if generation == 0 {
             create_generation(directory, generation, |_| Ok(()))?
         } else {
@@ -301,6 +301,7 @@ impl StoreInner {
             ));
         }
         let original_length = self.journal.metadata()?.len();
+        self.journal.seek(SeekFrom::End(0))?;
         let result = (|| {
             for record in records {
                 write_record(&mut self.journal, &record)?;
