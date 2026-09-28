@@ -67,6 +67,30 @@ fn journal_recovers_vote_commit_and_purged_position_after_restart() {
 }
 
 #[test]
+fn journal_replays_conflicting_append_as_suffix_replacement() {
+    let directory = TempDirectory::new().unwrap();
+    let path = directory.0.join("raft");
+    let replacement_log_id = LogId::new(CommittedLeaderId::new(2, 2), 1);
+    {
+        let mut store = StoreInner::open(&path).unwrap();
+        store
+            .append_entries(vec![blank_entry(0), blank_entry(1), blank_entry(2)])
+            .unwrap();
+        store
+            .append_entries(vec![Entry::new_blank(replacement_log_id)])
+            .unwrap();
+    }
+
+    let store = StoreInner::open(&path).unwrap();
+    assert_eq!(store.state.entries.len(), 2);
+    assert!(store.state.entries.contains_key(&0));
+    assert_eq!(
+        store.state.entries.get(&1).unwrap().log_id,
+        replacement_log_id
+    );
+}
+
+#[test]
 fn journal_discards_an_incomplete_final_frame() {
     let directory = TempDirectory::new().unwrap();
     let path = directory.0.join("raft");

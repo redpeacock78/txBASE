@@ -97,6 +97,9 @@ voterの削除や置換も同じcommit済みmembership経路を使う。
 `RaftCatalogStateMachine`はmembership、適用済み位置、カタログ状態、再試行結果を永続化する。
 append callbackはjournalをディスクへ同期してから完了する。
 
+appendの先頭indexが保持中のログに重なる場合、`RaftLogStore`はそのindex以降のsuffixを置き換える。
+commit済みまたはpurge済みの位置以下への置換と、ログindexが連続しないappendは拒否する。
+
 journalは長さ付きJSON recordとSHA-256 checksumで構成する。
 起動時に不完全な末尾frameを切り詰めるが、checksum不一致や不正なログ連番を含む完全なframeでは起動を拒否する。
 purgeでは現在の状態を新しいjournal generationへcheckpointしてから、古いgenerationを削除する。

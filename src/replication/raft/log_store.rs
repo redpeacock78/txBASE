@@ -152,7 +152,37 @@ impl StoreInner {
     }
 
     fn append_entries(&mut self, entries: Vec<Entry<TypeConfig>>) -> io::Result<()> {
-        let mut previous = self.last_log_index();
+        let Some(first) = entries.first() else {
+            return Ok(());
+        };
+        let first_index = first.log_id.index;
+        if self
+            .state
+            .last_purged
+            .is_some_and(|purged| first_index <= purged.index)
+            || self
+                .state
+                .committed
+                .is_some_and(|committed| first_index <= committed.index)
+        {
+            return Err(invalid_data(
+                "Raft log append cannot replace a purged or committed entry",
+            ));
+        }
+        if let Some(last) = self.last_log_index() {
+            if first_index > last {
+                let next = last
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("Raft log index overflow"))?;
+                if first_index != next {
+                    return Err(invalid_data(format!(
+                        "Raft log append expected index {next}, got {first_index}"
+                    )));
+                }
+            }
+        }
+
+        let mut previous: Option<u64> = None;
         for entry in &entries {
             if let Some(previous) = previous {
                 let expected = previous
@@ -167,11 +197,9 @@ impl StoreInner {
             }
             previous = Some(entry.log_id.index);
         }
-        if entries.is_empty() {
-            return Ok(());
-        }
 
         self.persist_records(entries.iter().cloned().map(JournalRecord::Append))?;
+        self.state.entries.split_off(&first_index);
         for entry in entries {
             self.state.entries.insert(entry.log_id.index, entry);
         }
@@ -287,18 +315,34 @@ impl StoreInner {
     fn apply_record(&mut self, record: JournalRecord) -> io::Result<()> {
         match record {
             JournalRecord::Append(entry) => {
-                if let Some(previous) = self.last_log_index() {
-                    let expected = previous
-                        .checked_add(1)
-                        .ok_or_else(|| invalid_data("Raft log index overflow"))?;
-                    if entry.log_id.index != expected {
-                        return Err(invalid_data(format!(
-                            "Raft log journal expected index {expected}, got {}",
-                            entry.log_id.index
-                        )));
+                let index = entry.log_id.index;
+                if self
+                    .state
+                    .last_purged
+                    .is_some_and(|purged| index <= purged.index)
+                    || self
+                        .state
+                        .committed
+                        .is_some_and(|committed| index <= committed.index)
+                {
+                    return Err(invalid_data(
+                        "Raft journal replaces a purged or committed entry",
+                    ));
+                }
+                if let Some(last) = self.last_log_index() {
+                    if index > last {
+                        let next = last
+                            .checked_add(1)
+                            .ok_or_else(|| invalid_data("Raft log index overflow"))?;
+                        if index != next {
+                            return Err(invalid_data(format!(
+                                "Raft log journal expected index {next}, got {index}"
+                            )));
+                        }
                     }
                 }
-                self.state.entries.insert(entry.log_id.index, entry);
+                self.state.entries.split_off(&index);
+                self.state.entries.insert(index, entry);
             }
             JournalRecord::Vote(vote) => {
                 if self.state.vote.is_some_and(|current| vote < current) {
@@ -384,11 +428,11 @@ impl StoreInner {
             if let Some(vote) = self.state.vote {
                 write_record(file, &JournalRecord::Vote(vote))?;
             }
-            if let Some(committed) = self.state.committed {
-                write_record(file, &JournalRecord::Committed(Some(committed)))?;
-            }
             for entry in self.state.entries.values() {
                 write_record(file, &JournalRecord::Append(entry.clone()))?;
+            }
+            if let Some(committed) = self.state.committed {
+                write_record(file, &JournalRecord::Committed(Some(committed)))?;
             }
             Ok(())
         })

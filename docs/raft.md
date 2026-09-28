@@ -69,6 +69,8 @@ The operational interface must expose explicit initialization, join, membership-
 
 `RaftLogStore` persists votes, log entries, the committed position, and the last purged log ID. `RaftCatalogStateMachine` persists membership, the applied position, catalog state, and retry results. An append callback completes only after the journal has been synchronized to disk.
 
+When an append overlaps retained logs, `RaftLogStore` replaces the suffix beginning at the first incoming index. It rejects gaps and any replacement at or below the committed or purged index.
+
 The journal stores length-prefixed JSON records with SHA-256 checksums. Startup truncates an incomplete final frame, but rejects a complete frame with a bad checksum or invalid log sequence. Purge writes a checkpoint into a new journal generation before removing the old generation.
 
 `RaftLogStore::open` holds an exclusive lock for its node directory, so a second process cannot open the same store. The log format and locking contract are implemented; node startup and protocol recovery remain unimplemented.
