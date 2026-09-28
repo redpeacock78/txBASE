@@ -204,7 +204,7 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
         &root.join(format!("catalog-{}", nodes[leader_index].node_id)),
         3,
         6,
-        "RetainedLearnerOffline",
+        "Offline",
         45,
     );
     assert_eq!(
