@@ -201,14 +201,14 @@ mod tests {
 
     #[test]
     fn request_fingerprint_ignores_catalog_tag_but_tracks_mutation() {
-        let operation = |age| {
+        let operation = |age: i64| {
             TransactionStep::Mutation(OperationIr {
                 method: OperationMethod::Post,
                 path: "/users/records".into(),
                 body: Some(json!({"AGE": age})),
             })
         };
-        let command = |catalog_tag, age| {
+        let command = |catalog_tag: &str, age: i64| {
             RaftCommand::new(
                 "client".into(),
                 1,
@@ -228,13 +228,6 @@ mod tests {
             command("catalog-before", 43).request_fingerprint
         );
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::xbase::{OperationIr, OperationMethod};
-    use serde_json::json;
 
     fn valid_command() -> RaftCommand {
         RaftCommand::new(

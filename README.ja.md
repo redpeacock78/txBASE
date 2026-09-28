@@ -314,7 +314,6 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 固定termレプリケーションと、初期membership固定のRaft方式を提供します。
 固定term方式は、ジャーナル化された`TXRP`と`TXRG`サイドカーを使い、有界なHTTPでエントリ、スナップショット、進捗を配送します。
 Raft方式はquorum書き込み、linearizable read barrier、認証付きpeer RPCを提供します。
-dynamic membership、故障注入テスト、公開catalog listenerのTLSは未対応です。
 
 次の領域は引き続き将来の作業です。
 
@@ -327,7 +326,7 @@ dynamic membership、故障注入テスト、公開catalog listenerのTLSは未�
 - XBF exportにおける厳密な複数ファイルreader atomicity。
 - クラウドオブジェクトストレージアダプターと保持方針。
 - ワーカーまたはWASIのランタイムアダプターと非同期WASMストレージ。
-- クォーラムまたはコンセンサス、ネットワーク経由のスナップショット転送、分散フォロワー読み取り、分散パーティショニング。
+- Raftのdynamic membership、故障注入テスト、公開catalog listenerのTLS、分散パーティショニング。
 
 受け入れ条件は[docs/ja/roadmap.md](docs/ja/roadmap.md)に、出典とfixtureの方針は[docs/ja/research.md](docs/ja/research.md)に記載しています。
 

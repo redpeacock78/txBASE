@@ -314,7 +314,7 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 
 The current implementation prioritizes bounded, recoverable local operations over an unbounded database server.
 
-It also includes fixed-term replication and optional static-membership Raft modes. The fixed-term path provides bounded HTTP entry, snapshot, and progress delivery over journaled `TXRP` and `TXRG` sidecars. The Raft path provides quorum writes, a linearizable read barrier, and authenticated peer RPC. Dynamic membership, failure-injection coverage, and TLS for the public catalog listener remain outside the current slice.
+It also includes fixed-term replication and optional static-membership Raft modes. The fixed-term path provides bounded HTTP entry, snapshot, and progress delivery over journaled `TXRP` and `TXRG` sidecars. The Raft path provides quorum writes, a linearizable read barrier, and authenticated peer RPC.
 
 The roadmap still leaves the following areas as future work:
 
@@ -327,7 +327,7 @@ The roadmap still leaves the following areas as future work:
 - Strict multi-file reader atomicity for XBF export.
 - Cloud object-storage adapters and retention policy.
 - Worker/WASI runtime adapters and asynchronous WASM storage.
-- Quorum or consensus, networked snapshot transfer, distributed follower reads, and distributed partitioning.
+- Dynamic Raft membership, failure-injection coverage, TLS for the public catalog listener, and distributed partitioning.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance conditions and [docs/research.md](docs/research.md) for the source and fixture policy.
 
