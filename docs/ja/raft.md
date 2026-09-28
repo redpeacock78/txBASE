@@ -108,7 +108,7 @@ JSON bodyには`version`、`cluster_id`、`node_id`、`peer_address`を含め、
 
 learnerにはclusterと同じcommit済みgenesis imageを事前に用意し、`--raft-initialize-catalog`で初期化します。
 空のcatalogからcluster fingerprintを引き継ぐ機能はありません。
-現在のAPIはvoterの昇格や削除を行いません。
+現在のAPIではvoterを昇格・削除できません。
 新しいvoterを昇格するときは、learnerが追いついた後にOpenRaftのjoint membership手順で変更をcommitします。
 ローカル設定の編集だけで投票権を変えることはできません。
 
