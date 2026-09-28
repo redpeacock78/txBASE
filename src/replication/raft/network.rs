@@ -81,12 +81,7 @@ impl RaftHttpNetworkFactory {
         bearer_token: impl Into<String>,
     ) -> Result<Self, String> {
         let cluster_id = cluster_id.into();
-        if cluster_id.is_empty()
-            || cluster_id.len() > 128
-            || !cluster_id
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-        {
+        if !is_valid_cluster_id(&cluster_id) {
             return Err(
                 "Raft cluster ID must be 1 to 128 ASCII letters, digits, '.', '_', or '-'".into(),
             );
@@ -104,6 +99,14 @@ impl RaftHttpNetworkFactory {
             bearer_token: bearer_token.into(),
         })
     }
+}
+
+pub(crate) fn is_valid_cluster_id(cluster_id: &str) -> bool {
+    !cluster_id.is_empty()
+        && cluster_id.len() <= 128
+        && cluster_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
 #[derive(Clone)]

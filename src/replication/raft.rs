@@ -1,5 +1,6 @@
 mod command;
 mod log_store;
+mod membership;
 mod network;
 mod snapshot;
 mod state_machine;
@@ -13,6 +14,11 @@ pub use command::{
     RaftRejection, RaftResponse, RaftResponseResult,
 };
 pub use log_store::RaftLogStore;
+pub use membership::{
+    RaftAddLearnerRequest, RaftLearnerAddResponse, RaftLearnerAddStatus,
+    RaftMembershipChangeRequest, RaftMembershipChangeResponse, RaftMembershipChangeStatus,
+    RaftMembershipHttpClient, RaftMembershipNode, RaftMembershipStatus, RaftNodeRole,
+};
 pub use network::{MAX_RAFT_RPC_BYTES, RaftHttpNetworkFactory};
 pub(crate) use network::{
     RAFT_ADD_LEARNER_PATH, RAFT_APPEND_PATH, RAFT_MEMBERSHIP_PATH, RAFT_RPC_VERSION,

@@ -1,6 +1,6 @@
 # Raft consensus design
 
-Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API can add prepared learners, report effective membership, and change voters through joint consensus. CLI membership commands and failure-injection coverage remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
+Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API and `txbase raft membership` CLI can add prepared learners, report effective membership, and change voters through joint consensus. Empty-catalog joining and failure-injection coverage remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
 
@@ -17,6 +17,7 @@ This document records the implemented Raft boundary and the remaining authority,
 - `serve-catalog` starts an OpenRaft node from an explicit node ID, cluster ID, node directory, peer address, and initial member map. Only `--raft-bootstrap` initializes cluster membership.
 - A separate peer listener handles vote, append, snapshot, learner-add, membership-status, and voter-change requests. It bounds requests to 2 MiB, applies a 10-second timeout, and checks bearer authentication, cluster and node identity, active membership, and a shared genesis-catalog fingerprint for Raft RPCs.
 - Peer traffic may use HTTPS with a node certificate and key. Bearer-authenticated HTTP is accepted only for loopback peer URLs. The public catalog listener remains HTTP.
+- `RaftMembershipHttpClient` and `txbase raft membership` provide authenticated status, learner-add, and voter-change operations. The client reuses the verified HTTP transport and validates versioned response shapes and voter-set consistency.
 - Raft writes to `/transaction` and named-table mutation routes require `X-Txbase-Client-Id` and a positive `X-Txbase-Client-Sequence`. Exact retries return the stored result.
 - Normal catalog reads call OpenRaft's linearizable read barrier before reading the local catalog. The server does not provide an explicitly stale follower-read mode.
 - A three-node CI test exercises quorum commit and retry deduplication, learner catch-up before promotion, joint voter promotion and demotion, retained-learner shutdown, and quorum writes after demotion.
@@ -26,7 +27,6 @@ This document records the implemented Raft boundary and the remaining authority,
 
 ### Not implemented
 
-- CLI commands for requesting membership changes and inspecting cluster status.
 - Joining from an empty catalog. A learner must currently be prepared from the exact committed genesis image used by the cluster.
 - Deterministic tests for quorum loss, partitions, message loss or reordering, leader changes, restart recovery, and reads during leadership changes.
 - Dedicated peer HTTPS certificate and host-verification integration tests.
@@ -93,7 +93,12 @@ Stale requests, unknown nodes, requests sent to a non-leader, and conflicting jo
 While a joint configuration is effective, a request for its target voter set resumes the change.
 Editing local configuration alone cannot change voter authority.
 
-The startup CLI rejects duplicate node IDs, duplicate peer URLs, missing local membership, conflicting replication modes, conflicting node identities, and attempts to run two nodes against one data directory. CLI commands for voter changes and membership status remain future work.
+The CLI exposes `raft membership status`, `add-learner`, and `change-voters` without opening a local catalog directory.
+All three commands require `TXBASE_REPLICATION_TOKEN`; the shared HTTP client refuses to send it over non-loopback HTTP and verifies HTTPS certificates and host names.
+Status may be read from any peer and reflects that node's local metrics.
+Learner addition and voter changes must target the current leader.
+The voter-change command requires the membership log index and voter IDs reported by a preceding status request, then sends them as compare-and-swap preconditions.
+The startup CLI still rejects duplicate node IDs, duplicate peer URLs, missing local membership, conflicting replication modes, conflicting node identities, and attempts to run two nodes against one data directory.
 
 ## 4. Durable log and catalog application
 
@@ -154,6 +159,7 @@ Migration from a fixed-term `TXRP` authority is manual. Stop the old writers, ch
 The state-machine CI tests cover catalog commit atomicity, restart-safe retries, sequence rejection, no-op and membership entries, and snapshot installation.
 The storage adapter's tests run OpenRaft's `testing::Suite` and restart-recovery checks.
 The three-node integration test exercises a quorum commit on two initial voters, authenticated learner addition, catch-up as part of promotion, joint promotion and demotion, membership-status authorization and validation, retained-learner shutdown, and quorum writes with the remaining voters.
+It also exercises the typed membership client for status, learner addition, promotion, idempotent retry, and demotion; CLI argument tests cover command routing and voter-ID validation.
 It does not yet inject deterministic network delay, message loss, partitions, reordering, restarts, or leader changes.
 
 Acceptance still requires tests for durable term and vote recovery, conflicting log replacement, quorum loss, leader change, client retry after a lost response, apply-marker recovery, snapshot installation and suffix retention, learner catch-up from a purged log through snapshot transfer, resuming an interrupted joint membership change, and linearizable reads during leadership changes.

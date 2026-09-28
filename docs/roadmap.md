@@ -75,7 +75,8 @@ The repository currently provides:
 - An optional OpenRaft mode for `serve-catalog` with explicit initial voters, quorum writes, linearizable reads, authenticated peer RPC, and peer HTTPS.
   Its authenticated peer API adds prepared learners, reports local effective membership, and changes voter sets through joint consensus.
   It waits for promoted learners to catch up and retains demoted voters as learners.
-  Empty-catalog joining and failure-injected failover coverage remain open; CLI membership commands are future work; see [Raft consensus design](raft.md).
+  The `txbase raft membership` CLI exposes status, learner addition, and voter changes through this peer control plane; status reports the contacted node's local metrics, and mutations target the current leader.
+  Empty-catalog joining and failure-injected failover coverage remain open; see [Raft consensus design](raft.md).
 - Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit, after validating the declared primary or unique parent key; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
 - Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with ordered per-transaction mode changes in the Rust and HTTP transaction APIs; deferred `CHECK` is a txBASE extension.
 
@@ -88,7 +89,7 @@ The baseline intentionally does not include the following:
 - References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
-- Joint Raft voter changes, empty-catalog learner joining, failure-injected quorum-loss and leader-change coverage, distributed follower reads, and distributed partitioning.
+- Empty-catalog Raft learner joining, failure-injected quorum-loss and leader-change coverage, distributed follower reads, and distributed partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -456,13 +457,13 @@ It provides quorum-committed writes, a linearizable read barrier, authenticated 
 An authenticated peer API reports local effective membership and supports compare-and-swap voter changes through OpenRaft joint consensus.
 The API waits for newly promoted learners to catch up and retains demoted voters as learners.
 OpenRaft storage, the catalog state machine, snapshots, startup recovery, and a three-node integration path covering promotion, demotion, and quorum writes after demotion are included in the CI test suite.
-Empty-catalog learner joining, CLI membership commands, TLS-specific integration coverage, interrupted-change recovery tests, and deterministic failure injection remain outstanding.
+Empty-catalog learner joining, TLS-specific integration coverage, interrupted-change recovery tests, and deterministic failure injection remain outstanding.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Extend the current OpenRaft integration with empty-catalog learner joining, CLI membership commands, peer TLS integration, interrupted-change recovery, and multi-node failure testing; see [Raft consensus design](raft.md).
+- Extend the current OpenRaft integration with empty-catalog learner joining, peer TLS integration, interrupted-change recovery, and multi-node failure testing; see [Raft consensus design](raft.md).
 - TLS for the public catalog listener, mutual TLS, durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.

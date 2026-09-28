@@ -14,6 +14,11 @@ txBASEは、パスを開く前にコマンドの責務が分かるよう、明�
 
 `--encoding`、`--schema`、`--bind`、`--keep`、`--keep-rows`のように解釈または有界な方針を変えるものは、名前付きオプションにします。
 
+`raft membership`は、ローカルのカタログ内容ではなく、リモートclusterのmembershipを変更するため、peer control planeのコマンド群として分けます。
+状態照会は接続先peerのローカルmetricsを返し、membershipの変更操作は現在のleaderへ送ります。
+voter変更では、観測したmembership状態をcompare-and-swap条件に使います。
+コマンド契約は[CLIコマンドリファレンス](cli.md)、peer APIの境界は[Raftコンセンサス設計](raft.md)を参照してください。
+
 ## Gitを参照する範囲
 
 コマンド階層は、txBASE自身の操作境界と復旧境界に基づく設計判断です。

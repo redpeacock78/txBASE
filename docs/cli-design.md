@@ -14,6 +14,10 @@ Paths and JSON values are positional when the operation has one unambiguous targ
 
 Named options change interpretation or select a bounded policy, such as `--encoding`, `--schema`, `--bind`, `--keep`, or `--keep-rows`.
 
+`raft membership` is a separate peer control-plane command family because it changes remote cluster membership rather than local catalog contents.
+Its status command reports one peer's local metrics, while membership mutations target the current leader and voter changes use observed membership state as compare-and-swap input.
+See [CLI command reference](cli.md) for the command contract and [Raft consensus design](raft.md) for the peer API boundary.
+
 ## Git reference boundary
 
 The command hierarchy is a txBASE design decision based on its own operation and recovery boundaries.

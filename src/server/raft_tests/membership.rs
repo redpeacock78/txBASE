@@ -1,4 +1,8 @@
 use super::*;
+use crate::replication::raft::{
+    RaftAddLearnerRequest, RaftMembershipChangeRequest, RaftMembershipChangeStatus,
+    RaftMembershipHttpClient,
+};
 
 #[test]
 fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
@@ -51,6 +55,11 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
     assert_eq!(initial_membership["voter_ids"], json!([1, 2]));
     assert_eq!(initial_membership["learner_ids"], json!([]));
     assert_eq!(get_membership(&members[&leader_id], "").0, 401);
+    let membership_client =
+        RaftMembershipHttpClient::new(&members[&leader_id], "ci-token").unwrap();
+    let typed_status = membership_client.status().unwrap();
+    assert_eq!(typed_status.cluster_id, "ci-raft-cluster");
+    assert_eq!(typed_status.voter_ids, [1, 2]);
 
     let command = record_command(&catalog_root, 1, 4, "Quorum", 43);
     assert_eq!(
@@ -89,12 +98,14 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
     .unwrap();
     let learner_server = learner.bind_peer_listener(&learner_config).unwrap();
     listeners.push(learner.spawn_peer_listener(learner_server).unwrap());
-    let response = post_add_learner(&members[&leader_id], &learner_url);
-    assert!(response.starts_with("HTTP/1.1 202"), "{response}");
-    let response_body = response.split_once("\r\n\r\n").unwrap().1;
-    let response: serde_json::Value = serde_json::from_str(response_body).unwrap();
-    assert_eq!(response["node_id"], learner_id);
-    assert_eq!(response["status"], "learner_sync_started");
+    let add_learner =
+        RaftAddLearnerRequest::new("ci-raft-cluster", learner_id, learner_url.clone()).unwrap();
+    let response = membership_client.add_learner(&add_learner).unwrap();
+    assert_eq!(response.node_id, learner_id);
+    assert_eq!(
+        response.status,
+        crate::replication::raft::RaftLearnerAddStatus::LearnerSyncStarted
+    );
     nodes.push(learner);
 
     wait_for_membership(
@@ -132,10 +143,19 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
         409
     );
 
-    let promote = membership_change_body(membership_index, &[1, 2], &[1, 2, 3]);
-    let (status, response) = post_membership(&members[&leader_id], promote.clone());
-    assert_eq!(status, 202, "{response}");
-    assert_eq!(response["status"], "membership_change_started");
+    let promotion_client = RaftMembershipHttpClient::new(&members[&leader_id], "ci-token").unwrap();
+    let promote = RaftMembershipChangeRequest::new(
+        "ci-raft-cluster",
+        membership_index,
+        vec![1, 2],
+        vec![1, 2, 3],
+    )
+    .unwrap();
+    let response = promotion_client.change_membership(&promote).unwrap();
+    assert_eq!(
+        response.status,
+        RaftMembershipChangeStatus::MembershipChangeStarted
+    );
     wait_for_membership(
         &nodes,
         &BTreeSet::from([1, 2, 3]),
@@ -160,9 +180,10 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
         json!([[1, 2, 3]])
     );
     assert_eq!(promoted_membership["learner_ids"], json!([]));
-    let (status, response) = post_membership(&members[&promoted_leader_id], promote);
-    assert_eq!(status, 200, "{response}");
-    assert_eq!(response["status"], "already_current");
+    let promoted_client =
+        RaftMembershipHttpClient::new(&members[&promoted_leader_id], "ci-token").unwrap();
+    let response = promoted_client.change_membership(&promote).unwrap();
+    assert_eq!(response.status, RaftMembershipChangeStatus::AlreadyCurrent);
 
     let leader_index = current_leader_index(&nodes, Duration::from_secs(20));
     let command = record_command(
@@ -185,10 +206,19 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
     let membership_index = promoted_membership["effective_membership_log_index"]
         .as_u64()
         .unwrap();
-    let demote = membership_change_body(membership_index, &[1, 2, 3], &[1, 2]);
-    let (status, response) = post_membership(&members[&leader_id], demote);
-    assert_eq!(status, 202, "{response}");
-    assert_eq!(response["status"], "membership_change_started");
+    let demote = RaftMembershipChangeRequest::new(
+        "ci-raft-cluster",
+        membership_index,
+        vec![1, 2, 3],
+        vec![1, 2],
+    )
+    .unwrap();
+    let demotion_client = RaftMembershipHttpClient::new(&members[&leader_id], "ci-token").unwrap();
+    let response = demotion_client.change_membership(&demote).unwrap();
+    assert_eq!(
+        response.status,
+        RaftMembershipChangeStatus::MembershipChangeStarted
+    );
     wait_for_membership(
         &nodes,
         &BTreeSet::from([1, 2]),

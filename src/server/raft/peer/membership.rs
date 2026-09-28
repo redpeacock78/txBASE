@@ -1,38 +1,22 @@
 use super::super::RaftRuntime;
-use crate::replication::raft::{self, MAX_RAFT_RPC_BYTES};
+use crate::replication::raft::{
+    self, MAX_RAFT_RPC_BYTES, RaftAddLearnerRequest, RaftLearnerAddResponse, RaftLearnerAddStatus,
+    RaftMembershipChangeRequest, RaftMembershipChangeResponse, RaftMembershipChangeStatus,
+    RaftMembershipNode, RaftMembershipStatus, RaftNodeRole,
+};
 use crate::server::{HttpResponse, error, json_response, read_json_body_with_limit};
 use openraft::BasicNode;
-use serde::Deserialize;
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use tiny_http::Request;
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AddLearnerRequest {
-    version: u16,
-    cluster_id: String,
-    node_id: u64,
-    peer_address: String,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ChangeMembershipRequest {
-    version: u16,
-    cluster_id: String,
-    expected_membership_log_index: u64,
-    expected_voter_ids: Vec<u64>,
-    voter_ids: Vec<u64>,
-}
-
 impl RaftRuntime {
     pub(super) fn membership_status_response(&self) -> HttpResponse {
-        json_response(200, self.membership_status(), false)
+        json_response(200, json!(self.membership_status()), false)
     }
 
-    fn membership_status(&self) -> serde_json::Value {
+    fn membership_status(&self) -> RaftMembershipStatus {
         let metrics = self.node.metrics();
         let metrics = metrics.borrow();
         let membership = &metrics.membership_config;
@@ -49,28 +33,30 @@ impl RaftRuntime {
             .collect::<Vec<_>>();
         let nodes = membership
             .nodes()
-            .map(|(node_id, node)| {
-                json!({
-                    "node_id": node_id,
-                    "peer_address": node.addr.clone(),
-                    "role": if voter_ids.contains(node_id) { "voter" } else { "learner" }
-                })
+            .map(|(node_id, node)| RaftMembershipNode {
+                node_id: *node_id,
+                peer_address: node.addr.clone(),
+                role: if voter_ids.contains(node_id) {
+                    RaftNodeRole::Voter
+                } else {
+                    RaftNodeRole::Learner
+                },
             })
             .collect::<Vec<_>>();
 
-        json!({
-            "version": raft::RAFT_RPC_VERSION,
-            "cluster_id": self.cluster_id,
-            "node_id": self.node_id,
-            "server_state": format!("{:?}", metrics.state).to_ascii_lowercase(),
-            "leader_id": metrics.current_leader,
-            "effective_membership_log_index": membership.log_id().as_ref().map(|id| id.index),
-            "effective_voter_configs": voter_configs,
-            "voter_ids": voter_ids,
-            "learner_ids": learner_ids,
-            "membership_change_in_progress": self.membership_change_lock.try_lock().is_err(),
-            "nodes": nodes
-        })
+        RaftMembershipStatus {
+            version: raft::RAFT_RPC_VERSION,
+            cluster_id: self.cluster_id.clone(),
+            node_id: self.node_id,
+            server_state: format!("{:?}", metrics.state).to_ascii_lowercase(),
+            leader_id: metrics.current_leader,
+            effective_membership_log_index: membership.log_id().as_ref().map(|id| id.index),
+            effective_voter_configs: voter_configs,
+            voter_ids: voter_ids.into_iter().collect(),
+            learner_ids: learner_ids.into_iter().collect(),
+            membership_change_in_progress: self.membership_change_lock.try_lock().is_err(),
+            nodes,
+        }
     }
 
     pub(super) fn handle_add_learner(&self, request: &mut Request) -> HttpResponse {
@@ -83,7 +69,7 @@ impl RaftRuntime {
             Ok(bytes) => bytes,
             Err(response) => return response,
         };
-        let rpc: AddLearnerRequest = match serde_json::from_slice(&bytes) {
+        let rpc: RaftAddLearnerRequest = match serde_json::from_slice(&bytes) {
             Ok(rpc) => rpc,
             Err(parse_error) => {
                 return json_response(
@@ -126,9 +112,13 @@ impl RaftRuntime {
         match self.add_learner(rpc.node_id, &rpc.peer_address) {
             Ok(added) => json_response(
                 if added { 202 } else { 200 },
-                json!({
-                    "node_id": rpc.node_id,
-                    "status": if added { "learner_sync_started" } else { "already_member" }
+                json!(RaftLearnerAddResponse {
+                    node_id: rpc.node_id,
+                    status: if added {
+                        RaftLearnerAddStatus::LearnerSyncStarted
+                    } else {
+                        RaftLearnerAddStatus::AlreadyMember
+                    },
                 }),
                 false,
             ),
@@ -148,7 +138,7 @@ impl RaftRuntime {
             Ok(bytes) => bytes,
             Err(response) => return response,
         };
-        let rpc: ChangeMembershipRequest = match serde_json::from_slice(&bytes) {
+        let rpc: RaftMembershipChangeRequest = match serde_json::from_slice(&bytes) {
             Ok(rpc) => rpc,
             Err(parse_error) => {
                 return json_response(
@@ -204,7 +194,7 @@ impl RaftRuntime {
             requested_voter_ids.clone(),
         ) {
             Ok(status) => {
-                let status_code = if status == "already_current" {
+                let status_code = if status == RaftMembershipChangeStatus::AlreadyCurrent {
                     200
                 } else {
                     202
@@ -212,11 +202,11 @@ impl RaftRuntime {
                 let current = self.membership_status();
                 json_response(
                     status_code,
-                    json!({
-                        "status": status,
-                        "requested_voter_ids": requested_voter_ids,
-                        "effective_membership_log_index": current["effective_membership_log_index"],
-                        "effective_voter_configs": current["effective_voter_configs"]
+                    json!(RaftMembershipChangeResponse {
+                        status,
+                        requested_voter_ids: requested_voter_ids.into_iter().collect(),
+                        effective_membership_log_index: current.effective_membership_log_index,
+                        effective_voter_configs: current.effective_voter_configs,
                     }),
                     false,
                 )
@@ -234,7 +224,7 @@ impl RaftRuntime {
         expected_membership_log_index: u64,
         expected_voter_ids: BTreeSet<u64>,
         requested_voter_ids: BTreeSet<u64>,
-    ) -> Result<&'static str, (u16, String)> {
+    ) -> Result<RaftMembershipChangeStatus, (u16, String)> {
         let (
             voter_configs,
             current_voter_ids,
@@ -293,8 +283,8 @@ impl RaftRuntime {
             }
             return Ok(
                 match self.schedule_membership_change(requested_voter_ids, Vec::new()) {
-                    Ok(()) => "membership_change_resumed",
-                    Err(()) => "membership_change_in_progress",
+                    Ok(()) => RaftMembershipChangeStatus::MembershipChangeResumed,
+                    Err(()) => RaftMembershipChangeStatus::MembershipChangeInProgress,
                 },
             );
         }
@@ -306,7 +296,7 @@ impl RaftRuntime {
             ));
         }
         if current_voter_ids == requested_voter_ids {
-            return Ok("already_current");
+            return Ok(RaftMembershipChangeStatus::AlreadyCurrent);
         }
         if membership_log_index != Some(expected_membership_log_index)
             || current_voter_ids != expected_voter_ids
@@ -328,7 +318,7 @@ impl RaftRuntime {
         {
             return Err((409, "another membership change is being submitted".into()));
         }
-        Ok("membership_change_started")
+        Ok(RaftMembershipChangeStatus::MembershipChangeStarted)
     }
 
     fn schedule_membership_change(

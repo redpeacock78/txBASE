@@ -2,8 +2,8 @@
 
 状態：`serve-catalog`は、初期voter集合を明示する任意のOpenRaftモードを提供します。
 このモードではquorum更新、線形化可能な読み取りbarrier、認証付きの専用peer listenerを使います。
-peer APIは、準備済みlearnerの追加、有効なmembershipの照会、joint consensusによるvoter変更を提供します。
-membershipを操作・確認するCLIと障害注入テストは未実装です。
+peer APIと`txbase raft membership` CLIは、準備済みlearnerの追加、有効なmembershipの照会、joint consensusによるvoter変更を提供します。
+空catalogからの参加と障害注入テストは未実装です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -21,6 +21,7 @@ membershipを操作・確認するCLIと障害注入テストは未実装です�
 - `serve-catalog`は、node ID、cluster ID、専用データディレクトリ、peer address、初期membershipを指定してOpenRaft nodeを起動する。membershipの初期化には`--raft-bootstrap`を明示する。
 - 専用peer listenerはvote、append、snapshot、learner追加、membership状態照会、voter変更の要求を処理する。要求を2 MiB、RPC timeoutを10秒に制限し、Bearer認証、cluster ID、node ID、有効なmembership、Raft RPCで全nodeが共有するgenesis catalog fingerprintを検証する。
 - peer通信ではnodeごとの証明書と秘密鍵を使うHTTPSを利用できる。Bearer token付きHTTPはloopback peer URLだけで許可する。公開catalog listenerにはTLSを設定しない。
+- `RaftMembershipHttpClient`と`txbase raft membership`は、認証付きの状態照会、learner追加、voter変更を提供する。共有HTTP transportの証明書検証を使い、version付き応答とvoter集合の整合性を検証する。
 - `/transaction`と名前付きテーブル更新では`X-Txbase-Client-Id`と正の`X-Txbase-Client-Sequence`を指定する。同じ要求の再試行には記録済み結果を返す。
 - 通常のcatalog読み取り前にOpenRaftの線形化可能な読み取りbarrierを呼び出す。明示的にstaleなfollower読み取りは提供しない。
 - 3 nodeのCIテストでquorum commitと再試行の重複排除、昇格前のlearner同期、joint membershipによるvoter昇格と降格、learner停止後に残るvoterでのquorum更新を検査する。
@@ -30,7 +31,6 @@ membershipを操作・確認するCLIと障害注入テストは未実装です�
 
 ### 未実装
 
-- membership変更とcluster状態を照会するCLI。
 - 空のcatalogからの参加。learnerには現在、clusterと同一のcommit済みgenesis imageを事前に用意する必要がある。
 - quorum喪失、partition、メッセージ損失や並べ替え、leader交代、再起動、交代中の読み取りを検査する決定的な障害テスト。
 - peer HTTPSの証明書とホスト名検証を対象にした統合テスト。
@@ -131,7 +131,11 @@ joint configが有効な間は、その変更先と一致する要求で処理�
 ローカル設定の編集だけで投票権は変わらない。
 
 起動CLIは、重複node ID、重複peer URL、local nodeのmembership欠落、レプリケーションmodeの混在、異なるnode identity、同じデータディレクトリを使う複数processの起動を拒否します。
-voter変更とmembership状態確認のCLIは未実装です。
+CLIには`raft membership status`、`add-learner`、`change-voters`があります。これらはローカルのカタログディレクトリを開きません。
+3つのコマンドすべてに`TXBASE_REPLICATION_TOKEN`が必要です。共有HTTP clientはloopback以外のHTTPでtokenを送らず、HTTPSでは証明書とホスト名を検証します。
+状態照会は任意のpeerへ送れますが、そのnodeのローカルmetricsを返します。
+learner追加とvoter変更は現在のleaderへ送ります。
+voter変更では、直前に取得した状態のmembership log indexとvoter ID集合をcompare-and-swap条件として指定します。
 
 ## 4. 永続ログとカタログへの適用
 
@@ -229,6 +233,7 @@ voter集合を推測したり、古いfollowerログを自動で昇格したり�
 CIのstate machineテストでは、カタログcommitの原子性、再起動後の再試行、sequence拒否、no-opとmembership、snapshotインストールを検証する。
 storage adapterのテストでは、OpenRaftの`testing::Suite`と再起動後の復旧確認を実行する。
 3 nodeの統合テストでは、初期voter 2 nodeでのquorum commit、認証付きlearner追加、昇格時のログ同期、joint membershipによる昇格と降格、状態照会の認証と入力検証、降格node停止後のquorum更新を検査する。
+統合テストは、状態照会、learner追加、昇格、冪等な再試行、降格で型付きmembership clientも検査する。CLIテストはコマンド振り分けとvoter IDの入力検証を確認する。
 メッセージ遅延、損失、partition、並べ替え、再起動、leader交代の注入は未実装です。
 
 完了には、termとvoteの永続復旧、競合ログの置換、quorum喪失、leader交代、応答消失後のclient再試行、適用位置の復旧をテストする。
