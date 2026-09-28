@@ -44,6 +44,7 @@ Web Streamsのコンシューマーは、`read()`、`pipeTo()`、または`Respo
 ## 3. キャンセルとエラー
 
 ホストは`AbortSignal`を指定できます。
+渡された`AbortSignal`がすでに中断されている場合、ファクトリーはデータベースのクエリメソッドを呼び出す前に、codeが`cancelled`の`WorkerQueryStreamError`を同期的に投げます。
 AbortするとWASMストリームをキャンセルし、`WorkerQueryStreamError`のcodeが`cancelled`であるエラーにより`ReadableStream`を失敗させます。
 シグナル対応のWASMオブジェクトテーブルメソッドを使うと、Workerアダプターはクエリごとのシグナルをスナップショット読み込み中のFetchリクエストにも渡します。
 そのクエリをキャンセルすると対応するリクエストだけが中断され、並行する別のクエリには影響しません。
@@ -71,6 +72,7 @@ Promiseを返すオブジェクトテーブルの初期化エラーは、最初�
 - Promiseによる初期化中のキャンセルで行を返さず、初期化後にストリームをキャンセルすること。
 - キューサイズが未指定または0の場合に拒否すること。
 - ストリーム作成前にsortを拒否すること。
+- 中断済みの`AbortSignal`では、クエリ開始前に`cancelled`エラーを投げること。
 - `AbortSignal`のキャンセルで保留中のreaderが`cancelled`カテゴリで失敗すること。
 - WASMの直接キャンセルが観測可能で終端になること。
 

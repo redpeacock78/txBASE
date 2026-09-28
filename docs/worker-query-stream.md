@@ -41,6 +41,7 @@ When the consumer is slow, the underlying source is not pulled beyond the config
 ## 3. Cancellation and errors
 
 An `AbortSignal` may be supplied by the host.
+If it is already aborted, the factory throws `WorkerQueryStreamError` with code `cancelled` before calling the database query method.
 Aborting it cancels the WASM stream and errors the `ReadableStream` with `WorkerQueryStreamError` code `cancelled`.
 With the signal-aware WASM object-table methods, the Worker adapter also forwards a per-query signal to the Fetch request loading that query's snapshot, so cancelling the query aborts that request without aborting other queries.
 The Rust `AsyncObjectQueryStream` has a per-query `CancellationToken` contract, documented in [Asynchronous query streaming](async-streaming.md).
@@ -66,6 +67,7 @@ Remote snapshot I/O is cancelled only by the Worker signal-aware object-table pa
 - cancelling while a Promise-backed stream is initializing emits no row and cancels the stream after it resolves;
 - queue size validation rejects an unbounded or zero-capacity configuration;
 - sort is rejected before streaming;
+- a pre-aborted `AbortSignal` throws `cancelled` before starting the query;
 - `AbortSignal` cancellation rejects the pending reader with the `cancelled` category;
 - direct WASM cancellation is observable and terminal.
 

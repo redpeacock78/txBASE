@@ -130,9 +130,18 @@ assert.throws(
 
 const alreadyAborted = new AbortController();
 alreadyAborted.abort("already closed");
+let alreadyAbortedQueryCalls = 0;
 assert.throws(
-  () => createWorkerQueryStream({ database, signal: alreadyAborted.signal }),
+  () => createWorkerQueryStream({
+    database: {
+      query_stream_json() {
+        alreadyAbortedQueryCalls += 1;
+      },
+    },
+    signal: alreadyAborted.signal,
+  }),
   (error) => error.code === "cancelled" && error.message === "already closed",
 );
+assert.equal(alreadyAbortedQueryCalls, 0);
 
 console.log("wasm worker query stream smoke passed");
