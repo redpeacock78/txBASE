@@ -89,6 +89,7 @@ fn spawn_replication_sequence(responses: Vec<Vec<u8>>) -> (String, JoinHandle<Ve
                     Err(error) => panic!("replication CLI listener failed: {error}"),
                 }
             };
+            stream.set_nonblocking(false).unwrap();
             requests.push(read_http_request(&mut stream));
             stream.write_all(&response).unwrap();
         }
