@@ -290,9 +290,10 @@ fn snapshots_transfer_catalog_membership_and_retry_state_together() {
     runtime()
         .block_on(follower.install_snapshot(&snapshot.meta, input))
         .unwrap();
-    assert_eq!(follower_catalog.transaction_id().unwrap(), Some(2));
+    let installed_catalog = Catalog::from_path(&follower_directory.0).unwrap();
+    assert_eq!(installed_catalog.transaction_id().unwrap(), Some(2));
     assert!(
-        follower_catalog
+        installed_catalog
             .open_table("users")
             .unwrap()
             .active_record(4)
