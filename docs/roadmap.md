@@ -451,7 +451,7 @@ index for coordinated compaction. Quorum-safe truncation remains future work.
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Raft or another explicitly selected authority protocol.
+- Raft authority using OpenRaft 0.9.25, with durable consensus storage, quorum commitment, membership administration, and crash-safe catalog application; see [Raft consensus design](raft.md). This is selected architecture, not an implemented feature.
 - TLS, durable retry queues, backpressure, quorum-safe log truncation, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.

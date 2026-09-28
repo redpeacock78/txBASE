@@ -47,6 +47,7 @@
 - [Cloudflare R2オブジェクトストレージアダプター](r2-object-store.md)
 - [Workerクエリストリームアダプター](worker-query-stream.md)
 - [分散化の進化](distributed-evolution.md)
+- [Raftコンセンサス設計](raft.md)
 
 ## ファイル粒度の規則
 

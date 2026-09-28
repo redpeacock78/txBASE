@@ -8,6 +8,9 @@ single-authority replay, snapshot installation, follower progress
 acknowledgements, and versioned transport contracts, but it is not quorum
 replication or consensus.
 
+Raft is the selected future authority protocol, but it is not implemented.
+Its txBASE-specific design is documented in [Raft consensus design](raft.md).
+
 ## 1. Prerequisites
 
 Distributed behavior comes after the local transaction and edge-storage contracts are stable.
@@ -35,7 +38,7 @@ replicated log (current local replay slice)
       ↓
 bounded HTTP status, contiguous entry-range, entry, snapshot, and progress delivery plus one-shot client catch-up (current transport slice)
       ↓
-Raft or another selected authority protocol
+Raft consensus (selected; see [Raft consensus design](raft.md))
 ```
 
 Each step needs a standalone contract before the next step depends on it.
@@ -334,11 +337,12 @@ guarantees, and distributed partitioning remain future work.
 
 ## 7. Explicit non-goals
 
-This document does not promise Raft, quorum, multi-region writes, global
+This document describes the pre-consensus slice; it does not claim an
+implementation of Raft, quorum, multi-region writes, global
 transactions, networked log truncation, distributed follower-read guarantees,
 automatic partition balancing, native server-side TLS, mutual TLS, durable retry queues, or authority discovery.
 
-Those choices require the authority and recovery contracts above.
+The Raft target is specified separately; the remaining features need their own authority and recovery contracts.
 
 ## Primary references and scope
 
@@ -348,8 +352,8 @@ Those choices require the authority and recovery contracts above.
 - [Rustls platform verifier](https://github.com/rustls/rustls-platform-verifier)
 - [Rustls `StreamOwned`](https://docs.rs/rustls/0.23.45/rustls/struct.StreamOwned.html)
 
-The Raft paper is a candidate protocol reference for the authority step in the progression.
-It does not select Raft for txBASE and does not define the future txBASE log, schema, or recovery format.
+The Raft paper defines the selected protocol; [Raft consensus design](raft.md)
+records the txBASE decision and its implementation boundary.
 
 The current repository has a local entry/replay implementation, a versioned
 snapshot installation primitive, journaled `TXRP` and `TXRG` sidecars, bounded HTTP

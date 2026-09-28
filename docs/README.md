@@ -49,6 +49,7 @@ Research and future work do not imply an implemented feature.
 - [Cloudflare R2 object-store adapter](r2-object-store.md)
 - [Worker query stream adapter](worker-query-stream.md)
 - [Distributed evolution](distributed-evolution.md)
+- [Raft consensus design](raft.md)
 
 ## File-granularity rule
 
