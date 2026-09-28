@@ -6,7 +6,9 @@ use crate::catalog::Catalog;
 use crate::replication::raft::RAFT_STATE_SIDECAR_NAME;
 use crate::xbase::{OperationIr, OperationMethod, TransactionStep};
 use openraft::storage::RaftStateMachine;
-use openraft::{BasicNode, CommittedLeaderId, Entry, EntryPayload, LogId, Membership};
+use openraft::{
+    BasicNode, CommittedLeaderId, Entry, EntryPayload, LogId, Membership, RaftSnapshotBuilder,
+};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;

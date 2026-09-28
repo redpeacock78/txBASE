@@ -246,15 +246,15 @@ pub(super) async fn run_blocking<T, F>(
     subject: ErrorSubject<u64>,
     verb: ErrorVerb,
     operation: F,
-) -> Result<T, StorageError<u64>>
+) -> Result<T, Box<StorageError<u64>>>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,
 {
     tokio::task::spawn_blocking(operation)
         .await
-        .map_err(|error| storage_error(subject.clone(), verb, error.to_string()))?
-        .map_err(|error| storage_error(subject, verb, error))
+        .map_err(|error| Box::new(storage_error(subject.clone(), verb, error.to_string())))?
+        .map_err(|error| Box::new(storage_error(subject, verb, error)))
 }
 
 fn storage_error(
@@ -286,6 +286,7 @@ impl RaftStateMachine<TypeConfig> for RaftCatalogStateMachine {
             Ok((state.last_applied, state.last_membership))
         })
         .await
+        .map_err(|error| *error)
     }
 
     async fn apply<I>(&mut self, entries: I) -> Result<Vec<Option<RaftResponse>>, StorageError<u64>>
@@ -300,6 +301,7 @@ impl RaftStateMachine<TypeConfig> for RaftCatalogStateMachine {
             apply_entries(&mut catalog, entries)
         })
         .await
+        .map_err(|error| *error)
     }
 
     async fn get_snapshot_builder(&mut self) -> Self::SnapshotBuilder {
@@ -331,6 +333,7 @@ impl RaftStateMachine<TypeConfig> for RaftCatalogStateMachine {
             },
         )
         .await
+        .map_err(|error| *error)
     }
 
     async fn get_current_snapshot(
@@ -342,5 +345,6 @@ impl RaftStateMachine<TypeConfig> for RaftCatalogStateMachine {
             super::snapshot::current_snapshot(&catalog)
         })
         .await
+        .map_err(|error| *error)
     }
 }

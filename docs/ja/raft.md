@@ -70,7 +70,7 @@ storage adapterの移行が済むまで、依存versionとfeature集合を固定
 依存versionとlockfileを固定し、この文書に記載したストレージスイートと複数nodeの障害テストを通さずに更新しない。
 
 プロトコル処理にはOpenRaftのTokio runtimeを使う。
-実装済みstate machineは`tokio::task::spawn_blocking`でカタログのファイル操作を行う。
+カタログのファイル操作にはTokioのblocking worker poolを使います。
 プロトコルruntimeとRPC経路は未実装です。
 将来のRPCは、必要な永続書き込みが完了する前に成功を返しません。
 

@@ -14,10 +14,17 @@ struct SidecarChange {
     after: Box<dyn FnOnce(u64) -> Vec<u8> + Send>,
 }
 
+pub(crate) type SidecarUpdate = (String, Option<Vec<u8>>, Option<Vec<u8>>);
+
 pub(super) struct PreparedSidecarChange {
     path: PathBuf,
     before: Option<Vec<u8>>,
     after: Box<dyn FnOnce(u64) -> Vec<u8> + Send>,
+}
+
+pub(super) struct CommitSideEffects {
+    pub(super) extra_changes: Vec<FileChange>,
+    pub(super) sidecar: Option<PreparedSidecarChange>,
 }
 
 #[derive(Clone, Copy)]
@@ -79,7 +86,7 @@ impl Catalog {
 
     pub(crate) fn update_sidecars_without_transaction(
         &self,
-        sidecars: Vec<(String, Option<Vec<u8>>, Option<Vec<u8>>)>,
+        sidecars: Vec<SidecarUpdate>,
     ) -> Result<(), CatalogTransactionError> {
         self.update_sidecars_at_transaction(None, sidecars)
     }
@@ -87,7 +94,7 @@ impl Catalog {
     pub(crate) fn update_sidecars_at_transaction(
         &self,
         expected_transaction_id: Option<u64>,
-        sidecars: Vec<(String, Option<Vec<u8>>, Option<Vec<u8>>)>,
+        sidecars: Vec<SidecarUpdate>,
     ) -> Result<(), CatalogTransactionError> {
         if self.is_historical() {
             return Err(CatalogTransactionError::Invalid(
@@ -450,8 +457,10 @@ impl Catalog {
             tables,
             touched,
             false,
-            Vec::new(),
-            sidecar_change,
+            CommitSideEffects {
+                extra_changes: Vec::new(),
+                sidecar: sidecar_change,
+            },
             &deferred_constraints,
         )
     }
@@ -532,10 +541,13 @@ impl Catalog {
         mut tables: BTreeMap<String, DbfTable>,
         mut touched: BTreeSet<String>,
         reuse_loaded_tables: bool,
-        extra_changes: Vec<FileChange>,
-        sidecar: Option<PreparedSidecarChange>,
+        side_effects: CommitSideEffects,
         deferred_constraints: &BTreeMap<String, BTreeSet<String>>,
     ) -> Result<(u64, Option<Vec<u8>>), CatalogTransactionError> {
+        let CommitSideEffects {
+            extra_changes,
+            sidecar,
+        } = side_effects;
         if touched.is_empty() {
             let transaction_id = super::journal::read_transaction_id_locked(&self.root)
                 .map(|transaction_id| transaction_id.unwrap_or(0))

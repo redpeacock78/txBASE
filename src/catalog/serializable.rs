@@ -212,8 +212,10 @@ impl CatalogTransaction {
                 tables,
                 touched,
                 true,
-                Vec::new(),
-                None,
+                super::transaction::CommitSideEffects {
+                    extra_changes: Vec::new(),
+                    sidecar: None,
+                },
                 &deferred_constraints,
             )
             .map(|(transaction_id, _)| transaction_id)

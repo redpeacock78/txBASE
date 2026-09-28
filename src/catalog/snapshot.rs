@@ -16,11 +16,17 @@ const TABLE_STATE_EXTENSIONS: [&str; 5] = [
 ];
 type SnapshotSidecar<'a> = (&'a str, Option<Vec<u8>>, Option<Vec<u8>>);
 
+pub(crate) struct CatalogSnapshotExport {
+    pub(crate) transaction_id: u64,
+    pub(crate) catalog_snapshot: Option<Vec<u8>>,
+    pub(crate) sidecars: Vec<Option<Vec<u8>>>,
+}
+
 impl Catalog {
     pub(crate) fn export_snapshot_with_sidecars(
         &self,
         sidecar_names: &[&str],
-    ) -> Result<(u64, Option<Vec<u8>>, Vec<Option<Vec<u8>>>), CatalogError> {
+    ) -> Result<CatalogSnapshotExport, CatalogError> {
         let _lock = self.acquire_read_lock()?;
         let transaction_id = super::journal::read_transaction_id_locked(&self.root)?.unwrap_or(0);
         let snapshot = if transaction_id == 0 {
@@ -35,7 +41,11 @@ impl Catalog {
                 super::transaction::read_optional(&path)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Ok((transaction_id, snapshot, sidecars))
+        Ok(CatalogSnapshotExport {
+            transaction_id,
+            catalog_snapshot: snapshot,
+            sidecars,
+        })
     }
 
     pub(crate) fn export_snapshot_at(&self, transaction_id: u64) -> Result<Vec<u8>, CatalogError> {

@@ -29,9 +29,12 @@ struct SnapshotContents {
 impl CatalogSnapshotBuilder {
     fn build(&self) -> Result<Snapshot<TypeConfig>, String> {
         let catalog = lock_catalog(&self.catalog)?;
-        let (transaction_id, catalog_bytes, sidecars) = catalog
+        let export = catalog
             .export_snapshot_with_sidecars(&[RAFT_STATE_SIDECAR_NAME, RAFT_SNAPSHOT_SIDECAR_NAME])
             .map_err(|error| error.to_string())?;
+        let transaction_id = export.transaction_id;
+        let catalog_bytes = export.catalog_snapshot;
+        let sidecars = export.sidecars;
         let state_bytes = sidecars[0]
             .as_deref()
             .ok_or_else(|| "Raft application state sidecar is missing".to_owned())?;
@@ -50,7 +53,7 @@ impl CatalogSnapshotBuilder {
                 )],
             )
             .map_err(|error| error.to_string())?;
-        Ok(snapshot_from_bytes(bytes)?)
+        snapshot_from_bytes(bytes)
     }
 }
 
@@ -61,13 +64,16 @@ impl RaftSnapshotBuilder<TypeConfig> for CatalogSnapshotBuilder {
             Self { catalog }.build()
         })
         .await
+        .map_err(|error| *error)
     }
 }
 
 pub(super) fn current_snapshot(catalog: &Catalog) -> Result<Option<Snapshot<TypeConfig>>, String> {
-    let (transaction_id, _, sidecars) = catalog
+    let export = catalog
         .export_snapshot_with_sidecars(&[RAFT_STATE_SIDECAR_NAME, RAFT_SNAPSHOT_SIDECAR_NAME])
         .map_err(|error| error.to_string())?;
+    let transaction_id = export.transaction_id;
+    let sidecars = export.sidecars;
     let current_state_bytes = sidecars[0]
         .as_deref()
         .ok_or_else(|| "Raft application state sidecar is missing".to_owned())?;
@@ -105,9 +111,12 @@ pub(super) fn install_snapshot(
     {
         return Err("Raft snapshot metadata does not match its payload".into());
     }
-    let (current_transaction_id, current_catalog_bytes, sidecars) = catalog
+    let export = catalog
         .export_snapshot_with_sidecars(&[RAFT_STATE_SIDECAR_NAME, RAFT_SNAPSHOT_SIDECAR_NAME])
         .map_err(|error| error.to_string())?;
+    let current_transaction_id = export.transaction_id;
+    let current_catalog_bytes = export.catalog_snapshot;
+    let sidecars = export.sidecars;
     let current_state_bytes = sidecars[0]
         .as_deref()
         .ok_or_else(|| "Raft application state sidecar is missing".to_owned())?;
