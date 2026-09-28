@@ -3,10 +3,17 @@
 This document isolates the replication and distributed-database boundary.
 
 txBASE has a process-scoped fixed-term replication mode with bounded HTTP
-delivery, plus an optional OpenRaft mode for a statically configured initial
-voter set. The latter provides quorum writes, a linearizable read barrier,
-authenticated peer RPC, and peer HTTPS. It does not yet provide learner join,
-dynamic membership operations, or failure-injected failover coverage.
+delivery, plus an optional OpenRaft mode initialized from an explicitly
+configured voter set. The latter provides quorum writes, a linearizable read
+barrier, authenticated peer RPC, and peer HTTPS. Its peer API adds learners,
+changes voter sets through joint consensus, and waits for learner catch-up
+before promotion. CI covers learner snapshot transfer and membership changes,
+plus a three-node partition, failover, healing, and restart scenario.
+
+Dedicated peer HTTPS certificate and hostname verification, delayed or
+reordered RPCs, retries after a committed response is lost, interrupted
+joint-membership recovery, reads during leadership changes, and crash-boundary
+injection remain open.
 
 The fixed-term mode is not consensus. The current Raft boundary and remaining
 work are documented in [Raft consensus design](raft.md).
@@ -38,9 +45,11 @@ replicated log (current local replay slice)
       ↓
 bounded HTTP status, contiguous entry-range, entry, snapshot, and progress delivery plus one-shot client catch-up (current transport slice)
       ↓
-optional static-membership Raft mode (current implementation; see [Raft consensus design](raft.md))
+optional Raft mode initialized from an explicit voter set (current implementation; see [Raft consensus design](raft.md))
       ↓
-learner join, dynamic membership, and deterministic failure testing (remaining Raft work)
+learner admission, joint-consensus voter changes, and three-node partition/failover testing (implemented)
+      ↓
+peer HTTPS verification and additional deterministic failure cases (remaining Raft work)
 ```
 
 Each step needs a standalone contract before the next step depends on it.
@@ -312,7 +321,7 @@ The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
 - TLS for the public catalog listener, mutual TLS, streaming, durable retry queues, backpressure, and authority discovery;
-- learner catch-up, dynamic Raft membership, and quorum-loss and leadership-change behavior under injected network faults;
+- peer HTTPS certificate and hostname verification; delayed or reordered RPCs; retries after a committed response is lost; interrupted joint-membership recovery; reads during leadership changes; and crash-boundary injection;
 - observability for lag and transport state;
 
 Change data capture, persistent WAL history, and replication must share the same ordering contract.
@@ -340,8 +349,10 @@ The initial local replication slice is complete because it has:
 
 These acceptance conditions cover only the fixed-term slice.
 Raft quorum writes and linearizable catalog reads have separate acceptance
-boundaries in [Raft consensus design](raft.md); dynamic membership and
-fault-injected failover remain outstanding.
+boundaries in [Raft consensus design](raft.md).
+The Raft CI tests cover learner transfer, joint-consensus voter changes, and a
+three-node partition/failover/restart scenario, but not the additional
+peer-TLS and failure cases documented in [Raft consensus design](raft.md).
 
 ## 7. Explicit non-goals
 
@@ -350,23 +361,26 @@ the optional Raft protocol. It does not claim multi-region writes, global
 transactions, automatic partition balancing, TLS for the public catalog
 listener, mutual TLS, durable retry queues, or authority discovery.
 
-The implemented Raft boundary and its remaining dynamic-membership and failure
-testing work are specified separately. Other distributed features need their
-own authority and recovery contracts.
+Raft learner admission, joint-consensus voter changes, and the remaining
+failure-testing work are specified separately. Other distributed features
+need their own authority and recovery contracts.
 
 ## Primary references and scope
 
 - [In Search of an Understandable Consensus Algorithm (Raft)](https://raft.github.io/raft.pdf)
 - [Raft consensus algorithm](https://raft.github.io/)
 - [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
+- [OpenRaft 0.9.25 dynamic membership](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/dynamic_membership/index.html)
 - [Rustls platform verifier](https://github.com/rustls/rustls-platform-verifier)
 - [Rustls `StreamOwned`](https://docs.rs/rustls/0.23.45/rustls/struct.StreamOwned.html)
 
 The Raft paper defines the protocol; [Raft consensus design](raft.md)
 records the txBASE decision, current implementation, and remaining work.
 
-The repository has the fixed-term `TXRP` path and an optional static-membership
-Raft path. Raft mode provides authenticated peer RPC, peer HTTPS, quorum writes,
-and a linearizable read barrier. Dynamic membership and failure-injected
-failover remain incomplete; the public catalog listener remains HTTP.
+The repository has the fixed-term `TXRP` path and an optional Raft path
+initialized from an explicit voter set. Raft mode provides authenticated peer
+RPC, peer HTTPS, quorum writes, a linearizable read barrier, learner admission,
+joint-consensus voter changes, and a three-node partition/failover/restart test.
+Dedicated peer certificate and hostname verification tests and additional
+failure scenarios remain open; the public catalog listener remains HTTP.
 These boundaries are design constraints rather than compatibility guarantees.

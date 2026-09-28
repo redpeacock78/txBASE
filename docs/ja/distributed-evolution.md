@@ -3,8 +3,11 @@
 この文書では、レプリケーションと分散データベースの境界を分けて記述します。
 
 txBASEには、プロセス単位の固定termレプリケーションと、有界なHTTP配送があります。
-初期voter集合を固定した任意のOpenRaftモードもあり、クォーラム書き込み、線形化可能な読み取りbarrier、認証付きpeer RPC、peer HTTPSを提供します。
-learnerの参加、動的membership、障害を注入したフェイルオーバー検証は未実装です。
+明示したvoter集合で起動する任意のOpenRaftモードもあり、クォーラム書き込み、線形化可能な読み取りbarrier、認証付きpeer RPC、peer HTTPSを提供します。
+peer APIはlearnerを追加し、joint consensusでvoter集合を変更し、voterへ昇格する前にlearnerの追従を待ちます。
+CIではlearnerへのスナップショット転送とmembership変更に加え、3ノードのpartition、failover、復旧、再起動を検証します。
+
+peer HTTPSの証明書とホスト名の検証、遅延または順序変更されたRPC、commit済み応答を失った場合の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入は残っています。
 
 固定termモードはコンセンサスではありません。
 現在のRaft境界と残作業は[Raftコンセンサス設計](raft.md)に記載します。
@@ -35,9 +38,11 @@ learnerの参加、動的membership、障害を注入したフェイルオーバ
       ↓
 有界なHTTPステータス、連続したエントリ範囲、エントリ、スナップショット、適用位置確認の配送と1回のcatch-upクライアント（現在の転送スライス）
       ↓
-初期membershipを固定した任意のRaftモード（実装済み。[Raftコンセンサス設計](raft.md)を参照）
+明示したvoter集合で起動する任意のRaftモード（実装済み。[Raftコンセンサス設計](raft.md)を参照）
       ↓
-learnerの参加、動的membership、決定的な障害テスト（Raftの残作業）
+learnerの追加、joint consensusによるvoter集合変更、3ノードのpartitionとfailoverのテスト（実装済み）
+      ↓
+peer HTTPS検証と追加の決定的な障害テスト（Raftの残作業）
 ```
 
 各段階は、次の段階が依存する前に独立した契約を持たなければなりません。
@@ -260,7 +265,7 @@ Shard A
 
 - カタログ表現タグから独立したスキーマ移行。
 - 公開カタログlistenerのTLS、相互TLS、ストリーミング、永続的な再試行キュー、バックプレッシャー、authorityの検出。
-- learnerの追従、Raftの動的membership、注入したネットワーク障害下でのクォーラム喪失とleader交代。
+- peer HTTPSの証明書とホスト名の検証、遅延または順序変更されたRPC、commit済み応答を失った場合の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入。
 - 分散フォロワー読み取りの整合性と鮮度。
 - 遅延と転送状態の可観測性。
 
@@ -289,7 +294,8 @@ Shard A
 
 この完了条件が対象とするのは固定termスライスだけです。
 Raftのクォーラム書き込みと線形化可能なカタログ読み取りは[Raftコンセンサス設計](raft.md)で別に定義します。
-動的membershipと障害を注入したフェイルオーバー検証は残っています。
+RaftのCIテストはlearnerの追従、joint consensusによるvoter集合変更、3ノードのpartition、failover、再起動を検証します。
+peer HTTPSと追加の障害ケースは、[Raftコンセンサス設計](raft.md)に記載したとおり未検証です。
 
 ## 7. 明示的な非目標
 
@@ -304,6 +310,7 @@ Raftの実装済み境界と残作業は別文書に記載します。
 - [In Search of an Understandable Consensus Algorithm（Raft）](https://raft.github.io/raft.pdf)
 - [Raft consensus algorithm](https://raft.github.io/)
 - [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
+- [OpenRaft 0.9.25 dynamic membership](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/dynamic_membership/index.html)
 - [Rustls platform verifier](https://github.com/rustls/rustls-platform-verifier)
 - [Rustls `StreamOwned`](https://docs.rs/rustls/0.23.45/rustls/struct.StreamOwned.html)
 
@@ -311,6 +318,7 @@ Raft論文は選択したプロトコルの一次資料です。
 txBASE側の採用判断と実装境界は[Raftコンセンサス設計](raft.md)に記載します。
 
 現在のリポジトリには、固定termのエントリ再生、検証済みスナップショットのインストール、ジャーナル化された`TXRP`サイドカー、有界なHTTP配送と再試行があります。
-任意のRaftモードは固定membershipで動作し、認証付きpeer RPC、peer HTTPS、クォーラム書き込み、線形化可能な読み取りbarrierを提供します。
-動的membershipと障害注入によるフェイルオーバー検証は未実装で、公開カタログlistenerはHTTPのままです。
+任意のRaftモードは明示したvoter集合で起動し、認証付きpeer RPC、peer HTTPS、クォーラム書き込み、線形化可能な読み取りbarrier、learner追加、joint consensusによるvoter集合変更を提供します。
+3ノードのpartition、failover、復旧、再起動を検証するテストもあります。
+peer HTTPSの証明書とホスト名の検証、追加の障害ケースは未検証で、公開カタログlistenerはHTTPのままです。
 これらの記述は、互換性の主張ではなく設計上の制約です。
