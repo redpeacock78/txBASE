@@ -134,7 +134,56 @@ fn journal_discards_an_incomplete_final_frame() {
 
     let store = StoreInner::open(&path).unwrap();
     assert_eq!(store.state.entries.len(), 1);
+    assert!(store.state.entries.contains_key(&0));
     assert_eq!(store.journal.metadata().unwrap().len(), valid_length);
+}
+
+#[test]
+fn journal_discards_a_torn_final_payload_frame() {
+    let directory = TempDirectory::new().unwrap();
+    let path = directory.0.join("raft");
+    let valid_length;
+    {
+        let mut store = StoreInner::open(&path).unwrap();
+        store.append_entries(vec![blank_entry(0)]).unwrap();
+        valid_length = store.journal.metadata().unwrap().len();
+    }
+
+    let journal_path = journal_path(&path, 0);
+    let mut journal = fs::OpenOptions::new()
+        .append(true)
+        .open(&journal_path)
+        .unwrap();
+    journal.write_all(&64_u32.to_le_bytes()).unwrap();
+    journal.write_all(&[0; 32]).unwrap();
+    journal.write_all(b"partial").unwrap();
+    drop(journal);
+
+    let store = StoreInner::open(&path).unwrap();
+    assert_eq!(store.state.entries.len(), 1);
+    assert!(store.state.entries.contains_key(&0));
+    assert_eq!(store.journal.metadata().unwrap().len(), valid_length);
+}
+
+#[test]
+fn journal_rejects_a_complete_frame_with_a_bad_checksum() {
+    let directory = TempDirectory::new().unwrap();
+    let path = directory.0.join("raft");
+    {
+        let mut store = StoreInner::open(&path).unwrap();
+        store.append_entries(vec![blank_entry(0)]).unwrap();
+    }
+
+    let journal_path = journal_path(&path, 0);
+    let mut bytes = fs::read(&journal_path).unwrap();
+    bytes[JOURNAL_MAGIC.len() + 4] ^= 0xff;
+    fs::write(&journal_path, &bytes).unwrap();
+
+    let error = StoreInner::open(&path)
+        .err()
+        .expect("corrupt frame must fail");
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(fs::read(&journal_path).unwrap(), bytes);
 }
 
 #[test]
