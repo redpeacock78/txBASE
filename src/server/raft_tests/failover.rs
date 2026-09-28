@@ -1,4 +1,8 @@
 use super::*;
+use crate::replication::raft::{
+    RaftAddLearnerRequest, RaftMembershipChangeRequest, RaftMembershipChangeStatus,
+    RaftMembershipHttpClient,
+};
 
 #[test]
 fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_restart() {
@@ -9,11 +13,16 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         .enumerate()
         .map(|(index, address)| (index as u64 + 1, format!("http://{address}")))
         .collect::<BTreeMap<_, _>>();
+    let voters = members
+        .iter()
+        .filter(|(node_id, _)| **node_id <= 2)
+        .map(|(node_id, address)| (*node_id, address.clone()))
+        .collect::<BTreeMap<_, _>>();
     let mut nodes = Vec::new();
     let mut listeners = Vec::new();
     let mut configs = Vec::new();
 
-    for node_id in 1..=3 {
+    for node_id in 1..=2 {
         let catalog_root = root.join(format!("catalog-{node_id}"));
         prepare_catalog(&catalog_root);
         let config = CatalogRaftConfig {
@@ -22,7 +31,7 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
             node_directory: root.join(format!("node-{node_id}")),
             peer_bind: addresses[(node_id - 1) as usize].clone(),
             peer_advertise: members[&node_id].clone(),
-            initial_members: members.clone(),
+            initial_members: voters.clone(),
             bootstrap: node_id == 1,
             initialize_catalog: node_id != 1,
             tls_certificate: None,
@@ -36,26 +45,105 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         nodes.push(node);
     }
 
-    let initial_leader_index = current_leader_index(&nodes, Duration::from_secs(20));
     wait_for_membership(
         &nodes,
-        &BTreeSet::from([1, 2, 3]),
+        &BTreeSet::from([1, 2]),
         &BTreeSet::new(),
         Duration::from_secs(20),
     );
-    let initial_leader_id = nodes[initial_leader_index].node_id;
+    let bootstrap_leader_index = current_leader_index(&nodes, Duration::from_secs(20));
+    let bootstrap_leader_id = nodes[bootstrap_leader_index].node_id;
     let initial_command = record_command(
-        &root.join(format!("catalog-{initial_leader_id}")),
+        &root.join(format!("catalog-{bootstrap_leader_id}")),
         1,
         4,
         "BeforePartition",
         43,
     );
     assert_eq!(
-        commit(&nodes[initial_leader_index], initial_command),
+        commit(&nodes[bootstrap_leader_index], initial_command),
         RaftResponseResult::Applied { transaction_id: 2 }
     );
     wait_for_transaction(&nodes, &root, 2, Duration::from_secs(15));
+
+    let learner_id = 3;
+    let learner_url = members[&learner_id].clone();
+    let learner_contact_id = nodes[current_leader_index(&nodes, Duration::from_secs(20))].node_id;
+    let learner_config = CatalogRaftConfig {
+        node_id: learner_id,
+        cluster_id: "ci-raft-failover".into(),
+        node_directory: root.join(format!("node-{learner_id}")),
+        peer_bind: addresses[(learner_id - 1) as usize].clone(),
+        peer_advertise: learner_url.clone(),
+        initial_members: BTreeMap::from([
+            (learner_contact_id, members[&learner_contact_id].clone()),
+            (learner_id, learner_url.clone()),
+        ]),
+        bootstrap: false,
+        initialize_catalog: true,
+        tls_certificate: None,
+        tls_private_key: None,
+    };
+    let learner_catalog_root = root.join(format!("catalog-{learner_id}"));
+    fs::create_dir(&learner_catalog_root).unwrap();
+    let learner = RaftRuntime::start(
+        &learner_catalog_root,
+        learner_config.clone(),
+        Some("ci-token".into()),
+    )
+    .unwrap();
+    let learner_server = learner.bind_peer_listener(&learner_config).unwrap();
+    listeners.push(learner.spawn_peer_listener(learner_server).unwrap());
+    configs.push(learner_config);
+    let add_leader_id = nodes[current_leader_index(&nodes, Duration::from_secs(20))].node_id;
+    let membership_client =
+        RaftMembershipHttpClient::new(&members[&add_leader_id], "ci-token").unwrap();
+    let add_learner =
+        RaftAddLearnerRequest::new("ci-raft-failover", learner_id, learner_url).unwrap();
+    let response = membership_client.add_learner(&add_learner).unwrap();
+    assert_eq!(response.node_id, learner_id);
+    assert_eq!(
+        response.status,
+        crate::replication::raft::RaftLearnerAddStatus::LearnerSyncStarted
+    );
+    nodes.push(learner);
+    wait_for_membership(
+        &nodes,
+        &BTreeSet::from([1, 2]),
+        &BTreeSet::from([3]),
+        Duration::from_secs(20),
+    );
+
+    let membership_leader_index = current_leader_index(&nodes, Duration::from_secs(20));
+    let membership_leader_id = nodes[membership_leader_index].node_id;
+    let (_, membership) = get_membership(&members[&membership_leader_id], "ci-token");
+    let membership_index = membership["effective_membership_log_index"]
+        .as_u64()
+        .unwrap();
+    let promotion_client =
+        RaftMembershipHttpClient::new(&members[&membership_leader_id], "ci-token").unwrap();
+    let promote = RaftMembershipChangeRequest::new(
+        "ci-raft-failover",
+        membership_index,
+        vec![1, 2],
+        vec![1, 2, 3],
+    )
+    .unwrap();
+    let response = promotion_client.change_membership(&promote).unwrap();
+    assert_eq!(
+        response.status,
+        RaftMembershipChangeStatus::MembershipChangeStarted
+    );
+    wait_for_membership(
+        &nodes,
+        &BTreeSet::from([1, 2, 3]),
+        &BTreeSet::new(),
+        Duration::from_secs(20),
+    );
+    wait_for_transaction(&nodes, &root, 2, Duration::from_secs(15));
+
+    let initial_leader_index = current_leader_index(&nodes, Duration::from_secs(20));
+    let initial_leader_id = nodes[initial_leader_index].node_id;
 
     for node in &nodes {
         if node.node_id == initial_leader_id {
