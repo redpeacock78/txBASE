@@ -5,7 +5,7 @@
 peer APIと`txbase raft membership` CLIは、learner追加、有効なmembershipの照会、joint consensusによるvoter変更を提供します。
 空catalogのlearnerは、genesis catalogが空または非空のclusterへ参加できます。
 3 nodeの決定的な障害テストで、quorum喪失、leader交代、ログの再同期、分断されたnodeの再起動を検査します。
-RPCの遅延や並べ替え、クラッシュ境界の注入、応答を失った要求の再試行は未検証です。
+RPCの遅延や順序変更、commit応答を失った後の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -35,7 +35,7 @@ RPCの遅延や並べ替え、クラッシュ境界の注入、応答を失っ�
 
 ### 未実装
 
-- RPCの遅延や並べ替え、commit応答を失った後の再試行、中断したjoint membershipの復旧、leader交代中の読み取りを検査する決定的なテスト。
+- RPCの遅延や順序変更、commit応答を失った後の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入を検査する決定的なテスト。
 - peer HTTPSの証明書とホスト名検証を対象にした統合テスト。
 - mutual TLSと公開catalog listenerのTLS。
 

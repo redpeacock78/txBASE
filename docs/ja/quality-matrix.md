@@ -177,7 +177,7 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 - 選定したICU4X・CLDRフィクスチャを超える、上流CJK照合の適合テスト一式。
 - スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針。
 - デプロイ済みWorkerまたはWASIのランタイムfixture、WASIのクエリスケジューリング、futureのキャンセルを超えるホストI/O中断の保証、peer HTTPSの統合テスト、公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、権威検出。
-- 遅延または並べ替えたRPC、commit応答を失った後の再試行、中断したjoint membershipの復旧、クラッシュ境界の注入を扱う決定的なテスト。
+- 遅延または順序変更されたRPC、commit応答を失った後の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入を扱う決定的なテスト。
 
 これらのいずれかをCurrentへ移す前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。
 

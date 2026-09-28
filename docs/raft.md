@@ -1,6 +1,6 @@
 # Raft consensus design
 
-Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API and `txbase raft membership` CLI can add learners, report effective membership, and change voters through joint consensus. A blank learner can join clusters with either an empty or non-empty genesis catalog. A deterministic three-node test now covers quorum loss, leader replacement, log reconciliation, and restart of the isolated node. Delay and reordering faults, crash-boundary injection, and lost-response retries remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
+Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API and `txbase raft membership` CLI can add learners, report effective membership, and change voters through joint consensus. A blank learner can join clusters with either an empty or non-empty genesis catalog. A deterministic three-node test now covers quorum loss, leader replacement, log reconciliation, and restart of the isolated node. Delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
 
@@ -29,7 +29,7 @@ This document records the implemented Raft boundary and the remaining authority,
 
 ### Not implemented
 
-- Deterministic tests for delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, and reads while leadership changes.
+- Deterministic tests for delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, reads while leadership changes, and crash-boundary injection.
 - Dedicated peer HTTPS certificate and host-verification integration tests.
 - Mutual TLS and TLS for the public catalog listener.
 

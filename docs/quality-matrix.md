@@ -174,7 +174,7 @@ The following topics have documentation or design notes but do not have a curren
 - the full upstream CJK collation conformance corpus beyond the curated ICU4X and CLDR fixtures;
 - Strict multi-file reader atomicity for schema-preserving XBF-to-DBF export, provider integrations beyond R2, live R2 validation, and provider-managed retention policy.
 - Deployed Worker/WASI runtime fixtures, WASI query scheduling, cancellation guarantees for host I/O beyond future cancellation, peer HTTPS integration coverage, public catalog-listener TLS, mutual TLS, durable retry queues, and authority discovery.
-- Deterministic delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, and crash-boundary injection.
+- Deterministic delayed or reordered RPCs, retries after a committed response is lost, interrupted joint-membership recovery, reads while leadership changes, and crash-boundary injection.
 
 Before one of these becomes current, add its public contract, malformed-input behavior, crash or retry behavior, fixture or deterministic test, and a row here.
 
