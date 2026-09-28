@@ -152,16 +152,20 @@ impl StoreInner {
     }
 
     fn append_entries(&mut self, entries: Vec<Entry<TypeConfig>>) -> io::Result<()> {
-        let mut expected = self.next_index();
+        let mut previous = self.last_log_index();
         for entry in &entries {
-            let index = expected.ok_or_else(|| invalid_data("Raft log index overflow"))?;
-            if entry.log_id.index != index {
-                return Err(invalid_data(format!(
-                    "Raft log append expected index {index}, got {}",
-                    entry.log_id.index
-                )));
+            if let Some(previous) = previous {
+                let expected = previous
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("Raft log index overflow"))?;
+                if entry.log_id.index != expected {
+                    return Err(invalid_data(format!(
+                        "Raft log append expected index {expected}, got {}",
+                        entry.log_id.index
+                    )));
+                }
             }
-            expected = index.checked_add(1);
+            previous = Some(entry.log_id.index);
         }
         if entries.is_empty() {
             return Ok(());
@@ -283,14 +287,16 @@ impl StoreInner {
     fn apply_record(&mut self, record: JournalRecord) -> io::Result<()> {
         match record {
             JournalRecord::Append(entry) => {
-                let expected = self
-                    .next_index()
-                    .ok_or_else(|| invalid_data("Raft log index overflow"))?;
-                if entry.log_id.index != expected {
-                    return Err(invalid_data(format!(
-                        "Raft log journal expected index {expected}, got {}",
-                        entry.log_id.index
-                    )));
+                if let Some(previous) = self.last_log_index() {
+                    let expected = previous
+                        .checked_add(1)
+                        .ok_or_else(|| invalid_data("Raft log index overflow"))?;
+                    if entry.log_id.index != expected {
+                        return Err(invalid_data(format!(
+                            "Raft log journal expected index {expected}, got {}",
+                            entry.log_id.index
+                        )));
+                    }
                 }
                 self.state.entries.insert(entry.log_id.index, entry);
             }
@@ -340,19 +346,6 @@ impl StoreInner {
         Ok(())
     }
 
-    fn next_index(&self) -> Option<u64> {
-        match self
-            .state
-            .entries
-            .last_key_value()
-            .map(|(index, _)| *index)
-            .or_else(|| self.state.last_purged.map(|log_id| log_id.index))
-        {
-            Some(index) => index.checked_add(1),
-            None => Some(0),
-        }
-    }
-
     fn log_state(&self) -> LogState<TypeConfig> {
         let last_log_id = self
             .state
@@ -364,6 +357,14 @@ impl StoreInner {
             last_purged_log_id: self.state.last_purged,
             last_log_id,
         }
+    }
+
+    fn last_log_index(&self) -> Option<u64> {
+        self.state
+            .entries
+            .last_key_value()
+            .map(|(index, _)| *index)
+            .or(self.state.last_purged.map(|log_id| log_id.index))
     }
 
     fn compact(&mut self) -> io::Result<()> {

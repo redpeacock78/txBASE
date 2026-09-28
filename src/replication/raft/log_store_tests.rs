@@ -44,23 +44,24 @@ fn journal_recovers_vote_commit_and_purged_position_after_restart() {
     {
         let mut store = StoreInner::open(&path).unwrap();
         store
-            .append_entries(vec![blank_entry(0), blank_entry(1), blank_entry(2)])
+            .append_entries(vec![blank_entry(5), blank_entry(6), blank_entry(7)])
             .unwrap();
         store.save_vote(Vote::new(2, 1)).unwrap();
-        store.save_committed(Some(log_id(1))).unwrap();
-        store.truncate(log_id(2)).unwrap();
-        store.purge(log_id(1)).unwrap();
+        store.save_committed(Some(log_id(6))).unwrap();
+        store.truncate(log_id(7)).unwrap();
+        store.purge(log_id(5)).unwrap();
     }
 
     let store = StoreInner::open(&path).unwrap();
     assert_eq!(store.state.vote, Some(Vote::new(2, 1)));
-    assert_eq!(store.state.committed, Some(log_id(1)));
-    assert!(store.state.entries.is_empty());
+    assert_eq!(store.state.committed, Some(log_id(6)));
+    assert_eq!(store.state.entries.len(), 1);
+    assert!(store.state.entries.contains_key(&6));
     assert_eq!(
         store.log_state(),
         LogState {
-            last_purged_log_id: Some(log_id(1)),
-            last_log_id: Some(log_id(1)),
+            last_purged_log_id: Some(log_id(5)),
+            last_log_id: Some(log_id(6)),
         }
     );
 }
