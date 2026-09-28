@@ -1,5 +1,8 @@
 use super::TypeConfig;
-use crate::replication::{ReplicationHttpClient, ReplicationRetryPolicy};
+use crate::replication::{
+    MAX_REPLICATION_SNAPSHOT_BYTES, ReplicationHttpClient, ReplicationHttpError,
+    ReplicationRetryPolicy,
+};
 use openraft::BasicNode;
 use openraft::error::{InstallSnapshotError, NetworkError, RPCError, RaftError, RemoteError};
 use openraft::network::{RPCOption, RaftNetwork, RaftNetworkFactory};
@@ -7,9 +10,11 @@ use openraft::raft::{
     AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest, InstallSnapshotResponse,
     VoteRequest, VoteResponse,
 };
+use openraft::{Snapshot, Vote};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::io;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 pub(crate) const RAFT_RPC_VERSION: u16 = 1;
@@ -17,6 +22,7 @@ pub(crate) const RAFT_VOTE_PATH: &str = "/raft/v1/vote";
 pub(crate) const RAFT_APPEND_PATH: &str = "/raft/v1/append";
 pub(crate) const RAFT_SNAPSHOT_PATH: &str = "/raft/v1/snapshot";
 pub(crate) const RAFT_ADD_LEARNER_PATH: &str = "/raft/v1/learner";
+pub(crate) const RAFT_PREPARE_LEARNER_PATH: &str = "/raft/v1/learner/prepare";
 pub(crate) const RAFT_MEMBERSHIP_PATH: &str = "/raft/v1/membership";
 pub const MAX_RAFT_RPC_BYTES: usize = crate::MAX_JSON_INPUT_BYTES * 2;
 
@@ -69,15 +75,135 @@ pub(crate) fn reply<T, E>(
 pub struct RaftHttpNetworkFactory {
     cluster_id: String,
     sender_id: u64,
-    genesis_fingerprint: Vec<u8>,
+    genesis_fingerprint: Arc<RwLock<Vec<u8>>>,
     bearer_token: String,
 }
 
 impl RaftHttpNetworkFactory {
+    fn new_network(&self, target: u64, address: &str) -> RaftHttpNetwork {
+        let client = ReplicationHttpClient::new(address)
+            .and_then(|client| client.with_bearer_token(self.bearer_token.clone()))
+            .map_err(|error| error.to_string());
+        RaftHttpNetwork {
+            target_id: target,
+            cluster_id: self.cluster_id.clone(),
+            sender_id: self.sender_id,
+            genesis_fingerprint: Arc::clone(&self.genesis_fingerprint),
+            client,
+        }
+    }
+
+    pub(crate) fn prepare_learner(
+        &self,
+        target_id: u64,
+        address: &str,
+        timeout: Duration,
+    ) -> Result<(), (u16, String)> {
+        let fingerprint = self
+            .genesis_fingerprint
+            .read()
+            .map_err(|error| (503, format!("Raft fingerprint lock poisoned: {error}")))?
+            .clone();
+        let request = RpcRequest {
+            version: RAFT_RPC_VERSION,
+            cluster_id: self.cluster_id.clone(),
+            sender_id: self.sender_id,
+            genesis_fingerprint: fingerprint.clone(),
+            payload: (),
+        };
+        let bytes = serde_json::to_vec(&request).map_err(|error| (500, error.to_string()))?;
+        let retry = ReplicationRetryPolicy::new(1, Duration::ZERO, Duration::ZERO)
+            .map_err(http_error_status)?;
+        let client = ReplicationHttpClient::new(address)
+            .and_then(|client| client.with_bearer_token(self.bearer_token.clone()))
+            .and_then(|client| client.with_timeout(timeout))
+            .map_err(http_error_status)?
+            .with_retry_policy(retry);
+        let response = client
+            .post_json_bytes(RAFT_PREPARE_LEARNER_PATH, &bytes, MAX_RAFT_RPC_BYTES)
+            .map_err(http_error_status)?;
+        let reply: RpcReply<(), String> = serde_json::from_slice(&response).map_err(|error| {
+            (
+                502,
+                format!("invalid learner preparation response: {error}"),
+            )
+        })?;
+        if reply.version != RAFT_RPC_VERSION
+            || reply.cluster_id != self.cluster_id
+            || reply.node_id != target_id
+            || reply.genesis_fingerprint != fingerprint
+        {
+            return Err((
+                502,
+                "learner preparation response identity does not match".into(),
+            ));
+        }
+        reply.result.map_err(|error| (409, error))
+    }
+
+    pub(crate) fn transfer_snapshot(
+        &self,
+        target_id: u64,
+        address: &str,
+        vote: Vote<u64>,
+        snapshot: Snapshot<TypeConfig>,
+        timeout: Duration,
+    ) -> Result<(), String> {
+        let network = self.new_network(target_id, address);
+        let meta = snapshot.meta;
+        let bytes = (*snapshot.snapshot).into_inner();
+        if bytes.is_empty() || bytes.len() > MAX_REPLICATION_SNAPSHOT_BYTES {
+            return Err(format!(
+                "Raft snapshot size must be between 1 and {MAX_REPLICATION_SNAPSHOT_BYTES} bytes"
+            ));
+        }
+
+        let chunk_size = (MAX_RAFT_RPC_BYTES / 8).max(1);
+        for (index, chunk) in bytes.chunks(chunk_size).enumerate() {
+            let offset = index * chunk_size;
+            let request: InstallSnapshotRequest<TypeConfig> = InstallSnapshotRequest {
+                vote,
+                meta: meta.clone(),
+                offset: offset as u64,
+                data: chunk.to_vec(),
+                done: offset + chunk.len() == bytes.len(),
+            };
+            let result = network
+                .rpc::<_, InstallSnapshotResponse<u64>, RaftError<u64, InstallSnapshotError>>(
+                    RAFT_SNAPSHOT_PATH,
+                    request,
+                    timeout,
+                )
+                .map_err(|error| format!("learner snapshot RPC failed: {error}"))?;
+            let response = result.map_err(|error| format!("learner rejected snapshot: {error}"))?;
+            if response.vote != vote {
+                return Err(format!(
+                    "learner snapshot response vote {} does not match leader vote {vote}",
+                    response.vote
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub fn new(
         cluster_id: impl Into<String>,
         sender_id: u64,
         genesis_fingerprint: Vec<u8>,
+        bearer_token: impl Into<String>,
+    ) -> Result<Self, String> {
+        Self::new_with_fingerprint(
+            cluster_id,
+            sender_id,
+            Arc::new(RwLock::new(genesis_fingerprint)),
+            bearer_token,
+        )
+    }
+
+    pub(crate) fn new_with_fingerprint(
+        cluster_id: impl Into<String>,
+        sender_id: u64,
+        genesis_fingerprint: Arc<RwLock<Vec<u8>>>,
         bearer_token: impl Into<String>,
     ) -> Result<Self, String> {
         let cluster_id = cluster_id.into();
@@ -89,7 +215,12 @@ impl RaftHttpNetworkFactory {
         if sender_id == 0 {
             return Err("Raft node ID must be positive".into());
         }
-        if genesis_fingerprint.len() != 32 {
+        if genesis_fingerprint
+            .read()
+            .map_err(|error| format!("Raft fingerprint lock poisoned: {error}"))?
+            .len()
+            != 32
+        {
             return Err("Raft genesis fingerprint must be a SHA-256 digest".into());
         }
         Ok(Self {
@@ -99,6 +230,14 @@ impl RaftHttpNetworkFactory {
             bearer_token: bearer_token.into(),
         })
     }
+}
+
+fn http_error_status(error: ReplicationHttpError) -> (u16, String) {
+    let status = match &error {
+        ReplicationHttpError::HttpStatus { status, .. } => *status,
+        _ => 503,
+    };
+    (status, error.to_string())
 }
 
 pub(crate) fn is_valid_cluster_id(cluster_id: &str) -> bool {
@@ -114,7 +253,7 @@ pub struct RaftHttpNetwork {
     target_id: u64,
     cluster_id: String,
     sender_id: u64,
-    genesis_fingerprint: Vec<u8>,
+    genesis_fingerprint: Arc<RwLock<Vec<u8>>>,
     client: Result<ReplicationHttpClient, String>,
 }
 
@@ -130,11 +269,16 @@ impl RaftHttpNetwork {
         T: DeserializeOwned,
         E: DeserializeOwned,
     {
+        let genesis_fingerprint = self
+            .genesis_fingerprint
+            .read()
+            .map_err(|error| format!("Raft fingerprint lock poisoned: {error}"))?
+            .clone();
         let request = RpcRequest {
             version: RAFT_RPC_VERSION,
             cluster_id: self.cluster_id.clone(),
             sender_id: self.sender_id,
-            genesis_fingerprint: self.genesis_fingerprint.clone(),
+            genesis_fingerprint: genesis_fingerprint.clone(),
             payload,
         };
         let bytes = serde_json::to_vec(&request).map_err(|error| error.to_string())?;
@@ -159,7 +303,7 @@ impl RaftHttpNetwork {
         if reply.version != RAFT_RPC_VERSION
             || reply.cluster_id != self.cluster_id
             || reply.node_id != self.target_id
-            || reply.genesis_fingerprint != self.genesis_fingerprint
+            || reply.genesis_fingerprint != genesis_fingerprint
         {
             return Err("Raft RPC response identity or version does not match".into());
         }
@@ -171,16 +315,7 @@ impl RaftNetworkFactory<TypeConfig> for RaftHttpNetworkFactory {
     type Network = RaftHttpNetwork;
 
     async fn new_client(&mut self, target: u64, node: &BasicNode) -> Self::Network {
-        let client = ReplicationHttpClient::new(&node.addr)
-            .and_then(|client| client.with_bearer_token(self.bearer_token.clone()))
-            .map_err(|error| error.to_string());
-        RaftHttpNetwork {
-            target_id: target,
-            cluster_id: self.cluster_id.clone(),
-            sender_id: self.sender_id,
-            genesis_fingerprint: self.genesis_fingerprint.clone(),
-            client,
-        }
+        self.new_network(target, &node.addr)
     }
 }
 

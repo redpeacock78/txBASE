@@ -2,6 +2,7 @@ use super::*;
 use crate::catalog::Catalog;
 use crate::replication::raft::RaftCatalogStateMachine;
 use openraft::entry::RaftEntry;
+use openraft::storage::RaftLogStorage;
 use openraft::testing::{StoreBuilder, Suite};
 use openraft::{CommittedLeaderId, Entry, ErrorSubject, ErrorVerb, LogId, StorageError, Vote};
 use std::fs;
@@ -35,6 +36,19 @@ fn log_id(index: u64) -> LogId<u64> {
 
 fn blank_entry(index: u64) -> Entry<TypeConfig> {
     Entry::new_blank(log_id(index))
+}
+
+#[test]
+fn pristine_log_store_rejects_a_persisted_vote() {
+    let directory = TempDirectory::new().unwrap();
+    let mut store = RaftLogStore::open(directory.0.join("raft")).unwrap();
+    assert!(store.is_pristine().unwrap());
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
+    runtime.block_on(store.save_vote(&Vote::new(2, 1))).unwrap();
+    assert!(!store.is_pristine().unwrap());
 }
 
 #[test]

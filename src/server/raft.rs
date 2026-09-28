@@ -1,4 +1,5 @@
 mod config;
+mod learner;
 mod peer;
 
 use super::{CatalogRaftConfig, HttpResponse, error, json_response};
@@ -10,13 +11,14 @@ use crate::replication::raft::{
 use openraft::{BasicNode, Raft};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tiny_http::Request;
 use tokio::runtime::{Builder, Runtime};
 
 type Node = Raft<TypeConfig>;
 pub(super) const RPC_TIMEOUT: Duration = Duration::from_secs(10);
+pub(super) const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub(super) struct RaftRuntime {
@@ -25,7 +27,11 @@ pub(super) struct RaftRuntime {
     pub(super) node_id: u64,
     cluster_id: String,
     initial_members: BTreeSet<u64>,
-    genesis_fingerprint: Vec<u8>,
+    genesis_fingerprint: Arc<RwLock<Vec<u8>>>,
+    local_genesis_fingerprint: Vec<u8>,
+    state_machine: RaftCatalogStateMachine,
+    log_store: RaftLogStore,
+    network_factory: RaftHttpNetworkFactory,
     token: String,
     peer_tls: bool,
     membership_change_lock: Arc<tokio::sync::Mutex<()>>,
@@ -60,13 +66,18 @@ impl RaftRuntime {
         let fingerprint_catalog = Catalog::from_path(catalog_root)
             .map_err(|error| format!("cannot reopen Raft catalog: {error}"))?;
         let genesis_fingerprint = raft::raft_genesis_fingerprint(&fingerprint_catalog)?;
+        let local_genesis_fingerprint = genesis_fingerprint.clone();
 
-        let network = RaftHttpNetworkFactory::new(
+        let genesis_fingerprint = Arc::new(RwLock::new(genesis_fingerprint.clone()));
+        let network = RaftHttpNetworkFactory::new_with_fingerprint(
             config.cluster_id.clone(),
             config.node_id,
-            genesis_fingerprint.clone(),
+            Arc::clone(&genesis_fingerprint),
             token.clone(),
         )?;
+        let network_factory = network.clone();
+        let join_state_machine = state.clone();
+        let join_log_store = log_store.clone();
         let raft_config = openraft::Config {
             cluster_name: config.cluster_id.clone(),
             max_payload_entries: 1,
@@ -112,6 +123,10 @@ impl RaftRuntime {
             cluster_id: config.cluster_id,
             initial_members: config.initial_members.keys().copied().collect(),
             genesis_fingerprint,
+            local_genesis_fingerprint,
+            state_machine: join_state_machine,
+            log_store: join_log_store,
+            network_factory,
             token,
             peer_tls,
             membership_change_lock: Arc::new(tokio::sync::Mutex::new(())),
@@ -126,52 +141,6 @@ impl RaftRuntime {
             .map_err(|_| "Raft read barrier timed out".to_owned())?
             .map(|_| ())
             .map_err(|error| format!("Raft read barrier failed: {error}"))
-    }
-
-    pub(super) fn add_learner(
-        &self,
-        node_id: u64,
-        peer_address: &str,
-    ) -> Result<bool, (u16, String)> {
-        if node_id == 0 || node_id == self.node_id {
-            return Err((
-                400,
-                "learner node ID must be positive and different from this node".into(),
-            ));
-        }
-        config::validate_peer_url(peer_address, &self.token).map_err(|error| (422, error))?;
-        {
-            let metrics = self.node.metrics();
-            let metrics = metrics.borrow();
-            let membership = &metrics.membership_config;
-            if let Some((_, node)) = membership.nodes().find(|(id, _)| **id == node_id) {
-                if node.addr == peer_address {
-                    return Ok(false);
-                }
-                return Err((
-                    409,
-                    format!("Raft node ID {node_id} is already in the membership"),
-                ));
-            }
-            if membership
-                .nodes()
-                .any(|(_, node)| node.addr == peer_address)
-            {
-                return Err((409, "Raft learner URL is already in the membership".into()));
-            }
-        }
-        self.runtime
-            .block_on(async {
-                tokio::time::timeout(
-                    RPC_TIMEOUT,
-                    self.node
-                        .add_learner(node_id, BasicNode::new(peer_address), false),
-                )
-                .await
-            })
-            .map_err(|_| (504, "Raft learner addition timed out".to_owned()))?
-            .map(|_| true)
-            .map_err(|error| (503, format!("cannot add Raft learner: {error}")))
     }
 
     #[cfg(test)]

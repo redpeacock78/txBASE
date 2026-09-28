@@ -123,6 +123,7 @@ impl RaftRuntime {
             raft::RAFT_VOTE_PATH => self.vote(request),
             raft::RAFT_APPEND_PATH => self.append_entries(request),
             raft::RAFT_SNAPSHOT_PATH => self.install_snapshot(request),
+            raft::RAFT_PREPARE_LEARNER_PATH => self.prepare_learner(request),
             raft::RAFT_ADD_LEARNER_PATH => self.handle_add_learner(request),
             raft::RAFT_MEMBERSHIP_PATH if request.method() == &Method::Get => {
                 self.membership_status_response()
@@ -215,6 +216,112 @@ impl RaftRuntime {
         }
     }
 
+    fn prepare_learner(&self, request: &mut Request) -> HttpResponse {
+        let rpc = match read_rpc::<()>(request, raft::RAFT_PREPARE_LEARNER_PATH) {
+            Ok(rpc) => rpc,
+            Err(response) => return response,
+        };
+        if rpc.version != raft::RAFT_RPC_VERSION
+            || rpc.cluster_id != self.cluster_id
+            || rpc.sender_id == 0
+            || rpc.sender_id == self.node_id
+            || rpc.genesis_fingerprint.len() != 32
+        {
+            return rejected_peer();
+        }
+        let sender_is_known = {
+            let metrics = self.node.metrics();
+            let membership = &metrics.borrow().membership_config;
+            if membership.log_id().is_some() {
+                membership
+                    .nodes()
+                    .any(|(node_id, _)| *node_id == rpc.sender_id)
+            } else {
+                self.initial_members.contains(&rpc.sender_id)
+            }
+        };
+        if !sender_is_known {
+            return rejected_peer();
+        }
+
+        let current_fingerprint = self.genesis_fingerprint();
+        if current_fingerprint != rpc.genesis_fingerprint {
+            let initialized = match self.runtime.block_on(async {
+                tokio::time::timeout(RPC_TIMEOUT, self.node.is_initialized()).await
+            }) {
+                Ok(Ok(initialized)) => initialized,
+                Ok(Err(raft_error)) => {
+                    return json_response(
+                        503,
+                        error("raft_unavailable", &raft_error.to_string()),
+                        false,
+                    );
+                }
+                Err(_) => {
+                    return json_response(
+                        504,
+                        error("raft_rpc_timeout", "learner readiness check timed out"),
+                        false,
+                    );
+                }
+            };
+            let catalog_is_empty = match self.state_machine.can_adopt_genesis_fingerprint() {
+                Ok(is_empty) => is_empty,
+                Err(message) => {
+                    return json_response(500, error("raft_state_error", &message), false);
+                }
+            };
+            let log_is_pristine = match self.log_store.is_pristine() {
+                Ok(is_pristine) => is_pristine,
+                Err(message) => {
+                    return json_response(500, error("raft_log_error", &message), false);
+                }
+            };
+            if initialized || !catalog_is_empty || !log_is_pristine {
+                return json_response(
+                    409,
+                    error(
+                        "learner_not_pristine",
+                        "only an empty, uninitialized Raft node can adopt another genesis fingerprint",
+                    ),
+                    false,
+                );
+            }
+
+            let mut fingerprint = match self.genesis_fingerprint.write() {
+                Ok(fingerprint) => fingerprint,
+                Err(lock_error) => {
+                    return json_response(
+                        503,
+                        error("raft_fingerprint_lock", &lock_error.to_string()),
+                        false,
+                    );
+                }
+            };
+            if *fingerprint == self.local_genesis_fingerprint {
+                *fingerprint = rpc.genesis_fingerprint;
+            } else if *fingerprint != rpc.genesis_fingerprint {
+                return json_response(
+                    409,
+                    error(
+                        "learner_already_prepared",
+                        "this learner is already prepared for a different genesis catalog",
+                    ),
+                    false,
+                );
+            }
+        }
+
+        self.rpc_response(Ok::<(), String>(()))
+    }
+
+    fn genesis_fingerprint(&self) -> Vec<u8> {
+        self.genesis_fingerprint
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
     fn validate_sender(
         &self,
         sender_id: u64,
@@ -228,7 +335,7 @@ impl RaftRuntime {
             || vote_sender != Some(sender_id)
             || cluster_id != self.cluster_id
             || version != raft::RAFT_RPC_VERSION
-            || genesis_fingerprint != self.genesis_fingerprint
+            || genesis_fingerprint != self.genesis_fingerprint().as_slice()
         {
             return false;
         }
@@ -245,7 +352,7 @@ impl RaftRuntime {
         serde_json::to_value(raft::raft_rpc_reply(
             &self.cluster_id,
             self.node_id,
-            &self.genesis_fingerprint,
+            &self.genesis_fingerprint(),
             result,
         ))
         .map(|value| json_response(200, value, false))

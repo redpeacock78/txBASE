@@ -73,10 +73,10 @@ The repository currently provides:
 - A bounded `ReplicationHttpClient` that validates authority status, pulls contiguous entry pages or a current snapshot, applies them through the local ordered replay contract, acknowledges follower progress over HTTP or HTTPS, and retries explicitly transient socket or HTTP failures within a bounded in-process policy.
 - A public `txbase replicate catch-up` command that opens a fixed-term follower catalog, resumes its journaled `TXRP` position, performs one bounded HTTP catch-up session, and reports the resulting progress as JSON.
 - An optional OpenRaft mode for `serve-catalog` with explicit initial voters, quorum writes, linearizable reads, authenticated peer RPC, and peer HTTPS.
-  Its authenticated peer API adds prepared learners, reports local effective membership, and changes voter sets through joint consensus.
+  Its authenticated peer API adds learners, reports local effective membership, and changes voter sets through joint consensus.
   It waits for promoted learners to catch up and retains demoted voters as learners.
   The `txbase raft membership` CLI exposes status, learner addition, and voter changes through this peer control plane; status reports the contacted node's local metrics, and mutations target the current leader.
-  Empty-catalog joining and failure-injected failover coverage remain open; see [Raft consensus design](raft.md).
+  Blank learners can join clusters with empty or non-empty genesis catalogs; deterministic failure-injected failover coverage remains open. See [Raft consensus design](raft.md).
 - Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit, after validating the declared primary or unique parent key; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
 - Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with ordered per-transaction mode changes in the Rust and HTTP transaction APIs; deferred `CHECK` is a txBASE extension.
 
@@ -89,7 +89,7 @@ The baseline intentionally does not include the following:
 - References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
-- Empty-catalog Raft learner joining, failure-injected quorum-loss and leader-change coverage, distributed follower reads, and distributed partitioning.
+- Failure-injected quorum-loss and leader-change coverage, distributed follower reads, and distributed partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -453,17 +453,18 @@ It accepts validated monotonic follower progress, persists it in the metadata-on
 index for coordinated compaction. This safety gate applies to the fixed-term `TXRP` log; the optional Raft mode uses OpenRaft's separate log and snapshot contract.
 
 The optional Raft implementation is connected to `serve-catalog` and uses an explicitly configured initial voter set.
-It provides quorum-committed writes, a linearizable read barrier, authenticated peer RPC, peer HTTPS for non-loopback URLs, and an authenticated endpoint that adds a prepared learner and starts log replication.
+It provides quorum-committed writes, a linearizable read barrier, authenticated peer RPC, peer HTTPS for non-loopback URLs, and an authenticated endpoint that safely prepares and adds a learner before starting log replication.
 An authenticated peer API reports local effective membership and supports compare-and-swap voter changes through OpenRaft joint consensus.
 The API waits for newly promoted learners to catch up and retains demoted voters as learners.
-OpenRaft storage, the catalog state machine, snapshots, startup recovery, and a three-node integration path covering promotion, demotion, and quorum writes after demotion are included in the CI test suite.
-Joining a blank learner to a cluster with a non-empty genesis catalog, TLS-specific integration coverage, interrupted-change recovery tests, and deterministic failure injection remain outstanding. An empty learner can already join a cluster whose genesis catalog is empty.
+OpenRaft storage, the catalog state machine, snapshots, startup recovery, and three-node integration coverage are included in the CI test suite.
+The three-node test now starts a learner from an empty catalog and verifies snapshot transfer of the non-empty genesis catalog and a committed update before normal log replication.
+TLS-specific integration coverage, interrupted-change recovery tests, and deterministic failure injection remain outstanding.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Extend the current OpenRaft integration so a blank learner can import a cluster's non-empty genesis catalog, then add peer TLS integration, interrupted-change recovery, and multi-node failure testing; see [Raft consensus design](raft.md).
+- Add peer TLS integration, interrupted-change recovery, and multi-node failure testing; see [Raft consensus design](raft.md).
 - TLS for the public catalog listener, mutual TLS, durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.

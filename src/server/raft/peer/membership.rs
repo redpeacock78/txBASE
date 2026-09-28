@@ -8,7 +8,6 @@ use crate::server::{HttpResponse, error, json_response, read_json_body_with_limi
 use openraft::BasicNode;
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 use tiny_http::Request;
 
 impl RaftRuntime {
@@ -331,19 +330,20 @@ impl RaftRuntime {
             .clone()
             .try_lock_owned()
             .map_err(|_| ())?;
-        let node = Arc::clone(&self.node);
+        let raft = self.clone();
         let node_id = self.node_id;
         self.runtime.spawn(async move {
             let _guard = guard;
             for (learner_id, learner) in learners {
-                if let Err(error) = node.add_learner(learner_id, learner, true).await {
-                    eprintln!(
-                        "Raft learner {learner_id} did not catch up on node {node_id}: {error}"
-                    );
-                    return;
+                match raft.add_learner_locked(learner_id, learner, true).await {
+                    Ok(_) => {}
+                    Err((_, error)) => {
+                        eprintln!("Raft learner {learner_id} failed on node {node_id}: {error}");
+                        return;
+                    }
                 }
             }
-            if let Err(error) = node.change_membership(voter_ids, true).await {
+            if let Err(error) = raft.node.change_membership(voter_ids, true).await {
                 eprintln!("Raft membership change failed on node {node_id}: {error}");
             }
         });

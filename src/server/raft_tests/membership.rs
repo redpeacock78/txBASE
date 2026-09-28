@@ -157,7 +157,7 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
         tls_private_key: None,
     };
     let learner_catalog_root = root.join(format!("catalog-{learner_id}"));
-    prepare_catalog(&learner_catalog_root);
+    fs::create_dir(&learner_catalog_root).unwrap();
     let learner = RaftRuntime::start(
         &learner_catalog_root,
         learner_config.clone(),
@@ -181,6 +181,23 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
         &BTreeSet::from([1, 2]),
         &BTreeSet::from([3]),
         Duration::from_secs(15),
+    );
+    let leader_catalog = Catalog::from_path(&catalog_root).unwrap();
+    let learner_catalog = Catalog::from_path(&learner_catalog_root).unwrap();
+    assert_eq!(learner_catalog.transaction_id().unwrap(), Some(2));
+    assert_eq!(
+        learner_catalog
+            .export_snapshot_with_sidecars(&[])
+            .unwrap()
+            .catalog_snapshot,
+        leader_catalog
+            .export_snapshot_with_sidecars(&[])
+            .unwrap()
+            .catalog_snapshot
+    );
+    assert_eq!(
+        crate::replication::raft::raft_genesis_fingerprint(&learner_catalog).unwrap(),
+        crate::replication::raft::raft_genesis_fingerprint(&leader_catalog).unwrap()
     );
 
     let leader_index = current_leader_index(&nodes, Duration::from_secs(20));

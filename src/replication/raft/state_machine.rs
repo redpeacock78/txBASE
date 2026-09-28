@@ -126,6 +126,7 @@ impl RaftApplicationState {
     }
 }
 
+#[derive(Clone)]
 pub struct RaftCatalogStateMachine {
     pub(super) catalog: SharedCatalog,
 }
@@ -216,6 +217,31 @@ impl RaftCatalogStateMachine {
         Ok(Self {
             catalog: Arc::new(Mutex::new(catalog)),
         })
+    }
+
+    pub(crate) fn can_adopt_genesis_fingerprint(&self) -> Result<bool, String> {
+        let catalog = lock_catalog(&self.catalog)?;
+        if catalog.is_historical() {
+            return Ok(false);
+        }
+        let (state, _) = read_state(&catalog)?;
+        let transaction_id = catalog
+            .transaction_id()
+            .map_err(|error| error.to_string())?
+            .unwrap_or(0);
+        let has_snapshot = catalog
+            .read_sidecar_bytes(RAFT_SNAPSHOT_SIDECAR_NAME)
+            .map_err(|error| error.to_string())?
+            .is_some();
+
+        Ok(transaction_id == 0
+            && catalog.tables().next().is_none()
+            && !has_snapshot
+            && state.genesis
+            && state.last_applied.is_none()
+            && state.last_membership.log_id().is_none()
+            && state.last_membership.membership().nodes().next().is_none()
+            && state.clients.is_empty())
     }
 }
 

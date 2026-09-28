@@ -93,11 +93,11 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - 公開`txbase replicate catch-up`コマンドが固定termのフォロワーカタログを開き、ジャーナル化された`TXRP`位置を再開し、有界なHTTP catch-upを1回実行して、結果の適用位置をJSONで表示する。
 - `serve-catalog`向けに、初期voter集合を明示する任意のOpenRaftモードを実装済みである。
   クォーラム書き込み、線形化可能な読み取り、認証付きpeer RPC、peer HTTPSを提供する。
-  認証付きpeer APIは準備済みlearnerを追加し、nodeごとの有効なmembershipを照会し、joint consensusでvoter集合を変更する。
+  認証付きpeer APIはlearnerを追加し、nodeごとの有効なmembershipを照会し、joint consensusでvoter集合を変更する。
   voterへ昇格するlearnerの同期を待ち、降格したvoterはlearnerとして保持する。
   `txbase raft membership` CLIは、このpeer control planeを通じて状態照会、learner追加、voter変更を提供する。
   状態照会は接続先nodeのローカルmetricsを返し、変更操作は現在のleaderへ送る。
-  空catalogからの参加と障害注入によるフェイルオーバー検証は残る。[Raftコンセンサス設計](raft.md)を参照する。
+  空catalogのlearnerは、空または非空のgenesis catalogを持つclusterへ参加できる。非空clusterからのsnapshot転送は3 nodeのCIで検証する。障害注入によるフェイルオーバー検証は残る。[Raftコンセンサス設計](raft.md)を参照する。
 
 ベースラインには意図的に、次を含めません。
 
@@ -110,7 +110,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - カタログルートをまたぐ参照は未対応である。
 - XBF出力とtxBASEロックを無視する読み手に対する、厳密な複数ファイル読み取りアトミック性。
 - R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針、永続的な再試行キュー。
-- 非空genesis catalogを持つclusterへの空catalogのRaft learner参加、クォーラム喪失とleader交代の障害注入テスト、分散フォロワー読み取り、分散パーティショニング。
+- クォーラム喪失とleader交代の障害注入テスト、分散フォロワー読み取り、分散パーティショニング。
 
 ## 3. フェーズ 1：小さなローカル DBMS を完成させる
 
@@ -508,17 +508,18 @@ authorityは、検証済みで単調なフォロワー適用位置を受け付�
 
 任意のRaftモードは`serve-catalog`に統合し、初期voter集合を明示して起動します。
 クォーラム書き込み、線形化可能な読み取りbarrier、認証付きpeer RPC、loopback以外のURLに対するpeer HTTPSを提供します。
-認証付きpeer APIは、準備済みlearnerを追加してログ複製を開始します。
+認証付きpeer APIは、状態を検証してlearnerを追加した後、ログ複製を開始します。
 認証付きpeer APIでnodeごとの有効なmembershipを照会し、compare-and-swap条件付きのvoter変更をjoint consensusで行えます。
 昇格するlearnerの同期を待ち、降格したvoterはlearnerとして保持します。
 OpenRaft storage suite、カタログstate machine、スナップショット、起動時復旧、3 nodeでの昇格・降格と降格後のquorum更新をCIで検査します。
-空catalogからのlearner参加、TLS統合テスト、中断した変更の復旧、決定的な障害注入は残っています。
+3 nodeテストではlearnerを空catalogから起動し、通常のログ複製を始める前に、非空genesis catalogとcommit済み更新をsnapshot転送します。
+peer TLS統合テスト、中断した変更の復旧、決定的な障害注入は残っています。
 
 ### 候補範囲
 
 - テーブル間または分散環境の長寿命スナップショットトランザクション。
 - 現在のテーブル、カタログ、`TXRP`、`TXRG`サイドカーを超える永続WAL履歴。
-- 現在のOpenRaft統合に空catalogからのlearner参加、peer TLS統合、中断した変更の復旧、複数nodeの障害テストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
+- peer TLS統合、中断した変更の復旧、複数nodeの障害テストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
 - 公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、バックプレッシャー、authorityの検出。
 - 分散フォロワー読み取りの保証。
 - 分散パーティショニング。

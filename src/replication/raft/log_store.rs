@@ -28,6 +28,18 @@ impl RaftLogStore {
             inner: Arc::new(Mutex::new(StoreInner::open(path.as_ref())?)),
         })
     }
+
+    pub(crate) fn is_pristine(&self) -> Result<bool, String> {
+        let inner = self
+            .inner
+            .lock()
+            .map_err(|error| format!("Raft log mutex poisoned: {error}"))?;
+        Ok(!inner.poisoned
+            && inner.state.entries.is_empty()
+            && inner.state.last_purged.is_none()
+            && inner.state.committed.is_none()
+            && inner.state.vote.is_none())
+    }
 }
 
 struct StoreInner {

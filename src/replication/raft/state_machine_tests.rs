@@ -324,6 +324,19 @@ fn startup_fails_closed_for_catalogs_without_raft_state() {
 }
 
 #[test]
+fn genesis_fingerprint_adoption_requires_an_empty_catalog() {
+    let empty_directory = TempDirectory::new();
+    let empty =
+        RaftCatalogStateMachine::open(Catalog::from_path(&empty_directory.0).unwrap()).unwrap();
+    assert!(empty.can_adopt_genesis_fingerprint().unwrap());
+
+    let populated_directory = TempDirectory::new();
+    let populated =
+        RaftCatalogStateMachine::initialize(seed_catalog(&populated_directory.0)).unwrap();
+    assert!(!populated.can_adopt_genesis_fingerprint().unwrap());
+}
+
+#[test]
 fn empty_genesis_initializes_and_records_its_durable_marker() {
     let directory = TempDirectory::new();
     let catalog = Catalog::from_path(&directory.0).unwrap();
