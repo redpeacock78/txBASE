@@ -39,13 +39,16 @@
 - [仕様調査インデックス](research.md)
 - [ロードマップと明示的な非目標](roadmap.md)
 
-## 将来のアーキテクチャ
+## WebAssemblyとホストアダプター
 
 - [WASMとワーカーのホスト境界](wasm.md)
 - [WASIクエリストリームコンポーネント](wasi-query-stream.md)
 - [Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)
 - [Cloudflare R2オブジェクトストレージアダプター](r2-object-store.md)
 - [Workerクエリストリームアダプター](worker-query-stream.md)
+
+## レプリケーションと合意形成
+
 - [分散化の進化](distributed-evolution.md)
 - [Raftコンセンサス設計](raft.md)
 

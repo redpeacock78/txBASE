@@ -41,13 +41,16 @@ Research and future work do not imply an implemented feature.
 - [Specification research index](research.md)
 - [Roadmap and explicit non-goals](roadmap.md)
 
-## Future architecture
+## WebAssembly and host adapters
 
 - [WASM and worker host boundary](wasm.md)
 - [WASI query-stream component](wasi-query-stream.md)
 - [Worker Fetch object-store adapter](worker-object-store.md)
 - [Cloudflare R2 object-store adapter](r2-object-store.md)
 - [Worker query stream adapter](worker-query-stream.md)
+
+## Replication and consensus
+
 - [Distributed evolution](distributed-evolution.md)
 - [Raft consensus design](raft.md)
 
