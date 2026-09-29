@@ -8,7 +8,7 @@ use tiny_http::{Method, StatusCode, TestRequest};
 const ROOT_ENV: &str = "TXBASE_RAFT_CRASH_TEST_ROOT";
 const ADDRESSES_ENV: &str = "TXBASE_RAFT_CRASH_TEST_ADDRESSES";
 const POINT_ENV: &str = "TXBASE_RAFT_CRASH_TEST_POINT";
-const TRANSACTION_BODY: &str = r#"{"operations":[{"method":"POST","path":"/users/records","body":{"ID":4,"NAME":"CrashRecovery","AGE":43,"ACTIVE":true}}]}"#;
+const TRANSACTION_BODY: &str = r#"{"operations":[{"method":"POST","path":"/users/records","body":{"ID":4,"NAME":"Crash","AGE":43,"ACTIVE":true}}]}"#;
 
 #[test]
 fn crash_boundaries_recover_without_duplicate_transactions() {
@@ -45,13 +45,14 @@ fn crash_boundaries_recover_without_duplicate_transactions() {
             let catalog =
                 Catalog::from_path(root.join(format!("catalog-{}", leader.node_id))).unwrap();
             let response = transaction_response(leader, &catalog);
-            assert_eq!(
-                response.status_code(),
-                StatusCode(200),
-                "crash point {point}"
-            );
+            let status = response.status_code();
             let mut body = String::new();
             response.into_reader().read_to_string(&mut body).unwrap();
+            assert_eq!(
+                status,
+                StatusCode(200),
+                "crash point {point}, response body: {body}"
+            );
             let transaction_id = serde_json::from_str::<Value>(&body).unwrap()["transaction_id"]
                 .as_u64()
                 .unwrap();
@@ -64,10 +65,7 @@ fn crash_boundaries_recover_without_duplicate_transactions() {
                 assert_eq!(catalog.transaction_id().unwrap(), Some(transaction_id));
                 let table = catalog.open_table("users").unwrap();
                 assert_eq!(table.records().len(), 4, "crash point {point}");
-                assert_eq!(
-                    table.active_record(4).unwrap().values["NAME"],
-                    "CrashRecovery"
-                );
+                assert_eq!(table.active_record(4).unwrap().values["NAME"], "Crash");
             }
         });
         std::fs::remove_dir_all(root).unwrap();
