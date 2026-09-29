@@ -133,6 +133,7 @@ fn interrupted_joint_membership_resumes_after_leader_restart() {
         &new_voters,
         Duration::from_secs(20),
     );
+    drop(new_voter_nodes);
     for peer_id in &new_voters {
         nodes[old_leader_index]
             .set_peer_blocked(*peer_id, true)
