@@ -77,14 +77,11 @@ CIは`wasm32-unknown-unknown`向けラッパーをビルドし、Node.jsで生�
 
 ## 主な一次資料と適用範囲
 
-- [WebAssemblyコア仕様](https://webassembly.github.io/spec/core/)
-- [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
-- [WASI 0.3とネイティブ非同期処理](https://wasi.dev/releases/wasi-p3)
-- [Rustの`wasm32-wasip2`ターゲット](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
+- [`wasm-bindgen`ガイド：JavaScriptへエクスポートするRust型](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/exported-rust-types.html)
 - [wasm-bindgen：PromiseとFuture](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html)
 
-WebAssemblyコア仕様はモジュールの動作を定め、Component Modelのガイドはコンポーネントの用語を説明します。
+`wasm-bindgen`ガイドは、エクスポートしたRust型がJavaScriptのクラスへ対応する規則と、async exportがPromiseへ変換される規則を説明します。
 
-WASIのバージョン状況はWASIのリリースページを参照します。
-Component Modelのガイドはアーキテクチャと用語の確認に使い、txBASEのホスト互換性はアダプターの実装とCIの検査結果に基づいて判断します。
-ホストランタイムとアダプターの保証は、それぞれの実装文書に記載します。
+txBASEのABIと入力上限は実装とテストで定めます。
+ホスト互換性はアダプターとCIで検証した範囲に限ります。
+WASI固有の資料は、targetとruntimeの境界を扱う[WASIクエリストリーミング](wasi-query-stream.md)に記載します。

@@ -87,13 +87,15 @@ WASI 0.3.1仕様は安定版ですが、Wasmtimeの`wasmtime-wasi::p3`ホスト�
 
 ## 一次資料と対象範囲
 
+- [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [WASI 0.3とネイティブ非同期処理](https://wasi.dev/releases/wasi-p3)
 - [`wasip3` 0.9.0のバインディング](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/)
 - [Rustの`wasm32-wasip2`ターゲット](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
 - [WASI filesystem interface](https://github.com/WebAssembly/wasi-filesystem/blob/main/wit/types.wit)
 - [Wasmtime CLIオプション](https://docs.wasmtime.dev/cli-options.html)
-- [WasmtimeのWASI P3ホスト実装](https://docs.rs/wasmtime-wasi/latest/wasmtime_wasi/p3/index.html)
+- [Wasmtime 49.0.0のWASI P3ホスト実装](https://docs.rs/wasmtime-wasi/49.0.0/wasmtime_wasi/p3/index.html)
 - [Bytecode AllianceのWasmtimeセットアップアクション](https://github.com/bytecodealliance/actions)
 
+Component Modelのガイドは、このコマンドが使うコンポーネントとインターフェースの概念を説明します。
 WASIの現行リリースは0.3.1であり、WASI 0.3.0で導入された非同期プリミティブに加えてComponent Modelの機能を導入しています。
 このアダプターが使うのは0.3.0の`stream`と`future`の境界であり、0.3.1だけが持つWIT機能には依存しません。

@@ -77,13 +77,15 @@ The smoke test covers writable local storage and recovery on this runtime, but d
 
 ## Primary references and scope
 
+- [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [WASI 0.3 and native async](https://wasi.dev/releases/wasi-p3)
 - [`wasip3` 0.9.0 bindings](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/)
 - [Rust `wasm32-wasip2` target](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
 - [WASI filesystem interface](https://github.com/WebAssembly/wasi-filesystem/blob/main/wit/types.wit)
 - [Wasmtime CLI options](https://docs.wasmtime.dev/cli-options.html)
-- [Wasmtime's WASI P3 host implementation](https://docs.rs/wasmtime-wasi/latest/wasmtime_wasi/p3/index.html)
+- [Wasmtime 49.0.0 WASI P3 host implementation](https://docs.rs/wasmtime-wasi/49.0.0/wasmtime_wasi/p3/index.html)
 - [Bytecode Alliance Wasmtime setup action](https://github.com/bytecodealliance/actions)
 
+The Component Model guide describes the component and interface concepts used by this command.
 WASI 0.3.1 is the current release and adds Component Model features beyond the async primitives introduced in WASI 0.3.0.
 This adapter uses the 0.3.0 `stream` and `future` boundary and does not depend on the 0.3.1-only WIT features.

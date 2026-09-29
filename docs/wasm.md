@@ -77,14 +77,10 @@ Browser storage, Node.js WASI, Deno, and Bun are not compatibility commitments.
 
 ## Primary references and scope
 
-- [WebAssembly Core Specification](https://webassembly.github.io/spec/core/)
-- [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
-- [WASI 0.3 and native async](https://wasi.dev/releases/wasi-p3)
-- [Rust `wasm32-wasip2` target](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
+- [wasm-bindgen: Exported Rust Types](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/exported-rust-types.html)
 - [wasm-bindgen: Promises and Futures](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html)
 
-The Core Specification defines module behavior, and the Component Model guide provides component vocabulary.
+The wasm-bindgen guide describes how exported Rust types map to JavaScript classes and how async exports map to Promises.
 
-The WASI release page is the source for WASI version status.
-Use the Component Model guide for architecture and terminology; derive txBASE host compatibility from the adapter implementation and CI evidence.
-Host runtime and adapter guarantees are documented with the corresponding implementation.
+The txBASE ABI and input limits come from its implementation and tests; host compatibility comes from its adapters and CI evidence.
+WASI-specific references belong in [WASI query streaming](wasi-query-stream.md), which documents that adapter's target and runtime boundaries.
