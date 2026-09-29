@@ -481,7 +481,8 @@ Rustのクエリストリームはそれぞれ独立した`CancellationToken`を
 生成済みの`WasmObjectTable`ラッパーとWorkerアダプターは、Promiseを介して同じクエリを公開します。
 WASI 0.3 CLIコンポーネントは共有する`AsyncQueryStream`を動かします。
 事前公開されたDBFファイルに加え、読み取り専用の事前公開filesystem storeにあるXBFスナップショットも読み込みます。
-ストリームのバックプレッシャーを使って非同期stdoutへNDJSONを書き込み、固定したWasmtimeによるCIスモーク検査が両方の入力経路を検査します。
+ストリームのバックプレッシャーを使って非同期stdoutへNDJSONを書き込みます。
+固定したWasmtimeによるCIスモーク検査はDBF、現行XBF、保持世代XBFの各経路で、共有するfilter、projection、skip、limitを検査します。
 XBFアダプターは同期ファイルシステム操作を使い、同時書き込みには対応しません。
 保留中WALの復旧で書き込みが必要になると、行を出力する前に失敗します。
 WASI 0.3.1仕様は安定版ですが、Wasmtimeの`wasmtime-wasi::p3`ホスト実装は上流資料で実験的かつ不安定で、未完成と説明されています。

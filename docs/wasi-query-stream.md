@@ -31,7 +31,7 @@ Its store root must be a directory exposed by `--dir`; the existing object-table
 The filesystem adapter is read-only and uses synchronous `std::fs` operations through `SyncObjectStoreAdapter`.
 That adapter makes the calls fit the async trait but does not make filesystem I/O non-blocking.
 The adapter validates namespace and object-key components, rejects `.` and `..`, and refuses to traverse symbolic links.
-The smoke test verifies that a `..` namespace and a symlinked snapshot fail without writing rows to stdout.
+The smoke test verifies that a `..` namespace, snapshot roots containing `.` or `..`, and a symlinked snapshot fail without writing rows to stdout.
 The object store must remain stable during the query; this adapter does not coordinate with concurrent writers.
 Because `AsyncObjectTable` recovers pending WAL records before reading, a recovery that needs to publish a manifest or delete a WAL record fails on the read-only store.
 Snapshot loading and recovery finish before the first row is emitted.
@@ -57,7 +57,8 @@ This command does not make synchronous DBF or object-store filesystem reads inte
 ## 4. CI boundary
 
 The `wasi-query-stream` CI job installs the WASI target and Wasmtime `49.0.0`, builds the component, and runs `tests/wasi_query_stream_smoke.sh`.
-The smoke check decodes pinned DBF and XBF fixtures, checks the DBF result and current and retained XBF generations, verifies that `sort` is rejected without stdout output, and verifies that pending-WAL recovery fails without stdout output.
+The smoke check decodes pinned DBF and XBF fixtures and compares DBF, current-XBF, and retained-XBF query results while exercising `filter`, `projection`, `skip`, and `limit`.
+It also verifies that `sort`, invalid namespaces and snapshot roots, symbolic-link traversal, and pending-WAL recovery fail without stdout output.
 
 This proves the component build and CLI behavior on the pinned Wasmtime `49.0.0` runtime, not production readiness of a WASI host.
 WASI 0.3.1 is a stable specification, but Wasmtime's `wasmtime-wasi::p3` host module is documented as experimental, unstable, and incomplete.

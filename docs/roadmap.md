@@ -411,7 +411,8 @@ queries through Promise-based initialization.
 A WASI 0.3 CLI component now drives the shared `AsyncQueryStream`, reads either
 a preopened DBF file or a current/retained XBF snapshot through a read-only
 preopened filesystem store, and writes NDJSON through asynchronous stdout with
-stream backpressure; a pinned Wasmtime CI smoke check covers both input paths.
+stream backpressure; a pinned Wasmtime CI smoke check covers both input paths
+and the shared filter, projection, skip, and limit controls.
 The XBF adapter uses synchronous filesystem operations, is not safe for
 concurrent writers, and fails before row output if pending-WAL recovery needs a
 write.

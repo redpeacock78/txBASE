@@ -35,7 +35,7 @@ object-storeのrootには、`--dir`で公開したディレクトリを指定し
 このアダプターは操作を非同期traitへ接続しますが、ファイルシステムI/Oをノンブロッキングにはしません。
 アダプターはnamespaceとobject keyの各componentを検証し、`.`と`..`を拒否します。
 symbolic linkも辿りません。
-スモーク検査では、`..`を含むnamespaceとsymbolic linkを通じたsnapshot読み込みが、stdoutへ行を出さずに失敗することを確認します。
+スモーク検査では、`..`を含むnamespace、`.`/`..`を含むsnapshot root、symbolic link経由のsnapshot読み込みが、stdoutへ行を出さずに失敗することを確認します。
 クエリの実行中にobject storeが変更されないようにしてください。
 このアダプターは同時書き込みを調整しません。
 `AsyncObjectTable`は読み取り前に保留中のWAL記録を復旧するため、マニフェストの公開やWAL記録の削除が必要な場合、読み取り専用ストアでは失敗します。
@@ -63,8 +63,8 @@ Rustのクエリストリームを破棄すると、行の生成を終了しま�
 ## 4. CIの範囲
 
 `wasi-query-stream` CIジョブはWASIターゲットとWasmtime `49.0.0`を導入し、コンポーネントをビルドして`tests/wasi_query_stream_smoke.sh`を実行します。
-スモーク検査は固定DBF・XBFフィクスチャをデコードし、DBFの結果、現在および保持中のXBF世代を確認します。
-`sort`がstdoutを出力せず拒否されることと、保留中のWAL復旧がstdoutを出力せず失敗することも確認します。
+スモーク検査は固定DBF・XBFフィクスチャをデコードし、`filter`、`projection`、`skip`、`limit`を適用したDBF、現行XBF、保持世代XBFの結果を比較します。
+`sort`、不正なnamespaceとsnapshot root、symbolic linkの経由、保留中WALの復旧が、stdoutへ行を出さずに失敗することも確認します。
 
 この検査が示すのは、固定したWasmtime `49.0.0`ランタイムでのコンポーネントのビルドとCLI動作であり、WASIホストの本番対応ではありません。
 WASI 0.3.1仕様は安定版ですが、Wasmtimeの`wasmtime-wasi::p3`ホスト実装は上流資料で実験的かつ不安定で、未完成と説明されています。

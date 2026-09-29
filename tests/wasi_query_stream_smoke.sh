@@ -9,6 +9,8 @@ trap 'rm -rf "$temp_dir"' EXIT
 xxd -r -p < "$repo_root/tests/fixtures/users.dbf.hex" > "$temp_dir/users.dbf"
 printf '%s\n' '{"NAME":"Alice"}' > "$temp_dir/expected-dbf.ndjson"
 printf '%s\n' '{"NAME":"Alice"}' '{"NAME":"Bob"}' > "$temp_dir/expected-xbf.ndjson"
+printf '%s\n' '{"NAME":"Bob"}' > "$temp_dir/expected-bob.ndjson"
+: > "$temp_dir/expected-empty.ndjson"
 
 mkdir -p "$temp_dir/object-store/users/snapshots" "$temp_dir/object-store/users/wal"
 xxd -r -p < "$repo_root/tests/fixtures/query-stream-users.xbf.hex" \
@@ -21,15 +23,40 @@ wasmtime run --dir "$temp_dir::/data" "$component" \
   /data/users.dbf '{"projection":{"NAME":1}}' > "$temp_dir/actual.ndjson"
 cmp "$temp_dir/expected-dbf.ndjson" "$temp_dir/actual.ndjson"
 
+# DBF queries apply filtering before skip and limit.
+wasmtime run --dir "$temp_dir::/data" "$component" \
+  /data/users.dbf '{"filter":{"NAME":{"$eq":"Nobody"}},"projection":{"NAME":1},"skip":0,"limit":1}' \
+  > "$temp_dir/filtered-dbf.ndjson"
+cmp "$temp_dir/expected-empty.ndjson" "$temp_dir/filtered-dbf.ndjson"
+
+wasmtime run --dir "$temp_dir::/data" "$component" \
+  /data/users.dbf '{"filter":{"NAME":{"$eq":"Alice"}},"projection":{"NAME":1},"skip":1,"limit":1}' \
+  > "$temp_dir/skipped-dbf.ndjson"
+cmp "$temp_dir/expected-empty.ndjson" "$temp_dir/skipped-dbf.ndjson"
+
 wasmtime run --dir "$temp_dir::/data" "$component" \
   --object-store /data/object-store users '{"projection":{"NAME":1}}' \
   > "$temp_dir/current-xbf.ndjson"
 cmp "$temp_dir/expected-xbf.ndjson" "$temp_dir/current-xbf.ndjson"
 
+# The current XBF query filters rows and stops after its one-row limit.
 wasmtime run --dir "$temp_dir::/data" "$component" \
-  --object-store /data/object-store users '{"projection":{"NAME":1}}' --generation 0 \
+  --object-store /data/object-store users \
+  '{"filter":{"NAME":{"$gte":"A"}},"projection":{"NAME":1},"skip":0,"limit":1}' \
+  > "$temp_dir/limited-xbf.ndjson"
+cmp "$temp_dir/expected-dbf.ndjson" "$temp_dir/limited-xbf.ndjson"
+
+wasmtime run --dir "$temp_dir::/data" "$component" \
+  --object-store /data/object-store users \
+  '{"filter":{"NAME":{"$gte":"B"}},"projection":{"NAME":1},"skip":0,"limit":1}' \
+  > "$temp_dir/filtered-xbf.ndjson"
+cmp "$temp_dir/expected-bob.ndjson" "$temp_dir/filtered-xbf.ndjson"
+
+wasmtime run --dir "$temp_dir::/data" "$component" \
+  --object-store /data/object-store users \
+  '{"filter":{"NAME":{"$gte":"A"}},"projection":{"NAME":1},"skip":1,"limit":1}' --generation 0 \
   > "$temp_dir/retained-xbf.ndjson"
-cmp "$temp_dir/expected-xbf.ndjson" "$temp_dir/retained-xbf.ndjson"
+cmp "$temp_dir/expected-bob.ndjson" "$temp_dir/retained-xbf.ndjson"
 
 if wasmtime run --dir "$temp_dir::/data" "$component" \
   --object-store /data/object-store ../users '{"projection":{"NAME":1}}' \
@@ -41,6 +68,26 @@ fi
 test ! -s "$temp_dir/traversal.stdout"
 grep -q 'object-store namespace must contain ordinary non-empty key components' \
   "$temp_dir/traversal.stderr"
+
+for dot_case in dot dotdot; do
+  case "$dot_case" in
+    dot) invalid_root='users/snapshots/./0.xbf' ;;
+    dotdot) invalid_root='users/snapshots/../0.xbf' ;;
+  esac
+  mkdir -p "$temp_dir/invalid-root-$dot_case/users"
+  printf '{"version":1,"generation":0,"root":"%s","wal_head":0,"history":[0]}\n' \
+    "$invalid_root" > "$temp_dir/invalid-root-$dot_case/users/manifest.json"
+  if wasmtime run --dir "$temp_dir::/data" "$component" \
+    --object-store "/data/invalid-root-$dot_case" users '{"projection":{"NAME":1}}' \
+    > "$temp_dir/invalid-root-$dot_case.stdout" 2> "$temp_dir/invalid-root-$dot_case.stderr"; then
+    printf 'object store unexpectedly accepted snapshot root %s\n' "$invalid_root" >&2
+    exit 1
+  fi
+
+  test ! -s "$temp_dir/invalid-root-$dot_case.stdout"
+  grep -q 'snapshot root does not match generation 0' \
+    "$temp_dir/invalid-root-$dot_case.stderr"
+done
 
 if wasmtime run --dir "$temp_dir::/data" "$component" \
   /data/users.dbf '{"sort":{"NAME":1}}' \
