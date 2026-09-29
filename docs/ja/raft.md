@@ -7,8 +7,9 @@ peer APIと`txbase raft membership` CLIは、learner追加、有効なmembership
 3 nodeの決定的な障害テストで、quorum喪失、leader交代、ログの再同期、分断されたnodeの再起動を検査します。
 非空の`AppendEntries`要求をRPC timeoutより長く保留して解放するケースも検査します。
 分断された旧leaderでは読み取りbarrierが失敗し、新leaderはbarrierが成功した場合だけ選択されることも確認します。
+旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも検査します。
 3 nodeの`/transaction`テストでは、commit後にhandlerが返した成功応答を破棄し、同じ要求の再試行が元のtransaction IDを返して更新を重複適用しないことと、同じclient sequenceで異なる本文を拒否することを検査します。
-より広いRPCの遅延や順序変更、中断したjoint membershipの復旧、leader交代と競合するcatalog HTTP読み取り、クラッシュ境界の注入は未検証です。
+より広いRPCの遅延や順序変更、中断したjoint membershipの復旧、leader交代のタイミングに合わせたcatalog HTTP読み取り（隔離後の旧leaderに対する`503`確認を超えるケース）、クラッシュ境界の注入は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -40,7 +41,7 @@ peer APIと`txbase raft membership` CLIは、learner追加、有効なmembership
 
 ### 未実装
 
-- より広いRPCの遅延や順序変更、中断したjoint membershipの復旧、leader交代と競合するcatalog HTTP読み取り、クラッシュ境界の注入を検査する決定的なテスト。
+- より広いRPCの遅延や順序変更、中断したjoint membershipの復旧、leader交代のタイミングに合わせたcatalog HTTP読み取り（隔離後の旧leaderに対する`503`確認を超えるケース）、クラッシュ境界の注入を検査する決定的なテスト。
 - mutual TLSと公開catalog listenerのTLS。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
@@ -258,8 +259,11 @@ leader側の更新がカタログへ適用されないこと、残るquorumが�
 統合テストは、状態照会、learner追加、昇格、冪等な再試行、降格で型付きmembership clientも検査する。CLIテストはコマンド振り分けとvoter IDの入力検証を確認する。
 再試行テストはhandlerが返した応答を破棄する。ソケット切断は直接検査しない。
 failoverテストでは、分断された旧leaderの読み取りbarrierが失敗し、新leaderの選出時にはbarrierが成功することも検査します。
-catalog HTTP読み取り要求がleader交代と競合するケースは未検証です。
-完了には、今回の非空`AppendEntries`遅延1件を超える遅延または順序変更の組み合わせ、ログ永続化からquorum commit、カタログ公開、適用位置の永続化、client応答までのクラッシュ注入、purge後のsnapshot転送、中断したjoint membership変更の再開、leader交代と競合するcatalog HTTP読み取りを検証します。
+旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認します。
+leader交代のタイミングに合わせたHTTP読み取り要求は未検証です。
+完了には、今回の非空`AppendEntries`遅延1件を超える遅延・順序変更、中断したjoint membershipの再開、leader交代時のcatalog HTTP読み取りを検証します。
+HTTP読み取りでは、隔離後の旧leaderに対する`503`確認を超えるケースを扱います。
+purge後のsnapshot転送と、ログ永続化からclient応答までのクラッシュ注入も検証します。
 
 ログ永続化、quorum commit、カタログジャーナル公開、適用済み位置の永続化、client応答の各境界でプロセスを強制終了し、再起動後の状態を検証する。
 単一nodeの成功やメモリ上のプロトコルテストだけでは、これらの保証を確認できない。
