@@ -198,7 +198,7 @@ It also exercises the typed membership client for status, learner addition, prom
 The crash-recovery test terminates its child process after a normal log entry is synced but before the in-memory log changes, after a commit marker is synced but before the in-memory committed position changes, after one catalog-journal commit publishes the mutation with its applied position and client result, or after OpenRaft returns the application result but before the `/transaction` handler constructs its HTTP response.
 For each point, the parent restarts all three node directories, retries the same client ID and sequence, and checks that every catalog reaches transaction 2 with exactly one mutation.
 The three logical nodes share the child process, so this test does not model an independent process crash for a single voter.
-The failover test also delays two successive non-empty `AppendEntries` requests from the replacement leader to one peer and releases them in sequence.
+The failover test also delays two successive non-empty `AppendEntries` requests from the current leader to one peer and releases them in sequence.
 The current leader is the sole voter during this sequence, while all peers (including the delayed target) are learners; the test restores the original voter set after catch-up.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so the test does not claim to hold overlapping calls from the same leader to that peer.
 Other delayed or reordered RPC schedules remain outstanding.

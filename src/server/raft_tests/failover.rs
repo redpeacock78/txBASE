@@ -252,10 +252,6 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4], verify_successive_
         );
     }
 
-    if verify_successive_delays {
-        append_delivery::delay_successive_appends_to_single_peer(&nodes, &root);
-    }
-
     drop(listeners.remove(initial_leader_index));
     let stopped = nodes.remove(initial_leader_index);
     stopped.shutdown().unwrap();
@@ -274,6 +270,18 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4], verify_successive_
         restarted.spawn_peer_listener(server).unwrap(),
     );
     nodes.insert(initial_leader_index, restarted);
+
+    wait_for_transaction(&nodes, &root, 3, Duration::from_secs(20));
+    wait_for_membership(
+        &nodes,
+        &expected_voters,
+        &BTreeSet::new(),
+        Duration::from_secs(20),
+    );
+    if verify_successive_delays {
+        append_delivery::delay_successive_appends_to_single_peer(&nodes, &root);
+    }
+
     let expected_transaction_id = if verify_successive_delays { 5 } else { 3 };
     let expected_record_count = if verify_successive_delays { 7 } else { 5 };
     wait_for_transaction(
