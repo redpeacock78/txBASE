@@ -2,6 +2,16 @@ use super::*;
 
 #[test]
 fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_restart() {
+    const RELEASE_ORDERS: [[usize; 4]; 2] = [
+        [3, 2, 1, 0], // descending peer ID
+        [1, 3, 0, 2], // second, fourth, first, third in ascending peer-ID order
+    ];
+    for release_order in RELEASE_ORDERS {
+        run_partitioned_leader_scenario(release_order);
+    }
+}
+
+fn run_partitioned_leader_scenario(release_order: [usize; 4]) {
     const NODE_COUNT: u64 = 5;
 
     let root = temporary_cluster();
@@ -202,13 +212,20 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         RaftResponseResult::Applied { transaction_id: 3 }
     );
     wait_for_transaction(&majority, &root, 3, Duration::from_secs(15));
-    // Deliver the held stale requests in descending peer-ID order after the new quorum commits.
-    for (_, delayed_append) in delayed_appends.iter_mut().rev() {
+    // Deliver the held stale requests in a deterministic order after the new quorum commits.
+    let mut released_peers = BTreeSet::new();
+    for delay_index in release_order {
+        let (peer_id, delayed_append) = &mut delayed_appends[delay_index];
+        assert!(
+            released_peers.insert(*peer_id),
+            "peer released more than once"
+        );
         delayed_append.release();
         delayed_append
             .wait_for_completion(Duration::from_secs(10))
             .unwrap();
     }
+    assert_eq!(released_peers.len(), (NODE_COUNT - 1) as usize);
 
     for source in &nodes {
         for target_id in 1..=NODE_COUNT {
