@@ -155,8 +155,12 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         assert_eq!(catalog.transaction_id().unwrap(), Some(3));
         let table = catalog.open_table("users").unwrap();
         assert_eq!(table.records().len(), 5);
-        assert_eq!(table.active_record(6).unwrap().values["NAME"], "Failover");
-        assert!(table.active_record(5).is_none());
+        assert_eq!(table.active_record(5).unwrap().values["NAME"], "Failover");
+        assert!(
+            !table
+                .active_records()
+                .any(|record| record.values["NAME"] == "NoQuorum")
+        );
     }
 
     drop(listeners.remove(initial_leader_index));
@@ -190,8 +194,12 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         assert_eq!(catalog.transaction_id().unwrap(), Some(3));
         let table = catalog.open_table("users").unwrap();
         assert_eq!(table.records().len(), 5);
-        assert_eq!(table.active_record(6).unwrap().values["NAME"], "Failover");
-        assert!(table.active_record(5).is_none());
+        assert_eq!(table.active_record(5).unwrap().values["NAME"], "Failover");
+        assert!(
+            !table
+                .active_records()
+                .any(|record| record.values["NAME"] == "NoQuorum")
+        );
     }
 
     drop(listeners);
