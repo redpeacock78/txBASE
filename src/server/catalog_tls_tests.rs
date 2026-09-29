@@ -213,8 +213,9 @@ fn public_listener_requires_trusted_client_cert_and_protects_the_http_backend() 
         forwarded
             .respond(
                 Response::from_string("ok")
-                    .with_header(Header::from_bytes("Connection", "x-response-secret").unwrap())
-                    .with_header(Header::from_bytes("X-Response-Secret", "hidden").unwrap())
+                    // tiny_http drops the forbidden Connection header before writing responses.
+                    .with_header(Header::from_bytes("Proxy-Connection", "keep-alive").unwrap())
+                    .with_header(Header::from_bytes("X-Response-Metadata", "visible").unwrap())
                     .with_header(Header::from_bytes("Via", "1.0 backend").unwrap()),
             )
             .unwrap();
@@ -248,7 +249,9 @@ fn public_listener_requires_trusted_client_cert_and_protects_the_http_backend() 
     assert!(response.starts_with("HTTP/1.1 200"));
     assert!(response.contains("1.0 backend"));
     assert!(response.contains("1.1 txbase"));
-    assert!(!response.to_ascii_lowercase().contains("x-response-secret"));
+    let response_headers = response.to_ascii_lowercase();
+    assert!(!response_headers.contains("proxy-connection"));
+    assert!(response_headers.contains("x-response-metadata: visible"));
     assert!(response.ends_with("ok"));
 
     backend_thread.join().unwrap();
