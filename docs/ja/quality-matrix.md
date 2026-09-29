@@ -175,6 +175,7 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 | REPL-010 | `ReplicationHttpClient`はHTTPSのmTLSで使うクライアント証明書と鍵の組を読み込み、HTTPでのidentity指定と不正な証明書または鍵の組を拒否する。`replicate catch-up`は`--tls-client-cert`と`--tls-client-key`でこの組を受け取る。server証明書とホスト名はOSの信頼ストアを使って検証する。 | `src/replication/http/client.rs`; `src/replication/http/tls.rs`; `src/replication/http_tests.rs`; `src/cli/commands/replication.rs`; `docs/ja/cli.md`; `docs/ja/catalog-listener-security.md` | `client_identity_files_must_exist_and_match`; `client_catches_up_over_https_with_a_client_certificate`; `catch_up_requires_a_complete_tls_client_identity_before_opening_the_catalog` | Current |
 | RAFT-011 | `--raft-peer-client-ca`でpeer mTLSを有効にします。初期member URLはすべてHTTPSにします。各nodeはpeer証明書と鍵を提示します。listenerは証明書のない接続を拒否し、信頼されていない証明書も受け入れません。 | `src/server/raft/config.rs`; `src/server/raft/peer.rs`; `src/replication/raft/network.rs`; `src/replication/raft/network_tests.rs`; `src/server/raft_tests/peer_tls.rs`; `docs/ja/raft.md` | `peer_rpc_presents_a_client_certificate_to_an_mtls_peer`; `peer_rpc_without_a_client_certificate_is_rejected_by_an_mtls_peer`; `raft_peer_listener_requires_a_trusted_client_certificate` | Current |
 | RAFT-012 | `RaftMembershipHttpClient`と`txbase raft membership`は、mTLSを要求するHTTPS peerへの接続時に、`--tls-client-cert`と`--tls-client-key`で任意のクライアント証明書と鍵を提示できる。 | `src/replication/raft/membership/client.rs`; `src/replication/http/client.rs`; `src/replication/http/tls.rs`; `src/cli/commands/raft.rs`; `docs/ja/cli.md`; `docs/ja/raft.md` | `client_identity_files_must_exist_and_match`; `raft_membership_cli_requires_a_complete_tls_client_identity` | Current |
+| RAFT-013 | 3 node clusterを動かす子プロセスを、log entryの永続化後、commit markerの永続化後、catalogと適用位置の原子的な公開後、OpenRaft application responseの受信後に強制終了し、再起動後に同じHTTP更新を再試行して、全nodeでtransaction ID 2の更新が1回だけ反映されることを検査します。 | `src/replication/raft/log_store.rs`; `src/replication/raft/state_machine/apply.rs`; `src/server/raft.rs`; `src/server/raft_tests/crash_recovery.rs`; `src/test_support.rs`; `docs/ja/raft.md` | `crash_boundaries_recover_without_duplicate_transactions` | Current |
 
 ## 明示的に残るギャップ
 
@@ -188,7 +189,7 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 - 選定した期待順序フィクスチャとベンチマーク入力を使った比較器の法則検査を超える、上流CJK照合の適合テスト一式。
 - スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針。
 - デプロイ済みWorkerまたはWASI production hostのfixture、futureのキャンセルを超えるホストI/O中断の保証、永続的な再試行キュー、権威検出。
-- RAFT-006で網羅する固定4要求の24通りの解放順序と、同一peerへの連続2要求以外の遅延・順序変更パターンを扱う決定的なテスト。要求batch、term、partition条件の違いとクラッシュ境界の注入を含む。
+- RAFT-006で網羅する固定4要求の24通りの解放順序と、同一peerへの連続2要求以外の遅延・順序変更パターンを扱う決定的なテスト。要求batch、term、partition条件の違いと、RAFT-013の4地点以外でのクラッシュ注入を含む。
 
 これらのいずれかをCurrentへ移す前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。
 
