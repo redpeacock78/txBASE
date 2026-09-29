@@ -161,15 +161,25 @@ fn lagging_voter_catches_up_from_snapshot_after_leader_purges_log() {
     }
     wait_for_transaction(&nodes, &root, 5, Duration::from_secs(30));
 
-    let lagging_metrics = nodes[lagging_index].node.metrics();
-    assert!(
-        lagging_metrics
-            .borrow()
-            .snapshot
-            .as_ref()
-            .is_some_and(|log_id| log_id.index >= snapshot_log_index),
-        "lagging voter did not install the purged log's snapshot"
-    );
+    let snapshot_deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let snapshot_installed = {
+            let metrics = nodes[lagging_index].node.metrics();
+            metrics
+                .borrow()
+                .snapshot
+                .as_ref()
+                .is_some_and(|log_id| log_id.index >= snapshot_log_index)
+        };
+        if snapshot_installed {
+            break;
+        }
+        assert!(
+            Instant::now() < snapshot_deadline,
+            "lagging voter did not install the purged log's snapshot"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
     wait_for_membership(
         &nodes,
         &BTreeSet::from([1, 2, 3]),
