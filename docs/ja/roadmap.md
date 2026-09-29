@@ -104,6 +104,8 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
   旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認する。
   別のmembership復旧テストでは、両方の新voterへの最終uniform構成の`AppendEntries`を止め、旧leaderを停止した後に、生存voterのleaderが同じ変更要求を再送して収束させる。
   その後、旧leaderを再起動し、降格したlearnerとして再参加することも検査する。
+  別の3 nodeテストでは、voter 1台を分断した状態で残るquorumが4件をcommitし、leaderでsnapshotを作って対象ログをpurgeする。
+  接続を戻したvoterがsnapshotをインストールして追いつき、次のclient sequenceを適用することも検査する。
   leader交代のタイミングに合わせたHTTP読み取り要求は未検証である。
   これを超えるRPC遅延と順序変更の組み合わせ、およびクラッシュ境界の検証は残る。
   詳細は[Raftコンセンサス設計](raft.md)を参照する。
@@ -528,6 +530,7 @@ failoverテストでは3 nodeを分断し、quorum喪失とleader交代を確認
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも検査します。
 peer RPCのHTTPS統合テストでは、テスト用rootで信頼した証明書を受け入れ、未信頼証明書とホスト名不一致を拒否します。
 3 nodeの`/transaction`テストでは、commit後にhandler応答を破棄し、同じ要求の再試行が元のtransaction IDを返して更新を重複適用しないことと、同じclient sequenceで異なる本文を拒否することを検査します。
+別の3 nodeテストでは、voter 1台を分断して残るquorumで4件をcommitし、snapshot対象ログをpurgeした後、復旧したvoterがsnapshotをインストールして次のclient sequenceを適用することを検査します。
 1件の古い`AppendEntries`遅延を超える遅延または順序変更の組み合わせ、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界の注入は未検証です。
 
 ### 候補範囲

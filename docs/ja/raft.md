@@ -10,6 +10,8 @@ peer APIと`txbase raft membership` CLIは、learner追加、有効なmembership
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも検査します。
 3 nodeの`/transaction`テストでは、commit後にhandlerが返した成功応答を破棄し、同じ要求の再試行が元のtransaction IDを返して更新を重複適用しないことと、同じclient sequenceで異なる本文を拒否することを検査します。
 別のmembership復旧テストでは、両方の新voterへの最終uniform構成の`AppendEntries`を保留して旧leaderを停止し、生存voterが同じ変更要求を再送して収束することと、旧leaderがlearnerとして再参加することを検査します。
+別の3 nodeテストでは、voter 1台を分断した状態で残るquorumが4件のコマンドをcommitし、leaderでsnapshotを作って対象ログをpurgeします。
+接続を戻したvoterがsnapshotをインストールして追いつき、次のclient sequenceを適用することも検査します。
 より広いRPCの遅延や順序変更、leader交代のタイミングに合わせたcatalog HTTP読み取り（隔離後の旧leaderに対する`503`確認を超えるケース）、クラッシュ境界の注入は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
@@ -34,6 +36,7 @@ peer APIと`txbase raft membership` CLIは、learner追加、有効なmembership
 - 3 nodeのCIテストでquorum commitと再試行の重複排除、昇格前のlearner同期、joint membershipによるvoter昇格と降格、learner停止後に残るvoterでのquorum更新を検査する。
 - 2 nodeのCIテストで、genesis catalogが空のclusterへ空catalogのlearnerが参加できることを検査する。
 - 3 nodeのCIテストで、空catalogのlearnerに非空genesis catalogとcommit済み更新をsnapshot転送することを検査する。
+- 3 nodeのCIテストで、voter 1台を分断したまま残るquorumが4件をcommitし、leaderがsnapshot対象ログをpurgeした後、復旧したvoterがsnapshotから追いついて次のclient sequenceを適用することを検査する。
 - 3 nodeの`/transaction`テストで、commit後にhandler応答を破棄し、同一要求の再試行、更新の重複排除、同じsequenceに対する異なる要求の拒否を検査する。
 - joint membership変更中に旧leaderを停止し、同じ変更要求を生存voterから再送して収束させ、旧leaderをlearnerとして再参加させる3 nodeテストを実行する。
 - peer RPCのHTTPS統合テストで、テスト用rootで信頼した証明書を受け入れ、未信頼証明書とpeer URLのhostに一致しないSANを拒否する。
@@ -259,6 +262,8 @@ membershipの統合テストでは、quorum commit、空learnerへのsnapshot転
 failoverの統合テストでは、非空の`AppendEntries`要求1件をRPC timeoutより長く保留し、現在のleaderを他の2 nodeから分断する。
 leader側の更新がカタログへ適用されないこと、残るquorumが次のclient sequenceをcommitすること、遅延要求の解放後にログが再同期すること、分断されたnodeの再起動後にカタログとmembershipが収束することを検査する。
 2 nodeのテストでは、genesis catalogが空のclusterへのlearner参加を引き続き検査する。
+別の3 nodeテストではvoter 1台を分断し、残るquorumで4件をcommitしてsnapshotを作成します。
+leaderがsnapshot対象ログをpurgeした後に接続を戻し、遅延voterのsnapshot適用、追いつき、次のclient sequenceの適用を確認します。
 統合テストは、状態照会、learner追加、昇格、冪等な再試行、降格で型付きmembership clientも検査する。CLIテストはコマンド振り分けとvoter IDの入力検証を確認する。
 再試行テストはhandlerが返した応答を破棄する。ソケット切断は直接検査しない。
 failoverテストでは、分断された旧leaderの読み取りbarrierが失敗し、新leaderの選出時にはbarrierが成功することも検査します。
@@ -266,7 +271,7 @@ failoverテストでは、分断された旧leaderの読み取りbarrierが失�
 leader交代のタイミングに合わせたHTTP読み取り要求は未検証です。
 完了には、今回の非空`AppendEntries`遅延1件を超える遅延・順序変更、leader交代時のcatalog HTTP読み取りを検証します。
 HTTP読み取りでは、隔離後の旧leaderに対する`503`確認を超えるケースを扱います。
-purge後のsnapshot転送と、ログ永続化からclient応答までのクラッシュ注入も検証します。
+ログ永続化からclient応答までのクラッシュ注入も検証します。
 
 ログ永続化、quorum commit、カタログジャーナル公開、適用済み位置の永続化、client応答の各境界でプロセスを強制終了し、再起動後の状態を検証する。
 単一nodeの成功やメモリ上のプロトコルテストだけでは、これらの保証を確認できない。

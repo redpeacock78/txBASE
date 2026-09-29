@@ -34,7 +34,7 @@
 | CJK、インデックス、XBF、ストレージ、並行性 | [ロードマップ](roadmap.md) | 現在の境界と将来の作業 |
 | エッジとオブジェクトストレージのコミット | [エッジストレージ](edge-storage.md)と[Cloudflare R2オブジェクトストレージアダプター](r2-object-store.md) | ローカル境界とR2バインディングアダプターを実装済みです。クラウドサービスへの接続検証と運用上のライフサイクル方針は今後の作業です。 |
 | WASMとワーカーのホスト境界 | [WASM](wasm.md)、[WASIクエリストリーム](wasi-query-stream.md)、[Workerクエリストリームアダプター](worker-query-stream.md)、[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)、[Cloudflare R2オブジェクトストレージアダプター](r2-object-store.md) | ホスト非依存コア、PromiseベースXBFアダプター、現在・保持中のXBFを読み取り専用filesystem adapterで扱うWASI 0.3 CLIクエリストリームコンポーネント、Worker互換Web Streamsクエリアダプター、汎用Fetchアダプター、R2バインディングアダプターを実装済みです。デプロイ済みWorker、R2サービスへの接続検証、書き込み可能またはプロバイダー接続型のWASIストレージ、ノンブロッキングなWASI I/O、R2以外の統合は今後の作業です。 |
-| 分散レプリケーションと権威 | [分散化の進化](distributed-evolution.md)と[Raftコンセンサス設計](raft.md) | 固定termのバージョン付きエントリ再生とHTTP配送に加え、明示した初期voter集合で起動する任意のOpenRaftモードがあります。認証付きpeer APIはlearner追加とjoint consensusによるvoter集合の変更に対応します。CIはlearnerへのsnapshot転送、membership変更、3 nodeのquorum failoverと再起動後の収束、中断したjoint membership変更の再開、およびRPC timeoutを過ぎてから解放する非空`AppendEntries`要求1件を検査します。これを超える遅延・順序変更の組み合わせ、commit済み応答の喪失後にソケットを介して再試行するケース、クラッシュ境界、公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、分散フォロワー読み取りの保証は未実装です。 |
+| 分散レプリケーションと権威 | [分散化の進化](distributed-evolution.md)と[Raftコンセンサス設計](raft.md) | 固定termのバージョン付きエントリ再生とHTTP配送に加え、明示した初期voter集合で起動する任意のOpenRaftモードがあります。認証付きpeer APIはlearner追加とjoint consensusによるvoter集合の変更に対応します。CIはlearnerへのsnapshot転送、membership変更、3 nodeのquorum failoverと再起動後の収束、中断したjoint membership変更の再開、RPC timeout後に解放する非空`AppendEntries`要求1件、およびleaderのログpurge後にlagging voterがsnapshotから復旧する経路を検査します。これを超える遅延・順序変更の組み合わせ、commit済み応答の喪失後にソケットを介して再試行するケース、クラッシュ境界、公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、分散フォロワー読み取りの保証は未実装です。 |
 
 ## 調査方法
 

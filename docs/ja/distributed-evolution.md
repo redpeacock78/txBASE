@@ -8,6 +8,8 @@ peer APIはlearnerを追加し、joint consensusでvoter集合を変更し、vot
 CIではlearnerへのスナップショット転送とmembership変更に加え、3ノードのpartition、failover、復旧、再起動を検証します。
 別の決定的なテストでは、両方の変更先voterへの最終uniform membership entryの配送を止め、joint configが残る状態で旧leaderを停止します。
 生存voterのleaderが同じvoter集合を再送して収束させた後、旧leaderをlearnerとして再起動します。
+別の3 nodeテストではvoter 1台を分断して残るquorumで4件をcommitし、leaderでsnapshotを作成して対象ログをpurgeします。
+接続を復旧したvoterがsnapshotをインストールして追いつき、次のclient sequenceを適用することも確認します。
 
 CIはpeer HTTPSで証明書の信頼性とホスト名の一致を検証します。
 failoverテストでは、非空の`AppendEntries`要求1件をRPC timeoutより長く保留し、残るquorumがcommitした後に解放します。
@@ -48,7 +50,7 @@ failoverテストでは、非空の`AppendEntries`要求1件をRPC timeoutより
       ↓
 明示したvoter集合で起動する任意のRaftモード（実装済み。[Raftコンセンサス設計](raft.md)を参照）
       ↓
-learnerの追加、joint consensusによるvoter集合変更、3ノードのpartitionとfailover、中断したjoint membershipの復旧（実装済み）
+learnerの追加、joint consensusによるvoter集合変更、3ノードのpartitionとfailover、中断したjoint membershipの復旧、purge済みログからのsnapshot復旧（実装済み）
       ↓
 遅延または順序変更の広い組み合わせ、クラッシュ境界のテスト（Raftの残作業）
 ```
@@ -331,5 +333,6 @@ txBASE側の採用判断と実装境界は[Raftコンセンサス設計](raft.md
 3ノードのpartition、failover、復旧、再起動を検証するテストもあります。
 CIはpeer HTTPSの証明書信頼とホスト名一致を検証します。
 3 nodeのfailoverテストでは、非空の`AppendEntries`要求1件をRPC timeoutより長く保留してから解放します。
+別の3 nodeテストでは、1台のvoterを分断して残るquorumで更新をcommitし、leaderがsnapshot対象ログをpurgeした後のsnapshot転送と復旧を確認します。
 より広い遅延または順序変更の組み合わせと他の障害ケースは未検証で、公開カタログlistenerはHTTPのままです。
 これらの記述は、互換性の主張ではなく設計上の制約です。

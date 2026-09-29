@@ -386,5 +386,6 @@ RPC, peer HTTPS, quorum writes, a linearizable read barrier, learner admission,
 joint-consensus voter changes, and a three-node partition/failover/restart test.
 The integration tests verify peer certificate trust and hostname matching.
 The three-node failover test also delays one non-empty `AppendEntries` request past its RPC timeout before releasing it.
+Another three-node test disconnects one voter while the remaining quorum commits four commands, snapshots and purges the leader log, then checks that the voter installs the snapshot and applies the next client sequence after reconnecting.
 Broader delayed or reordered schedules and other failure scenarios remain open; the public catalog listener remains HTTP.
 These boundaries are design constraints rather than compatibility guarantees.
