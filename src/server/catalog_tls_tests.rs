@@ -121,10 +121,14 @@ fn request<A: ToSocketAddrs>(address: A, bytes: &[u8]) -> Vec<u8> {
 }
 
 fn read_http_response(stream: &mut impl Read) -> Vec<u8> {
+    try_read_http_response(stream).unwrap()
+}
+
+fn try_read_http_response(stream: &mut impl Read) -> std::io::Result<Vec<u8>> {
     let mut response = Vec::new();
     let mut byte = [0_u8; 1];
     while !response.ends_with(b"\r\n\r\n") {
-        stream.read_exact(&mut byte).unwrap();
+        stream.read_exact(&mut byte)?;
         response.push(byte[0]);
     }
     let headers = String::from_utf8_lossy(&response);
@@ -138,8 +142,8 @@ fn read_http_response(stream: &mut impl Read) -> Vec<u8> {
         .unwrap_or(0);
     let start = response.len();
     response.resize(start + content_length, 0);
-    stream.read_exact(&mut response[start..]).unwrap();
-    response
+    stream.read_exact(&mut response[start..])?;
+    Ok(response)
 }
 
 fn send_tls_request(address: SocketAddr, config: Arc<ClientConfig>, request: &[u8]) -> Vec<u8> {
@@ -152,6 +156,20 @@ fn send_tls_request(address: SocketAddr, config: Arc<ClientConfig>, request: &[u
     let mut stream = rustls::StreamOwned::new(connection, socket);
     stream.write_all(request).unwrap();
     read_http_response(&mut stream)
+}
+
+fn tls_request_is_rejected(address: SocketAddr, config: Arc<ClientConfig>, request: &[u8]) -> bool {
+    let socket = TcpStream::connect(address).unwrap();
+    socket
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .unwrap();
+    socket
+        .set_write_timeout(Some(Duration::from_secs(3)))
+        .unwrap();
+    let server_name = "localhost".try_into().unwrap();
+    let connection = ClientConnection::new(config, server_name).unwrap();
+    let mut stream = rustls::StreamOwned::new(connection, socket);
+    stream.write_all(request).is_err() || try_read_http_response(&mut stream).is_err()
 }
 
 #[test]
@@ -202,13 +220,17 @@ fn public_listener_requires_trusted_client_cert_and_protects_the_http_backend() 
             .unwrap();
     });
 
-    assert!(!completes_tls_handshake(
+    let tls_probe_request =
+        b"GET /catalog HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+    assert!(tls_request_is_rejected(
         listener.public_addr(),
-        Arc::clone(&certificates.missing_client_config)
+        Arc::clone(&certificates.missing_client_config),
+        tls_probe_request,
     ));
-    assert!(!completes_tls_handshake(
+    assert!(tls_request_is_rejected(
         listener.public_addr(),
-        Arc::clone(&certificates.untrusted_client_config)
+        Arc::clone(&certificates.untrusted_client_config),
+        tls_probe_request,
     ));
 
     let bypass = request(
