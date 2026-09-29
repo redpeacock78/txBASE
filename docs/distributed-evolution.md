@@ -14,8 +14,8 @@ After the replacement election, it blocks RPC between the remaining voters and c
 Another deterministic test withholds the final uniform-membership append from both target voters, stops the old leader while those voters retain the joint configuration, resubmits the same voter set through a surviving leader, then restarts the former leader as a learner.
 
 CI verifies peer HTTPS certificate trust and hostname matching.
-The failover test also holds one non-empty `AppendEntries` request past its RPC timeout and releases it after the remaining quorum commits.
-This covers one stale-request case, not broad delayed or reordered RPC schedules.
+The failover test also holds non-empty `AppendEntries` requests to both remaining voters past their RPC timeouts and releases them sequentially in reverse peer order after the remaining quorum commits.
+This covers one controlled pair of stale requests, not broad delayed or reordered RPC schedules.
 The `/transaction` retry test drops a successful handler response after commit, but does not simulate a socket disconnect.
 Broader delayed or reordered schedules, socket-level retries after losing a committed response, and crash-boundary injection remain open.
 
@@ -325,7 +325,7 @@ The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
 - TLS for the public catalog listener, mutual TLS, streaming, durable retry queues, backpressure, and authority discovery;
-- broader delayed or reordered RPC schedules beyond one stale `AppendEntries` case; socket-level retries after losing a committed response; and crash-boundary injection;
+- broader delayed or reordered RPC schedules beyond the controlled pair of stale `AppendEntries` requests; socket-level retries after losing a committed response; and crash-boundary injection;
 - observability for lag and transport state;
 
 Change data capture, persistent WAL history, and replication must share the same ordering contract.
@@ -386,7 +386,7 @@ initialized from an explicit voter set. Raft mode provides authenticated peer
 RPC, peer HTTPS, quorum writes, a linearizable read barrier, learner admission,
 joint-consensus voter changes, and a three-node partition/failover/restart test.
 The integration tests verify peer certificate trust and hostname matching.
-The three-node failover test also delays one non-empty `AppendEntries` request past its RPC timeout before releasing it.
+The three-node failover test also delays non-empty `AppendEntries` requests to both remaining voters past their RPC timeouts, then releases them sequentially in reverse peer order after the replacement quorum commits.
 Another three-node test disconnects one voter while the remaining quorum commits four commands, snapshots and purges the leader log, then checks that the voter installs the snapshot and applies the next client sequence after reconnecting.
 Broader delayed or reordered schedules and other failure scenarios remain open; the public catalog listener remains HTTP.
 These boundaries are design constraints rather than compatibility guarantees.

@@ -59,19 +59,23 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
 
     let initial_leader_index = current_leader_index(&nodes, Duration::from_secs(20));
     let initial_leader_id = nodes[initial_leader_index].node_id;
-    let delayed_peer_id = nodes
-        .iter()
-        .find(|node| node.node_id != initial_leader_id)
-        .unwrap()
-        .node_id;
-    let mut delayed_append = nodes[initial_leader_index]
-        .delay_next_append_entries(delayed_peer_id)
-        .unwrap();
     let majority = nodes
         .iter()
         .filter(|node| node.node_id != initial_leader_id)
         .cloned()
         .collect::<Vec<_>>();
+    let mut delayed_appends = majority
+        .iter()
+        .map(|peer| {
+            (
+                peer.node_id,
+                nodes[initial_leader_index]
+                    .delay_next_append_entries(peer.node_id)
+                    .unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    delayed_appends.sort_by_key(|(peer_id, _)| *peer_id);
 
     for node in &nodes {
         if node.node_id == initial_leader_id {
@@ -97,9 +101,11 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
     let mut no_quorum_write = isolated_leader
         .runtime
         .spawn(async move { isolated_node.client_write(uncommitted).await });
-    delayed_append
-        .wait_until_paused(Duration::from_secs(10))
-        .unwrap();
+    for (_, delayed_append) in &delayed_appends {
+        delayed_append
+            .wait_until_paused(Duration::from_secs(10))
+            .unwrap();
+    }
     let no_quorum_result = nodes[initial_leader_index].runtime.block_on(async {
         tokio::time::timeout(Duration::from_secs(3), &mut no_quorum_write).await
     });
@@ -194,10 +200,13 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         RaftResponseResult::Applied { transaction_id: 3 }
     );
     wait_for_transaction(&majority, &root, 3, Duration::from_secs(15));
-    delayed_append.release();
-    delayed_append
-        .wait_for_completion(Duration::from_secs(10))
-        .unwrap();
+    // Deliver the held stale requests in descending peer-ID order after the new quorum commits.
+    for (_, delayed_append) in delayed_appends.iter_mut().rev() {
+        delayed_append.release();
+        delayed_append
+            .wait_for_completion(Duration::from_secs(10))
+            .unwrap();
+    }
 
     for source in &nodes {
         for target_id in 1..=3 {

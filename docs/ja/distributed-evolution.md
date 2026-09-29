@@ -12,12 +12,12 @@ CIではlearnerへのスナップショット転送とmembership変更に加え�
 接続を復旧したvoterがsnapshotをインストールして追いつき、次のclient sequenceを適用することも確認します。
 
 CIはpeer HTTPSで証明書の信頼性とホスト名の一致を検証します。
-failoverテストでは、非空の`AppendEntries`要求1件をRPC timeoutより長く保留し、残るquorumがcommitした後に解放します。
+failoverテストでは、両方の残るvoter宛ての非空`AppendEntries`要求をRPC timeoutより長く保留し、quorumのcommit後にpeer IDの逆順で解放します。
 このテストは、分断された旧leaderの読み取りbarrierが失敗し、新leaderの選出時にはbarrierが成功することも検査します。
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認します。
 replacement leaderの選出後に残るvoter間のRPCを遮断すると、そのleaderへのcatalog読み取りは`503`で失敗します。
 通信を復旧し、read barrierの成功後に`GET /catalog`が`200`を返すことも確認します。
-これは古い要求を1件扱う検証であり、RPCの遅延と順序変更の広い組み合わせは対象外です。
+これは制御された古い要求2件を扱う検証であり、RPCの遅延と順序変更の広い組み合わせは対象外です。
 `/transaction`の再試行テストはcommit後のhandler応答を破棄しますが、ソケット切断は再現しません。
 検証が残るのは、RPCの遅延と順序変更の広い組み合わせ、commit済み応答をソケット切断で失った後の再試行、クラッシュ境界の注入です。
 
@@ -277,7 +277,7 @@ Shard A
 
 - カタログ表現タグから独立したスキーマ移行。
 - 公開カタログlistenerのTLS、相互TLS、ストリーミング、永続的な再試行キュー、バックプレッシャー、authorityの検出。
-- 古い`AppendEntries`遅延1件を超える遅延または順序変更の組み合わせ、commit済み応答の喪失後にソケットを介して再試行するケース、クラッシュ境界の注入。
+- 制御された古い`AppendEntries`要求2件を超える遅延または順序変更の組み合わせ、commit済み応答の喪失後にソケットを介して再試行するケース、クラッシュ境界の注入。
 - 分散フォロワー読み取りの整合性と鮮度。
 - 遅延と転送状態の可観測性。
 
@@ -334,7 +334,7 @@ txBASE側の採用判断と実装境界は[Raftコンセンサス設計](raft.md
 任意のRaftモードは明示したvoter集合で起動し、認証付きpeer RPC、peer HTTPS、クォーラム書き込み、線形化可能な読み取りbarrier、learner追加、joint consensusによるvoter集合変更を提供します。
 3ノードのpartition、failover、復旧、再起動を検証するテストもあります。
 CIはpeer HTTPSの証明書信頼とホスト名一致を検証します。
-3 nodeのfailoverテストでは、非空の`AppendEntries`要求1件をRPC timeoutより長く保留してから解放します。
+3 nodeのfailoverテストでは、両方の残るvoter宛ての非空`AppendEntries`要求をRPC timeoutより長く保留し、replacement quorumのcommit後にpeer IDの逆順で解放します。
 別の3 nodeテストでは、1台のvoterを分断して残るquorumで更新をcommitし、leaderがsnapshot対象ログをpurgeした後のsnapshot転送と復旧を確認します。
-より広い遅延または順序変更の組み合わせと他の障害ケースは未検証で、公開カタログlistenerはHTTPのままです。
+この制御された要求2件を超える遅延または順序変更の組み合わせと他の障害ケースは未検証で、公開カタログlistenerはHTTPのままです。
 これらの記述は、互換性の主張ではなく設計上の制約です。

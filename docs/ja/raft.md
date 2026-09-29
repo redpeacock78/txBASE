@@ -5,7 +5,7 @@
 peer APIと`txbase raft membership` CLIは、learner追加、有効なmembershipの照会、joint consensusによるvoter変更を提供します。
 空catalogのlearnerは、genesis catalogが空または非空のclusterへ参加できます。
 3 nodeの決定的な障害テストで、quorum喪失、leader交代、ログの再同期、分断されたnodeの再起動を検査します。
-非空の`AppendEntries`要求をRPC timeoutより長く保留して解放するケースも検査します。
+両方の残るvoter宛ての非空`AppendEntries`要求をRPC timeoutより長く保留し、quorumのcommit後に逆順で解放するケースも検査します。
 分断された旧leaderでは読み取りbarrierが失敗し、新leaderはbarrierが成功した場合だけ選択されることも確認します。
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも検査します。
 replacement leaderの選出後に残るvoter間のRPCを遮断すると、そのleaderへのcatalog読み取りは`503`で失敗します。
@@ -261,8 +261,8 @@ voter集合を推測したり、古いfollowerログを自動で昇格したり�
 CIのstate machineテストでは、カタログcommitの原子性、再起動後の再試行、sequence拒否、no-opとmembership、snapshotインストールを検証する。
 storage adapterのテストでは、OpenRaftの`testing::Suite`と再起動後の復旧確認を実行する。
 membershipの統合テストでは、quorum commit、空learnerへのsnapshot転送、昇格と降格、降格後に残るvoterでのquorum更新を検査する。
-failoverの統合テストでは、非空の`AppendEntries`要求1件をRPC timeoutより長く保留し、現在のleaderを他の2 nodeから分断する。
-leader側の更新がカタログへ適用されないこと、残るquorumが次のclient sequenceをcommitすること、遅延要求の解放後にログが再同期すること、分断されたnodeの再起動後にカタログとmembershipが収束することを検査する。
+failoverの統合テストでは、両方の残るvoter宛ての非空`AppendEntries`要求をRPC timeoutより長く保留し、現在のleaderを他の2 nodeから分断する。
+leader側の更新がカタログへ適用されないこと、残るquorumが次のclient sequenceをcommitすること、遅延要求をquorumのcommit後にpeer IDの逆順で解放してログが再同期すること、分断されたnodeの再起動後にカタログとmembershipが収束することを検査する。
 2 nodeのテストでは、genesis catalogが空のclusterへのlearner参加を引き続き検査する。
 別の3 nodeテストではvoter 1台を分断し、残るquorumで4件をcommitしてsnapshotを作成します。
 leaderがsnapshot対象ログをpurgeした後に接続を戻し、遅延voterのsnapshot適用、追いつき、次のclient sequenceの適用を確認します。
@@ -272,7 +272,7 @@ failoverテストでは、分断された旧leaderの読み取りbarrierが失�
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認します。
 replacement leaderの選出後に残るvoter間のRPCを遮断し、そのleaderへのcatalog読み取りが`503`で失敗することを検査します。
 通信を復旧し、read barrierの成功後にleaderへの`GET /catalog`が`200`を返すことも確認します。
-完了には、今回の非空`AppendEntries`遅延1件を超える遅延・順序変更を検証します。
+完了には、今回の制御された古い`AppendEntries`要求2件を超える、より広い遅延・順序変更を検証します。
 ログ永続化からclient応答までのクラッシュ注入も検証します。
 
 ログ永続化、quorum commit、カタログジャーナル公開、適用済み位置の永続化、client応答の各境界でプロセスを強制終了し、再起動後の状態を検証する。
