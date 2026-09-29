@@ -27,6 +27,7 @@ Research and future work do not imply an implemented feature.
 - [Mutation model](mutation-model.md)
 - [Snapshot transactions](transactions.md)
 - [HTTP method semantics and QUERY](http-semantics.md)
+- [Public catalog listener transport security](catalog-listener-security.md)
 
 ## Command-line interface
 

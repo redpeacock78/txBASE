@@ -38,9 +38,27 @@ pub(crate) fn serve_catalog(mut args: impl Iterator<Item = String>) -> Result<()
     let mut raft_initialize_catalog = false;
     let mut raft_tls_certificate = None;
     let mut raft_tls_private_key = None;
+    let mut catalog_tls_certificate = None;
+    let mut catalog_tls_private_key = None;
+    let mut catalog_tls_client_ca = None;
     while let Some(option) = args.next() {
         match option.as_str() {
             "--bind" => bind = args.next().ok_or("--bind requires an address")?,
+            "--tls-cert" => {
+                catalog_tls_certificate = Some(PathBuf::from(
+                    args.next().ok_or("--tls-cert requires a file path")?,
+                ));
+            }
+            "--tls-key" => {
+                catalog_tls_private_key = Some(PathBuf::from(
+                    args.next().ok_or("--tls-key requires a file path")?,
+                ));
+            }
+            "--tls-client-ca" => {
+                catalog_tls_client_ca = Some(PathBuf::from(
+                    args.next().ok_or("--tls-client-ca requires a file path")?,
+                ));
+            }
             "--replication-term" => {
                 replication_options_used = true;
                 replication_term = args
@@ -120,6 +138,20 @@ pub(crate) fn serve_catalog(mut args: impl Iterator<Item = String>) -> Result<()
             _ => return Err(format!("unknown option: {option}").into()),
         }
     }
+    let catalog_tls = match (catalog_tls_certificate, catalog_tls_private_key) {
+        (Some(certificate), Some(private_key)) => Some(server::CatalogTlsConfig {
+            certificate,
+            private_key,
+            client_ca: catalog_tls_client_ca,
+        }),
+        (None, None) if catalog_tls_client_ca.is_none() => None,
+        _ => {
+            return Err(
+                "--tls-cert and --tls-key must be specified together; --tls-client-ca requires both"
+                    .into(),
+            );
+        }
+    };
     let raft_options_used = raft_node_id.is_some()
         || raft_cluster_id.is_some()
         || raft_node_directory.is_some()
@@ -134,26 +166,97 @@ pub(crate) fn serve_catalog(mut args: impl Iterator<Item = String>) -> Result<()
         if replication_options_used {
             return Err("--replication-* and --raft-* options cannot be combined".into());
         }
-        return server::serve_catalog_with_raft(
-            &path,
-            &bind,
-            server::CatalogRaftConfig {
-                node_id: raft_node_id.ok_or("--raft-node-id is required for Raft mode")?,
-                cluster_id: raft_cluster_id.ok_or("--raft-cluster-id is required for Raft mode")?,
-                node_directory: raft_node_directory
-                    .ok_or("--raft-data-directory is required for Raft mode")?,
-                peer_bind: raft_peer_bind.ok_or("--raft-peer-bind is required for Raft mode")?,
-                peer_advertise: raft_peer_advertise
-                    .ok_or("--raft-peer-advertise is required for Raft mode")?,
-                initial_members: raft_initial_members,
-                bootstrap: raft_bootstrap,
-                initialize_catalog: raft_initialize_catalog,
-                tls_certificate: raft_tls_certificate,
-                tls_private_key: raft_tls_private_key,
-            },
-        )
+        let config = server::CatalogRaftConfig {
+            node_id: raft_node_id.ok_or("--raft-node-id is required for Raft mode")?,
+            cluster_id: raft_cluster_id.ok_or("--raft-cluster-id is required for Raft mode")?,
+            node_directory: raft_node_directory
+                .ok_or("--raft-data-directory is required for Raft mode")?,
+            peer_bind: raft_peer_bind.ok_or("--raft-peer-bind is required for Raft mode")?,
+            peer_advertise: raft_peer_advertise
+                .ok_or("--raft-peer-advertise is required for Raft mode")?,
+            initial_members: raft_initial_members,
+            bootstrap: raft_bootstrap,
+            initialize_catalog: raft_initialize_catalog,
+            tls_certificate: raft_tls_certificate,
+            tls_private_key: raft_tls_private_key,
+        };
+        return match catalog_tls {
+            Some(tls) => server::serve_catalog_with_raft_and_tls(&path, &bind, config, tls),
+            None => server::serve_catalog_with_raft(&path, &bind, config),
+        }
         .map_err(Into::into);
     }
-    server::serve_catalog_with_replication_config(&path, &bind, replication_term, replication_role)
-        .map_err(Into::into)
+    match catalog_tls {
+        Some(tls) => server::serve_catalog_with_replication_config_and_tls(
+            &path,
+            &bind,
+            replication_term,
+            replication_role,
+            tls,
+        ),
+        None => server::serve_catalog_with_replication_config(
+            &path,
+            &bind,
+            replication_term,
+            replication_role,
+        ),
+    }
+    .map_err(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::serve_catalog;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT_INVALID_TLS_ID: AtomicUsize = AtomicUsize::new(0);
+
+    fn run(args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+        serve_catalog(args.iter().map(|value| (*value).to_owned()))
+    }
+
+    #[test]
+    fn public_tls_requires_certificate_and_key_as_a_pair() {
+        for args in [
+            vec!["catalog", "--tls-cert", "server.pem"],
+            vec!["catalog", "--tls-key", "server-key.pem"],
+            vec!["catalog", "--tls-client-ca", "client-ca.pem"],
+            vec![
+                "catalog",
+                "--tls-cert",
+                "server.pem",
+                "--tls-client-ca",
+                "client-ca.pem",
+            ],
+        ] {
+            let error = run(&args).unwrap_err().to_string();
+            assert!(
+                error.contains("--tls-cert and --tls-key must be specified together"),
+                "unexpected error for {args:?}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn public_tls_pair_is_accepted_and_certificate_load_fails_before_catalog_open() {
+        let id = NEXT_INVALID_TLS_ID.fetch_add(1, Ordering::Relaxed);
+        let catalog = std::env::temp_dir().join(format!(
+            "txbase-invalid-tls-catalog-{}-{id}",
+            std::process::id()
+        ));
+        assert!(!catalog.exists());
+        let error = run(&[
+            catalog.to_str().unwrap(),
+            "--bind",
+            "127.0.0.1:0",
+            "--tls-cert",
+            "missing-server.pem",
+            "--tls-key",
+            "missing-server-key.pem",
+        ])
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("cannot read server certificate"));
+        assert!(!catalog.exists());
+    }
 }

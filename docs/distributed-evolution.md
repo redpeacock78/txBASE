@@ -224,13 +224,14 @@ for missing or invalid credentials. Without that environment variable, the route
 remain unauthenticated for local development compatibility. The replication client
 supports HTTPS and verifies certificates and host names with the operating
 system's trust facilities. Bearer tokens require HTTPS, except for loopback
-HTTP. The public catalog listener remains HTTP-only, so deployments that need
-network encryption must terminate TLS at a reverse proxy and protect the
-proxy-to-server connection, for example by keeping it on loopback. These
-limits apply to fixed-term replication: it has no mutual TLS, streaming,
-durable retry queue, backpressure, quorum, or authority discovery. Optional
-Raft mode uses a separate authenticated peer listener and supports peer HTTPS;
-see [Raft consensus design](raft.md).
+HTTP. The public catalog listener supports opt-in TLS and optional mutual TLS;
+see [public catalog listener transport security](catalog-listener-security.md).
+The built-in `replicate catch-up` client validates server certificates but
+cannot present a client certificate, so it cannot connect to a listener that
+requires mutual TLS. Fixed-term replication still has no streaming, durable
+retry queue, backpressure, quorum, or authority discovery. Optional Raft mode
+uses a separate authenticated peer listener and supports peer HTTPS, but not
+peer mutual TLS; see [Raft consensus design](raft.md).
 
 ### HTTP client
 
@@ -273,9 +274,10 @@ under the delivery contracts; conflict responses and malformed responses are
 terminal. `ReplicationRetryPolicy` allows at most eight total attempts and a
 30-second backoff cap. This is an in-process request policy, not a durable
 retry queue.
-The fixed-term catalog listener does not terminate TLS, and this client does
-not implement mutual TLS, streaming, backpressure, authority discovery, quorum,
-or consensus. The optional Raft peer transport is separate.
+The public catalog listener supports opt-in TLS and mutual TLS, but this client
+cannot present a client certificate. It also does not implement streaming,
+backpressure, authority discovery, quorum, or consensus. The optional Raft
+peer transport is separate and does not support peer mutual TLS.
 
 ## 4. Co-location before distributed joins
 
@@ -324,7 +326,7 @@ The local slice defines the following initial contracts:
 The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
-- TLS for the public catalog listener, mutual TLS, streaming, durable retry queues, backpressure, and authority discovery;
+- client-certificate support in the built-in catch-up client, Raft peer mutual TLS, streaming, durable retry queues, backpressure, and authority discovery;
 - broader delayed or reordered RPC schedules beyond the controlled pair of stale `AppendEntries` requests; socket-level retries after losing a committed response; and crash-boundary injection;
 - observability for lag and transport state;
 
@@ -362,8 +364,9 @@ peer-TLS and failure cases documented in [Raft consensus design](raft.md).
 
 This document describes the fixed-term replication slice and does not define
 the optional Raft protocol. It does not claim multi-region writes, global
-transactions, automatic partition balancing, TLS for the public catalog
-listener, mutual TLS, durable retry queues, or authority discovery.
+transactions, automatic partition balancing, Raft peer mutual TLS, client-
+certificate support in the built-in catch-up client, durable retry queues, or
+authority discovery.
 
 Raft learner admission, joint-consensus voter changes, and the remaining
 failure-testing work are specified separately. Other distributed features
@@ -388,5 +391,9 @@ joint-consensus voter changes, and a three-node partition/failover/restart test.
 The integration tests verify peer certificate trust and hostname matching.
 The three-node failover test also delays non-empty `AppendEntries` requests to both remaining voters past their RPC timeouts, then releases them sequentially in reverse peer order after the replacement quorum commits.
 Another three-node test disconnects one voter while the remaining quorum commits four commands, snapshots and purges the leader log, then checks that the voter installs the snapshot and applies the next client sequence after reconnecting.
-Broader delayed or reordered schedules and other failure scenarios remain open; the public catalog listener remains HTTP.
+Broader delayed or reordered schedules and other failure scenarios remain open.
+Public listener TLS and optional mTLS are documented in
+[public catalog listener transport security](catalog-listener-security.md);
+Raft peer mTLS and client-certificate support in the built-in catch-up client
+remain open.
 These boundaries are design constraints rather than compatibility guarantees.

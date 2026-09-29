@@ -31,7 +31,7 @@ This document records the implemented Raft boundary and the remaining authority,
 - Catalog filesystem work runs through Tokio's blocking worker pool.
 - `serve-catalog` starts an OpenRaft node from an explicit node ID, cluster ID, node directory, peer address, and initial member map. Only `--raft-bootstrap` initializes cluster membership.
 - A separate peer listener handles vote, append, snapshot, learner-preparation, learner-add, membership-status, and voter-change requests. It bounds requests to 2 MiB, applies a 10-second timeout, and checks bearer authentication, cluster and node identity, active membership, and a shared genesis-catalog fingerprint for Raft RPCs.
-- Peer traffic may use HTTPS with a node certificate and key. Bearer-authenticated HTTP is accepted only for loopback peer URLs. The public catalog listener remains HTTP.
+- Peer traffic may use HTTPS with a node certificate and key. Bearer-authenticated HTTP is accepted only for loopback peer URLs. The public catalog listener has separate opt-in TLS and mTLS options; see [public catalog listener transport security](catalog-listener-security.md).
 - `RaftMembershipHttpClient` and `txbase raft membership` provide authenticated status, learner-add, and voter-change operations. The client reuses the verified HTTP transport and validates versioned response shapes and voter-set consistency.
 - Raft writes to `/transaction` and named-table mutation routes require `X-Txbase-Client-Id` and a positive `X-Txbase-Client-Sequence`. Exact retries return the stored result.
 - Normal catalog reads call OpenRaft's linearizable read barrier before reading the local catalog. The server does not provide an explicitly stale follower-read mode.
@@ -49,7 +49,7 @@ This document records the implemented Raft boundary and the remaining authority,
 ### Not implemented
 
 - Broader deterministic coverage for delayed or reordered RPC schedules beyond the three four-request release orders and the tested same-peer request pair.
-- Mutual TLS and TLS for the public catalog listener.
+- Mutual TLS for the Raft peer listener.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
 The serialized command limit is 1 MiB.
@@ -170,7 +170,7 @@ The preparation route accepts a known initial member before the candidate has a 
 The learner workflow sends a chunked snapshot through the normal snapshot route before adding the candidate to membership; OpenRaft then replicates later log entries.
 The listener is separate from the public catalog listener, caps each request at 2 MiB, applies a 10-second RPC timeout, and checks Raft RPC senders against the active membership, cluster ID, and shared genesis fingerprint. It also checks that the OpenRaft vote identifies the same sender.
 
-Every Raft peer request requires the `TXBASE_REPLICATION_TOKEN` bearer credential. Non-loopback peer URLs must use HTTPS with `--raft-peer-cert` and `--raft-peer-key`; the client verifies the certificate and host name with the operating system's trust facilities. Plain HTTP with a bearer token is allowed only for loopback URLs. This TLS configuration applies only to the peer listener; the public catalog listener still uses HTTP.
+Every Raft peer request requires the `TXBASE_REPLICATION_TOKEN` bearer credential. Non-loopback peer URLs must use HTTPS with `--raft-peer-cert` and `--raft-peer-key`; the client verifies the certificate and host name with the operating system's trust facilities. Plain HTTP with a bearer token is allowed only for loopback URLs. Peer TLS does not provide mutual TLS and applies only to the peer listener; configure public catalog TLS separately as described in [public catalog listener transport security](catalog-listener-security.md).
 
 ## 7. Snapshots, recovery, and migration
 

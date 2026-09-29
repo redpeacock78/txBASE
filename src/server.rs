@@ -8,6 +8,7 @@ use tiny_http::{Method, Request, Response, Server};
 mod body;
 mod catalog;
 mod catalog_mutation;
+mod catalog_tls;
 mod catalog_transaction;
 mod cdc;
 mod etag;
@@ -44,6 +45,13 @@ pub struct CatalogRaftConfig {
     pub initialize_catalog: bool,
     pub tls_certificate: Option<std::path::PathBuf>,
     pub tls_private_key: Option<std::path::PathBuf>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CatalogTlsConfig {
+    pub certificate: std::path::PathBuf,
+    pub private_key: std::path::PathBuf,
+    pub client_ca: Option<std::path::PathBuf>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -134,6 +142,38 @@ pub fn serve_catalog_with_replication_config(
         replication_term,
         role,
         replication_token_from_env()?,
+        None,
+    )
+}
+
+pub fn serve_catalog_with_tls(
+    root: impl AsRef<Path>,
+    bind: &str,
+    tls: CatalogTlsConfig,
+) -> Result<(), String> {
+    serve_catalog_with_replication_config_and_tls(
+        root,
+        bind,
+        1,
+        CatalogReplicationRole::Authority,
+        tls,
+    )
+}
+
+pub fn serve_catalog_with_replication_config_and_tls(
+    root: impl AsRef<Path>,
+    bind: &str,
+    replication_term: u64,
+    role: CatalogReplicationRole,
+    tls: CatalogTlsConfig,
+) -> Result<(), String> {
+    catalog::serve(
+        root,
+        bind,
+        replication_term,
+        role,
+        replication_token_from_env()?,
+        Some(tls),
     )
 }
 
@@ -142,7 +182,16 @@ pub fn serve_catalog_with_raft(
     bind: &str,
     config: CatalogRaftConfig,
 ) -> Result<(), String> {
-    catalog::serve_with_raft(root, bind, config, replication_token_from_env()?)
+    catalog::serve_with_raft(root, bind, config, replication_token_from_env()?, None)
+}
+
+pub fn serve_catalog_with_raft_and_tls(
+    root: impl AsRef<Path>,
+    bind: &str,
+    config: CatalogRaftConfig,
+    tls: CatalogTlsConfig,
+) -> Result<(), String> {
+    catalog::serve_with_raft(root, bind, config, replication_token_from_env()?, Some(tls))
 }
 
 fn replication_token_from_env() -> Result<Option<String>, String> {

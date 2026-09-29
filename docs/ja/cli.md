@@ -111,8 +111,8 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 | コマンド | 現在の動作と書き込み境界 |
 | --- | --- |
 | `txbase serve FILE [--bind ADDRESS] [--encoding NAME]` | 単一テーブルHTTPサーバーを起動する。 |
-| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--replication-term TERM] [--replication-role authority|follower]` | 固定termレプリケーションモードでカタログHTTPサーバーを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、フォロワー位置をメタデータだけの`TXRG`サイドカーへ保存する。`follower`ロールは直接のカタログ更新とフォロワー適用位置確認を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。`TXBASE_REPLICATION_TOKEN`を設定した場合、すべてのレプリケーションルートにRFC 6750の`Authorization: Bearer <token>`ヘッダーが必要になる。 |
-| `txbase serve-catalog DIRECTORY --raft-node-id ID --raft-cluster-id ID --raft-data-directory DIR --raft-peer-bind ADDRESS --raft-peer-advertise URL --raft-initial-member ID=URL ...` | 初期voter集合を固定した任意のOpenRaftモードと、独立したpeer listenerを起動する。Raftオプションと`--replication-*`は併用できない。bootstrapとTLSのオプションは後述する。 |
+| `txbase serve-catalog DIRECTORY [--bind ADDRESS] [--tls-cert PEM --tls-key PEM [--tls-client-ca PEM]] [--replication-term TERM] [--replication-role authority|follower]` | 固定termレプリケーションモードでカタログHTTPサーバーを起動する。既定の`authority`ロールは`/transaction`と名前付きテーブルの更新ルートをカタログジャーナルと`TXRP`サイドカーへ捕捉し、フォロワー位置をメタデータだけの`TXRG`サイドカーへ保存する。`follower`ロールは直接のカタログ更新とフォロワー適用位置確認を`409`で拒否しながらレプリケーション配送を受け付ける。`TERM`は正の固定ローカルtermで、既定値は`1`。`TXBASE_REPLICATION_TOKEN`を設定した場合、すべてのレプリケーションルートにRFC 6750の`Authorization: Bearer <token>`ヘッダーが必要になる。TLSは任意である。`--tls-client-ca`を指定するとクライアント証明書が必須になる。詳細は[公開カタログlistenerの通信保護](catalog-listener-security.md)を参照する。 |
+| `txbase serve-catalog DIRECTORY --raft-node-id ID --raft-cluster-id ID --raft-data-directory DIR --raft-peer-bind ADDRESS --raft-peer-advertise URL --raft-initial-member ID=URL ... [--tls-cert PEM --tls-key PEM [--tls-client-ca PEM]]` | 初期voter集合を固定した任意のOpenRaftモードと、独立したpeer listenerを起動する。Raftオプションと`--replication-*`は併用できない。公開listenerのTLSはpeer TLSとは独立している。詳細は[公開カタログlistenerの通信保護](catalog-listener-security.md)と、後述するbootstrapおよびpeer TLSのオプションを参照する。 |
 | `txbase replicate catch-up DIRECTORY AUTHORITY_URL --replication-term TERM --follower-id ID [--limit COUNT] [--timeout-ms MILLISECONDS]` | フォロワーカタログを開き、authorityから有界な1回のcatch-upを取得し、適用済みカタログと`TXRP`位置を永続化し、適用位置を確認して、同期結果をJSONで表示する。`AUTHORITY_URL`ではHTTPとHTTPSを使えます。HTTPSではOSの信頼ストアを使って証明書と接続先のホスト名を検証します。`TERM`はauthorityと一致する必要があり、`COUNT`は`1`から`128`の範囲で指定します。authorityがBearer認証を要求する場合は、任意の`TXBASE_REPLICATION_TOKEN`環境変数を使います。Bearer認証情報を送る場合は、loopback HTTP以外ではHTTPSを使います。 |
 | `txbase raft membership status PEER_URL [--timeout-ms MILLISECONDS]` | 対象nodeの有効なmembershipをJSONで読み取る。カタログディレクトリは開かず、cluster全体に対するlinearizable readではない。 |
 | `txbase raft membership add-learner PEER_URL --cluster-id ID --node-id ID --peer-address URL [--timeout-ms MILLISECONDS]` | 現leaderへlearner追加を要求する。`202`はログ複製の開始を示し、catch-up完了までは示さない。すでにmemberなら`200`を返す。 |
@@ -126,6 +126,7 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 - `--encoding`はDBFテキストをデコードするパスロードコマンドの`read`、`schema`、`verify`、`xbf import`、`pack`、`recall`、`serve`に属する。
 - `--schema`は`xbf export`だけに属する。
 - `--bind`は`serve`と`serve-catalog`だけに属する。
+- `--tls-cert`、`--tls-key`、`--tls-client-ca`は`serve-catalog`だけに属する。証明書と鍵は同時に指定する。クライアントCAを指定するとクライアント証明書が必須になる。組み込みの`replicate catch-up` clientはクライアント証明書を提示できない。
 
 ### CDCとMVCCのオプション
 

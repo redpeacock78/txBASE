@@ -98,7 +98,7 @@ Large direct equality joins can use fresh compatible ordered indexes for merge e
 The planner falls back to bounded hash or index-probe paths when that merge path is unavailable or more expensive.
 
 The catalog server also exposes `GET /replication/status`, `GET /replication/snapshot`, `POST /replication/entry`, `POST /replication/snapshot`, and authority-only `POST /replication/progress` for versioned, bounded replication delivery and follower progress acknowledgements.
-In the default `authority` role, `/transaction` and named-table mutation routes construct replication entries and journal the catalog change with the matching `TXRP` position. `--replication-role follower` rejects direct catalog mutations and accepts changes through replication delivery. Set `TXBASE_REPLICATION_TOKEN` to require an RFC 6750 Bearer token on these fixed-term replication routes; the public catalog listener uses HTTP, and this mode does not provide quorum or consensus. Supplying `--raft-*` options selects optional static-membership OpenRaft mode, with quorum writes, a linearizable read barrier, and authenticated peer RPC; peer HTTPS is supported. Dynamic membership and failure-injection coverage remain out of scope.
+In the default `authority` role, `/transaction` and named-table mutation routes construct replication entries and journal the catalog change with the matching `TXRP` position. `--replication-role follower` rejects direct catalog mutations and accepts changes through replication delivery. Set `TXBASE_REPLICATION_TOKEN` to require an RFC 6750 Bearer token on these fixed-term replication routes. The public catalog listener uses HTTP by default and supports opt-in TLS and client-certificate authentication; see [listener security](docs/catalog-listener-security.md). This mode does not provide quorum or consensus. Supplying `--raft-*` options selects optional static-membership OpenRaft mode, with quorum writes, a linearizable read barrier, and authenticated peer RPC; peer HTTPS is supported. Dynamic membership and failure-injection coverage remain out of scope.
 
 See the [query model](docs/query-model.md), [aggregation model](docs/aggregation.md), [join model](docs/joins.md), and [query planning](docs/query-planning.md) for the exact boundary.
 
@@ -301,6 +301,7 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 - [SQLite testing and quality model](docs/testing-quality.md)
 - [Quality contract matrix](docs/quality-matrix.md)
 - [HTTP method semantics and QUERY](docs/http-semantics.md)
+- [Public catalog listener transport security](docs/catalog-listener-security.md)
 - [Schema metadata and local constraints](docs/schema-metadata.md)
 - [XBF v1 format draft](docs/xbf.md)
 - [MVCC and historical snapshots](docs/mvcc.md)
@@ -327,7 +328,7 @@ The roadmap still leaves the following areas as future work:
 - Strict multi-file reader atomicity for XBF export.
 - Cloud object-storage adapters and retention policy.
 - Worker/WASI runtime adapters and asynchronous WASM storage.
-- Dynamic Raft membership, failure-injection coverage, TLS for the public catalog listener, and distributed partitioning.
+- Dynamic Raft membership, broader failure-injection coverage, built-in client-certificate support for replication catch-up, and distributed partitioning.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance conditions and [docs/research.md](docs/research.md) for the source and fixture policy.
 

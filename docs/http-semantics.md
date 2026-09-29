@@ -105,7 +105,10 @@ The configured value must be an ASCII `b64token`; txBASE validates it before the
 Missing, malformed, or non-matching credentials return `401 Unauthorized` with `WWW-Authenticate: Bearer` and a JSON error code.
 The other catalog routes are not covered by this token boundary.
 When the environment variable is absent, the replication routes remain unauthenticated for local development compatibility.
-This is application-layer authentication only; the public catalog listener does not provide TLS, so a bearer token must not be sent over an untrusted plain-HTTP network.
+This is application-layer authentication only; the public catalog listener uses HTTP by default and can opt into TLS or client-certificate authentication.
+Do not send a Bearer token over untrusted plain HTTP.
+TLS does not replace the route-specific Bearer credential, and client-certificate checks do not assign per-certificate catalog roles.
+See [public catalog listener transport security](catalog-listener-security.md).
 
 ### Raft peer transport and authentication
 
@@ -114,7 +117,8 @@ Every `POST /raft/v1/vote`, `/raft/v1/append`, and `/raft/v1/snapshot` request r
 The peer listener limits request bodies to 2 MiB and each RPC to 10 seconds, then validates the cluster, sender, active membership, and genesis-catalog fingerprint.
 Loopback peer URLs may use HTTP; non-loopback peer URLs must use HTTPS with both `--raft-peer-cert` and `--raft-peer-key` configured.
 Peer clients verify the certificate and host name with the operating system's trust facilities.
-This transport does not provide mutual TLS, and it does not change the public catalog listener from HTTP.
+The Raft peer transport does not provide mutual TLS.
+Public catalog listener TLS is configured independently; see [public catalog listener transport security](catalog-listener-security.md).
 
 `DELETE` is a logical DBF deletion.
 

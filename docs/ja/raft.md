@@ -42,7 +42,7 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 - カタログのファイル操作にはTokioのblocking worker poolを使う。
 - `serve-catalog`は、node ID、cluster ID、専用データディレクトリ、peer address、初期membershipを指定してOpenRaft nodeを起動する。membershipの初期化には`--raft-bootstrap`を明示する。
 - 専用peer listenerはvote、append、snapshot、learner準備、learner追加、membership状態照会、voter変更の要求を処理する。要求を2 MiB、RPC timeoutを10秒に制限し、Bearer認証、cluster ID、node ID、有効なmembership、Raft RPCで全nodeが共有するgenesis catalog fingerprintを検証する。
-- peer通信ではnodeごとの証明書と秘密鍵を使うHTTPSを利用できる。Bearer token付きHTTPはloopback peer URLだけで許可する。公開catalog listenerにはTLSを設定しない。
+- peer通信ではnodeごとの証明書と秘密鍵を使うHTTPSを利用できる。Bearer token付きHTTPはloopback peer URLだけで許可する。公開catalog listenerには独立したTLSとmTLSの設定がある。詳細は[公開カタログlistenerの通信保護](catalog-listener-security.md)を参照する。
 - `RaftMembershipHttpClient`と`txbase raft membership`は、認証付きの状態照会、learner追加、voter変更を提供する。共有HTTP transportの証明書検証を使い、version付き応答とvoter集合の整合性を検証する。
 - `/transaction`と名前付きテーブル更新では`X-Txbase-Client-Id`と正の`X-Txbase-Client-Sequence`を指定する。同じ要求の再試行には記録済み結果を返す。
 - 通常のcatalog読み取り前にOpenRaftの線形化可能な読み取りbarrierを呼び出す。明示的にstaleなfollower読み取りは提供しない。
@@ -61,7 +61,7 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 ### 未実装
 
 - 3通りのpeer間解放順序と検証済みの同一peerへの連続2要求を超えるRPCの遅延・順序変更を検査する決定的なテスト。
-- mutual TLSと公開catalog listenerのTLS。
+- Raft peer listenerのmutual TLS。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
 正のsequenceと空でないカタログtagが必要です。
@@ -243,7 +243,8 @@ OpenRaft vote内の送信node IDも検証します。
 loopback以外のpeer URLにはHTTPSを使い、nodeごとに`--raft-peer-cert`と`--raft-peer-key`を指定します。
 clientはOSの信頼機構で証明書とホスト名を検証します。
 Bearer token付きHTTPはloopback URLだけで使えます。
-TLS設定はpeer listenerだけに適用され、公開catalog listenerはHTTPのままです。
+peer TLSはmutual TLSを提供せず、peer listenerだけに適用されます。
+公開catalog listenerのTLSは[公開カタログlistenerの通信保護](catalog-listener-security.md)で別に設定します。
 
 ## 7. snapshot、復旧、移行
 

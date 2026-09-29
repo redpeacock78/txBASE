@@ -80,6 +80,10 @@ The repository currently provides:
 - Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit, after validating the declared primary or unique parent key; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
 - Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with ordered per-transaction mode changes in the Rust and HTTP transaction APIs; deferred `CHECK` is a txBASE extension.
 
+The current `serve-catalog` also has an opt-in public TLS frontend for fixed-term and Raft modes.
+When `--tls-client-ca` is configured, it requires a trusted client certificate.
+The frontend streams HTTP/1.1 to a token-protected loopback backend and validates TLS inputs before opening the catalog; see [public catalog listener transport security](catalog-listener-security.md).
+
 The baseline intentionally does not include the following:
 
 - Filesystem- and cache-aware merge join costing.
@@ -480,7 +484,7 @@ Broader delayed or reordered RPC schedules remain outstanding.
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
 - Add deterministic tests for delayed or reordered RPC schedules beyond the three controlled cross-peer release orders and the tested pair of successive same-peer requests; see [Raft consensus design](raft.md).
-- TLS for the public catalog listener, mutual TLS, durable retry queues, backpressure, and authority discovery.
+- Mutual TLS for the Raft peer listener, client-certificate support in the built-in `replicate catch-up` client, durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.
 
@@ -524,6 +528,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Filesystem- and cache-aware merge planning, aggregation, predicate-level serializable MVCC, durable XBF, provider integrations beyond R2, live R2 service validation, TLS, durable retry queues, authority discovery, quorum, or consensus code without a contract and end-to-end test.
+- Filesystem- and cache-aware merge planning, aggregation, predicate-level serializable MVCC, durable XBF, provider integrations beyond R2, live R2 service validation, Raft peer mTLS, client-certificate support in the built-in catch-up client, durable retry queues, authority discovery, quorum, or consensus code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and filesystem- or cache-aware merge planning remain future work.

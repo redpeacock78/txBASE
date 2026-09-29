@@ -25,6 +25,7 @@
 - [更新モデル](mutation-model.md)
 - [スナップショットトランザクション](transactions.md)
 - [HTTP メソッドの意味と QUERY](http-semantics.md)
+- [公開カタログlistenerの通信保護](catalog-listener-security.md)
 
 ## コマンドラインインターフェース
 

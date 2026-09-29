@@ -105,7 +105,10 @@ txBASEは、定義された意味に従ってHTTPメソッド名を使います�
 認証情報がない、不正な形式である、または一致しない場合は、`WWW-Authenticate: Bearer`とJSONエラーコードを伴う`401 Unauthorized`を返します。
 その他のカタログルートは、このトークン境界の対象ではありません。
 環境変数を設定しない場合、ローカル開発との互換性のため、レプリケーションルートは認証なしのままです。
-これはアプリケーション層の認証だけです。公開カタログlistenerはTLSを提供しないため、信頼できない平文HTTPネットワークへBearerトークンを送ってはなりません。
+これはアプリケーション層の認証だけです。公開カタログlistenerは既定でHTTPを使い、TLSを有効にできます。クライアント証明書の検証も任意で必須化できます。
+信頼できないHTTP上でBearerトークンを送信しないでください。
+TLSはrouteごとのBearer認証の代わりにはならず、クライアント証明書によってカタログ権限を分けることもありません。
+詳細は[公開カタログlistenerの通信保護](catalog-listener-security.md)を参照してください。
 
 ### Raft peerの転送と認証
 
@@ -114,7 +117,8 @@ Raftモードは、公開カタログlistenerと分離したpeer listenerを起�
 peer listenerはリクエスト本文を2 MiB、各RPCを10秒に制限し、cluster、送信node、有効なmembership、genesis catalog fingerprintを検証します。
 loopbackのpeer URLにはHTTPを使えますが、loopback以外では`--raft-peer-cert`と`--raft-peer-key`を設定したHTTPSが必要です。
 peer clientはOSの信頼機構で証明書とホスト名を検証します。
-この転送は相互TLSを提供せず、公開カタログlistenerもHTTPのままです。
+Raft peer transportは相互TLSを提供しません。
+公開カタログlistenerのTLSは独立して設定します。詳細は[公開カタログlistenerの通信保護](catalog-listener-security.md)を参照してください。
 
 `DELETE`はDBFの論理削除です。
 

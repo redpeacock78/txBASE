@@ -1,4 +1,5 @@
 use super::CatalogReplicationRole;
+use super::catalog_tls::CatalogListener;
 use super::records::get_response;
 #[cfg(test)]
 use super::records::{
@@ -16,7 +17,7 @@ use serde_json::Value;
 #[cfg(test)]
 use std::collections::BTreeMap;
 use std::path::Path;
-use tiny_http::{Method, Request, Server};
+use tiny_http::{Method, Request};
 
 pub(super) fn serve(
     root: impl AsRef<Path>,
@@ -24,14 +25,23 @@ pub(super) fn serve(
     replication_term: u64,
     role: CatalogReplicationRole,
     replication_token: Option<String>,
+    tls: Option<super::CatalogTlsConfig>,
 ) -> Result<(), String> {
+    let listener = CatalogListener::bind(bind, tls.as_ref())?;
     let mut catalog =
         Catalog::from_path(root).map_err(|error| format!("cannot open catalog: {error}"))?;
     let mut replication = crate::replication::ReplicationLog::open(&catalog, replication_term)
         .map_err(|error| format!("cannot open replication log: {error}"))?;
-    let server = Server::http(bind).map_err(|error| format!("cannot bind {bind}: {error}"))?;
-    eprintln!("listening on http://{bind}");
-    for request in server.incoming_requests() {
+    eprintln!(
+        "listening on {}://{}",
+        if listener.is_tls() { "https" } else { "http" },
+        listener.public_addr()
+    );
+    for request in listener.incoming_requests() {
+        if !listener.authorizes(&request) {
+            reject_private_backend_request(request);
+            continue;
+        }
         handle_request(
             request,
             &mut catalog,
@@ -48,19 +58,33 @@ pub(super) fn serve_with_raft(
     bind: &str,
     config: super::CatalogRaftConfig,
     replication_token: Option<String>,
+    tls: Option<super::CatalogTlsConfig>,
 ) -> Result<(), String> {
     let root = root.as_ref();
+    let listener = CatalogListener::bind(bind, tls.as_ref())?;
     let mut catalog =
         Catalog::from_path(root).map_err(|error| format!("cannot open catalog: {error}"))?;
     let raft = super::raft::RaftRuntime::start(root, config.clone(), replication_token)?;
     let peer_server = raft.bind_peer_listener(&config)?;
     let _peer_listener = raft.spawn_peer_listener(peer_server)?;
-    let server = Server::http(bind).map_err(|error| format!("cannot bind {bind}: {error}"))?;
-    eprintln!("listening on http://{bind}");
-    for request in server.incoming_requests() {
+    eprintln!(
+        "listening on {}://{}",
+        if listener.is_tls() { "https" } else { "http" },
+        listener.public_addr()
+    );
+    for request in listener.incoming_requests() {
+        if !listener.authorizes(&request) {
+            reject_private_backend_request(request);
+            continue;
+        }
         handle_raft_request(request, &mut catalog, &raft);
     }
     Ok(())
+}
+
+fn reject_private_backend_request(request: Request) {
+    let response = tiny_http::Response::from_string("Forbidden").with_status_code(403);
+    let _ = request.respond(response);
 }
 
 fn handle_request(
