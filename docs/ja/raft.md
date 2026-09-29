@@ -24,7 +24,7 @@ RAFT-006では、1つのleaderから同一peerへ送る連続した非空`Append
 1件目の保留中に2件目の遅延を設定し、1件目を解放してから2件目を解放します。
 逐次遅延中はcurrent leaderだけをvoterにし、ほかのnodeをlearnerにします。対象peerにはcurrent leader以外から送信できないようにします。
 全nodeが追いついた後に、元のvoter構成へ戻します。
-OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries` futureの完了を待つため、このテストが扱うのは逐次要求です。同一leaderから同じpeerへの同時呼び出しではありません（[task構成](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/src/docs/internal/threading.md)、[複製実装](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/src/replication/mod.rs)）。
+OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries` futureの完了を待つため、このテストが扱うのは逐次要求です。同一leaderから同じpeerへの同時呼び出しではありません（[task構成](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/docs/internal/threading.md)、[複製実装](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/replication/mod.rs)）。
 この24通りで網羅するのは、同じ4要求の解放順序です。要求batch、term、partition条件を変えた遅延・順序変更は、同一peerへの連続要求とともに未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 

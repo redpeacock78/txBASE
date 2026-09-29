@@ -13,7 +13,7 @@ Each delay matches one of the next two expected log indices and stays armed acro
 The test arms the second delay while the first request is paused, then releases the requests in sequence.
 During this sequence, the current leader is the sole voter and every peer is a learner; other nodes are blocked from sending to the delayed target until catch-up.
 The test restores the original voter set after every node catches up.
-OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so this covers successive requests rather than overlapping calls from the same leader to that peer ([threading model](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/src/docs/internal/threading.md); [replication implementation](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/src/replication/mod.rs)).
+OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so this covers successive requests rather than overlapping calls from the same leader to that peer ([threading model](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/docs/internal/threading.md); [replication implementation](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/replication/mod.rs)).
 The 24 orders exhaust release order only for these four held requests; schedules with different request batches, terms, or partition conditions remain outstanding.
 Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
