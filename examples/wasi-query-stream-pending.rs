@@ -88,4 +88,5 @@ mod component {
 }
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "wasi", target_env = "p2")))]
+#[allow(dead_code)]
 fn main() {}
