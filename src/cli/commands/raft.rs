@@ -1,5 +1,6 @@
 use std::env;
 use std::error::Error;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use txbase::replication::raft::{
@@ -30,8 +31,11 @@ fn status(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> 
     let peer_url = args
         .next()
         .ok_or("raft membership status requires a peer URL")?;
-    let timeout = parse_timeout_options(&mut args)?;
-    let response = client(&peer_url, timeout)?.status()?;
+    let mut tls_client_certificate = None;
+    let mut tls_client_key = None;
+    let timeout =
+        parse_timeout_options(&mut args, &mut tls_client_certificate, &mut tls_client_key)?;
+    let response = client(&peer_url, timeout, tls_client_certificate, tls_client_key)?.status()?;
     println!("{}", serde_json::to_string(&response)?);
     Ok(())
 }
@@ -44,6 +48,8 @@ fn add_learner(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Err
     let mut node_id = None;
     let mut peer_address = None;
     let mut timeout = None;
+    let mut tls_client_certificate = None;
+    let mut tls_client_key = None;
     while let Some(option) = args.next() {
         match option.as_str() {
             "--cluster-id" => set_once(
@@ -72,6 +78,19 @@ fn add_learner(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Err
                 )?,
                 "--timeout-ms",
             )?,
+            "--tls-client-cert" => set_once(
+                &mut tls_client_certificate,
+                PathBuf::from(
+                    args.next()
+                        .ok_or("--tls-client-cert requires a file path")?,
+                ),
+                "--tls-client-cert",
+            )?,
+            "--tls-client-key" => set_once(
+                &mut tls_client_key,
+                PathBuf::from(args.next().ok_or("--tls-client-key requires a file path")?),
+                "--tls-client-key",
+            )?,
             _ => return Err(format!("unknown raft membership option: {option}").into()),
         }
     }
@@ -82,7 +101,8 @@ fn add_learner(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Err
         node_id.ok_or("--node-id is required")?,
         peer_address.ok_or("--peer-address is required")?,
     )?;
-    let response = client(&peer_url, timeout)?.add_learner(&request)?;
+    let response = client(&peer_url, timeout, tls_client_certificate, tls_client_key)?
+        .add_learner(&request)?;
     println!("{}", serde_json::to_string(&response)?);
     Ok(())
 }
@@ -96,6 +116,8 @@ fn change_voters(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn E
     let mut expected_voter_ids = None;
     let mut voter_ids = None;
     let mut timeout = None;
+    let mut tls_client_certificate = None;
+    let mut tls_client_key = None;
     while let Some(option) = args.next() {
         match option.as_str() {
             "--cluster-id" => set_once(
@@ -133,6 +155,19 @@ fn change_voters(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn E
                 )?,
                 "--timeout-ms",
             )?,
+            "--tls-client-cert" => set_once(
+                &mut tls_client_certificate,
+                PathBuf::from(
+                    args.next()
+                        .ok_or("--tls-client-cert requires a file path")?,
+                ),
+                "--tls-client-cert",
+            )?,
+            "--tls-client-key" => set_once(
+                &mut tls_client_key,
+                PathBuf::from(args.next().ok_or("--tls-client-key requires a file path")?),
+                "--tls-client-key",
+            )?,
             _ => return Err(format!("unknown raft membership option: {option}").into()),
         }
     }
@@ -144,35 +179,67 @@ fn change_voters(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn E
         expected_voter_ids.ok_or("--expected-voter-ids is required")?,
         voter_ids.ok_or("--voter-ids is required")?,
     )?;
-    let response = client(&peer_url, timeout)?.change_membership(&request)?;
+    let response = client(&peer_url, timeout, tls_client_certificate, tls_client_key)?
+        .change_membership(&request)?;
     println!("{}", serde_json::to_string(&response)?);
     Ok(())
 }
 
 fn parse_timeout_options(
     args: &mut impl Iterator<Item = String>,
+    tls_client_certificate: &mut Option<PathBuf>,
+    tls_client_key: &mut Option<PathBuf>,
 ) -> Result<Duration, Box<dyn Error>> {
     let mut timeout = None;
     while let Some(option) = args.next() {
-        if option != "--timeout-ms" {
-            return Err(format!("unknown raft membership option: {option}").into());
-        }
-        set_once(
-            &mut timeout,
-            parse_timeout_ms(
-                args.next()
-                    .ok_or("--timeout-ms requires a positive integer")?,
+        match option.as_str() {
+            "--timeout-ms" => set_once(
+                &mut timeout,
+                parse_timeout_ms(
+                    args.next()
+                        .ok_or("--timeout-ms requires a positive integer")?,
+                )?,
+                "--timeout-ms",
             )?,
-            "--timeout-ms",
-        )?;
+            "--tls-client-cert" => set_once(
+                tls_client_certificate,
+                PathBuf::from(
+                    args.next()
+                        .ok_or("--tls-client-cert requires a file path")?,
+                ),
+                "--tls-client-cert",
+            )?,
+            "--tls-client-key" => set_once(
+                tls_client_key,
+                PathBuf::from(args.next().ok_or("--tls-client-key requires a file path")?),
+                "--tls-client-key",
+            )?,
+            _ => return Err(format!("unknown raft membership option: {option}").into()),
+        }
     }
     Ok(timeout.unwrap_or(DEFAULT_TIMEOUT))
 }
 
-fn client(peer_url: &str, timeout: Duration) -> Result<RaftMembershipHttpClient, Box<dyn Error>> {
+fn client(
+    peer_url: &str,
+    timeout: Duration,
+    tls_client_certificate: Option<PathBuf>,
+    tls_client_key: Option<PathBuf>,
+) -> Result<RaftMembershipHttpClient, Box<dyn Error>> {
+    let tls_identity = match (tls_client_certificate, tls_client_key) {
+        (Some(certificate), Some(private_key)) => Some((certificate, private_key)),
+        (None, None) => None,
+        _ => {
+            return Err("--tls-client-cert and --tls-client-key must be specified together".into());
+        }
+    };
     let token = env::var("TXBASE_REPLICATION_TOKEN")
         .map_err(|_| "Raft membership commands require TXBASE_REPLICATION_TOKEN")?;
-    Ok(RaftMembershipHttpClient::new(peer_url, token)?.with_timeout(timeout)?)
+    let mut client = RaftMembershipHttpClient::new(peer_url, token)?;
+    if let Some((certificate, private_key)) = tls_identity {
+        client = client.with_client_certificate_files(certificate, private_key)?;
+    }
+    Ok(client.with_timeout(timeout)?)
 }
 
 fn set_once<T>(slot: &mut Option<T>, value: T, option: &str) -> Result<(), Box<dyn Error>> {
@@ -295,5 +362,22 @@ mod tests {
                 .to_string()
                 .contains("--timeout-ms may be specified only once")
         );
+    }
+
+    #[test]
+    fn raft_membership_cli_requires_a_complete_tls_client_identity() {
+        let error = raft(
+            [
+                "membership",
+                "status",
+                "https://localhost",
+                "--tls-client-cert",
+                "client.pem",
+            ]
+            .map(str::to_owned)
+            .into_iter(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("must be specified together"));
     }
 }

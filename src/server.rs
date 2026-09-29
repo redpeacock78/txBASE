@@ -45,6 +45,7 @@ pub struct CatalogRaftConfig {
     pub initialize_catalog: bool,
     pub tls_certificate: Option<std::path::PathBuf>,
     pub tls_private_key: Option<std::path::PathBuf>,
+    pub tls_client_ca: Option<std::path::PathBuf>,
 }
 
 #[derive(Clone, Debug)]

@@ -38,6 +38,7 @@ pub(crate) fn serve_catalog(mut args: impl Iterator<Item = String>) -> Result<()
     let mut raft_initialize_catalog = false;
     let mut raft_tls_certificate = None;
     let mut raft_tls_private_key = None;
+    let mut raft_tls_client_ca = None;
     let mut catalog_tls_certificate = None;
     let mut catalog_tls_private_key = None;
     let mut catalog_tls_client_ca = None;
@@ -135,6 +136,12 @@ pub(crate) fn serve_catalog(mut args: impl Iterator<Item = String>) -> Result<()
                     args.next().ok_or("--raft-peer-key requires a file path")?,
                 ));
             }
+            "--raft-peer-client-ca" => {
+                raft_tls_client_ca = Some(PathBuf::from(
+                    args.next()
+                        .ok_or("--raft-peer-client-ca requires a file path")?,
+                ));
+            }
             _ => return Err(format!("unknown option: {option}").into()),
         }
     }
@@ -161,7 +168,8 @@ pub(crate) fn serve_catalog(mut args: impl Iterator<Item = String>) -> Result<()
         || raft_bootstrap
         || raft_initialize_catalog
         || raft_tls_certificate.is_some()
-        || raft_tls_private_key.is_some();
+        || raft_tls_private_key.is_some()
+        || raft_tls_client_ca.is_some();
     if raft_options_used {
         if replication_options_used {
             return Err("--replication-* and --raft-* options cannot be combined".into());
@@ -179,6 +187,7 @@ pub(crate) fn serve_catalog(mut args: impl Iterator<Item = String>) -> Result<()
             initialize_catalog: raft_initialize_catalog,
             tls_certificate: raft_tls_certificate,
             tls_private_key: raft_tls_private_key,
+            tls_client_ca: raft_tls_client_ca,
         };
         return match catalog_tls {
             Some(tls) => server::serve_catalog_with_raft_and_tls(&path, &bind, config, tls),

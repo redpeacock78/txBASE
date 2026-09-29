@@ -26,6 +26,8 @@ fn catch_up(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>
         .ok_or("replicate catch-up requires an authority URL")?;
     let mut term = None;
     let mut follower_id = None;
+    let mut tls_client_certificate = None;
+    let mut tls_client_key = None;
     let mut limit = MAX_REPLICATION_ENTRY_BATCH;
     let mut timeout = Duration::from_secs(10);
     while let Some(option) = args.next() {
@@ -60,6 +62,17 @@ fn catch_up(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>
                     "replication timeout",
                 )?);
             }
+            "--tls-client-cert" => {
+                tls_client_certificate = Some(PathBuf::from(
+                    args.next()
+                        .ok_or("--tls-client-cert requires a file path")?,
+                ));
+            }
+            "--tls-client-key" => {
+                tls_client_key = Some(PathBuf::from(
+                    args.next().ok_or("--tls-client-key requires a file path")?,
+                ));
+            }
             _ => return Err(format!("unknown option: {option}").into()),
         }
     }
@@ -67,15 +80,24 @@ fn catch_up(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>
     let term = term.ok_or("replicate catch-up requires --replication-term TERM")?;
     let follower_id = follower_id.ok_or("replicate catch-up requires --follower-id ID")?;
     ReplicationProgress::new(follower_id.clone(), term, 0, 0, "cli".into())?;
-    let mut catalog = Catalog::from_path(&directory)?;
-    let mut log = ReplicationLog::open(&catalog, term)?;
     let mut client = ReplicationHttpClient::new(&authority_url)?.with_timeout(timeout)?;
+    match (tls_client_certificate, tls_client_key) {
+        (Some(certificate), Some(private_key)) => {
+            client = client.with_client_certificate_files(certificate, private_key)?;
+        }
+        (None, None) => {}
+        _ => {
+            return Err("--tls-client-cert and --tls-client-key must be specified together".into());
+        }
+    }
     if let Some(token) = env::var_os("TXBASE_REPLICATION_TOKEN") {
         let token = token
             .into_string()
             .map_err(|_| "TXBASE_REPLICATION_TOKEN must be valid UTF-8")?;
         client = client.with_bearer_token(token)?;
     }
+    let mut catalog = Catalog::from_path(&directory)?;
+    let mut log = ReplicationLog::open(&catalog, term)?;
     let result = client.catch_up(&mut catalog, &mut log, follower_id, limit)?;
     println!(
         "{}",
@@ -124,5 +146,50 @@ mod tests {
     fn replicate_rejects_missing_or_unknown_subcommands() {
         assert!(replicate(std::iter::empty()).is_err());
         assert!(replicate([String::from("status")].into_iter()).is_err());
+    }
+
+    #[test]
+    fn catch_up_requires_a_complete_tls_client_identity_before_opening_the_catalog() {
+        let error = replicate(
+            [
+                "catch-up",
+                "/missing-catalog",
+                "http://127.0.0.1:1",
+                "--replication-term",
+                "1",
+                "--follower-id",
+                "follower",
+                "--tls-client-cert",
+                "client.pem",
+            ]
+            .map(str::to_owned)
+            .into_iter(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("must be specified together"));
+
+        let error = replicate(
+            [
+                "catch-up",
+                "/missing-catalog",
+                "http://127.0.0.1:1",
+                "--replication-term",
+                "1",
+                "--follower-id",
+                "follower",
+                "--tls-client-cert",
+                "client.pem",
+                "--tls-client-key",
+                "client-key.pem",
+            ]
+            .map(str::to_owned)
+            .into_iter(),
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("client certificates require HTTPS")
+        );
     }
 }

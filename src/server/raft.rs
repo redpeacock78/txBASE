@@ -69,12 +69,24 @@ impl RaftRuntime {
         let local_genesis_fingerprint = genesis_fingerprint.clone();
 
         let genesis_fingerprint = Arc::new(RwLock::new(genesis_fingerprint.clone()));
-        let network = RaftHttpNetworkFactory::new_with_fingerprint(
+        let mut network = RaftHttpNetworkFactory::new_with_fingerprint(
             config.cluster_id.clone(),
             config.node_id,
             Arc::clone(&genesis_fingerprint),
             token.clone(),
         )?;
+        if config.tls_client_ca.is_some() {
+            network = network.with_client_certificate_files(
+                config
+                    .tls_certificate
+                    .as_deref()
+                    .expect("validated TLS certificate"),
+                config
+                    .tls_private_key
+                    .as_deref()
+                    .expect("validated TLS private key"),
+            );
+        }
         let network_factory = network.clone();
         let join_state_machine = state.clone();
         let join_log_store = log_store.clone();

@@ -19,7 +19,7 @@ use tokio_rustls::TlsAcceptor;
 
 const INTERNAL_HEADER: &str = "x-txbase-internal-listener-token";
 
-pub(super) struct CatalogListener {
+pub(super) struct ProtectedHttpListener {
     server: Arc<Server>,
     token: Option<String>,
     tls_worker: Option<TlsWorker>,
@@ -31,7 +31,7 @@ struct TlsWorker {
     thread: JoinHandle<()>,
 }
 
-impl CatalogListener {
+impl ProtectedHttpListener {
     pub(super) fn bind(bind: &str, config: Option<&CatalogTlsConfig>) -> Result<Self, String> {
         let Some(config) = config else {
             let server =
@@ -39,7 +39,7 @@ impl CatalogListener {
             let public_addr = server
                 .server_addr()
                 .to_ip()
-                .ok_or_else(|| format!("catalog listener {bind} is not an IP socket"))?;
+                .ok_or_else(|| format!("HTTP listener {bind} is not an IP socket"))?;
             return Ok(Self {
                 server: Arc::new(server),
                 token: None,
@@ -50,20 +50,20 @@ impl CatalogListener {
 
         let tls_config = load_server_config(config)?;
         let public_listener = TcpListener::bind(bind)
-            .map_err(|error| format!("cannot bind HTTPS catalog listener {bind}: {error}"))?;
+            .map_err(|error| format!("cannot bind HTTPS listener {bind}: {error}"))?;
         public_listener
             .set_nonblocking(true)
-            .map_err(|error| format!("cannot configure HTTPS catalog listener {bind}: {error}"))?;
+            .map_err(|error| format!("cannot configure HTTPS listener {bind}: {error}"))?;
         let public_addr = public_listener
             .local_addr()
-            .map_err(|error| format!("cannot inspect HTTPS catalog listener {bind}: {error}"))?;
+            .map_err(|error| format!("cannot inspect HTTPS listener {bind}: {error}"))?;
 
         let server = Server::http("127.0.0.1:0")
-            .map_err(|error| format!("cannot bind private catalog backend: {error}"))?;
+            .map_err(|error| format!("cannot bind private HTTP backend: {error}"))?;
         let backend_addr = server
             .server_addr()
             .to_ip()
-            .ok_or_else(|| "private catalog backend is not an IP socket".to_owned())?;
+            .ok_or_else(|| "private HTTP backend is not an IP socket".to_owned())?;
         let server = Arc::new(server);
         let token = new_internal_token()?;
         let worker_token = token.clone();
@@ -72,7 +72,7 @@ impl CatalogListener {
         let worker_server = Arc::clone(&server);
         let acceptor = TlsAcceptor::from(tls_config);
         let thread = thread::Builder::new()
-            .name("txbase-catalog-tls".to_owned())
+            .name("txbase-https-listener".to_owned())
             .spawn(move || {
                 run_tls_worker(
                     public_listener,
@@ -84,7 +84,7 @@ impl CatalogListener {
                     worker_server,
                 );
             })
-            .map_err(|error| format!("cannot start HTTPS catalog listener: {error}"))?;
+            .map_err(|error| format!("cannot start HTTPS listener: {error}"))?;
 
         match ready_rx.recv_timeout(Duration::from_secs(10)) {
             Ok(Ok(())) => Ok(Self {
@@ -99,13 +99,13 @@ impl CatalogListener {
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 let _ = thread.join();
-                Err("HTTPS catalog listener stopped during startup".to_owned())
+                Err("HTTPS listener stopped during startup".to_owned())
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 let _ = shutdown.send(());
                 server.unblock();
                 let _ = thread.join();
-                Err("timed out starting HTTPS catalog listener".to_owned())
+                Err("timed out starting HTTPS listener".to_owned())
             }
         }
     }
@@ -125,6 +125,10 @@ impl CatalogListener {
     pub(super) fn authorizes(&self, request: &Request) -> bool {
         request_has_internal_token(request, self.token.as_deref())
     }
+
+    pub(super) fn unblock(&self) {
+        self.server.unblock();
+    }
 }
 
 fn request_has_internal_token(request: &Request, expected: Option<&str>) -> bool {
@@ -141,7 +145,7 @@ fn request_has_internal_token(request: &Request, expected: Option<&str>) -> bool
         && values.next().is_none()
 }
 
-impl Drop for CatalogListener {
+impl Drop for ProtectedHttpListener {
     fn drop(&mut self) {
         if let Some(worker) = self.tls_worker.take() {
             let _ = worker.shutdown.send(());
@@ -151,7 +155,7 @@ impl Drop for CatalogListener {
     }
 }
 
-fn load_server_config(config: &CatalogTlsConfig) -> Result<Arc<ServerConfig>, String> {
+pub(super) fn load_server_config(config: &CatalogTlsConfig) -> Result<Arc<ServerConfig>, String> {
     let certificates = read_certificates(&config.certificate, "server certificate")?;
     let private_key = rustls_pemfile::private_key(&mut BufReader::new(
         File::open(&config.private_key)
@@ -206,7 +210,7 @@ fn read_certificates(
 fn new_internal_token() -> Result<String, String> {
     let mut random = [0_u8; 32];
     getrandom::fill(&mut random)
-        .map_err(|error| format!("cannot generate private catalog listener token: {error}"))?;
+        .map_err(|error| format!("cannot generate private HTTP listener token: {error}"))?;
     let mut token = String::with_capacity(random.len() * 2);
     for byte in random {
         write!(&mut token, "{byte:02x}").expect("writing to a String cannot fail");
@@ -260,7 +264,7 @@ fn run_tls_worker(
         acceptor,
         shutdown,
     )) {
-        eprintln!("HTTPS catalog listener stopped: {error}");
+        eprintln!("HTTPS listener stopped: {error}");
         server.unblock();
     }
 }
@@ -271,4 +275,4 @@ pub(super) const fn internal_header_name() -> &'static str {
 
 #[cfg(test)]
 #[path = "catalog_tls_tests.rs"]
-mod tests;
+pub(in crate::server) mod tests;

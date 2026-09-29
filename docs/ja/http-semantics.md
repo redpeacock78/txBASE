@@ -116,8 +116,10 @@ Raftモードは、公開カタログlistenerと分離したpeer listenerを起�
 `POST /raft/v1/vote`、`/raft/v1/append`、`/raft/v1/snapshot`には、従来のレプリケーションルートで認証を省略できる場合も`TXBASE_REPLICATION_TOKEN`のBearer認証情報が必要です。
 peer listenerはリクエスト本文を2 MiB、各RPCを10秒に制限し、cluster、送信node、有効なmembership、genesis catalog fingerprintを検証します。
 loopbackのpeer URLにはHTTPを使えますが、loopback以外では`--raft-peer-cert`と`--raft-peer-key`を設定したHTTPSが必要です。
-peer clientはOSの信頼機構で証明書とホスト名を検証します。
-Raft peer transportは相互TLSを提供しません。
+peer clientはOSの信頼機構でserver証明書とホスト名を検証します。
+`--raft-peer-client-ca`を指定すると、すべてのHTTPS peer接続でクライアント証明書を必須にします。
+その場合、すべての初期memberにHTTPSを指定します。
+mTLSでは各Raft nodeがpeer証明書と鍵を送信側client identityにも使います。
 公開カタログlistenerのTLSは独立して設定します。詳細は[公開カタログlistenerの通信保護](catalog-listener-security.md)を参照してください。
 
 `DELETE`はDBFの論理削除です。

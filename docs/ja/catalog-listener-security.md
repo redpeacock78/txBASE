@@ -22,8 +22,8 @@ TLSファイルは起動時に一度だけ読み込みます。
 証明書や信頼CAを変更した後は、サーバーを再起動してください。
 不正なTLSファイルとlistenerのbindエラーは、カタログを開く前に報告します。
 
-公開listenerの`--tls-cert`、`--tls-key`、`--tls-client-ca`は、Raft peer listenerの`--raft-peer-cert`と`--raft-peer-key`とは独立しています。
-後者はRaft peer listenerだけを設定します。
+公開listenerの`--tls-cert`、`--tls-key`、`--tls-client-ca`は、Raft peer用の`--raft-peer-cert`、`--raft-peer-key`、`--raft-peer-client-ca`とは独立しています。
+Raft用のオプションはpeer listenerだけを設定します。詳細は[Raftコンセンサス設計](raft.md)を参照してください。
 
 ## HTTP転送の境界
 
@@ -51,12 +51,11 @@ mTLSはさらに、設定したCA証明書までつながるクライアント�
 
 `TXBASE_REPLICATION_TOKEN`はレプリケーションrouteに使う独立したBearer認証情報です。
 HTTPではネットワーク上で読み取られるため、TLSの代わりにはなりません。
-組み込みの`replicate catch-up` clientはクライアント証明書を読み込まないため、`--tls-client-ca`を設定したlistenerには接続できません。
-この構成ではクライアント証明書に対応したclientを使ってください。
+組み込みの`replicate catch-up` clientは、`--tls-client-cert`と`--tls-client-key`を両方指定するとクライアント証明書を提示します。
+client identityを指定した場合はHTTPSが必要です。server証明書はOSの信頼機構で検証します。
 
-Raft peer TLSと公開カタログTLSでは、証明書、listener、信頼設定がそれぞれ独立しています。
-peer HTTPSはmTLSを提供しません。
-詳細は[Raftコンセンサス設計](raft.md)を参照してください。
+Raft peer TLSと公開カタログTLSでは、listenerと信頼設定がそれぞれ独立しています。
+Raft peerのmTLSは`--raft-peer-client-ca`で個別に有効にします。詳細は[Raftコンセンサス設計](raft.md)を参照してください。
 
 ## CLIの例
 
@@ -73,6 +72,14 @@ txbase serve-catalog ./data --bind 0.0.0.0:8443 \
 txbase serve-catalog ./data --bind 0.0.0.0:8443 \
   --tls-cert ./server-chain.pem --tls-key ./server-key.pem \
   --tls-client-ca ./client-ca.pem
+```
+
+組み込みcatch-up clientは、次のコマンドでクライアント証明書を提示できます。
+
+```sh
+txbase replicate catch-up ./follower https://authority.example \
+  --replication-term 4 --follower-id follower-1 \
+  --tls-client-cert ./follower-chain.pem --tls-client-key ./follower-key.pem
 ```
 
 `serve-catalog`に`--raft-*`を指定した場合も、同じ公開TLSオプションを使えます。

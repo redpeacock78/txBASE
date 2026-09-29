@@ -31,8 +31,8 @@ This document records the implemented Raft boundary and the remaining authority,
 - Catalog filesystem work runs through Tokio's blocking worker pool.
 - `serve-catalog` starts an OpenRaft node from an explicit node ID, cluster ID, node directory, peer address, and initial member map. Only `--raft-bootstrap` initializes cluster membership.
 - A separate peer listener handles vote, append, snapshot, learner-preparation, learner-add, membership-status, and voter-change requests. It bounds requests to 2 MiB, applies a 10-second timeout, and checks bearer authentication, cluster and node identity, active membership, and a shared genesis-catalog fingerprint for Raft RPCs.
-- Peer traffic may use HTTPS with a node certificate and key. Bearer-authenticated HTTP is accepted only for loopback peer URLs. The public catalog listener has separate opt-in TLS and mTLS options; see [public catalog listener transport security](catalog-listener-security.md).
-- `RaftMembershipHttpClient` and `txbase raft membership` provide authenticated status, learner-add, and voter-change operations. The client reuses the verified HTTP transport and validates versioned response shapes and voter-set consistency.
+- Peer traffic may use HTTPS with a node certificate and key. `--raft-peer-client-ca` enables mTLS and requires HTTPS for every initial member. A node presents its peer certificate and key as its client identity when connecting to an mTLS peer; each peer verifies that identity against its configured CA. Outgoing clients verify server certificates and host names with the operating system's trust facilities. The public catalog listener has separate TLS and mTLS options; see [public catalog listener transport security](catalog-listener-security.md).
+- `RaftMembershipHttpClient` and `txbase raft membership` provide authenticated status, learner-add, and voter-change operations. The client reuses the verified HTTP transport, supports an optional client certificate and key, and validates versioned response shapes and voter-set consistency.
 - Raft writes to `/transaction` and named-table mutation routes require `X-Txbase-Client-Id` and a positive `X-Txbase-Client-Sequence`. Exact retries return the stored result.
 - Normal catalog reads call OpenRaft's linearizable read barrier before reading the local catalog. The server does not provide an explicitly stale follower-read mode.
 - A three-node CI test exercises quorum commit and retry deduplication, learner catch-up before promotion, joint voter promotion and demotion, retained-learner shutdown, and quorum writes after demotion.
@@ -41,7 +41,8 @@ This document records the implemented Raft boundary and the remaining authority,
 - A two-node CI test verifies that an empty-catalog learner can join a cluster with an empty genesis catalog.
 - A three-node CI test verifies that a blank learner receives the non-empty genesis catalog and a committed update before it joins as a learner.
 - A three-node CI test isolates one voter, commits four commands on the remaining quorum, snapshots and purges the leader log, then verifies that the voter installs the snapshot and applies the next client sequence after reconnecting.
-- A peer-RPC HTTPS integration test accepts a certificate trusted by its test root and rejects an untrusted certificate or a certificate whose SAN does not match the peer host.
+- Peer-RPC HTTPS tests accept a trusted server certificate, reject untrusted or wrong-host server certificates, require a trusted client certificate when mTLS is enabled, and reject a missing client certificate.
+- The Raft peer-listener integration test verifies that a trusted client can reach the membership route while missing and untrusted client certificates fail during TLS negotiation.
 - `RaftLogStore` durably stores votes, log entries, committed position, and the last purged log ID in a node-specific directory.
 - The log journal uses length-prefixed, SHA-256-checked JSON records, recovers an incomplete tail, and compacts purged history into a new generation.
 - The node directory has an exclusive process lock, and the storage tests include OpenRaft's `testing::Suite` plus restart-recovery cases.
@@ -49,7 +50,6 @@ This document records the implemented Raft boundary and the remaining authority,
 ### Not implemented
 
 - Broader deterministic coverage for delayed or reordered RPC schedules beyond the three four-request release orders and the tested same-peer request pair.
-- Mutual TLS for the Raft peer listener.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
 The serialized command limit is 1 MiB.
@@ -170,7 +170,13 @@ The preparation route accepts a known initial member before the candidate has a 
 The learner workflow sends a chunked snapshot through the normal snapshot route before adding the candidate to membership; OpenRaft then replicates later log entries.
 The listener is separate from the public catalog listener, caps each request at 2 MiB, applies a 10-second RPC timeout, and checks Raft RPC senders against the active membership, cluster ID, and shared genesis fingerprint. It also checks that the OpenRaft vote identifies the same sender.
 
-Every Raft peer request requires the `TXBASE_REPLICATION_TOKEN` bearer credential. Non-loopback peer URLs must use HTTPS with `--raft-peer-cert` and `--raft-peer-key`; the client verifies the certificate and host name with the operating system's trust facilities. Plain HTTP with a bearer token is allowed only for loopback URLs. Peer TLS does not provide mutual TLS and applies only to the peer listener; configure public catalog TLS separately as described in [public catalog listener transport security](catalog-listener-security.md).
+Every Raft peer request requires the `TXBASE_REPLICATION_TOKEN` bearer credential. Non-loopback peer URLs must use HTTPS with `--raft-peer-cert` and `--raft-peer-key`; the client verifies the server certificate and host name with the operating system's trust facilities. Plain HTTP with a bearer token is allowed only for loopback URLs.
+
+Pass `--raft-peer-client-ca PEM` to require every HTTPS peer client to present a certificate issued by that CA. All initial-member URLs must use HTTPS when this option is enabled. Each node presents its `--raft-peer-cert` and `--raft-peer-key` pair as its outgoing client identity, so the certificate must be valid for both server and client authentication. The client CA controls inbound peer identity verification; clients continue to use the operating system's trust facilities to verify peer server certificates.
+
+Raft peer mTLS is independent of public catalog mTLS. `--raft-peer-client-ca` applies only to the peer listener; public catalog clients use `--tls-client-ca` as described in [public catalog listener transport security](catalog-listener-security.md). The `txbase raft membership` commands can present a separate client identity with `--tls-client-cert` and `--tls-client-key`.
+
+Rustls [`WebPkiClientVerifier`](https://docs.rs/rustls/0.23.45/rustls/server/struct.WebPkiClientVerifier.html) requires and validates client certificates when configured with trusted roots. [`ConfigBuilder::with_client_auth_cert`](https://docs.rs/rustls/0.23.45/rustls/struct.ConfigBuilder.html#method.with_client_auth_cert) configures the client identity.
 
 ## 7. Snapshots, recovery, and migration
 

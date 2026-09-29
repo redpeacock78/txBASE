@@ -66,6 +66,7 @@ fn interrupted_joint_membership_resumes_after_leader_restart() {
             initialize_catalog: false,
             tls_certificate: None,
             tls_private_key: None,
+            tls_client_ca: None,
         };
         let node =
             RaftRuntime::start(&catalog_root, config.clone(), Some("ci-token".into())).unwrap();

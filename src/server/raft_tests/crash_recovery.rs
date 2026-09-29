@@ -124,6 +124,7 @@ fn with_cluster<T>(
             initialize_catalog: node_id != 1,
             tls_certificate: None,
             tls_private_key: None,
+            tls_client_ca: None,
         };
         let node = RaftRuntime::start(&catalog_root, config.clone(), Some("ci-token".into()))
             .unwrap_or_else(|error| {

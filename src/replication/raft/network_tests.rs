@@ -1,6 +1,6 @@
 use super::*;
 use crate::replication::http_tests::{
-    spawn_tls_handshake_probe, spawn_tls_status, tls_config_pair,
+    spawn_tls_handshake_probe, spawn_tls_status, tls_client_auth_config_pair, tls_config_pair,
 };
 use rustls::{ClientConfig, RootCertStore};
 
@@ -51,6 +51,41 @@ fn peer_rpc_uses_verified_https_and_rejects_untrusted_or_wrong_host_certificates
 
     let (url, server) = spawn_tls_handshake_probe(server_tls, "127.0.0.1");
     let network = network_with_tls(&url, trusted_client);
+    assert!(
+        network
+            .rpc::<(), String, String>(RAFT_VOTE_PATH, (), Duration::from_secs(2))
+            .is_err()
+    );
+    assert!(server.join().unwrap());
+}
+
+#[test]
+fn peer_rpc_presents_a_client_certificate_to_an_mtls_peer() {
+    let (client_tls, _, server_tls) = tls_client_auth_config_pair();
+    let response: RpcReply<String, String> =
+        reply("tls-cluster", 2, &[7; 32], Ok("accepted".into()));
+    let (url, server) = spawn_tls_status(serde_json::to_vec(&response).unwrap(), server_tls);
+    let network = network_with_tls(&url, client_tls);
+
+    let result = network
+        .rpc::<(), String, String>(RAFT_VOTE_PATH, (), Duration::from_secs(2))
+        .unwrap();
+
+    assert_eq!(result.unwrap(), "accepted");
+    assert!(
+        server
+            .join()
+            .unwrap()
+            .starts_with("POST /api/raft/v1/vote HTTP/1.1\r\n")
+    );
+}
+
+#[test]
+fn peer_rpc_without_a_client_certificate_is_rejected_by_an_mtls_peer() {
+    let (_, anonymous_client_tls, server_tls) = tls_client_auth_config_pair();
+    let (url, server) = spawn_tls_handshake_probe(server_tls, "localhost");
+    let network = network_with_tls(&url, anonymous_client_tls);
+
     assert!(
         network
             .rpc::<(), String, String>(RAFT_VOTE_PATH, (), Duration::from_secs(2))

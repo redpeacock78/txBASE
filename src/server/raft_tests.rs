@@ -3,6 +3,7 @@ mod failover;
 mod idempotency;
 mod membership;
 mod membership_recovery;
+mod peer_tls;
 mod snapshot_recovery;
 
 use super::raft::RaftRuntime;

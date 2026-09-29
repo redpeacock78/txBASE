@@ -116,8 +116,9 @@ Raft mode starts a peer listener separate from the public catalog listener.
 Every `POST /raft/v1/vote`, `/raft/v1/append`, and `/raft/v1/snapshot` request requires the `TXBASE_REPLICATION_TOKEN` Bearer credential, even when the legacy replication routes do not require it.
 The peer listener limits request bodies to 2 MiB and each RPC to 10 seconds, then validates the cluster, sender, active membership, and genesis-catalog fingerprint.
 Loopback peer URLs may use HTTP; non-loopback peer URLs must use HTTPS with both `--raft-peer-cert` and `--raft-peer-key` configured.
-Peer clients verify the certificate and host name with the operating system's trust facilities.
-The Raft peer transport does not provide mutual TLS.
+Peer clients verify the server certificate and host name with the operating system's trust facilities.
+`--raft-peer-client-ca` optionally requires a client certificate on every HTTPS peer connection and therefore requires HTTPS for every initial member.
+Each Raft node uses its peer certificate and key as its outgoing client identity when mTLS is enabled.
 Public catalog listener TLS is configured independently; see [public catalog listener transport security](catalog-listener-security.md).
 
 `DELETE` is a logical DBF deletion.

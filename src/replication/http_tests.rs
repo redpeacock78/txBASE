@@ -1,6 +1,10 @@
 use super::*;
 use crate::catalog::Catalog;
 use crate::xbase::{OperationIr, OperationMethod};
+use rcgen::{
+    BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, KeyPair,
+    generate_simple_self_signed,
+};
 use rustls::pki_types::PrivateKeyDer;
 use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection, StreamOwned};
 use serde_json::json;
@@ -133,6 +137,74 @@ pub(in crate::replication) fn tls_config_pair() -> (Arc<ClientConfig>, Arc<Serve
         )
         .unwrap();
     (Arc::new(client), Arc::new(server))
+}
+
+pub(in crate::replication) fn tls_client_auth_config_pair()
+-> (Arc<ClientConfig>, Arc<ClientConfig>, Arc<ServerConfig>) {
+    let server = generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+    let mut server_roots = RootCertStore::empty();
+    server_roots.add(server.cert.der().clone()).unwrap();
+
+    let mut client_ca_params = CertificateParams::default();
+    client_ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    let client_ca_key = KeyPair::generate().unwrap();
+    let client_ca = client_ca_params.self_signed(&client_ca_key).unwrap();
+    let mut client_params = CertificateParams::default();
+    client_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+    let client_key = KeyPair::generate().unwrap();
+    let client = client_params
+        .signed_by(&client_key, &client_ca, &client_ca_key)
+        .unwrap();
+
+    let anonymous_client_config = ClientConfig::builder()
+        .with_root_certificates(server_roots.clone())
+        .with_no_client_auth();
+    let client_config = ClientConfig::builder()
+        .with_root_certificates(server_roots)
+        .with_client_auth_cert(
+            vec![client.der().clone()],
+            PrivateKeyDer::Pkcs8(client_key.serialize_der().into()),
+        )
+        .unwrap();
+    let mut client_roots = RootCertStore::empty();
+    client_roots.add(client_ca.der().clone()).unwrap();
+    let verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(client_roots))
+        .build()
+        .unwrap();
+    let server_config = ServerConfig::builder()
+        .with_client_cert_verifier(verifier)
+        .with_single_cert(
+            vec![server.cert.der().clone()],
+            PrivateKeyDer::Pkcs8(server.key_pair.serialize_der().into()),
+        )
+        .unwrap();
+    (
+        Arc::new(client_config),
+        Arc::new(anonymous_client_config),
+        Arc::new(server_config),
+    )
+}
+
+fn spawn_tls_sequence(
+    responses: Vec<Vec<u8>>,
+    config: Arc<ServerConfig>,
+) -> (String, JoinHandle<Vec<String>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let handle = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for response in responses {
+            let (socket, _) = listener.accept().unwrap();
+            let connection = ServerConnection::new(Arc::clone(&config)).unwrap();
+            let mut stream = StreamOwned::new(connection, socket);
+            requests.push(String::from_utf8(read_request(&mut stream)).unwrap());
+            stream.write_all(&response).unwrap();
+            stream.conn.send_close_notify();
+            stream.flush().unwrap();
+        }
+        requests
+    });
+    (format!("https://localhost:{port}/api/"), handle)
 }
 
 pub(in crate::replication) fn spawn_tls_status(
@@ -323,7 +395,7 @@ fn client_does_not_retry_terminal_replication_status() {
 }
 
 #[test]
-fn client_catches_up_entry_pages_and_acknowledges_progress() {
+fn client_catches_up_over_https_with_a_client_certificate() {
     let leader_root = temporary_catalog("leader");
     let follower_root = temporary_catalog("follower");
     let leader = Catalog::from_path(&leader_root).unwrap();
@@ -364,9 +436,11 @@ fn client_catches_up_entry_pages_and_acknowledges_progress() {
             .into_bytes(),
         ),
     ];
-    let (url, server) = spawn_sequence(responses);
+    let (client_tls, _, server_tls) = tls_client_auth_config_pair();
+    let (url, server) = spawn_tls_sequence(responses, server_tls);
     let client = ReplicationHttpClient::new(&url)
         .unwrap()
+        .with_tls_config_for_test(client_tls)
         .with_bearer_token("secret")
         .unwrap();
     let mut replica = ReplicationLog::new(4).unwrap();

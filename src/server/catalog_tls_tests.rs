@@ -17,12 +17,12 @@ use tiny_http::{Header, Response};
 
 static NEXT_TLS_TEST_ID: AtomicUsize = AtomicUsize::new(0);
 
-struct TestCertificates {
-    directory: PathBuf,
-    config: CatalogTlsConfig,
-    client_config: Arc<ClientConfig>,
-    missing_client_config: Arc<ClientConfig>,
-    untrusted_client_config: Arc<ClientConfig>,
+pub(in crate::server) struct TestCertificates {
+    pub(in crate::server) directory: PathBuf,
+    pub(in crate::server) config: CatalogTlsConfig,
+    pub(in crate::server) client_config: Arc<ClientConfig>,
+    pub(in crate::server) missing_client_config: Arc<ClientConfig>,
+    pub(in crate::server) untrusted_client_config: Arc<ClientConfig>,
 }
 
 impl Drop for TestCertificates {
@@ -31,7 +31,7 @@ impl Drop for TestCertificates {
     }
 }
 
-fn test_certificates() -> TestCertificates {
+pub(in crate::server) fn test_certificates() -> TestCertificates {
     let id = NEXT_TLS_TEST_ID.fetch_add(1, Ordering::Relaxed);
     let directory =
         std::env::temp_dir().join(format!("txbase-catalog-tls-{}-{id}", std::process::id()));
@@ -146,7 +146,11 @@ fn try_read_http_response(stream: &mut impl Read) -> std::io::Result<Vec<u8>> {
     Ok(response)
 }
 
-fn send_tls_request(address: SocketAddr, config: Arc<ClientConfig>, request: &[u8]) -> Vec<u8> {
+pub(in crate::server) fn send_tls_request(
+    address: SocketAddr,
+    config: Arc<ClientConfig>,
+    request: &[u8],
+) -> Vec<u8> {
     let socket = TcpStream::connect(address).unwrap();
     socket
         .set_read_timeout(Some(Duration::from_secs(3)))
@@ -158,7 +162,11 @@ fn send_tls_request(address: SocketAddr, config: Arc<ClientConfig>, request: &[u
     read_http_response(&mut stream)
 }
 
-fn tls_request_is_rejected(address: SocketAddr, config: Arc<ClientConfig>, request: &[u8]) -> bool {
+pub(in crate::server) fn tls_request_is_rejected(
+    address: SocketAddr,
+    config: Arc<ClientConfig>,
+    request: &[u8],
+) -> bool {
     let socket = TcpStream::connect(address).unwrap();
     socket
         .set_read_timeout(Some(Duration::from_secs(3)))
@@ -175,7 +183,7 @@ fn tls_request_is_rejected(address: SocketAddr, config: Arc<ClientConfig>, reque
 #[test]
 fn public_listener_requires_trusted_client_cert_and_protects_the_http_backend() {
     let certificates = test_certificates();
-    let listener = CatalogListener::bind("127.0.0.1:0", Some(&certificates.config)).unwrap();
+    let listener = ProtectedHttpListener::bind("127.0.0.1:0", Some(&certificates.config)).unwrap();
     let backend_addr = listener.server.server_addr().to_ip().unwrap();
     let backend = Arc::clone(&listener.server);
     let token = listener.token.clone().unwrap();
@@ -283,7 +291,7 @@ fn server_tls_without_a_client_ca_accepts_clients_without_certificates() {
         client_ca: None,
         ..certificates.config.clone()
     };
-    let listener = CatalogListener::bind("127.0.0.1:0", Some(&config)).unwrap();
+    let listener = ProtectedHttpListener::bind("127.0.0.1:0", Some(&config)).unwrap();
     assert!(completes_tls_handshake(
         listener.public_addr(),
         Arc::clone(&certificates.missing_client_config)

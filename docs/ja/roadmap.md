@@ -91,8 +91,11 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
   外部インフラなしの決定的なleader/followerフィクスチャも提供する。
 - 有界な`ReplicationHttpClient`がauthorityの状態を検証し、連続したエントリページまたは現在のスナップショットを取得し、ローカルの順序付き再生契約で適用し、HTTPまたはHTTPSでフォロワー適用位置を確認し、一時的なソケットまたはHTTPの失敗をプロセス内の有界な方針で再試行する。
 - 公開`txbase replicate catch-up`コマンドが固定termのフォロワーカタログを開き、ジャーナル化された`TXRP`位置を再開し、有界なHTTP catch-upを1回実行して、結果の適用位置をJSONで表示する。
+- 組み込みcatch-up clientは`--tls-client-cert`と`--tls-client-key`を使ってHTTPS authorityにクライアント証明書を提示できる。
 - `serve-catalog`向けに、初期voter集合を明示する任意のOpenRaftモードを実装済みである。
   クォーラム書き込み、線形化可能な読み取り、認証付きpeer RPC、peer HTTPSを提供する。
+  `--raft-peer-client-ca`を指定するとpeer mTLSが有効になる。
+  peer証明書と鍵は送信側client identityにも使い、すべての初期member URLにHTTPSを指定する。
   認証付きpeer APIはlearnerを追加し、nodeごとの有効なmembershipを照会し、joint consensusでvoter集合を変更する。
   voterへ昇格するlearnerの同期を待ち、降格したvoterはlearnerとして保持する。
   `txbase raft membership` CLIは、このpeer control planeを通じて状態照会、learner追加、voter変更を提供する。
@@ -559,7 +562,7 @@ proxyはcommit後の最初の成功応答を破棄します。
 - テーブル間または分散環境の長寿命スナップショットトランザクション。
 - 現在のテーブル、カタログ、`TXRP`、`TXRG`サイドカーを超える永続WAL履歴。
 - 現行の3通りのpeer間解放順序と検証済みの同一peerへの連続2要求を超える遅延・順序変更を検査する決定的なテストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
-- Raft peer listenerの相互TLS、組み込み`replicate catch-up` clientのクライアント証明書対応、永続的な再試行キュー、バックプレッシャー、authorityの検出。
+- 永続的な再試行キュー、バックプレッシャー、authorityの検出。
 - 分散フォロワー読み取りの保証。
 - 分散パーティショニング。
 
@@ -600,7 +603,7 @@ DBFとXBFのコーデックは、意味論が一致する範囲でクエリ、�
 - Firebaseの認証、セキュリティ規則、リスナー、オフラインクライアント。
 - SQLiteと同じテスト量またはカバレッジの主張。
 - 宣言エンコーディングが曖昧な場合の自動CJK変換。
-- 契約とエンドツーエンドテストなしのファイルシステムとキャッシュを考慮したmerge計画、集約、述語単位のserializable MVCC、耐久XBF、R2以外のプロバイダー統合、R2の本番接続検証、Raft peerの相互TLS、組み込みcatch-up clientのクライアント証明書対応、永続的な再試行キュー、権威検出、クォーラム、コンセンサスコード。
+- 契約とエンドツーエンドテストなしのファイルシステムとキャッシュを考慮したmerge計画、集約、述語単位のserializable MVCC、耐久XBF、R2以外のプロバイダー統合、R2の本番接続検証、永続的な再試行キュー、権威検出、クォーラム、コンセンサスコード。
 
 現在のインデックススライスは意図的にローカルです。
 

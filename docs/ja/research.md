@@ -27,7 +27,7 @@
 | SQLite のテスト範囲と品質 | [テストと品質](testing-quality.md) | 現在のテストマップと参照資料 |
 | 契約からテストへの追跡 | [品質契約マトリクス](quality-matrix.md) | 現在の証拠マップ |
 | HTTP メソッド、PATCH、QUERY | [HTTP の意味](http-semantics.md) | 現在のルートとプロトコル参照 |
-| 公開カタログlistenerの通信保護 | [公開カタログlistenerの通信保護](catalog-listener-security.md) | 任意のTLSと相互TLS、HTTP転送、CLI設定、組み込みcatch-up clientのクライアント証明書制約を実装済み |
+| 公開カタログlistenerの通信保護 | [公開カタログlistenerの通信保護](catalog-listener-security.md) | 任意のTLSと相互TLS、HTTP転送、CLI設定、組み込みcatch-up clientの任意のclient identityを実装済み |
 | DBF 上のリレーショナルスキーマ制約 | [スキーマメタデータ](schema-metadata.md) | 現在のローカルサブセットと将来のリレーショナル作業 |
 | ネイティブ XBF ストレージ形式 | [XBF v1 草案](xbf.md) | 草案コーデック、DBF 変換と出力、スナップショット経路、世代検査付き WAL、スキーマ出力ジャーナル |
 | 複数テーブル DBF 検出と有界ローカル等値結合 | [カタログ](catalog.md)と[結合モデル](joins.md) | 現在の境界と将来のリレーショナル作業 |
@@ -35,7 +35,7 @@
 | CJK、インデックス、XBF、ストレージ、並行性 | [ロードマップ](roadmap.md) | 現在の境界と将来の作業 |
 | エッジとオブジェクトストレージのコミット | [エッジストレージ](edge-storage.md)と[Cloudflare R2オブジェクトストレージアダプター](r2-object-store.md) | ローカル境界とR2バインディングアダプターを実装済みです。クラウドサービスへの接続検証と運用上のライフサイクル方針は今後の作業です。 |
 | WASMとワーカーのホスト境界 | [WASM](wasm.md)、[WASIクエリストリーム](wasi-query-stream.md)、[Workerクエリストリームアダプター](worker-query-stream.md)、[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)、[Cloudflare R2オブジェクトストレージアダプター](r2-object-store.md) | ホスト非依存コア、PromiseベースXBFアダプター、単一writerで書き込み可能なfilesystem adapterを使って現在・保持中のXBFを扱い、保留中WALを復旧するWASI 0.3 CLIクエリストリームコンポーネント、Worker互換Web Streamsクエリアダプター、汎用Fetchアダプター、R2バインディングアダプターを実装済みです。デプロイ済みWorker、R2サービスへの接続検証、プロバイダー接続型WASIストレージ、ノンブロッキングなWASI I/O、R2以外の統合は今後の作業です。 |
-| 分散レプリケーションと権威 | [分散化の進化](distributed-evolution.md)と[Raftコンセンサス設計](raft.md) | 固定termのバージョン付きエントリ再生とHTTP配送に加え、明示した初期voter集合で起動する任意のOpenRaftモードがあります。認証付きpeer APIはlearner追加とjoint consensusによるvoter集合変更に対応します。公開カタログlistenerは任意のTLSと相互TLSに対応します。組み込みcatch-up clientはクライアント証明書を提示できず、Raft peer listenerも相互TLSに対応しません。CIはlearnerへのsnapshot転送、membership変更、3 nodeのquorum failoverと再起動後の収束、quorum喪失中にcatalog読み取りを拒否し通信復旧後に許可する経路、中断したjoint membership変更の再開、quorumのcommit後に両方の残るvoter宛ての非空`AppendEntries`要求2件をpeer IDの逆順で解放する経路、およびleaderのログpurge後にlagging voterがsnapshotから復旧する経路を検査します。より広い遅延・順序変更、commit済み応答の喪失後のソケット再試行、クラッシュ境界、永続的な再試行キュー、分散フォロワー読み取りの保証は未実装です。 |
+| 分散レプリケーションと権威 | [分散化の進化](distributed-evolution.md)と[Raftコンセンサス設計](raft.md) | 固定termのバージョン付きエントリ再生とHTTP配送に加え、明示した初期voter集合で起動する任意のOpenRaftモードがあります。認証付きpeer APIはlearner追加とjoint consensusによるvoter集合変更に対応します。公開カタログlistenerは任意のTLSと相互TLSに対応します。組み込みcatch-up clientはクライアント証明書と鍵を指定でき、`--raft-peer-client-ca`を指定するとRaft peerも相互TLSを使います。CIは信頼済み、未提示、未信頼のpeer client certificate、learnerへのsnapshot転送、membership変更、3 nodeのquorum failoverと再起動後の収束、quorum喪失中にcatalog読み取りを拒否し通信復旧後に許可する経路、中断したjoint membership変更の再開、quorumのcommit後に両方の残るvoter宛ての非空`AppendEntries`要求2件をpeer IDの逆順で解放する経路、およびleaderのログpurge後にlagging voterがsnapshotから復旧する経路を検査します。より広い遅延・順序変更、commit済み応答の喪失後のソケット再試行、クラッシュ境界、永続的な再試行キュー、分散フォロワー読み取りの保証は未実装です。 |
 
 ## 調査方法
 
@@ -45,7 +45,7 @@
 
 実装していない設計メモはFutureとしてラベル付けします。
 
-このインデックスの調査は2026-09-25に更新しました。
+このインデックスの調査は2026-09-30に更新しました。
 
 READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blob/master/README.md)の節構造に従いますが、内容はtxBASE固有です。
 
@@ -65,7 +65,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 | SQLiteセッション拡張とPostgreSQL論理デコード | 公式プロジェクト文書です。 | CDC文書は変更セットとコミット済みWAL利用者の語彙を参照しますが、単一テーブルcommit向けの`TXCD`と明示的な複数テーブルカタログcommit向けの`TXCC`という、物理レコードの状態差分サイドカーを定義します。利用者スロット、再生、レプリケーション互換性は提供しません。 | 外部資料との比較と範囲の境界は[変更データ取得](change-data-capture.md)に置き、DBFのcommit機構は[DBF互換性](dbf-compatibility.md)に、カタログジャーナル機構は[カタログ](catalog.md)に置きます。 |
 | Gitのコマンドラインインターフェース文書 | CLI設計の参照に使う公式プロジェクト文書です。 | txBASEの明示的なサブコマンドとオプションの形だけに影響します。Gitのコマンド群、リポジトリモデル、オプションの意味はコピーしません。 | 設計判断は[CLIコマンド体系の設計](cli-design.md)に置き、コマンド契約は[CLIコマンドリファレンス](cli.md)に置きます。MVCCやストレージの契約には置きません。 |
 | RFC 9110、RFC 5789、RFC 10008、RFC 6750 | IETFの標準化過程にある仕様です。 | HTTPメソッドの安全性、PATCHの意味、QUERYの安全性と冪等性、Bearer認証ヘッダーをHTTP契約へ反映します。txBASEは対応メディアタイプ、応答形状、範囲上限、ルート上限、環境変数で選択するトークン境界を別に定義します。 | 規範的なHTTP意味論は[HTTPの意味](http-semantics.md)に置き、txBASE固有の制約は実装契約のそばに置きます。 |
-| `tiny_http`、Rustls、`tokio-rustls`、Hyper、`hyper-util`、`rustls-pemfile`のAPI | バージョンを固定した公式Rust crate API文書です。intermediaryの規範はRFC 9110です。 | 公開カタログlistenerは任意のTLSを終端し、任意のクライアント証明書を検証してから、tokenで保護したloopback backendへHTTP/1.1を転送します。proxyは本文をストリーム転送し、hop-by-hopフィールドを除去して`Via`を追加します。組み込みcatch-up clientはクライアント証明書を提示できず、Raft peer HTTPSも相互TLSではありません。 | 設定、信頼境界、転送動作、clientの制約は[公開カタログlistenerの通信保護](catalog-listener-security.md)に置き、RFC由来のintermediary要件は[HTTPの意味](http-semantics.md)に置きます。 |
+| `tiny_http`、Rustls、`tokio-rustls`、Hyper、`hyper-util`、`rustls-pemfile`のAPI | バージョンを固定した公式Rust crate API文書です。intermediaryの規範はRFC 9110です。 | 公開カタログlistenerは任意のTLSを終端し、任意のクライアント証明書を検証してから、tokenで保護したloopback backendへHTTP/1.1を転送します。catch-up clientとRaft membership clientは設定したclient identityを提示できます。Raft peer listenerもmTLSを要求できます。proxyは本文をストリーム転送し、hop-by-hopフィールドを除去して`Via`を追加します。 | 設定、信頼境界、転送動作、client identityの指定方法は[公開カタログlistenerの通信保護](catalog-listener-security.md)と[Raftコンセンサス設計](raft.md)に置き、RFC由来のintermediary要件は[HTTPの意味](http-semantics.md)に置きます。 |
 | POSIXの`rename()`と`fsync()` | The Open Groupの仕様です。 | Unixコードはrenameによる置換と`sync_all`を使います。Windowsには別の置換経路があるため、POSIXのディレクトリ永続性保証と同一とは記述しません。 | ファイルシステムの永続性の前提は永続化とXBFの文書に置き、Unix限定であることを明記します。 |
 | WebAssembly、WASI、Component Model | 標準仕様または標準化中の仕様です。ホスト資料は実装参照です。 | リポジトリにはバージョン付きホスト非依存DBFコア、生成した`wasm-bindgen` Node.jsラッパー、Promiseベースの非同期XBFオブジェクトテーブルとランタイム非依存クエリストリームアダプター、単一writerで書き込み可能なfilesystem adapterを使って現在・保持中のXBFを読み込み、保留中WALを復旧するWASI 0.3 CLIクエリストリームコンポーネント、汎用Worker互換FetchとCloudflare R2バインディングのオブジェクトストレージアダプター、Worker互換Web Streamsクエリアダプターがあります。CIは各アダプターを決定的なローカルフィクスチャで検査し、WASIの書き込みと復旧も検査します。デプロイ済みWorkerとR2サービスへの接続、プロバイダー接続型WASIストレージ、ノンブロッキングなWASI I/Oは今後の作業です。 | コアABIとホスト境界は[WASM](wasm.md)、[WASIクエリストリーム](wasi-query-stream.md)、[Workerクエリストリームアダプター](worker-query-stream.md)、[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)、[Cloudflare R2オブジェクトストレージアダプター](r2-object-store.md)に置きます。プロバイダー固有の保証は対応するアダプター文書に置きます。 |
 | WHATWG Streams、DOM、Cloudflare Workersのストリーム文書 | WHATWG仕様はWebプラットフォーム資料であり、Cloudflare Workersの文書は公式ホスト実装の参照です。 | WorkerクエリアダプターはWASMのスナップショットストリームに対してpull型`ReadableStream`、正のハイウォーターマーク、UTF-8のNDJSONチャンク、readerキャンセル、`AbortSignal`キャンセルを使います。リポジトリはNode.jsで汎用Web APIの形を検査しますが、デプロイ済みCloudflare Workerや本番WASIホストとの互換性は主張しません。 | キュー、pull、キャンセル、チャンク形式は[Workerクエリストリームアダプター](worker-query-stream.md)に置き、共有クエリ制御は[クエリモデル](query-model.md)に置きます。 |
@@ -169,6 +169,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 - [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
 - [`tiny_http` 0.12 `SslConfig`](https://docs.rs/tiny_http/0.12.0/tiny_http/struct.SslConfig.html)
 - [Rustls 0.23.45 `WebPkiClientVerifier`](https://docs.rs/rustls/0.23.45/rustls/server/struct.WebPkiClientVerifier.html)
+- [Rustls 0.23.45 `ConfigBuilder::with_client_auth_cert`](https://docs.rs/rustls/0.23.45/rustls/struct.ConfigBuilder.html#method.with_client_auth_cert)
 - [`tokio-rustls` 0.26.6 `TlsAcceptor`](https://docs.rs/tokio-rustls/0.26.6/tokio_rustls/server/struct.TlsAcceptor.html)
 - [Hyper 1.11.1 HTTP/1 server connection](https://docs.rs/hyper/1.11.1/hyper/server/conn/http1/struct.Builder.html)
 - [Hyper 1.11.1 streaming body](https://docs.rs/hyper/1.11.1/hyper/body/index.html)

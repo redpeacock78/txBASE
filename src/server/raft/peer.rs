@@ -1,16 +1,18 @@
-use super::{CatalogRaftConfig, RPC_TIMEOUT, RaftRuntime, config};
+use super::{CatalogRaftConfig, RPC_TIMEOUT, RaftRuntime};
 use crate::replication::raft::{self, MAX_RAFT_RPC_BYTES, TypeConfig};
+use crate::server::CatalogTlsConfig;
+use crate::server::catalog_tls::ProtectedHttpListener;
 use crate::server::{HttpResponse, error, header, json_response, read_json_body_with_limit};
 use openraft::raft::{AppendEntriesRequest, InstallSnapshotRequest, VoteRequest};
 use serde::Serialize;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use tiny_http::{Method, Request, Server};
+use tiny_http::{Method, Request};
 
 mod membership;
 
 pub(in crate::server) struct PeerListener {
-    server: Arc<Server>,
+    server: Arc<ProtectedHttpListener>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -27,48 +29,53 @@ impl RaftRuntime {
     pub(in crate::server) fn bind_peer_listener(
         &self,
         config: &CatalogRaftConfig,
-    ) -> Result<Server, String> {
-        if self.peer_tls {
-            let certificate = config::read_tls_file(config.tls_certificate.as_deref())?;
-            let private_key = config::read_tls_file(config.tls_private_key.as_deref())?;
-            Server::https(
-                &config.peer_bind,
-                tiny_http::SslConfig {
-                    certificate,
-                    private_key,
-                },
-            )
-            .map_err(|error| {
-                format!(
-                    "cannot bind Raft peer listener {}: {error}",
-                    config.peer_bind
-                )
+    ) -> Result<ProtectedHttpListener, String> {
+        let tls = if self.peer_tls {
+            Some(CatalogTlsConfig {
+                certificate: config
+                    .tls_certificate
+                    .clone()
+                    .ok_or_else(|| "Raft peer TLS certificate path is missing".to_owned())?,
+                private_key: config
+                    .tls_private_key
+                    .clone()
+                    .ok_or_else(|| "Raft peer TLS private key path is missing".to_owned())?,
+                client_ca: config.tls_client_ca.clone(),
             })
         } else {
-            Server::http(&config.peer_bind).map_err(|error| {
-                format!(
-                    "cannot bind Raft peer listener {}: {error}",
-                    config.peer_bind
-                )
-            })
-        }
+            None
+        };
+        ProtectedHttpListener::bind(&config.peer_bind, tls.as_ref()).map_err(|error| {
+            format!(
+                "cannot bind Raft peer listener {}: {error}",
+                config.peer_bind
+            )
+        })
     }
 
     pub(in crate::server) fn spawn_peer_listener(
         &self,
-        server: Server,
+        server: ProtectedHttpListener,
     ) -> Result<PeerListener, String> {
-        let raft = self.clone();
         let server = Arc::new(server);
         let listener_server = server.clone();
+        let raft = self.clone();
         let listener_thread = thread::Builder::new()
             .name(format!("txbase-raft-peer-{}", self.node_id))
             .spawn(move || {
                 for mut request in listener_server.incoming_requests() {
                     let path = request.url().split('?').next().unwrap_or("/").to_owned();
-                    let response = raft.peer_response(&mut request, &path).unwrap_or_else(|| {
-                        json_response(404, error("not_found", "Raft peer route not found"), false)
-                    });
+                    let response = if listener_server.authorizes(&request) {
+                        raft.peer_response(&mut request, &path).unwrap_or_else(|| {
+                            json_response(
+                                404,
+                                error("not_found", "Raft peer route not found"),
+                                false,
+                            )
+                        })
+                    } else {
+                        json_response(403, error("forbidden", "invalid listener token"), false)
+                    };
                     if let Err(error) = request.respond(response) {
                         eprintln!("failed to send Raft peer response: {error}");
                     }
@@ -108,16 +115,6 @@ impl RaftRuntime {
         }
         if let Err(response) = crate::server::replication::authorize(request, &self.token) {
             return Some(response);
-        }
-        if request.secure() != self.peer_tls {
-            return Some(json_response(
-                400,
-                error(
-                    "raft_transport_mismatch",
-                    "peer transport security does not match this node",
-                ),
-                false,
-            ));
         }
         Some(match path {
             raft::RAFT_VOTE_PATH => self.vote(request),

@@ -1,5 +1,5 @@
 use super::CatalogReplicationRole;
-use super::catalog_tls::CatalogListener;
+use super::catalog_tls::ProtectedHttpListener;
 use super::records::get_response;
 #[cfg(test)]
 use super::records::{
@@ -27,7 +27,7 @@ pub(super) fn serve(
     replication_token: Option<String>,
     tls: Option<super::CatalogTlsConfig>,
 ) -> Result<(), String> {
-    let listener = CatalogListener::bind(bind, tls.as_ref())?;
+    let listener = ProtectedHttpListener::bind(bind, tls.as_ref())?;
     let mut catalog =
         Catalog::from_path(root).map_err(|error| format!("cannot open catalog: {error}"))?;
     let mut replication = crate::replication::ReplicationLog::open(&catalog, replication_term)
@@ -61,10 +61,10 @@ pub(super) fn serve_with_raft(
     tls: Option<super::CatalogTlsConfig>,
 ) -> Result<(), String> {
     let root = root.as_ref();
-    let listener = CatalogListener::bind(bind, tls.as_ref())?;
+    let listener = ProtectedHttpListener::bind(bind, tls.as_ref())?;
+    let raft = super::raft::RaftRuntime::start(root, config.clone(), replication_token)?;
     let mut catalog =
         Catalog::from_path(root).map_err(|error| format!("cannot open catalog: {error}"))?;
-    let raft = super::raft::RaftRuntime::start(root, config.clone(), replication_token)?;
     let peer_server = raft.bind_peer_listener(&config)?;
     let _peer_listener = raft.spawn_peer_listener(peer_server)?;
     eprintln!(

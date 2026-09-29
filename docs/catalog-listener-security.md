@@ -21,8 +21,8 @@ TLS files are read once during startup.
 Replace a certificate or trust set by restarting the server.
 Invalid TLS files and listener-bind errors are reported before txBASE opens the catalog.
 
-The public `--tls-cert`, `--tls-key`, and `--tls-client-ca` options are independent of `--raft-peer-cert` and `--raft-peer-key`.
-The latter configure only the Raft peer listener.
+The public `--tls-cert`, `--tls-key`, and `--tls-client-ca` options are independent of the Raft peer options `--raft-peer-cert`, `--raft-peer-key`, and `--raft-peer-client-ca`.
+The Raft options configure only the peer listener; see [Raft consensus design](raft.md).
 
 ## HTTP forwarding boundary
 
@@ -47,11 +47,11 @@ It does not assign different catalog permissions to different certificates.
 
 `TXBASE_REPLICATION_TOKEN` remains a separate Bearer credential for replication routes.
 It is not a substitute for TLS because HTTP exposes it to observers on the network.
-The built-in `replicate catch-up` client does not load a client certificate, so it cannot connect to a listener configured with `--tls-client-ca`.
-Use a client that supports certificate authentication for that deployment.
+The built-in `replicate catch-up` client can present a client certificate when given `--tls-client-cert` and `--tls-client-key` together.
+The client verifies the server with the operating system's trust facilities and requires HTTPS when a client identity is configured.
 
-Raft peer TLS and public catalog TLS have separate certificates, listeners, and trust configuration.
-Peer HTTPS does not provide mTLS; see [Raft consensus design](raft.md).
+Raft peer TLS and public catalog TLS have separate listeners and trust configuration.
+Raft peer mTLS is enabled independently with `--raft-peer-client-ca`; see [Raft consensus design](raft.md).
 
 ## CLI examples
 
@@ -68,6 +68,14 @@ HTTPS with required client certificates:
 txbase serve-catalog ./data --bind 0.0.0.0:8443 \
   --tls-cert ./server-chain.pem --tls-key ./server-key.pem \
   --tls-client-ca ./client-ca.pem
+```
+
+The built-in catch-up client can connect to that listener with its own identity:
+
+```sh
+txbase replicate catch-up ./follower https://authority.example \
+  --replication-term 4 --follower-id follower-1 \
+  --tls-client-cert ./follower-chain.pem --tls-client-key ./follower-key.pem
 ```
 
 The same public TLS options apply when `serve-catalog` uses `--raft-*` options.

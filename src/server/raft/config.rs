@@ -1,5 +1,6 @@
 use super::CatalogRaftConfig;
 use crate::replication::ReplicationHttpClient;
+use crate::server::CatalogTlsConfig;
 use std::collections::BTreeSet;
 #[cfg(unix)]
 use std::fs::File;
@@ -51,12 +52,50 @@ pub(super) fn validate_config(
     if config.tls_certificate.is_some() != config.tls_private_key.is_some() {
         return Err("Raft peer TLS requires both a certificate and private key".into());
     }
+    if config.tls_client_ca.is_some() && config.tls_certificate.is_none() {
+        return Err("Raft peer client CA requires HTTPS and a server certificate".into());
+    }
     let peer_tls = config.peer_advertise.starts_with("https://");
     if peer_tls != config.tls_certificate.is_some() {
         return Err("Raft peer TLS files must match the advertised URL scheme".into());
     }
     if !config.peer_advertise.starts_with("http://") && !peer_tls {
         return Err("Raft peer advertise URL must use HTTP or HTTPS".into());
+    }
+    if config.tls_client_ca.is_some()
+        && config
+            .initial_members
+            .values()
+            .any(|address| !address.starts_with("https://"))
+    {
+        return Err("Raft peer mTLS requires HTTPS for every initial member".into());
+    }
+    if peer_tls {
+        let tls = CatalogTlsConfig {
+            certificate: config
+                .tls_certificate
+                .clone()
+                .ok_or_else(|| "Raft peer TLS certificate path is missing".to_owned())?,
+            private_key: config
+                .tls_private_key
+                .clone()
+                .ok_or_else(|| "Raft peer TLS private key path is missing".to_owned())?,
+            client_ca: config.tls_client_ca.clone(),
+        };
+        let _ = crate::server::catalog_tls::load_server_config(&tls)?;
+    }
+    if config.tls_client_ca.is_some() {
+        let certificate = config.tls_certificate.as_deref();
+        let private_key = config.tls_private_key.as_deref();
+        let certificate =
+            certificate.ok_or_else(|| "Raft peer TLS certificate path is missing".to_owned())?;
+        let private_key =
+            private_key.ok_or_else(|| "Raft peer TLS private key path is missing".to_owned())?;
+        let client = ReplicationHttpClient::new(self_address)
+            .and_then(|client| client.with_bearer_token(token.to_owned()))
+            .and_then(|client| client.with_client_certificate_files(certificate, private_key))
+            .map_err(|error| format!("invalid Raft peer mTLS identity: {error}"))?;
+        drop(client);
     }
     let catalog_root = fs::canonicalize(catalog_root)
         .map_err(|error| format!("cannot resolve catalog directory: {error}"))?;
@@ -111,9 +150,4 @@ pub(super) fn bind_node_identity(
         }
         Err(error) => Err(format!("cannot create Raft node identity: {error}")),
     }
-}
-
-pub(super) fn read_tls_file(path: Option<&Path>) -> Result<Vec<u8>, String> {
-    let path = path.ok_or_else(|| "Raft TLS file path is missing".to_owned())?;
-    fs::read(path).map_err(|error| format!("cannot read Raft TLS file {}: {error}", path.display()))
 }

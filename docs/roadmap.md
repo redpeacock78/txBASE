@@ -72,7 +72,9 @@ The repository currently provides:
 - A process-local single-authority replication boundary with versioned `ReplicationEntry`, `ReplicationLog`, `ReplicationSnapshot`, and `ReplicationProgress` JSON formats, journaled `TXRP` data-plane and `TXRG` follower-progress sidecar persistence, catalog representation-tag checks, contiguous term/index/transaction ordering, atomic catalog replay and snapshot installation, retained snapshot export, suffix-preserving authority-side log compaction, monotonic follower-progress acknowledgement with durable minimum-index coordinated compaction, duplicate-delivery acknowledgement, conflict and gap rejection, restart validation, bounded historical follower reads at applied positions, bounded entry-batch validation and ordered receiver application, bounded HTTP entry, contiguous entry-range, snapshot, and progress delivery, default authority capture of `/transaction` and named-table mutations, a read-only follower role, and deterministic leader/follower fixtures without external infrastructure.
 - A bounded `ReplicationHttpClient` that validates authority status, pulls contiguous entry pages or a current snapshot, applies them through the local ordered replay contract, acknowledges follower progress over HTTP or HTTPS, and retries explicitly transient socket or HTTP failures within a bounded in-process policy.
 - A public `txbase replicate catch-up` command that opens a fixed-term follower catalog, resumes its journaled `TXRP` position, performs one bounded HTTP catch-up session, and reports the resulting progress as JSON.
+- The built-in catch-up client can authenticate to an HTTPS authority with `--tls-client-cert` and `--tls-client-key`.
 - An optional OpenRaft mode for `serve-catalog` with explicit initial voters, quorum writes, linearizable reads, authenticated peer RPC, and peer HTTPS.
+  `--raft-peer-client-ca` enables peer mTLS; the peer certificate and key also serve as the outgoing client identity, and every initial member URL must use HTTPS.
   Its authenticated peer API adds learners, reports local effective membership, and changes voter sets through joint consensus.
   It waits for promoted learners to catch up and retains demoted voters as learners.
   The `txbase raft membership` CLI exposes status, learner addition, and voter changes through this peer control plane; status reports the contacted node's local metrics, and mutations target the current leader.
@@ -484,7 +486,7 @@ Broader delayed or reordered RPC schedules remain outstanding.
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
 - Add deterministic tests for delayed or reordered RPC schedules beyond the three controlled cross-peer release orders and the tested pair of successive same-peer requests; see [Raft consensus design](raft.md).
-- Mutual TLS for the Raft peer listener, client-certificate support in the built-in `replicate catch-up` client, durable retry queues, backpressure, and authority discovery.
+- Durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.
 
@@ -528,6 +530,6 @@ The number of files is not a quality metric by itself.
 - Firebase authentication, security rules, listeners, or offline clients.
 - SQLite-level test volume or coverage claims.
 - Automatic CJK conversion when the declared encoding is ambiguous.
-- Filesystem- and cache-aware merge planning, aggregation, predicate-level serializable MVCC, durable XBF, provider integrations beyond R2, live R2 service validation, Raft peer mTLS, client-certificate support in the built-in catch-up client, durable retry queues, authority discovery, quorum, or consensus code without a contract and end-to-end test.
+- Filesystem- and cache-aware merge planning, aggregation, predicate-level serializable MVCC, durable XBF, provider integrations beyond R2, live R2 service validation, durable retry queues, authority discovery, quorum, or consensus code without a contract and end-to-end test.
 
 The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and filesystem- or cache-aware merge planning remain future work.

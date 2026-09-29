@@ -5,6 +5,7 @@ use super::types::{
 };
 use crate::replication::{ReplicationHttpClient, ReplicationHttpError};
 use serde::{Serialize, de::DeserializeOwned};
+use std::path::Path;
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -24,6 +25,17 @@ impl RaftMembershipHttpClient {
 
     pub fn with_timeout(mut self, timeout: Duration) -> Result<Self, ReplicationHttpError> {
         self.client = self.client.with_timeout(timeout)?;
+        Ok(self)
+    }
+
+    pub fn with_client_certificate_files(
+        mut self,
+        certificate: impl AsRef<Path>,
+        private_key: impl AsRef<Path>,
+    ) -> Result<Self, ReplicationHttpError> {
+        self.client = self
+            .client
+            .with_client_certificate_files(certificate, private_key)?;
         Ok(self)
     }
 

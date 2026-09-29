@@ -78,7 +78,7 @@ async fn forward_request(
         Ok(response) => Ok(response),
         Err(()) => Ok(Response::builder()
             .status(502)
-            .body(full_body("catalog backend unavailable"))
+            .body(full_body("HTTP backend unavailable"))
             .expect("static gateway response is valid")),
     }
 }

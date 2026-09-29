@@ -190,10 +190,10 @@ authorityは、登録済みフォロワーが確認したindexの最小値を安
 BearerトークンをHTTPで送る場合、接続先はloopbackに限ります。
 公開カタログlistenerは、任意のTLSと相互TLSに対応します。
 詳細は[公開カタログlistenerの通信保護](catalog-listener-security.md)を参照してください。
-組み込みの`replicate catch-up` clientはサーバー証明書を検証しますが、クライアント証明書を提示できません。
-そのため、相互TLSを必須にしたlistenerには接続できません。
+組み込みの`replicate catch-up` clientは、`--tls-client-cert`と`--tls-client-key`を指定するとクライアント証明書を提示します。
+server証明書はOSの信頼機構で検証します。
 固定termレプリケーションは、ストリーミング、永続的な再試行キュー、バックプレッシャー、クォーラム、権威検出にも対応しません。
-任意のRaftモードは認証付きpeer listenerを別に使い、peer HTTPSに対応しますが、peer相互TLSには対応しません。[Raftコンセンサス設計](raft.md)を参照してください。
+任意のRaftモードは認証付きpeer listenerを別に使い、`--raft-peer-client-ca`によるpeer mTLSに対応します。[Raftコンセンサス設計](raft.md)を参照してください。
 
 ### HTTPクライアント
 
@@ -228,9 +228,9 @@ chunked転送のデコードは行いません。
 競合応答と不正な応答は終端エラーです。
 `ReplicationRetryPolicy`は合計8回までの試行と、30秒までのバックオフを設定できます。
 これはプロセス内のリクエスト方針であり、永続的な再試行キューではありません。
-公開カタログlistenerは任意のTLSと相互TLSに対応しますが、このclientはクライアント証明書を提示できません。
-ストリーミング、バックプレッシャー、権威検出、クォーラム、コンセンサスにも対応しません。
-任意のRaft peer転送は別の実装であり、peer相互TLSには対応しません。
+公開カタログlistenerは任意のTLSと相互TLSに対応します。
+このclientは`--tls-client-cert`と`--tls-client-key`を指定するとクライアント証明書を提示しますが、ストリーミング、バックプレッシャー、権威検出、クォーラム、コンセンサスには対応しません。
+任意のRaft peer転送は別の実装であり、`--raft-peer-client-ca`を指定するとmTLSを使います。
 
 ## 4. 分散結合より先にデータを近接させる
 
@@ -278,7 +278,7 @@ Shard A
 次の契約は未確定です。
 
 - カタログ表現タグから独立したスキーマ移行。
-- 組み込みcatch-up clientのクライアント証明書対応、Raft peerの相互TLS、ストリーミング、永続的な再試行キュー、バックプレッシャー、authorityの検出。
+- ストリーミング、永続的な再試行キュー、バックプレッシャー、authorityの検出。
 - 制御された古い`AppendEntries`要求2件を超える遅延または順序変更の組み合わせ、commit済み応答の喪失後にソケットを介して再試行するケース、クラッシュ境界の注入。
 - 分散フォロワー読み取りの整合性と鮮度。
 - 遅延と転送状態の可観測性。
@@ -308,14 +308,13 @@ Shard A
 
 この完了条件が対象とするのは固定termスライスだけです。
 Raftのクォーラム書き込みと線形化可能なカタログ読み取りは[Raftコンセンサス設計](raft.md)で別に定義します。
-RaftのCIテストはlearnerの追従、joint consensusによるvoter集合変更、3ノードのpartition、failover、再起動を検証します。
-peer HTTPSの証明書信頼とホスト名一致は統合テストで検査します。
-追加の障害ケースは[Raftコンセンサス設計](raft.md)に記載します。
+RaftのCIテストはlearnerの追従、joint consensusによるvoter集合変更、peer HTTPSとmTLS、3ノードのpartition、failover、再起動を検証します。
+より広い遅延や順序変更とその他の障害ケースは[Raftコンセンサス設計](raft.md)に記載します。
 
 ## 7. 明示的な非目標
 
 この文書は固定termレプリケーションを扱い、任意のRaftプロトコルは定義しません。
-マルチリージョン書き込み、グローバルトランザクション、自動パーティション再配置、Raft peerの相互TLS、組み込みcatch-up clientのクライアント証明書対応、永続的な再試行キュー、権威検出も主張しません。
+マルチリージョン書き込み、グローバルトランザクション、自動パーティション再配置、永続的な再試行キュー、権威検出も主張しません。
 
 Raftの実装済み境界と残作業は別文書に記載します。
 その他の分散機能には、それぞれ権威と復旧の契約が必要です。
@@ -340,5 +339,5 @@ CIはpeer HTTPSの証明書信頼とホスト名一致を検証します。
 別の3 nodeテストでは、1台のvoterを分断して残るquorumで更新をcommitし、leaderがsnapshot対象ログをpurgeした後のsnapshot転送と復旧を確認します。
 この制御された要求2件を超える遅延または順序変更の組み合わせと他の障害ケースは未検証です。
 公開listenerのTLSと任意の相互TLSは[公開カタログlistenerの通信保護](catalog-listener-security.md)に記載します。
-Raft peerの相互TLSと組み込みcatch-up clientのクライアント証明書対応は今後の作業です。
+組み込みcatch-up clientのクライアント証明書対応は本書に、Raft peerのmTLSは[Raftコンセンサス設計](raft.md)に記載します。
 これらの記述は、互換性の主張ではなく設計上の制約です。

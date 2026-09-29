@@ -3,6 +3,7 @@ use super::protocol::{
     ReplicationProgressResponse, ReplicationSyncResult, is_valid_bearer_token, parse_base_url,
     parse_json, read_response,
 };
+use super::tls;
 use crate::catalog::Catalog;
 use crate::replication::{
     ApplyOutcome, MAX_REPLICATION_ENTRY_BATCH, MAX_REPLICATION_ENTRY_BATCH_BYTES,
@@ -11,9 +12,9 @@ use crate::replication::{
 };
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
-use rustls_platform_verifier::BuilderVerifierExt;
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, TcpStream, ToSocketAddrs};
+use std::path::Path;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -83,11 +84,7 @@ impl ReplicationHttpClient {
     pub fn new(base_url: &str) -> Result<Self, ReplicationHttpError> {
         let (host, port, host_header, base_path, use_tls) = parse_base_url(base_url)?;
         let tls_config = if use_tls {
-            let config = ClientConfig::builder()
-                .with_platform_verifier()
-                .map_err(|error| ReplicationHttpError::Tls(error.to_string()))?
-                .with_no_client_auth();
-            Some(Arc::new(config))
+            Some(tls::client_config(None)?)
         } else {
             None
         };
@@ -119,6 +116,23 @@ impl ReplicationHttpClient {
             ));
         }
         self.timeout = timeout;
+        Ok(self)
+    }
+
+    pub fn with_client_certificate_files(
+        mut self,
+        certificate: impl AsRef<Path>,
+        private_key: impl AsRef<Path>,
+    ) -> Result<Self, ReplicationHttpError> {
+        if self.tls_config.is_none() {
+            return Err(ReplicationHttpError::InvalidConfig(
+                "client certificates require HTTPS".into(),
+            ));
+        }
+        self.tls_config = Some(tls::client_config(Some((
+            certificate.as_ref(),
+            private_key.as_ref(),
+        )))?);
         Ok(self)
     }
 

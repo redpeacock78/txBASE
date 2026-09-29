@@ -33,6 +33,7 @@ fn empty_catalog_joins_an_empty_genesis_cluster() {
             initialize_catalog: false,
             tls_certificate: None,
             tls_private_key: None,
+            tls_client_ca: None,
         };
         let raft =
             RaftRuntime::start(&catalog_root, config.clone(), Some("ci-token".into())).unwrap();
@@ -103,6 +104,7 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
             initialize_catalog: node_id != 1,
             tls_certificate: None,
             tls_private_key: None,
+            tls_client_ca: None,
         };
         let raft =
             RaftRuntime::start(&catalog_root, config.clone(), Some("ci-token".into())).unwrap();
@@ -155,6 +157,7 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
         initialize_catalog: true,
         tls_certificate: None,
         tls_private_key: None,
+        tls_client_ca: None,
     };
     let learner_catalog_root = root.join(format!("catalog-{learner_id}"));
     fs::create_dir(&learner_catalog_root).unwrap();

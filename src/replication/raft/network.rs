@@ -18,6 +18,7 @@ use openraft::{Snapshot, Vote};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -81,15 +82,14 @@ pub struct RaftHttpNetworkFactory {
     sender_id: u64,
     genesis_fingerprint: Arc<RwLock<Vec<u8>>>,
     bearer_token: String,
+    tls_identity: Option<(PathBuf, PathBuf)>,
     #[cfg(test)]
     faults: Arc<FaultController>,
 }
 
 impl RaftHttpNetworkFactory {
     fn new_network(&self, target: u64, address: &str) -> RaftHttpNetwork {
-        let client = ReplicationHttpClient::new(address)
-            .and_then(|client| client.with_bearer_token(self.bearer_token.clone()))
-            .map_err(|error| error.to_string());
+        let client = self.http_client(address).map_err(|error| error.to_string());
         RaftHttpNetwork {
             target_id: target,
             cluster_id: self.cluster_id.clone(),
@@ -99,6 +99,29 @@ impl RaftHttpNetworkFactory {
             #[cfg(test)]
             faults: Arc::clone(&self.faults),
         }
+    }
+
+    fn http_client(&self, address: &str) -> Result<ReplicationHttpClient, ReplicationHttpError> {
+        let client =
+            ReplicationHttpClient::new(address)?.with_bearer_token(self.bearer_token.clone())?;
+        match &self.tls_identity {
+            Some((certificate, private_key)) => {
+                client.with_client_certificate_files(certificate, private_key)
+            }
+            None => Ok(client),
+        }
+    }
+
+    pub(crate) fn with_client_certificate_files(
+        mut self,
+        certificate: impl AsRef<Path>,
+        private_key: impl AsRef<Path>,
+    ) -> Self {
+        self.tls_identity = Some((
+            certificate.as_ref().to_owned(),
+            private_key.as_ref().to_owned(),
+        ));
+        self
     }
 
     #[cfg(test)]
@@ -152,8 +175,8 @@ impl RaftHttpNetworkFactory {
         let bytes = serde_json::to_vec(&request).map_err(|error| (500, error.to_string()))?;
         let retry = ReplicationRetryPolicy::new(1, Duration::ZERO, Duration::ZERO)
             .map_err(http_error_status)?;
-        let client = ReplicationHttpClient::new(address)
-            .and_then(|client| client.with_bearer_token(self.bearer_token.clone()))
+        let client = self
+            .http_client(address)
             .and_then(|client| client.with_timeout(timeout))
             .map_err(http_error_status)?
             .with_retry_policy(retry);
@@ -266,6 +289,7 @@ impl RaftHttpNetworkFactory {
             sender_id,
             genesis_fingerprint,
             bearer_token: bearer_token.into(),
+            tls_identity: None,
             #[cfg(test)]
             faults: Arc::new(FaultController::default()),
         })

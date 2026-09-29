@@ -42,8 +42,8 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 - カタログのファイル操作にはTokioのblocking worker poolを使う。
 - `serve-catalog`は、node ID、cluster ID、専用データディレクトリ、peer address、初期membershipを指定してOpenRaft nodeを起動する。membershipの初期化には`--raft-bootstrap`を明示する。
 - 専用peer listenerはvote、append、snapshot、learner準備、learner追加、membership状態照会、voter変更の要求を処理する。要求を2 MiB、RPC timeoutを10秒に制限し、Bearer認証、cluster ID、node ID、有効なmembership、Raft RPCで全nodeが共有するgenesis catalog fingerprintを検証する。
-- peer通信ではnodeごとの証明書と秘密鍵を使うHTTPSを利用できる。Bearer token付きHTTPはloopback peer URLだけで許可する。公開catalog listenerには独立したTLSとmTLSの設定がある。詳細は[公開カタログlistenerの通信保護](catalog-listener-security.md)を参照する。
-- `RaftMembershipHttpClient`と`txbase raft membership`は、認証付きの状態照会、learner追加、voter変更を提供する。共有HTTP transportの証明書検証を使い、version付き応答とvoter集合の整合性を検証する。
+- peer通信ではnodeごとの証明書と秘密鍵を使うHTTPSを利用できる。`--raft-peer-client-ca`を指定するとmTLSが有効になり、すべての初期memberでHTTPSが必要になる。nodeはmTLS peerへ接続するとき、peer証明書と鍵をclient identityとして提示する。各peerは設定したCAを使ってidentityを検証する。送信側clientはOSの信頼機構でserver証明書とホスト名を検証する。公開catalog listenerには独立したTLSとmTLSの設定がある。詳細は[公開カタログlistenerの通信保護](catalog-listener-security.md)を参照する。
+- `RaftMembershipHttpClient`と`txbase raft membership`は、認証付きの状態照会、learner追加、voter変更を提供する。共有HTTP transportの証明書検証を使い、任意のクライアント証明書と鍵に対応し、version付き応答とvoter集合の整合性を検証する。
 - `/transaction`と名前付きテーブル更新では`X-Txbase-Client-Id`と正の`X-Txbase-Client-Sequence`を指定する。同じ要求の再試行には記録済み結果を返す。
 - 通常のcatalog読み取り前にOpenRaftの線形化可能な読み取りbarrierを呼び出す。明示的にstaleなfollower読み取りは提供しない。
 - 3 nodeのCIテストでquorum commitと再試行の重複排除、昇格前のlearner同期、joint membershipによるvoter昇格と降格、learner停止後に残るvoterでのquorum更新を検査する。
@@ -53,7 +53,8 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 - 3 nodeのCIテストで、voter 1台を分断したまま残るquorumが4件をcommitし、leaderがsnapshot対象ログをpurgeした後、復旧したvoterがsnapshotから追いついて次のclient sequenceを適用することを検査する。
 - 3 nodeの`/transaction`テストは、commit後にローカルTCP proxyで最初の成功HTTP応答を破棄する。同一要求の再試行が同じJSON結果とtransaction IDを返し、更新が一度だけ適用され、同じsequenceの異なる要求が`409`になることを検査する。
 - joint membership変更中に旧leaderを停止し、同じ変更要求を生存voterから再送して収束させ、旧leaderをlearnerとして再参加させる3 nodeテストを実行する。
-- peer RPCのHTTPS統合テストで、テスト用rootで信頼した証明書を受け入れ、未信頼証明書とpeer URLのhostに一致しないSANを拒否する。
+- peer RPCのHTTPSテストで、信頼済みserver証明書を受け入れ、未信頼またはhost不一致のserver証明書を拒否し、mTLSでは信頼済みclient証明書を要求する。client証明書がない接続も拒否する。
+- Raft peer listenerの統合テストで、信頼済みclientがmembership routeへ到達できることと、client証明書がない場合や未信頼の場合にTLS negotiationで失敗することを検査する。
 - `RaftLogStore`はnode専用ディレクトリにvote、ログエントリ、commit済み位置、最後にpurgeしたlog IDを永続化する。
 - ログjournalは長さ付きのSHA-256検証済みJSON recordを使う。不完全な末尾を復旧し、purge後は新しいgenerationへ圧縮する。
 - nodeディレクトリをプロセス間で排他ロックする。ストレージテストにはOpenRaftの`testing::Suite`と再起動後の復旧確認を含める。
@@ -61,7 +62,6 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 ### 未実装
 
 - 3通りのpeer間解放順序と検証済みの同一peerへの連続2要求を超えるRPCの遅延・順序変更を検査する決定的なテスト。
-- Raft peer listenerのmutual TLS。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
 正のsequenceと空でないカタログtagが必要です。
@@ -241,10 +241,22 @@ OpenRaft vote内の送信node IDも検証します。
 
 すべてのRaft peer要求に`TXBASE_REPLICATION_TOKEN`のBearer認証情報が必要です。
 loopback以外のpeer URLにはHTTPSを使い、nodeごとに`--raft-peer-cert`と`--raft-peer-key`を指定します。
-clientはOSの信頼機構で証明書とホスト名を検証します。
+clientはOSの信頼機構でserver証明書とホスト名を検証します。
 Bearer token付きHTTPはloopback URLだけで使えます。
-peer TLSはmutual TLSを提供せず、peer listenerだけに適用されます。
-公開catalog listenerのTLSは[公開カタログlistenerの通信保護](catalog-listener-security.md)で別に設定します。
+
+`--raft-peer-client-ca PEM`を指定すると、そのCAが発行したクライアント証明書をHTTPS peer接続で必須にします。
+有効化する場合は、すべての初期member URLにHTTPSを指定します。
+各nodeは`--raft-peer-cert`と`--raft-peer-key`を送信時のclient identityにも使います。
+そのため、server認証とclient認証の両方に使える証明書を指定します。
+client CAは接続してくるpeerのidentityを検証します。
+送信側clientは引き続きOSの信頼機構でpeer server証明書を検証します。
+
+Raft peer mTLSは公開catalogのmTLSとは独立しています。
+`--raft-peer-client-ca`はpeer listenerだけに適用し、公開catalog clientの証明書検証には[公開カタログlistenerの通信保護](catalog-listener-security.md)で説明する`--tls-client-ca`を使います。
+`txbase raft membership`では、`--tls-client-cert`と`--tls-client-key`で別のclient identityを指定できます。
+
+Rustlsの[`WebPkiClientVerifier`](https://docs.rs/rustls/0.23.45/rustls/server/struct.WebPkiClientVerifier.html)は、信頼するrootを設定するとクライアント証明書を必須にして検証します。
+[`ConfigBuilder::with_client_auth_cert`](https://docs.rs/rustls/0.23.45/rustls/struct.ConfigBuilder.html#method.with_client_auth_cert)で送信側のidentityを設定します。
 
 ## 7. snapshot、復旧、移行
 
