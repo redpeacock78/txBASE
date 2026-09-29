@@ -108,6 +108,10 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         "isolated leader reported a write committed without a quorum"
     );
     no_quorum_write.abort();
+    let _ = nodes[initial_leader_index]
+        .runtime
+        .block_on(no_quorum_write);
+    drop(isolated_leader);
     let isolated_catalog =
         Catalog::from_path(root.join(format!("catalog-{initial_leader_id}"))).unwrap();
     assert_eq!(isolated_catalog.transaction_id().unwrap(), Some(2));
