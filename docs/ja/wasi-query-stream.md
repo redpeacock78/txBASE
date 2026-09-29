@@ -48,6 +48,9 @@ symbolic linkも辿りません。
 コンポーネントは既存の`AsyncQueryStream`をポーリングし、結果を1件ずつUTF-8のNDJSON行に変換します。
 行をWASI Component Modelのバイトストリームへ書き込み、`wasi:cli/stdout.write-via-stream`を並行して待機します。
 stdout側の消費速度が行の生成へバックプレッシャーとして伝わります。
+スモーク検査は同一レコードを131,072件含むDBFを使います。
+stdoutの先頭1バイトを読んでから100ミリ秒間読み取りを停止します。
+再開後に、全行の内容と出力件数を検証します。
 
 ## 3. エラーとキャンセル
 
@@ -64,6 +67,8 @@ Rustのクエリストリームを破棄すると、行の生成を終了しま�
 
 `wasi-query-stream` CIジョブはWASIターゲットとWasmtime `49.0.0`を導入し、コンポーネントをビルドして`tests/wasi_query_stream_smoke.sh`を実行します。
 スモーク検査は固定DBF・XBFフィクスチャをデコードし、`filter`、`projection`、`skip`、`limit`を適用したDBF、現行XBF、保持世代XBFの結果を比較します。
+131,072行のDBFクエリでstdoutの先頭1バイトを読んだ後、読み取りを100ミリ秒停止します。
+再開後の出力全体を検証します。
 `sort`、不正なnamespaceとsnapshot root、symbolic linkの経由、保留中WALの復旧が、stdoutへ行を出さずに失敗することも確認します。
 
 この検査が示すのは、固定したWasmtime `49.0.0`ランタイムでのコンポーネントのビルドとCLI動作であり、WASIホストの本番対応ではありません。

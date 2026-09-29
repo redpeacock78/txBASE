@@ -48,7 +48,7 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 
 | ID | 契約 | 実装またはフィクスチャの証拠 | 決定的な検査 | 状態 |
 | --- | --- | --- | --- | --- |
-| WASI-001 | WASI CLIコンポーネントは事前公開DBFファイル、または読み取り専用filesystem object-store adapterを介して現在・保持中のXBFスナップショットを読み込み、共有するfilter、projection、skip、limitのストリーム意味論を再利用し、Component ModelストリームのbackpressureでWASI 0.3 stdoutへNDJSONを書き込む。未対応制御、traversal namespace、`.`/`..`を含むsnapshot root、symbolic link経由のobject path、書き込みが必要な保留中WALの復旧は、行を出力する前に失敗する。 | `examples/wasi-query-stream.rs`; `examples/wasi_query_stream/object_store.rs`; `src/edge/query_stream.rs`; `src/query/stream.rs`; `src/query/stream_async.rs`; `.github/workflows/ci.yml`; `tests/wasi_query_stream_smoke.sh`; `docs/ja/wasi-query-stream.md` | `cargo build --locked --example wasi-query-stream --target wasm32-wasip2 --release`; `bash tests/wasi_query_stream_smoke.sh target/wasm32-wasip2/release/examples/wasi_query_stream.wasm`（DBFのfilter/projection/skip/limit、現行XBFのfilter/limit、保持世代XBFのskip/limit、出力前の拒否） | Boundary |
+| WASI-001 | WASI CLIコンポーネントは事前公開DBFファイル、または読み取り専用filesystem object-store adapterを介して現在・保持中のXBFスナップショットを読み込み、共有するfilter、projection、skip、limitのストリーム意味論を再利用し、Component ModelストリームのbackpressureでWASI 0.3 stdoutへNDJSONを書き込みます。未対応制御、traversal namespace、`.`/`..`を含むsnapshot root、symbolic link経由のobject path、書き込みが必要な保留中WALの復旧は、行を出力する前に失敗します。 | `examples/wasi-query-stream.rs`; `examples/wasi_query_stream/object_store.rs`; `src/edge/query_stream.rs`; `src/query/stream.rs`; `src/query/stream_async.rs`; `.github/workflows/ci.yml`; `tests/wasi_query_stream_smoke.sh`; `docs/ja/wasi-query-stream.md` | `cargo build --locked --example wasi-query-stream --target wasm32-wasip2 --release`; `bash tests/wasi_query_stream_smoke.sh target/wasm32-wasip2/release/examples/wasi_query_stream.wasm`（DBFのfilter/projection/skip/limit、現行XBFのfilter/limit、保持世代XBFのskip/limit、先頭1バイトを読んだ後に131,072行のbackpressure、出力前の拒否） | Boundary |
 | QRY-003A | `$sortByCount`が入力レコードごとに共有する有界なスカラー式サブセットを評価し、欠損またはnullの結果を`null`としてグループ化し、10,000グループの上限を保つ。 | `src/query/aggregation_plan/stage_parsers.rs`; `src/query/aggregation/output.rs`; `src/query/aggregation_tests/sort_by_count_tests.rs`; `docs/ja/aggregation.md` | `sort_by_count_evaluates_a_scalar_expression_per_record` | Boundary |
 | DBF-001 | 宣言済みヘッダー、記述子、レコード長、削除マーカーを境界検査する。 | `src/dbf/parser.rs`; `tests/corpus/dbf/` | `src/dbf/malformed_tests.rs::rejects_malformed_dbf_corpus`と形式テスト | Current |
 | DBF-002 | 上流の Windows-1251 テーブルを含む、サポートする dBASE III、dBASE IV、Visual FoxPro のフィクスチャが宣言されたフィールド境界を往復し、スキーマメタデータに宣言済みコードページ名を公開する。 | `tests/fixtures/external-*.dbf.hex`; `src/dbf/compatibility_tests.rs`; `src/dbf/codec.rs`; `src/dbf/encoding_name_tests.rs` | `reads_and_writes_a_pinned_external_*_fixture`; `reads_and_writes_a_pinned_external_cp1251_fixture`; `reports_names_for_supported_language_drivers` | Current |
@@ -172,14 +172,14 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 
 次の話題には文書または設計メモがありますが、マトリクスで現在の実装とは主張していません。
 
-- ランタイム非依存アダプターを超えるWASIの`AsyncQueryStream`スケジューリングと、ホスト固有の非同期ストレージライフサイクル意味論、プロバイダー固有のクラウドオブジェクトストレージアダプター。
+- `AsyncQueryStream`が`Pending`を返し、waker通知後に再開する動作を検査するWASI統合フィクスチャ。runtime-neutral adapterを超えるホスト固有の非同期storage lifecycle意味論。R2以外のcloud object-store adapter。
 - ファイルシステムおよびキャッシュを考慮したマージ結合戦略。
 - 入力`$match`、`$unwind`、式サブセットを持つ`$set`/`$addFields`、`$project`、`$sort`、`$skip`、`$limit`、グループ出力の`$match`、`$count`、`$distinct`、`$group`、`$bucket`、結果が有限な数値になる有界なスカラー式を使う`$bucketAuto`、有界なスカラー式を使う`$sortByCount`を超える集約ステージ。
   `$group`または`$bucket`の`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を超えるアキュムレータも対象とする。
 - 述語単位のロックと分散serializable調整。
 - 選定したICU4X・CLDRフィクスチャを超える、上流CJK照合の適合テスト一式。
 - スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針。
-- デプロイ済みWorkerまたはWASIのランタイムfixture、WASIのクエリスケジューリング、futureのキャンセルを超えるホストI/O中断の保証、公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、権威検出。
+- デプロイ済みWorkerまたはWASI production hostのfixture、futureのキャンセルを超えるホストI/O中断の保証、公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、権威検出。
 - RAFT-006の現行の4要求をpeer IDの逆順に解放するケース以外の遅延パターンと順序変更パターン、commit応答喪失後のソケット再試行、クラッシュ境界の注入を扱う決定的なテスト。
 
 これらのいずれかをCurrentへ移す前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。

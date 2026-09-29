@@ -43,6 +43,7 @@ Queries with `sort`, aggregation, pagination, or cursor controls fail before wri
 The component polls the existing `AsyncQueryStream` and serializes each result as one UTF-8 NDJSON line.
 It writes rows to a WASI component-model byte stream and awaits `wasi:cli/stdout.write-via-stream` concurrently.
 The stdout consumer therefore applies backpressure to row production.
+The smoke check delays stdout consumption while a DBF query emits 131,072 copies of one row, then validates every output row and the total count.
 
 ## 3. Errors and cancellation
 
@@ -59,6 +60,7 @@ This command does not make synchronous DBF or object-store filesystem reads inte
 The `wasi-query-stream` CI job installs the WASI target and Wasmtime `49.0.0`, builds the component, and runs `tests/wasi_query_stream_smoke.sh`.
 The smoke check decodes pinned DBF and XBF fixtures and compares DBF, current-XBF, and retained-XBF query results while exercising `filter`, `projection`, `skip`, and `limit`.
 It also verifies that `sort`, invalid namespaces and snapshot roots, symbolic-link traversal, and pending-WAL recovery fail without stdout output.
+It reads the first stdout byte, pauses the pipe reader for 100 ms during a 131,072-row DBF query, then checks the complete output after the reader resumes.
 
 This proves the component build and CLI behavior on the pinned Wasmtime `49.0.0` runtime, not production readiness of a WASI host.
 WASI 0.3.1 is a stable specification, but Wasmtime's `wasmtime-wasi::p3` host module is documented as experimental, unstable, and incomplete.

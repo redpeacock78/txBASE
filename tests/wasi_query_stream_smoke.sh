@@ -12,6 +12,24 @@ printf '%s\n' '{"NAME":"Alice"}' '{"NAME":"Bob"}' > "$temp_dir/expected-xbf.ndjs
 printf '%s\n' '{"NAME":"Bob"}' > "$temp_dir/expected-bob.ndjson"
 : > "$temp_dir/expected-empty.ndjson"
 
+# Generate more than 2 MiB of output so a delayed pipe reader exercises backpressure.
+backpressure_records=131072
+read -r header_low header_high record_low record_high < <(
+  od -An -tu1 -j8 -N4 "$temp_dir/users.dbf"
+)
+header_length=$((header_low + 256 * header_high))
+record_length=$((record_low + 256 * record_high))
+record_hex=$(xxd -p -s "$header_length" -l "$record_length" "$temp_dir/users.dbf" | tr -d '\n')
+backpressure_dbf="$temp_dir/backpressure.dbf"
+head -c "$header_length" "$temp_dir/users.dbf" > "$backpressure_dbf"
+printf -v record_count_hex '%08x' "$backpressure_records"
+record_count_le="${record_count_hex:6:2}${record_count_hex:4:2}${record_count_hex:2:2}${record_count_hex:0:2}"
+printf '%s' "$record_count_le" | xxd -r -p | dd of="$backpressure_dbf" bs=1 seek=4 conv=notrunc 2>/dev/null
+awk -v record="$record_hex" -v count="$backpressure_records" \
+  'BEGIN { for (i = 0; i < count; i++) printf "%s", record }' \
+  | xxd -r -p >> "$backpressure_dbf"
+printf '\x1a' >> "$backpressure_dbf"
+
 mkdir -p "$temp_dir/object-store/users/snapshots" "$temp_dir/object-store/users/wal"
 xxd -r -p < "$repo_root/tests/fixtures/query-stream-users.xbf.hex" \
   > "$temp_dir/object-store/users/snapshots/0.xbf"
@@ -22,6 +40,26 @@ printf '%s\n' \
 wasmtime run --dir "$temp_dir::/data" "$component" \
   /data/users.dbf '{"projection":{"NAME":1}}' > "$temp_dir/actual.ndjson"
 cmp "$temp_dir/expected-dbf.ndjson" "$temp_dir/actual.ndjson"
+
+# Stop reading stdout briefly, then validate the complete result after the pipe drains.
+timeout 30s wasmtime run --dir "$temp_dir::/data" "$component" \
+  /data/backpressure.dbf '{"projection":{"NAME":1}}' \
+  | {
+    IFS= read -r -N 1 first_byte
+    printf '%s' "$first_byte" > "$temp_dir/backpressure.ndjson"
+    sleep 0.1
+    cat >> "$temp_dir/backpressure.ndjson"
+  }
+expected_row=$(sed -n '1p' "$temp_dir/expected-dbf.ndjson")
+awk -v expected_rows="$backpressure_records" -v expected_row="$expected_row" '
+  $0 != expected_row { printf "unexpected output at row %d\n", NR > "/dev/stderr"; exit 1 }
+  END {
+    if (NR != expected_rows) {
+      printf "expected %d rows, received %d\n", expected_rows, NR > "/dev/stderr"
+      exit 1
+    }
+  }
+' "$temp_dir/backpressure.ndjson"
 
 # DBF queries apply filtering before skip and limit.
 wasmtime run --dir "$temp_dir::/data" "$component" \
