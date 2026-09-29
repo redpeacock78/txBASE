@@ -20,6 +20,7 @@ proxyはcommit後の最初の成功応答を破棄します。
 子プロセステストでは、3つの論理nodeを動かすプロセスを4つの永続化境界で強制終了し、同じnodeディレクトリから再起動して同一要求を再試行します。
 RAFT-006では、1つのleaderから同一peerへ送る連続した非空`AppendEntries`要求2件も遅延させます。
 1件目の保留中に2件目の遅延を設定し、1件目を解放してから2件目を解放します。
+遅延中は対象をlearnerへ降格し、追いついた後にvoterへ戻します。保留中のpeerはvoter quorumに含まれません。
 OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries` futureの完了を待つため、このテストが扱うのは逐次要求です。同一leaderから同じpeerへの同時呼び出しではありません。
 ほかの遅延・順序変更パターンは未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
@@ -288,6 +289,7 @@ replacement leaderの選出後に残るvoter間のRPCを遮断し、そのleader
 各境界で親プロセスが3つのnodeディレクトリを再起動し、同じclient IDとsequenceを再試行して、全カタログがtransaction 2に収束し更新が1回だけ適用されることを確認します。
 3つの論理nodeは同じ子プロセスで動くため、このテストは単一voterだけを個別に停止する障害を扱いません。
 failoverテストでは、replacement leaderから同一peerへ送る非空`AppendEntries`要求2件を連続して遅延させ、順に解放します。
+遅延対象は一時的にlearnerへ降格し、複製の追いつきを待ってからvoterへ戻します。要求を保留している間、そのpeerはvoter quorumに参加しません。
 OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries` futureの完了を待つため、このテストは同一leaderから同一peerへの逐次要求を扱います。
 より広い遅延・順序変更パターンは未検証です。
 

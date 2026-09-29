@@ -9,6 +9,7 @@ The `/transaction` retry test sends real HTTP requests through a local TCP proxy
 A child-process test now terminates the process hosting the three-node test cluster at four durability boundaries, restarts the same node directories, and verifies exact retry and one-time application.
 RAFT-006 also delays two successive non-empty `AppendEntries` requests from one leader to one peer.
 The test arms the second delay while the first request is paused, then releases the requests in sequence.
+It temporarily demotes the target to a learner and promotes it after catch-up, keeping the delayed peer outside the voter quorum.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so this covers successive requests rather than overlapping calls from the same leader to that peer.
 Other delayed or reordered RPC schedules remain outstanding.
 Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
@@ -198,6 +199,7 @@ The crash-recovery test terminates its child process after a normal log entry is
 For each point, the parent restarts all three node directories, retries the same client ID and sequence, and checks that every catalog reaches transaction 2 with exactly one mutation.
 The three logical nodes share the child process, so this test does not model an independent process crash for a single voter.
 The failover test also delays two successive non-empty `AppendEntries` requests from the replacement leader to one peer and releases them in sequence.
+The target is temporarily a learner and is promoted after replication catches up, so it does not participate in the voter quorum while requests are held.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so the test does not claim to hold overlapping calls from the same leader to that peer.
 Other delayed or reordered RPC schedules remain outstanding.
 
