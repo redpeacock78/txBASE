@@ -94,17 +94,33 @@ fn lagging_voter_catches_up_from_snapshot_after_leader_purges_log() {
         .last_applied
         .as_ref()
         .map(|log_id| log_id.index)
-        .unwrap_or(0);
+        .unwrap();
     let leader = &nodes[leader_index];
     leader
         .runtime
         .block_on(leader.node.trigger().snapshot())
         .unwrap();
-    let snapshot = leader
-        .runtime
-        .block_on(leader.node.get_snapshot())
-        .unwrap()
-        .unwrap();
+    let snapshot_deadline = Instant::now() + Duration::from_secs(15);
+    let snapshot = loop {
+        let snapshot_ready = {
+            let metrics = leader.node.metrics();
+            metrics
+                .borrow()
+                .snapshot
+                .as_ref()
+                .is_some_and(|log_id| log_id.index > lagging_applied_index)
+        };
+        if snapshot_ready {
+            if let Some(snapshot) = leader.runtime.block_on(leader.node.get_snapshot()).unwrap() {
+                break snapshot;
+            }
+        }
+        assert!(
+            Instant::now() < snapshot_deadline,
+            "leader did not create a snapshot newer than log index {lagging_applied_index}"
+        );
+        thread::sleep(Duration::from_millis(50));
+    };
     let snapshot_log_index = snapshot
         .meta
         .last_log_id
