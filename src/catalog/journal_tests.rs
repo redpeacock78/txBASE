@@ -193,6 +193,41 @@ fn metadata_only_journal_recovery_does_not_advance_catalog_transaction() {
 }
 
 #[test]
+fn committed_journal_cleanup_can_resume_after_its_manifest_is_removed() {
+    let root = temporary_root();
+    fs::write(root.join(".txbase.replication"), b"after").unwrap();
+    let journal = root.join(JOURNAL_DIR);
+    fs::create_dir(&journal).unwrap();
+    fs::create_dir(journal.join("before")).unwrap();
+    fs::create_dir(journal.join("after")).unwrap();
+    write_synced(&journal.join("before/0"), b"before").unwrap();
+    write_synced(&journal.join("after/0"), b"after").unwrap();
+    write_manifest(
+        &journal,
+        &Manifest {
+            phase: Phase::Committed,
+            changes: vec![ManifestChange {
+                target: ".txbase.replication".into(),
+                before: Some("0".into()),
+                after: Some("0".into()),
+            }],
+        },
+    )
+    .unwrap();
+
+    remove_manifest(&journal).unwrap();
+    fs::remove_dir_all(journal.join("after")).unwrap();
+    recover(&root).unwrap();
+
+    assert_eq!(
+        fs::read(root.join(".txbase.replication")).unwrap(),
+        b"after"
+    );
+    assert!(!journal.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn commit_rejects_existing_journal_before_advancing_transaction() {
     let root = temporary_root();
     fs::write(root.join(TRANSACTION_STATE), transaction_state_bytes(7)).unwrap();

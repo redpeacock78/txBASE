@@ -206,7 +206,9 @@ pub(crate) fn commit_files(root: &Path, changes: Vec<FileChange>) -> Result<(), 
     })();
 
     result?;
-    let _ = fs::remove_dir_all(&journal);
+    if remove_manifest(&journal).is_ok() {
+        let _ = fs::remove_dir_all(&journal);
+    }
     sync_directory(root)?;
     Ok(())
 }
@@ -299,9 +301,19 @@ fn recover_locked(root: &Path) -> Result<(), CatalogError> {
             }
         }
     }
+    remove_manifest(&journal)?;
     fs::remove_dir_all(journal)?;
     sync_directory(root)?;
     Ok(())
+}
+
+fn remove_manifest(journal: &Path) -> Result<(), CatalogError> {
+    // Remove the recovery marker before staged files so interrupted cleanup is safe to resume.
+    match fs::remove_file(journal.join(MANIFEST)) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn open_lock(root: &Path, exclusive: bool) -> Result<File, CatalogError> {
