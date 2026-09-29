@@ -123,6 +123,10 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
             .len(),
         4
     );
+    assert!(
+        nodes[initial_leader_index].linearizable_read().is_err(),
+        "an isolated former leader passed the linearizable read barrier"
+    );
 
     let replacement_index = current_leader_index(&majority, Duration::from_secs(20));
     let replacement_id = majority[replacement_index].node_id;
