@@ -84,6 +84,12 @@ Second, POSIX durability language is limited to the Unix path; cross-platform re
 
 ## Primary source groups
 
+### CJK collation
+
+The four benchmark input lists are pinned to [this ICU4X source snapshot](https://github.com/unicode-org/icu4x/tree/91457a4954287800a0b77732db4261c584bf25ce/components/collator/benches/data) and distributed under Unicode License V3, included beside the fixtures.
+ICU4X documents these lists as benchmark inputs and describes shuffling them before measurement; they provide no expected locale sort order.
+The tests use the strings to check comparator laws, not to claim locale-conformance coverage.
+
 ### dBASE and Visual FoxPro
 
 - [dBASE Level 7 file format](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)

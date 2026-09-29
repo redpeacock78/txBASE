@@ -84,6 +84,12 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 
 ## 主な資料群
 
+### CJK照合
+
+4つのベンチマーク入力リストは[ICU4Xの固定したソース](https://github.com/unicode-org/icu4x/tree/91457a4954287800a0b77732db4261c584bf25ce/components/collator/benches/data)に由来し、Unicode License V3に従います。同ライセンスはフィクスチャと同じディレクトリに収録しています。
+ICU4Xはこれらのリストをベンチマーク入力として扱い、計測前にシャッフルする手順を示しています。そのため、期待されるロケール照合順序は定義しません。
+テストでは文字列を比較器の法則検査に使い、ロケール適合性を主張しません。
+
 ### dBASE と Visual FoxPro
 
 - [dBASE Level 7 file format](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)

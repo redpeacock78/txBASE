@@ -119,3 +119,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "collation_corpus_tests.rs"]
+mod corpus_tests;
