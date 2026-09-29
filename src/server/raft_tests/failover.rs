@@ -156,7 +156,7 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         let table = catalog.open_table("users").unwrap();
         assert_eq!(table.records().len(), 5);
         assert_eq!(table.active_record(6).unwrap().values["NAME"], "Failover");
-        assert!(table.active_record(5).is_err());
+        assert!(table.active_record(5).is_none());
     }
 
     drop(listeners.remove(initial_leader_index));
@@ -191,7 +191,7 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         let table = catalog.open_table("users").unwrap();
         assert_eq!(table.records().len(), 5);
         assert_eq!(table.active_record(6).unwrap().values["NAME"], "Failover");
-        assert!(table.active_record(5).is_err());
+        assert!(table.active_record(5).is_none());
     }
 
     drop(listeners);

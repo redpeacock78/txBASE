@@ -1,6 +1,6 @@
 use super::TypeConfig;
 #[cfg(test)]
-use super::network_faults::{AppendDelay, AppendDelayHandle, FaultController};
+use super::network_faults::{AppendDelayHandle, FaultController};
 use crate::replication::{
     MAX_REPLICATION_SNAPSHOT_BYTES, ReplicationHttpClient, ReplicationHttpError,
     ReplicationRetryPolicy,
