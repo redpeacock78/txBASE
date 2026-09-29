@@ -12,25 +12,17 @@ pub(super) fn delay_successive_appends_to_single_peer(nodes: &[RaftRuntime], roo
         .iter()
         .map(|node| node.node_id)
         .collect::<BTreeSet<_>>();
-    let remaining_voters = all_voters
+    let test_voters = BTreeSet::from([leader.node_id]);
+    let learners = all_voters
         .iter()
         .copied()
-        .filter(|node_id| *node_id != target_id)
+        .filter(|node_id| !test_voters.contains(node_id))
         .collect::<BTreeSet<_>>();
     leader
         .runtime
-        .block_on(
-            leader
-                .node
-                .change_membership(remaining_voters.clone(), true),
-        )
+        .block_on(leader.node.change_membership(test_voters.clone(), true))
         .unwrap();
-    wait_for_membership(
-        nodes,
-        &remaining_voters,
-        &BTreeSet::from([target_id]),
-        Duration::from_secs(20),
-    );
+    wait_for_membership(nodes, &test_voters, &learners, Duration::from_secs(20));
 
     let leader_index = current_leader_index(nodes, Duration::from_secs(20));
     let leader = &nodes[leader_index];
