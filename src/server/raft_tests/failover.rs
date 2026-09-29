@@ -4,9 +4,10 @@ use super::*;
 
 #[test]
 fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_restart() {
-    const RELEASE_ORDERS: [[usize; 4]; 2] = [
+    const RELEASE_ORDERS: [[usize; 4]; 3] = [
         [3, 2, 1, 0], // descending peer ID
         [1, 3, 0, 2], // second, fourth, first, third in ascending peer-ID order
+        [0, 1, 2, 3], // ascending peer ID
     ];
     for (scenario_index, release_order) in RELEASE_ORDERS.into_iter().enumerate() {
         run_partitioned_leader_scenario(release_order, scenario_index == 0);
@@ -226,6 +227,22 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4], verify_successive_
         delayed_append
             .wait_for_completion(Duration::from_secs(10))
             .unwrap();
+        let catalog = Catalog::from_path(root.join(format!("catalog-{peer_id}"))).unwrap();
+        assert_eq!(
+            catalog.transaction_id().unwrap(),
+            Some(3),
+            "delayed AppendEntries rolled back peer {peer_id}'s committed catalog"
+        );
+        assert_eq!(
+            catalog
+                .open_table("users")
+                .unwrap()
+                .active_record(5)
+                .unwrap()
+                .values["NAME"],
+            "Failover",
+            "delayed AppendEntries replaced peer {peer_id}'s newer committed record"
+        );
     }
     assert_eq!(released_peers.len(), (NODE_COUNT - 1) as usize);
 

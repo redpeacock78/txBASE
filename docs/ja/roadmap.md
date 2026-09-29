@@ -99,7 +99,8 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
   状態照会は接続先nodeのローカルmetricsを返し、変更操作は現在のleaderへ送る。
   空catalogのlearnerは、空または非空のgenesis catalogを持つclusterへ参加できる。
   5 nodeの障害注入テストでquorum喪失、leader交代、partition復旧、分断nodeの再起動を検査する。
-  4台への非空`AppendEntries`要求をquorum commit後に解放し、peer IDの降順と、昇順で並べた2番目、4番目、1番目、3番目の順で送る2通りの順序も検査する。
+  4台への非空`AppendEntries`要求をquorum commit後に、peer IDの降順、昇順の一覧に対する2番目、4番目、1番目、3番目の順、peer IDの昇順の3通りで解放する。
+  各要求の配送後も、対象peerのcatalogがtransaction ID 3と`Failover`レコードを維持することを確認する。
   failoverテストでは、分断された旧leaderの読み取りbarrierが失敗し、新leaderの選出時にはbarrierが成功することも検査する。
   旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認する。
   replacement leaderの選出後に残るvoter間のRPCを遮断すると、そのleaderへのcatalog読み取りは`503`で失敗する。
@@ -123,7 +124,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - カタログルートをまたぐ参照は未対応である。
 - XBF出力とtxBASEロックを無視する読み手に対する、厳密な複数ファイル読み取りアトミック性。
 - R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針、永続的な再試行キュー。
-- 現行の2通りのpeer間解放順序と検証済みの同一peerへの連続2要求を超える遅延・順序変更を扱う追加のRaft障害テスト。分散フォロワー読み取りと分散パーティショニング。
+- 現行の3通りのpeer間解放順序と検証済みの同一peerへの連続2要求を超える遅延・順序変更を扱う追加のRaft障害テスト。分散フォロワー読み取りと分散パーティショニング。
 
 ## 3. フェーズ 1：小さなローカル DBMS を完成させる
 
@@ -543,14 +544,15 @@ proxyはcommit後の最初の成功応答を破棄します。
 別の3 nodeテストでは、voter 1台を分断して残るquorumで4件をcommitし、snapshot対象ログをpurgeした後、復旧したvoterがsnapshotをインストールして次のclient sequenceを適用することを検査します。
 子プロセステストでは、通常ログエントリの永続化後、commit markerの永続化後、カタログ更新と適用位置の原子的な公開後、OpenRaftの適用結果を受信した後に、3つの論理nodeを動かすプロセスを強制終了します。
 再起動後に同じ要求を再試行し、全nodeで更新が一度だけ適用されることを検査します。
-5 nodeテストでは、同一peerへの連続した非空`AppendEntries`要求2件も遅延させ、順に解放します。
-より広い遅延・順序変更パターンは未検証です。
+5 nodeのfailoverテストでは、4台のpeerに保留した非空`AppendEntries`要求を3通りの順序で解放し、各配送後も対象peerがtransaction 3と`Failover`レコードを保持することを確認します。
+同一peerへの連続した非空`AppendEntries`要求2件も遅延させ、順に解放します。
+これら3通りの解放順序と同一peerへの連続要求以外の遅延・順序変更パターンは未検証です。
 
 ### 候補範囲
 
 - テーブル間または分散環境の長寿命スナップショットトランザクション。
 - 現在のテーブル、カタログ、`TXRP`、`TXRG`サイドカーを超える永続WAL履歴。
-- 現行の2通りのpeer間解放順序と検証済みの同一peerへの連続2要求を超える遅延・順序変更を検査する決定的なテストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
+- 現行の3通りのpeer間解放順序と検証済みの同一peerへの連続2要求を超える遅延・順序変更を検査する決定的なテストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
 - 公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、バックプレッシャー、authorityの検出。
 - 分散フォロワー読み取りの保証。
 - 分散パーティショニング。
