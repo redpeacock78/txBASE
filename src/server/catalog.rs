@@ -144,7 +144,7 @@ fn handle_request(
     }
 }
 
-fn handle_raft_request(
+pub(super) fn handle_raft_request(
     mut request: Request,
     catalog: &mut Catalog,
     raft: &super::raft::RaftRuntime,

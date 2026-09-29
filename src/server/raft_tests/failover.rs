@@ -112,7 +112,7 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         .runtime
         .block_on(no_quorum_write);
     drop(isolated_leader);
-    let isolated_catalog =
+    let mut isolated_catalog =
         Catalog::from_path(root.join(format!("catalog-{initial_leader_id}"))).unwrap();
     assert_eq!(isolated_catalog.transaction_id().unwrap(), Some(2));
     assert_eq!(
@@ -123,10 +123,29 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
             .len(),
         4
     );
-    assert!(
-        nodes[initial_leader_index].linearizable_read().is_err(),
-        "an isolated former leader passed the linearizable read barrier"
+    let http_server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+    let authority = http_server.server_addr().to_ip().unwrap().to_string();
+    let client = thread::spawn(move || {
+        peer_request(
+            &format!("http://{authority}"),
+            "GET",
+            "/catalog",
+            None,
+            "ci-token",
+        )
+    });
+    let request = http_server.recv().unwrap();
+    super::super::catalog::handle_raft_request(
+        request,
+        &mut isolated_catalog,
+        &nodes[initial_leader_index],
     );
+    let (status, body) = response_json(&client.join().unwrap());
+    assert_eq!(
+        status, 503,
+        "an isolated former leader served a catalog read without quorum: {body}"
+    );
+    assert_eq!(body["error"]["code"], "raft_unavailable");
 
     let replacement_index = current_leader_index(&majority, Duration::from_secs(20));
     let replacement_id = majority[replacement_index].node_id;
