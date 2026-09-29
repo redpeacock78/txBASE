@@ -137,8 +137,31 @@ fn with_cluster<T>(
                     .unwrap_or_else(|directory_error| {
                         vec![format!("<unreadable: {directory_error}>")]
                     });
+                let journal = catalog_root.join(".txbase.catalog.txn");
+                let journal_details = ["manifest.json", "manifest.json.tmp", "before", "after"]
+                    .map(|entry| {
+                        let path = journal.join(entry);
+                        let details = if path.is_dir() {
+                            std::fs::read_dir(&path)
+                                .map(|entries| {
+                                    entries
+                                        .filter_map(Result::ok)
+                                        .map(|entry| {
+                                            entry.file_name().to_string_lossy().into_owned()
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                })
+                                .unwrap_or_else(|error| format!("<unreadable: {error}>"))
+                        } else {
+                            std::fs::read_to_string(&path)
+                                .unwrap_or_else(|error| format!("<unreadable: {error}>"))
+                        };
+                        format!("{entry}: {details}")
+                    })
+                    .join("; ");
                 panic!(
-                    "crash point {crash_point}: cannot start node {node_id} with catalog {} and node directory {}: {error}; catalog entries: {catalog_entries:?}",
+                    "crash point {crash_point}: cannot start node {node_id} with catalog {} and node directory {}: {error}; catalog entries: {catalog_entries:?}; journal: {journal_details}",
                     catalog_root.display(),
                     config.node_directory.display()
                 )
