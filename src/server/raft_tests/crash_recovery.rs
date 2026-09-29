@@ -39,7 +39,7 @@ fn crash_boundaries_recover_without_duplicate_transactions() {
             String::from_utf8_lossy(&output.stderr)
         );
 
-        with_cluster(&root, &addresses, |nodes| {
+        with_cluster(&root, &addresses, point, |nodes| {
             let leader_index = current_leader_index(nodes, Duration::from_secs(20));
             let leader = &nodes[leader_index];
             let catalog =
@@ -83,7 +83,7 @@ fn crash_boundary_child() {
         .map(str::to_owned)
         .collect::<Vec<_>>();
     let point = std::env::var(POINT_ENV).unwrap();
-    with_cluster(Path::new(&root), &addresses, |nodes| {
+    with_cluster(Path::new(&root), &addresses, &point, |nodes| {
         let leader_index = current_leader_index(nodes, Duration::from_secs(20));
         let leader = &nodes[leader_index];
         let catalog =
@@ -98,7 +98,12 @@ fn crash_boundary_child() {
     });
 }
 
-fn with_cluster<T>(root: &Path, addresses: &[String], run: impl FnOnce(&[RaftRuntime]) -> T) -> T {
+fn with_cluster<T>(
+    root: &Path,
+    addresses: &[String],
+    crash_point: &str,
+    run: impl FnOnce(&[RaftRuntime]) -> T,
+) -> T {
     let members = addresses
         .iter()
         .enumerate()
@@ -120,8 +125,14 @@ fn with_cluster<T>(root: &Path, addresses: &[String], run: impl FnOnce(&[RaftRun
             tls_certificate: None,
             tls_private_key: None,
         };
-        let node =
-            RaftRuntime::start(&catalog_root, config.clone(), Some("ci-token".into())).unwrap();
+        let node = RaftRuntime::start(&catalog_root, config.clone(), Some("ci-token".into()))
+            .unwrap_or_else(|error| {
+                panic!(
+                    "crash point {crash_point}: cannot start node {node_id} with catalog {} and node directory {}: {error}",
+                    catalog_root.display(),
+                    config.node_directory.display()
+                )
+            });
         let server = node.bind_peer_listener(&config).unwrap();
         listeners.push(node.spawn_peer_listener(server).unwrap());
         nodes.push(node);
