@@ -182,7 +182,7 @@ fn lagging_voter_catches_up_from_snapshot_after_leader_purges_log() {
         &root.join(format!("catalog-{}", nodes[leader_index].node_id)),
         5,
         8,
-        "AfterSnapshot",
+        "AfterSnap",
         45,
     );
     assert_eq!(
@@ -201,10 +201,7 @@ fn lagging_voter_catches_up_from_snapshot_after_leader_purges_log() {
                 format!("Snapshot-{}", record_number - 3)
             );
         }
-        assert_eq!(
-            table.active_record(8).unwrap().values["NAME"],
-            "AfterSnapshot"
-        );
+        assert_eq!(table.active_record(8).unwrap().values["NAME"], "AfterSnap");
     }
 
     drop(listeners);
