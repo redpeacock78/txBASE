@@ -48,7 +48,11 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4], verify_successive_
     const NODE_COUNT: u64 = 5;
 
     let root = temporary_cluster();
-    let addresses = (0..NODE_COUNT).map(|_| free_address()).collect::<Vec<_>>();
+    let mut addresses = BTreeSet::new();
+    while addresses.len() < NODE_COUNT as usize {
+        addresses.insert(free_address());
+    }
+    let addresses = addresses.into_iter().collect::<Vec<_>>();
     let members = addresses
         .iter()
         .enumerate()
