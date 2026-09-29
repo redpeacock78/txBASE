@@ -1,3 +1,5 @@
+mod append_delivery;
+
 use super::*;
 
 #[test]
@@ -6,12 +8,12 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         [3, 2, 1, 0], // descending peer ID
         [1, 3, 0, 2], // second, fourth, first, third in ascending peer-ID order
     ];
-    for release_order in RELEASE_ORDERS {
-        run_partitioned_leader_scenario(release_order);
+    for (scenario_index, release_order) in RELEASE_ORDERS.into_iter().enumerate() {
+        run_partitioned_leader_scenario(release_order, scenario_index == 0);
     }
 }
 
-fn run_partitioned_leader_scenario(release_order: [usize; 4]) {
+fn run_partitioned_leader_scenario(release_order: [usize; 4], verify_successive_delays: bool) {
     const NODE_COUNT: u64 = 5;
 
     let root = temporary_cluster();
@@ -250,6 +252,10 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4]) {
         );
     }
 
+    if verify_successive_delays {
+        append_delivery::delay_successive_appends_to_single_peer(&nodes, &root);
+    }
+
     drop(listeners.remove(initial_leader_index));
     let stopped = nodes.remove(initial_leader_index);
     stopped.shutdown().unwrap();
@@ -276,12 +282,28 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4]) {
         Duration::from_secs(20),
     );
     current_leader_index(&nodes, Duration::from_secs(20));
+    let expected_transaction_id = if verify_successive_delays { 5 } else { 3 };
+    let expected_record_count = if verify_successive_delays { 7 } else { 5 };
     for node in &nodes {
         let catalog = Catalog::from_path(root.join(format!("catalog-{}", node.node_id))).unwrap();
-        assert_eq!(catalog.transaction_id().unwrap(), Some(3));
+        assert_eq!(
+            catalog.transaction_id().unwrap(),
+            Some(expected_transaction_id)
+        );
         let table = catalog.open_table("users").unwrap();
-        assert_eq!(table.records().len(), 5);
+        assert_eq!(table.records().len(), expected_record_count);
         assert_eq!(table.active_record(5).unwrap().values["NAME"], "Failover");
+        if verify_successive_delays {
+            for name in ["DelayedOne", "DelayedTwo"] {
+                assert!(
+                    table
+                        .active_records()
+                        .any(|record| record.values["NAME"] == name),
+                    "node {} did not recover record {name}",
+                    node.node_id
+                );
+            }
+        }
         assert!(
             !table
                 .active_records()

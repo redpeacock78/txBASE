@@ -7,7 +7,10 @@ The five-node failover test runs the partition and recovery scenario twice, rele
 It also verifies that reads fail closed without a quorum and recover after connectivity returns.
 The `/transaction` retry test sends real HTTP requests through a local TCP proxy, drops the first successful response after commit, and verifies an identical retry, one-time mutation, and `409` for a different payload at the same client sequence.
 A child-process test now terminates the process hosting the three-node test cluster at four durability boundaries, restarts the same node directories, and verifies exact retry and one-time application.
-Delayed or reordered RPC schedules beyond these two four-request release orders, including multiple held requests per peer, remain outstanding.
+RAFT-006 also delays two successive non-empty `AppendEntries` requests from one leader to one peer.
+The test arms the second delay while the first request is paused, then releases the requests in sequence.
+OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so this covers successive requests rather than overlapping calls from the same leader to that peer.
+Other delayed or reordered RPC schedules remain outstanding.
 Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
@@ -41,7 +44,7 @@ This document records the implemented Raft boundary and the remaining authority,
 
 ### Not implemented
 
-- Broader deterministic coverage for delayed or reordered RPC schedules beyond the two four-request release orders, including multiple held requests per peer.
+- Broader deterministic coverage for delayed or reordered RPC schedules beyond the two four-request release orders and the tested same-peer request pair.
 - Mutual TLS and TLS for the public catalog listener.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
@@ -194,7 +197,9 @@ It also exercises the typed membership client for status, learner addition, prom
 The crash-recovery test terminates its child process after a normal log entry is synced but before the in-memory log changes, after a commit marker is synced but before the in-memory committed position changes, after one catalog-journal commit publishes the mutation with its applied position and client result, or after OpenRaft returns the application result but before the `/transaction` handler constructs its HTTP response.
 For each point, the parent restarts all three node directories, retries the same client ID and sequence, and checks that every catalog reaches transaction 2 with exactly one mutation.
 The three logical nodes share the child process, so this test does not model an independent process crash for a single voter.
-Delayed or reordered RPC delivery beyond these two four-request schedules, including multiple held requests per peer, remains outstanding.
+The failover test also delays two successive non-empty `AppendEntries` requests from the replacement leader to one peer and releases them in sequence.
+OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so the test does not claim to hold overlapping calls from the same leader to that peer.
+Other delayed or reordered RPC schedules remain outstanding.
 
 ## Primary references and scope
 
@@ -206,6 +211,7 @@ Delayed or reordered RPC delivery beyond these two four-request schedules, inclu
 - [OpenRaft getting started and storage test suite](https://docs.rs/openraft/0.9.25/openraft/docs/getting_started/) defines the application storage and network adapters and points to `testing::Suite`.
 - [OpenRaft cluster formation](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/cluster_formation/) defines the one-time `Raft::initialize()` operation.
 - [OpenRaft network traits](https://docs.rs/openraft/0.9.25/openraft/network/) define the peer RPC adapter.
+- [OpenRaft replication tasks](https://docs.rs/openraft/0.9.25/openraft/docs/internal/threading/index.html) document one replication task per target node.
 - [OpenRaft dynamic membership](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/dynamic_membership/) defines learner catch-up and voter changes; [`Raft::change_membership`](https://docs.rs/openraft/0.9.25/openraft/raft/struct.Raft.html#method.change_membership) documents that a leader loss or crash before the uniform configuration commits leaves the joint configuration active.
 - [OpenRaft snapshot replication](https://docs.rs/openraft/0.9.25/openraft/docs/protocol/replication/snapshot_replication/) documents chunked snapshot transfer.
 - [OpenRaft `Raft::install_snapshot`](https://docs.rs/openraft/0.9.25/openraft/raft/struct.Raft.html#method.install_snapshot) defines the snapshot-install RPC used by the learner join flow.

@@ -18,7 +18,10 @@ proxyはcommit後の最初の成功応答を破棄します。
 別の3 nodeテストでは、voter 1台を分断した状態で残るquorumが4件のコマンドをcommitし、leaderでsnapshotを作って対象ログをpurgeします。
 接続を戻したvoterがsnapshotをインストールして追いつき、次のclient sequenceを適用することも検査します。
 子プロセステストでは、3つの論理nodeを動かすプロセスを4つの永続化境界で強制終了し、同じnodeディレクトリから再起動して同一要求を再試行します。
-この2通りの4要求解放順序を超える遅延・順序変更と、peerごとに複数要求を保留するケースは未検証です。
+RAFT-006では、1つのleaderから同一peerへ送る連続した非空`AppendEntries`要求2件も遅延させます。
+1件目の保留中に2件目の遅延を設定し、1件目を解放してから2件目を解放します。
+OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries` futureの完了を待つため、このテストが扱うのは逐次要求です。同一leaderから同じpeerへの同時呼び出しではありません。
+ほかの遅延・順序変更パターンは未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -53,7 +56,7 @@ proxyはcommit後の最初の成功応答を破棄します。
 
 ### 未実装
 
-- 2通りの4要求解放順序を超えるRPCの遅延・順序変更と、peerごとに複数要求を保留するケースを検査する決定的なテスト。
+- 2通りのpeer間解放順序と検証済みの同一peerへの連続2要求を超えるRPCの遅延・順序変更を検査する決定的なテスト。
 - mutual TLSと公開catalog listenerのTLS。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
@@ -284,7 +287,9 @@ replacement leaderの選出後に残るvoter間のRPCを遮断し、そのleader
 子プロセステストでは、通常ログエントリを同期した直後、commit markerを同期した直後、カタログ更新と適用位置およびclient再試行結果を1つのjournal commitで公開した直後、OpenRaftが適用結果を返した直後にプロセスを強制終了します。
 各境界で親プロセスが3つのnodeディレクトリを再起動し、同じclient IDとsequenceを再試行して、全カタログがtransaction 2に収束し更新が1回だけ適用されることを確認します。
 3つの論理nodeは同じ子プロセスで動くため、このテストは単一voterだけを個別に停止する障害を扱いません。
-この2通りの4要求解放順序を超える遅延・順序変更と、peerごとに複数要求を保留するケースは未検証です。
+failoverテストでは、replacement leaderから同一peerへ送る非空`AppendEntries`要求2件を連続して遅延させ、順に解放します。
+OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries` futureの完了を待つため、このテストは同一leaderから同一peerへの逐次要求を扱います。
+より広い遅延・順序変更パターンは未検証です。
 
 ## 一次資料と適用範囲
 
@@ -296,6 +301,7 @@ replacement leaderの選出後に残るvoter間のRPCを遮断し、そのleader
 - [OpenRaftの導入手順とストレージテストスイート](https://docs.rs/openraft/0.9.25/openraft/docs/getting_started/)は、アプリケーション用ストレージとネットワークのadapter、および`testing::Suite`を説明する。
 - [OpenRaftのcluster初期化](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/cluster_formation/)は、一度限りの`Raft::initialize()`を定義する。
 - [OpenRaftのnetwork trait](https://docs.rs/openraft/0.9.25/openraft/network/)は、peer RPC adapterの契約を定義する。
+- [OpenRaftの複製task](https://docs.rs/openraft/0.9.25/openraft/docs/internal/threading/index.html)は、target nodeごとに1つの複製taskを実行することを説明する。
 - [OpenRaftの動的membership](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/dynamic_membership/)はlearnerの追いつきとvoter変更を定義する。leader交代またはクラッシュがuniform configのcommit前に起きるとjoint configが残ることも、[`Raft::change_membership`](https://docs.rs/openraft/0.9.25/openraft/raft/struct.Raft.html#method.change_membership)に記載されている。
 - [OpenRaftのsnapshot複製](https://docs.rs/openraft/0.9.25/openraft/docs/protocol/replication/snapshot_replication/)は、chunk単位のsnapshot転送を説明する。
 - [OpenRaft `Raft::install_snapshot`](https://docs.rs/openraft/0.9.25/openraft/raft/struct.Raft.html#method.install_snapshot)は、learner参加で使うsnapshot install RPCを定義する。
