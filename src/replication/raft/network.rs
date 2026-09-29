@@ -115,6 +115,15 @@ impl RaftHttpNetworkFactory {
     }
 
     #[cfg(test)]
+    pub(crate) fn delay_append_entries_at(
+        &self,
+        target: u64,
+        log_index: u64,
+    ) -> Result<AppendDelayHandle, String> {
+        self.faults.delay_append_entries_at(target, log_index)
+    }
+
+    #[cfg(test)]
     pub(crate) fn delay_next_uniform_membership_append(
         &self,
         target: u64,
@@ -372,13 +381,20 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
             )
         });
         #[cfg(test)]
+        let entry_log_indices = rpc
+            .entries
+            .iter()
+            .map(|entry| entry.log_id.index)
+            .collect::<Vec<_>>();
+        #[cfg(test)]
         let delay = if rpc.entries.is_empty() {
             None
         } else {
-            match self
-                .faults
-                .take_append_delay(self.target_id, has_uniform_membership)
-            {
+            match self.faults.take_append_delay(
+                self.target_id,
+                has_uniform_membership,
+                &entry_log_indices,
+            ) {
                 Ok(delay) => delay,
                 Err(error) => return map_rpc_result(self.target_id, Err(error)),
             }

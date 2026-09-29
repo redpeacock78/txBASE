@@ -26,7 +26,21 @@ pub(super) fn delay_successive_appends_to_single_peer(nodes: &[RaftRuntime], roo
 
     let leader_index = current_leader_index(nodes, Duration::from_secs(20));
     let leader = &nodes[leader_index];
-    let mut first_delay = leader.delay_next_append_entries(target_id).unwrap();
+    let first_log_index = leader
+        .node
+        .metrics()
+        .borrow()
+        .last_log_index
+        .expect("the leader must have a log before delayed appends");
+    for source in nodes
+        .iter()
+        .filter(|node| node.node_id != leader.node_id && node.node_id != target_id)
+    {
+        source.set_peer_blocked(target_id, true).unwrap();
+    }
+    let mut first_delay = leader
+        .delay_append_entries_at(target_id, first_log_index + 1)
+        .unwrap();
 
     let first_command = record_command(
         &root.join(format!("catalog-{}", leader.node_id)),
@@ -58,7 +72,9 @@ pub(super) fn delay_successive_appends_to_single_peer(nodes: &[RaftRuntime], roo
         "the first AppendEntries request escaped before release"
     );
 
-    let mut second_delay = leader.delay_next_append_entries(target_id).unwrap();
+    let mut second_delay = leader
+        .delay_append_entries_at(target_id, first_log_index + 2)
+        .unwrap();
     let second_command = record_command(
         &root.join(format!("catalog-{}", leader.node_id)),
         4,
@@ -92,6 +108,9 @@ pub(super) fn delay_successive_appends_to_single_peer(nodes: &[RaftRuntime], roo
     second_delay
         .wait_for_completion(Duration::from_secs(10))
         .unwrap();
+    for source in nodes.iter().filter(|node| node.node_id != target_id) {
+        source.set_peer_blocked(target_id, false).unwrap();
+    }
     wait_for_transaction(nodes, root, 5, Duration::from_secs(20));
 
     let leader_index = current_leader_index(nodes, Duration::from_secs(20));

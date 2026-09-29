@@ -8,8 +8,10 @@ It also verifies that reads fail closed without a quorum and recover after conne
 The `/transaction` retry test sends real HTTP requests through a local TCP proxy, drops the first successful response after commit, and verifies an identical retry, one-time mutation, and `409` for a different payload at the same client sequence.
 A child-process test now terminates the process hosting the three-node test cluster at four durability boundaries, restarts the same node directories, and verifies exact retry and one-time application.
 RAFT-006 also delays two successive non-empty `AppendEntries` requests from one leader to one peer.
+Each delay matches one of the next two expected log indices, so an unrelated membership append cannot consume it.
 The test arms the second delay while the first request is paused, then releases the requests in sequence.
-During this sequence, the current leader is the sole voter and every peer is a learner; the test restores the original voter set after catch-up.
+During this sequence, the current leader is the sole voter and every peer is a learner; other nodes are blocked from sending to the delayed target until catch-up.
+The test restores the original voter set after every node catches up.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so this covers successive requests rather than overlapping calls from the same leader to that peer.
 Other delayed or reordered RPC schedules remain outstanding.
 Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
@@ -199,7 +201,9 @@ The crash-recovery test terminates its child process after a normal log entry is
 For each point, the parent restarts all three node directories, retries the same client ID and sequence, and checks that every catalog reaches transaction 2 with exactly one mutation.
 The three logical nodes share the child process, so this test does not model an independent process crash for a single voter.
 The failover test also delays two successive non-empty `AppendEntries` requests from the current leader to one peer and releases them in sequence.
-The current leader is the sole voter during this sequence, while all peers (including the delayed target) are learners; the test restores the original voter set after catch-up.
+Each delay matches the log index of one command, so an unrelated membership append cannot consume either delay.
+The test blocks every other sender to the target while it holds the two requests, so another replication stream cannot satisfy the catch-up check.
+After all nodes catch up, it restores the original voter set.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so the test does not claim to hold overlapping calls from the same leader to that peer.
 Other delayed or reordered RPC schedules remain outstanding.
 

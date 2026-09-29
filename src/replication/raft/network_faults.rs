@@ -7,6 +7,7 @@ use std::time::Duration;
 enum AppendDelayKind {
     Any,
     UniformMembership,
+    LogIndex(u64),
 }
 
 #[derive(Default)]
@@ -56,6 +57,14 @@ impl FaultController {
         self.delay_next(target, AppendDelayKind::UniformMembership)
     }
 
+    pub(crate) fn delay_append_entries_at(
+        &self,
+        target: u64,
+        log_index: u64,
+    ) -> Result<AppendDelayHandle, String> {
+        self.delay_next(target, AppendDelayKind::LogIndex(log_index))
+    }
+
     fn delay_next(&self, target: u64, kind: AppendDelayKind) -> Result<AppendDelayHandle, String> {
         let (delay, handle) = AppendDelay::new();
         let mut delays = self
@@ -75,6 +84,7 @@ impl FaultController {
         &self,
         target: u64,
         has_uniform_membership: bool,
+        entry_log_indices: &[u64],
     ) -> Result<Option<AppendDelay>, String> {
         let mut delays = self
             .delayed_appends
@@ -82,6 +92,11 @@ impl FaultController {
             .map_err(|error| format!("test network delay lock poisoned: {error}"))?;
         if has_uniform_membership {
             if let Some(delay) = delays.remove(&(target, AppendDelayKind::UniformMembership)) {
+                return Ok(Some(delay));
+            }
+        }
+        for log_index in entry_log_indices {
+            if let Some(delay) = delays.remove(&(target, AppendDelayKind::LogIndex(*log_index))) {
                 return Ok(Some(delay));
             }
         }
