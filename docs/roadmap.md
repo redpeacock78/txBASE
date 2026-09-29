@@ -76,7 +76,7 @@ The repository currently provides:
   Its authenticated peer API adds learners, reports local effective membership, and changes voter sets through joint consensus.
   It waits for promoted learners to catch up and retains demoted voters as learners.
   The `txbase raft membership` CLI exposes status, learner addition, and voter changes through this peer control plane; status reports the contacted node's local metrics, and mutations target the current leader.
-  Blank learners can join clusters with empty or non-empty genesis catalogs. A three-node failure-injection test now covers quorum loss, leader replacement, partition healing, and restart of the isolated node; delayed or reordered RPCs and crash-boundary coverage remain open. See [Raft consensus design](raft.md).
+  Blank learners can join clusters with empty or non-empty genesis catalogs. A three-node failure-injection test covers quorum loss, leader replacement, partition healing, and restart of the isolated node; it also releases one non-empty `AppendEntries` request after its RPC timeout and after the remaining quorum commits. Broader delayed or reordered RPC schedules and crash-boundary coverage remain open. See [Raft consensus design](raft.md).
 - Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit, after validating the declared primary or unique parent key; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
 - Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with ordered per-transaction mode changes in the Rust and HTTP transaction APIs; deferred `CHECK` is a txBASE extension.
 
@@ -89,7 +89,7 @@ The baseline intentionally does not include the following:
 - References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
-- Additional Raft failure coverage for delayed or reordered RPCs, interrupted joint-membership recovery, reads during leadership changes, and crash boundaries; distributed follower reads and partitioning.
+- Additional Raft failure coverage beyond the single delayed `AppendEntries` case, including broader delayed or reordered RPC schedules, interrupted joint-membership recovery, reads during leadership changes, and crash boundaries; distributed follower reads and partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -461,13 +461,13 @@ The membership test starts a learner from an empty catalog and verifies snapshot
 The failover test injects a three-node partition, checks quorum loss and leader replacement, heals the partition, and restarts the isolated node before checking convergence.
 The peer-RPC HTTPS integration test accepts a certificate trusted by its test root and rejects an untrusted certificate or a hostname mismatch.
 A three-node `/transaction` test discards the successful handler response after commit, verifies an identical retry returns the original transaction ID without a duplicate mutation, and rejects a different payload at the same client sequence.
-Delayed or reordered RPCs, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain outstanding.
+Broader delayed or reordered RPC schedules beyond the single stale `AppendEntries` case, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain outstanding.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Add deterministic tests for delayed or reordered RPCs, interrupted joint-membership recovery, reads during leadership changes, and crash boundaries; see [Raft consensus design](raft.md).
+- Add deterministic tests for delayed or reordered RPC schedules beyond the single stale `AppendEntries` case, interrupted joint-membership recovery, reads during leadership changes, and crash boundaries; see [Raft consensus design](raft.md).
 - TLS for the public catalog listener, mutual TLS, durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.

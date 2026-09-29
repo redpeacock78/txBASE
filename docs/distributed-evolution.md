@@ -10,10 +10,11 @@ changes voter sets through joint consensus, and waits for learner catch-up
 before promotion. CI covers learner snapshot transfer and membership changes,
 plus a three-node partition, failover, healing, and restart scenario.
 
-Dedicated peer HTTPS certificate and hostname verification, delayed or
-reordered RPCs, retries after a committed response is lost, interrupted
-joint-membership recovery, reads during leadership changes, and crash-boundary
-injection remain open.
+CI verifies peer HTTPS certificate trust and hostname matching.
+The failover test also holds one non-empty `AppendEntries` request past its RPC timeout and releases it after the remaining quorum commits.
+This covers one stale-request case, not broad delayed or reordered RPC schedules.
+The `/transaction` retry test drops a successful handler response after commit, but does not simulate a socket disconnect.
+Broader delayed or reordered schedules, socket-level retries after losing a committed response, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain open.
 
 The fixed-term mode is not consensus. The current Raft boundary and remaining
 work are documented in [Raft consensus design](raft.md).
@@ -49,7 +50,7 @@ optional Raft mode initialized from an explicit voter set (current implementatio
       ↓
 learner admission, joint-consensus voter changes, and three-node partition/failover testing (implemented)
       ↓
-peer HTTPS verification and additional deterministic failure cases (remaining Raft work)
+broader delayed or reordered RPC schedules, interrupted joint-membership recovery, and crash-boundary tests (remaining Raft work)
 ```
 
 Each step needs a standalone contract before the next step depends on it.
@@ -321,7 +322,7 @@ The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
 - TLS for the public catalog listener, mutual TLS, streaming, durable retry queues, backpressure, and authority discovery;
-- peer HTTPS certificate and hostname verification; delayed or reordered RPCs; retries after a committed response is lost; interrupted joint-membership recovery; reads during leadership changes; and crash-boundary injection;
+- broader delayed or reordered RPC schedules beyond one stale `AppendEntries` case; socket-level retries after losing a committed response; interrupted joint-membership recovery; reads during leadership changes; and crash-boundary injection;
 - observability for lag and transport state;
 
 Change data capture, persistent WAL history, and replication must share the same ordering contract.
@@ -381,6 +382,7 @@ The repository has the fixed-term `TXRP` path and an optional Raft path
 initialized from an explicit voter set. Raft mode provides authenticated peer
 RPC, peer HTTPS, quorum writes, a linearizable read barrier, learner admission,
 joint-consensus voter changes, and a three-node partition/failover/restart test.
-Dedicated peer certificate and hostname verification tests and additional
-failure scenarios remain open; the public catalog listener remains HTTP.
+The integration tests verify peer certificate trust and hostname matching.
+The three-node failover test also delays one non-empty `AppendEntries` request past its RPC timeout before releasing it.
+Broader delayed or reordered schedules and other failure scenarios remain open; the public catalog listener remains HTTP.
 These boundaries are design constraints rather than compatibility guarantees.

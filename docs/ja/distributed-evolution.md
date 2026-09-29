@@ -7,7 +7,11 @@ txBASEには、プロセス単位の固定termレプリケーションと、有�
 peer APIはlearnerを追加し、joint consensusでvoter集合を変更し、voterへ昇格する前にlearnerの追従を待ちます。
 CIではlearnerへのスナップショット転送とmembership変更に加え、3ノードのpartition、failover、復旧、再起動を検証します。
 
-peer HTTPSの証明書とホスト名の検証、遅延または順序変更されたRPC、commit済み応答を失った場合の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入は残っています。
+CIはpeer HTTPSで証明書の信頼性とホスト名の一致を検証します。
+failoverテストでは、非空の`AppendEntries`要求1件をRPC timeoutより長く保留し、残るquorumがcommitした後に解放します。
+これは古い要求を1件扱う検証であり、RPCの遅延と順序変更の広い組み合わせは対象外です。
+`/transaction`の再試行テストはcommit後のhandler応答を破棄しますが、ソケット切断は再現しません。
+検証が残るのは、RPCの遅延と順序変更の広い組み合わせ、commit済み応答をソケット切断で失った後の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入です。
 
 固定termモードはコンセンサスではありません。
 現在のRaft境界と残作業は[Raftコンセンサス設計](raft.md)に記載します。
@@ -42,7 +46,7 @@ peer HTTPSの証明書とホスト名の検証、遅延または順序変更さ�
       ↓
 learnerの追加、joint consensusによるvoter集合変更、3ノードのpartitionとfailoverのテスト（実装済み）
       ↓
-peer HTTPS検証と追加の決定的な障害テスト（Raftの残作業）
+遅延または順序変更の広い組み合わせ、中断したjoint membershipの復旧、クラッシュ境界のテスト（Raftの残作業）
 ```
 
 各段階は、次の段階が依存する前に独立した契約を持たなければなりません。
@@ -265,7 +269,7 @@ Shard A
 
 - カタログ表現タグから独立したスキーマ移行。
 - 公開カタログlistenerのTLS、相互TLS、ストリーミング、永続的な再試行キュー、バックプレッシャー、authorityの検出。
-- peer HTTPSの証明書とホスト名の検証、遅延または順序変更されたRPC、commit済み応答を失った場合の再試行、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入。
+- 古い`AppendEntries`遅延1件を超える遅延または順序変更の組み合わせ、commit済み応答の喪失後にソケットを介して再試行するケース、中断したjoint membershipの復旧、leader交代中の読み取り、クラッシュ境界の注入。
 - 分散フォロワー読み取りの整合性と鮮度。
 - 遅延と転送状態の可観測性。
 
@@ -295,7 +299,8 @@ Shard A
 この完了条件が対象とするのは固定termスライスだけです。
 Raftのクォーラム書き込みと線形化可能なカタログ読み取りは[Raftコンセンサス設計](raft.md)で別に定義します。
 RaftのCIテストはlearnerの追従、joint consensusによるvoter集合変更、3ノードのpartition、failover、再起動を検証します。
-peer HTTPSと追加の障害ケースは、[Raftコンセンサス設計](raft.md)に記載したとおり未検証です。
+peer HTTPSの証明書信頼とホスト名一致は統合テストで検査します。
+追加の障害ケースは[Raftコンセンサス設計](raft.md)に記載します。
 
 ## 7. 明示的な非目標
 
@@ -320,5 +325,7 @@ txBASE側の採用判断と実装境界は[Raftコンセンサス設計](raft.md
 現在のリポジトリには、固定termのエントリ再生、検証済みスナップショットのインストール、ジャーナル化された`TXRP`サイドカー、有界なHTTP配送と再試行があります。
 任意のRaftモードは明示したvoter集合で起動し、認証付きpeer RPC、peer HTTPS、クォーラム書き込み、線形化可能な読み取りbarrier、learner追加、joint consensusによるvoter集合変更を提供します。
 3ノードのpartition、failover、復旧、再起動を検証するテストもあります。
-peer HTTPSの証明書とホスト名の検証、追加の障害ケースは未検証で、公開カタログlistenerはHTTPのままです。
+CIはpeer HTTPSの証明書信頼とホスト名一致を検証します。
+3 nodeのfailoverテストでは、非空の`AppendEntries`要求1件をRPC timeoutより長く保留してから解放します。
+より広い遅延または順序変更の組み合わせと他の障害ケースは未検証で、公開カタログlistenerはHTTPのままです。
 これらの記述は、互換性の主張ではなく設計上の制約です。
