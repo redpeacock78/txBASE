@@ -10,12 +10,13 @@ changes voter sets through joint consensus, and waits for learner catch-up
 before promotion. CI covers learner snapshot transfer and membership changes,
 plus a three-node partition, failover, healing, and restart scenario.
 The failover test also verifies that the isolated former leader fails its read barrier, that the replacement leader passes one, and that `GET /catalog` to the isolated former leader returns `503 raft_unavailable`.
+Another deterministic test withholds the final uniform-membership append from both target voters, stops the old leader while those voters retain the joint configuration, resubmits the same voter set through a surviving leader, then restarts the former leader as a learner.
 
 CI verifies peer HTTPS certificate trust and hostname matching.
 The failover test also holds one non-empty `AppendEntries` request past its RPC timeout and releases it after the remaining quorum commits.
 This covers one stale-request case, not broad delayed or reordered RPC schedules.
 The `/transaction` retry test drops a successful handler response after commit, but does not simulate a socket disconnect.
-Broader delayed or reordered schedules, socket-level retries after losing a committed response, interrupted joint-membership recovery, catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check, and crash-boundary injection remain open.
+Broader delayed or reordered schedules, socket-level retries after losing a committed response, catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check, and crash-boundary injection remain open.
 
 The fixed-term mode is not consensus. The current Raft boundary and remaining
 work are documented in [Raft consensus design](raft.md).
@@ -49,9 +50,9 @@ bounded HTTP status, contiguous entry-range, entry, snapshot, and progress deliv
       ↓
 optional Raft mode initialized from an explicit voter set (current implementation; see [Raft consensus design](raft.md))
       ↓
-learner admission, joint-consensus voter changes, and three-node partition/failover testing (implemented)
+learner admission, joint-consensus voter changes, three-node partition/failover testing, and interrupted joint-membership recovery (implemented)
       ↓
-broader delayed or reordered RPC schedules, interrupted joint-membership recovery, and crash-boundary tests (remaining Raft work)
+broader delayed or reordered RPC schedules and crash-boundary tests (remaining Raft work)
 ```
 
 Each step needs a standalone contract before the next step depends on it.
@@ -323,7 +324,7 @@ The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
 - TLS for the public catalog listener, mutual TLS, streaming, durable retry queues, backpressure, and authority discovery;
-- broader delayed or reordered RPC schedules beyond one stale `AppendEntries` case; socket-level retries after losing a committed response; interrupted joint-membership recovery; catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check; and crash-boundary injection;
+- broader delayed or reordered RPC schedules beyond one stale `AppendEntries` case; socket-level retries after losing a committed response; catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check; and crash-boundary injection;
 - observability for lag and transport state;
 
 Change data capture, persistent WAL history, and replication must share the same ordering contract.

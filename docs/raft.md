@@ -1,6 +1,6 @@
 # Raft consensus design
 
-Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API and `txbase raft membership` CLI can add learners, report effective membership, and change voters through joint consensus. A blank learner can join clusters with either an empty or non-empty genesis catalog. A deterministic three-node test covers quorum loss, leader replacement, log reconciliation, and restart of the isolated node; it also holds one non-empty `AppendEntries` request past its RPC timeout, releases it after the remaining quorum commits, and checks that the isolated former leader fails its read barrier while the replacement leader passes one. The test also sends `GET /catalog` to the isolated former leader and verifies a `503 raft_unavailable` response. A three-node `/transaction` test drops the successful handler response after commit, verifies that an exact retry returns the original transaction ID without applying twice, and rejects a different payload at the same client sequence. Broader delayed or reordered RPC schedules, interrupted joint-membership recovery, catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check, and crash-boundary injection remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
+Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and a separate authenticated peer listener. The peer API and `txbase raft membership` CLI can add learners, report effective membership, and change voters through joint consensus. A blank learner can join clusters with either an empty or non-empty genesis catalog. A deterministic three-node test covers quorum loss, leader replacement, log reconciliation, and restart of the isolated node; it also holds one non-empty `AppendEntries` request past its RPC timeout, releases it after the remaining quorum commits, and checks that the isolated former leader fails its read barrier while the replacement leader passes one. The test also sends `GET /catalog` to the isolated former leader and verifies a `503 raft_unavailable` response. A separate membership-recovery test withholds the final uniform-configuration append from both new voters, stops the old leader while the surviving voters retain joint membership, retries the same target through a surviving leader, and verifies convergence and the old leader's return as a learner. A three-node `/transaction` test drops the successful handler response after commit, verifies that an exact retry returns the original transaction ID without applying twice, and rejects a different payload at the same client sequence. Broader delayed or reordered RPC schedules, catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check, and crash-boundary injection remain outstanding. Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
 
@@ -31,7 +31,7 @@ This document records the implemented Raft boundary and the remaining authority,
 
 ### Not implemented
 
-- Broader deterministic coverage for delayed or reordered RPC schedules beyond the single delayed `AppendEntries` case, interrupted joint-membership recovery, catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check, and crash-boundary injection.
+- Broader deterministic coverage for delayed or reordered RPC schedules beyond the single delayed `AppendEntries` case, catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check, and crash-boundary injection.
 - Mutual TLS and TLS for the public catalog listener.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
@@ -101,6 +101,7 @@ A voter change follows four steps:
 
 Stale requests, unknown nodes, requests sent to a non-leader, and conflicting joint changes return `409`.
 While a joint configuration is effective, a request for its target voter set resumes the change.
+If the leader stops before the uniform configuration commits, the surviving voters retain the joint configuration; after electing a leader, resubmit the same target voter set to resume the change.
 Editing local configuration alone cannot change voter authority.
 
 The CLI exposes `raft membership status`, `add-learner`, and `change-voters` without opening a local catalog directory.
@@ -177,7 +178,7 @@ It also sends a client-facing `GET /catalog` to the isolated former leader and v
 The `/transaction` retry test discards the successful handler response after commit and verifies exact retry and same-sequence conflict behavior; it does not exercise a socket-level disconnect.
 The two-node test continues to cover blank-learner joining when the genesis catalog is empty.
 It also exercises the typed membership client for status, learner addition, promotion, idempotent retry, and demotion; CLI argument tests cover command routing and voter-ID validation.
-Acceptance still requires broader delayed or reordered RPC delivery beyond the single stale `AppendEntries` case, crash injection between log persistence, quorum commitment, catalog publication, applied-position persistence, and client response, snapshot transfer after log purging, resuming an interrupted joint membership change, and catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check. The current failover test requests `GET /catalog` after the former leader loses quorum; it does not coordinate request timing with the replacement election.
+Acceptance still requires broader delayed or reordered RPC delivery beyond the single stale `AppendEntries` case, crash injection between log persistence, quorum commitment, catalog publication, applied-position persistence, and client response, snapshot transfer after log purging, and catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check. The current failover test requests `GET /catalog` after the former leader loses quorum; it does not coordinate request timing with the replacement election.
 
 Crash injection must cover each boundary between log persistence, quorum commitment, catalog journal publication, applied-position persistence, and client response. A green single-node test or an in-memory protocol test does not establish these guarantees.
 
@@ -191,7 +192,7 @@ Crash injection must cover each boundary between log persistence, quorum commitm
 - [OpenRaft getting started and storage test suite](https://docs.rs/openraft/0.9.25/openraft/docs/getting_started/) defines the application storage and network adapters and points to `testing::Suite`.
 - [OpenRaft cluster formation](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/cluster_formation/) defines the one-time `Raft::initialize()` operation.
 - [OpenRaft network traits](https://docs.rs/openraft/0.9.25/openraft/network/) define the peer RPC adapter.
-- [OpenRaft dynamic membership](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/dynamic_membership/) defines learner catch-up and voter changes.
+- [OpenRaft dynamic membership](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/dynamic_membership/) defines learner catch-up and voter changes; [`Raft::change_membership`](https://docs.rs/openraft/0.9.25/openraft/raft/struct.Raft.html#method.change_membership) documents that a leader loss or crash before the uniform configuration commits leaves the joint configuration active.
 - [OpenRaft snapshot replication](https://docs.rs/openraft/0.9.25/openraft/docs/protocol/replication/snapshot_replication/) documents chunked snapshot transfer.
 - [OpenRaft `Raft::install_snapshot`](https://docs.rs/openraft/0.9.25/openraft/raft/struct.Raft.html#method.install_snapshot) defines the snapshot-install RPC used by the learner join flow.
 

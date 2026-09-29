@@ -102,6 +102,8 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
   非空の`AppendEntries`要求1件をRPC timeoutより長く保留し、残るquorumのcommit後に解放するケースも検査する。
   failoverテストでは、分断された旧leaderの読み取りbarrierが失敗し、新leaderの選出時にはbarrierが成功することも検査する。
   旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認する。
+  別のmembership復旧テストでは、両方の新voterへの最終uniform構成の`AppendEntries`を止め、旧leaderを停止した後に、生存voterのleaderが同じ変更要求を再送して収束させる。
+  その後、旧leaderを再起動し、降格したlearnerとして再参加することも検査する。
   leader交代のタイミングに合わせたHTTP読み取り要求は未検証である。
   これを超えるRPC遅延と順序変更の組み合わせ、およびクラッシュ境界の検証は残る。
   詳細は[Raftコンセンサス設計](raft.md)を参照する。
@@ -117,7 +119,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - カタログルートをまたぐ参照は未対応である。
 - XBF出力とtxBASEロックを無視する読み手に対する、厳密な複数ファイル読み取りアトミック性。
 - R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針、永続的な再試行キュー。
-- 1件の遅延`AppendEntries`を超える遅延または順序変更の組み合わせ、中断したjoint membership変更、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界を扱う追加のRaft障害テスト。分散フォロワー読み取りと分散パーティショニング。
+- 1件の遅延`AppendEntries`を超える遅延または順序変更の組み合わせ、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界を扱う追加のRaft障害テスト。分散フォロワー読み取りと分散パーティショニング。
 
 ## 3. フェーズ 1：小さなローカル DBMS を完成させる
 
@@ -526,13 +528,13 @@ failoverテストでは3 nodeを分断し、quorum喪失とleader交代を確認
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも検査します。
 peer RPCのHTTPS統合テストでは、テスト用rootで信頼した証明書を受け入れ、未信頼証明書とホスト名不一致を拒否します。
 3 nodeの`/transaction`テストでは、commit後にhandler応答を破棄し、同じ要求の再試行が元のtransaction IDを返して更新を重複適用しないことと、同じclient sequenceで異なる本文を拒否することを検査します。
-1件の古い`AppendEntries`遅延を超える遅延または順序変更の組み合わせ、中断したjoint membershipの復旧、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界の注入は未検証です。
+1件の古い`AppendEntries`遅延を超える遅延または順序変更の組み合わせ、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界の注入は未検証です。
 
 ### 候補範囲
 
 - テーブル間または分散環境の長寿命スナップショットトランザクション。
 - 現在のテーブル、カタログ、`TXRP`、`TXRG`サイドカーを超える永続WAL履歴。
-- 1件の古い`AppendEntries`遅延を超える遅延または順序変更の組み合わせ、中断したjoint membershipの復旧、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界を検査する決定的なテストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
+- 1件の古い`AppendEntries`遅延を超える遅延または順序変更の組み合わせ、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界を検査する決定的なテストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
 - 公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、バックプレッシャー、authorityの検出。
 - 分散フォロワー読み取りの保証。
 - 分散パーティショニング。

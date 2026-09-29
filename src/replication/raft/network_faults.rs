@@ -3,10 +3,16 @@ use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum AppendDelayKind {
+    Any,
+    UniformMembership,
+}
+
 #[derive(Default)]
 pub(crate) struct FaultController {
     blocked_targets: RwLock<BTreeSet<u64>>,
-    delayed_appends: Mutex<BTreeMap<u64, AppendDelay>>,
+    delayed_appends: Mutex<BTreeMap<(u64, AppendDelayKind), AppendDelay>>,
 }
 
 impl FaultController {
@@ -40,31 +46,57 @@ impl FaultController {
         &self,
         target: u64,
     ) -> Result<AppendDelayHandle, String> {
+        self.delay_next(target, AppendDelayKind::Any)
+    }
+
+    pub(crate) fn delay_next_uniform_membership_append(
+        &self,
+        target: u64,
+    ) -> Result<AppendDelayHandle, String> {
+        self.delay_next(target, AppendDelayKind::UniformMembership)
+    }
+
+    fn delay_next(&self, target: u64, kind: AppendDelayKind) -> Result<AppendDelayHandle, String> {
         let (delay, handle) = AppendDelay::new();
         let mut delays = self
             .delayed_appends
             .lock()
             .map_err(|error| format!("test network delay lock poisoned: {error}"))?;
-        if delays.contains_key(&target) {
+        if delays.contains_key(&(target, kind)) {
             return Err(format!(
                 "an AppendEntries delay is already armed for peer {target}"
             ));
         }
-        delays.insert(target, delay);
+        delays.insert((target, kind), delay);
         Ok(handle)
     }
 
-    pub(crate) fn take_append_delay(&self, target: u64) -> Result<Option<AppendDelay>, String> {
-        self.delayed_appends
+    pub(crate) fn take_append_delay(
+        &self,
+        target: u64,
+        has_uniform_membership: bool,
+    ) -> Result<Option<AppendDelay>, String> {
+        let mut delays = self
+            .delayed_appends
             .lock()
-            .map(|mut delays| delays.remove(&target))
-            .map_err(|error| format!("test network delay lock poisoned: {error}"))
+            .map_err(|error| format!("test network delay lock poisoned: {error}"))?;
+        if has_uniform_membership {
+            if let Some(delay) = delays.remove(&(target, AppendDelayKind::UniformMembership)) {
+                return Ok(Some(delay));
+            }
+        }
+        Ok(delays.remove(&(target, AppendDelayKind::Any)))
     }
+}
+
+enum AppendDelayAction {
+    Release,
+    Cancel,
 }
 
 pub(crate) struct AppendDelay {
     entered: SyncSender<()>,
-    release: Receiver<()>,
+    release: Receiver<AppendDelayAction>,
     completed: SyncSender<Result<(), String>>,
 }
 
@@ -87,9 +119,9 @@ impl AppendDelay {
         )
     }
 
-    pub(crate) fn pause(&self) {
+    pub(crate) fn pause(&self) -> bool {
         let _ = self.entered.send(());
-        let _ = self.release.recv();
+        matches!(self.release.recv(), Ok(AppendDelayAction::Release))
     }
 
     pub(crate) fn complete(self, result: Result<(), String>) {
@@ -99,7 +131,7 @@ impl AppendDelay {
 
 pub(crate) struct AppendDelayHandle {
     entered: Receiver<()>,
-    release: Option<SyncSender<()>>,
+    release: Option<SyncSender<AppendDelayAction>>,
     completed: Receiver<Result<(), String>>,
 }
 
@@ -112,7 +144,13 @@ impl AppendDelayHandle {
 
     pub(crate) fn release(&mut self) {
         if let Some(release) = self.release.take() {
-            let _ = release.send(());
+            let _ = release.send(AppendDelayAction::Release);
+        }
+    }
+
+    pub(crate) fn cancel(&mut self) {
+        if let Some(release) = self.release.take() {
+            let _ = release.send(AppendDelayAction::Cancel);
         }
     }
 

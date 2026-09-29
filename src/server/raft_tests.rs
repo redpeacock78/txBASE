@@ -1,6 +1,7 @@
 mod failover;
 mod idempotency;
 mod membership;
+mod membership_recovery;
 
 use super::raft::RaftRuntime;
 use crate::catalog::Catalog;

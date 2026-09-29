@@ -163,6 +163,15 @@ impl RaftRuntime {
         self.network_factory.delay_next_append_entries(peer_id)
     }
 
+    #[cfg(test)]
+    pub(super) fn delay_next_uniform_membership_append(
+        &self,
+        peer_id: u64,
+    ) -> Result<raft::AppendDelayHandle, String> {
+        self.network_factory
+            .delay_next_uniform_membership_append(peer_id)
+    }
+
     pub(super) fn propose_request(
         &self,
         request: &Request,

@@ -9,7 +9,8 @@ peer APIと`txbase raft membership` CLIは、learner追加、有効なmembership
 分断された旧leaderでは読み取りbarrierが失敗し、新leaderはbarrierが成功した場合だけ選択されることも確認します。
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも検査します。
 3 nodeの`/transaction`テストでは、commit後にhandlerが返した成功応答を破棄し、同じ要求の再試行が元のtransaction IDを返して更新を重複適用しないことと、同じclient sequenceで異なる本文を拒否することを検査します。
-より広いRPCの遅延や順序変更、中断したjoint membershipの復旧、leader交代のタイミングに合わせたcatalog HTTP読み取り（隔離後の旧leaderに対する`503`確認を超えるケース）、クラッシュ境界の注入は未検証です。
+別のmembership復旧テストでは、両方の新voterへの最終uniform構成の`AppendEntries`を保留して旧leaderを停止し、生存voterが同じ変更要求を再送して収束することと、旧leaderがlearnerとして再参加することを検査します。
+より広いRPCの遅延や順序変更、leader交代のタイミングに合わせたcatalog HTTP読み取り（隔離後の旧leaderに対する`503`確認を超えるケース）、クラッシュ境界の注入は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -34,6 +35,7 @@ peer APIと`txbase raft membership` CLIは、learner追加、有効なmembership
 - 2 nodeのCIテストで、genesis catalogが空のclusterへ空catalogのlearnerが参加できることを検査する。
 - 3 nodeのCIテストで、空catalogのlearnerに非空genesis catalogとcommit済み更新をsnapshot転送することを検査する。
 - 3 nodeの`/transaction`テストで、commit後にhandler応答を破棄し、同一要求の再試行、更新の重複排除、同じsequenceに対する異なる要求の拒否を検査する。
+- joint membership変更中に旧leaderを停止し、同じ変更要求を生存voterから再送して収束させ、旧leaderをlearnerとして再参加させる3 nodeテストを実行する。
 - peer RPCのHTTPS統合テストで、テスト用rootで信頼した証明書を受け入れ、未信頼証明書とpeer URLのhostに一致しないSANを拒否する。
 - `RaftLogStore`はnode専用ディレクトリにvote、ログエントリ、commit済み位置、最後にpurgeしたlog IDを永続化する。
 - ログjournalは長さ付きのSHA-256検証済みJSON recordを使う。不完全な末尾を復旧し、purge後は新しいgenerationへ圧縮する。
@@ -41,7 +43,7 @@ peer APIと`txbase raft membership` CLIは、learner追加、有効なmembership
 
 ### 未実装
 
-- より広いRPCの遅延や順序変更、中断したjoint membershipの復旧、leader交代のタイミングに合わせたcatalog HTTP読み取り（隔離後の旧leaderに対する`503`確認を超えるケース）、クラッシュ境界の注入を検査する決定的なテスト。
+- より広いRPCの遅延や順序変更、leader交代のタイミングに合わせたcatalog HTTP読み取り（隔離後の旧leaderに対する`503`確認を超えるケース）、クラッシュ境界の注入を検査する決定的なテスト。
 - mutual TLSと公開catalog listenerのTLS。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
@@ -143,7 +145,8 @@ voter集合は次の4段階で変更する。
 4. `GET /raft/v1/membership`を繰り返し、`effective_voter_configs`が1集合になり、`membership_change_in_progress`が`false`になるまで待つ。
 
 古い要求、未知のnode、followerへの要求、競合するjoint変更には`409`を返す。
-joint configが有効な間は、その変更先と一致する要求で処理を再開できる。
+leader停止後もjoint configが残ります。
+新leaderへ同じ変更先を指定した要求を再送すると処理を再開できます。
 ローカル設定の編集だけで投票権は変わらない。
 
 起動CLIは、重複node ID、重複peer URL、local nodeのmembership欠落、レプリケーションmodeの混在、異なるnode identity、同じデータディレクトリを使う複数processの起動を拒否します。
@@ -261,7 +264,7 @@ leader側の更新がカタログへ適用されないこと、残るquorumが�
 failoverテストでは、分断された旧leaderの読み取りbarrierが失敗し、新leaderの選出時にはbarrierが成功することも検査します。
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認します。
 leader交代のタイミングに合わせたHTTP読み取り要求は未検証です。
-完了には、今回の非空`AppendEntries`遅延1件を超える遅延・順序変更、中断したjoint membershipの再開、leader交代時のcatalog HTTP読み取りを検証します。
+完了には、今回の非空`AppendEntries`遅延1件を超える遅延・順序変更、leader交代時のcatalog HTTP読み取りを検証します。
 HTTP読み取りでは、隔離後の旧leaderに対する`503`確認を超えるケースを扱います。
 purge後のsnapshot転送と、ログ永続化からclient応答までのクラッシュ注入も検証します。
 
@@ -278,7 +281,7 @@ purge後のsnapshot転送と、ログ永続化からclient応答までのクラ�
 - [OpenRaftの導入手順とストレージテストスイート](https://docs.rs/openraft/0.9.25/openraft/docs/getting_started/)は、アプリケーション用ストレージとネットワークのadapter、および`testing::Suite`を説明する。
 - [OpenRaftのcluster初期化](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/cluster_formation/)は、一度限りの`Raft::initialize()`を定義する。
 - [OpenRaftのnetwork trait](https://docs.rs/openraft/0.9.25/openraft/network/)は、peer RPC adapterの契約を定義する。
-- [OpenRaftの動的membership](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/dynamic_membership/)は、learnerの追いつきとvoter変更を定義する。
+- [OpenRaftの動的membership](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/dynamic_membership/)はlearnerの追いつきとvoter変更を定義する。leader交代またはクラッシュがuniform configのcommit前に起きるとjoint configが残ることも、[`Raft::change_membership`](https://docs.rs/openraft/0.9.25/openraft/raft/struct.Raft.html#method.change_membership)に記載されている。
 - [OpenRaftのsnapshot複製](https://docs.rs/openraft/0.9.25/openraft/docs/protocol/replication/snapshot_replication/)は、chunk単位のsnapshot転送を説明する。
 - [OpenRaft `Raft::install_snapshot`](https://docs.rs/openraft/0.9.25/openraft/raft/struct.Raft.html#method.install_snapshot)は、learner参加で使うsnapshot install RPCを定義する。
 

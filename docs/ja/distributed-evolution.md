@@ -6,6 +6,8 @@ txBASEには、プロセス単位の固定termレプリケーションと、有�
 明示したvoter集合で起動する任意のOpenRaftモードもあり、クォーラム書き込み、線形化可能な読み取りbarrier、認証付きpeer RPC、peer HTTPSを提供します。
 peer APIはlearnerを追加し、joint consensusでvoter集合を変更し、voterへ昇格する前にlearnerの追従を待ちます。
 CIではlearnerへのスナップショット転送とmembership変更に加え、3ノードのpartition、failover、復旧、再起動を検証します。
+別の決定的なテストでは、両方の変更先voterへの最終uniform membership entryの配送を止め、joint configが残る状態で旧leaderを停止します。
+生存voterのleaderが同じvoter集合を再送して収束させた後、旧leaderをlearnerとして再起動します。
 
 CIはpeer HTTPSで証明書の信頼性とホスト名の一致を検証します。
 failoverテストでは、非空の`AppendEntries`要求1件をRPC timeoutより長く保留し、残るquorumがcommitした後に解放します。
@@ -13,7 +15,7 @@ failoverテストでは、非空の`AppendEntries`要求1件をRPC timeoutより
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認します。
 これは古い要求を1件扱う検証であり、RPCの遅延と順序変更の広い組み合わせは対象外です。
 `/transaction`の再試行テストはcommit後のhandler応答を破棄しますが、ソケット切断は再現しません。
-検証が残るのは、RPCの遅延と順序変更の広い組み合わせ、commit済み応答をソケット切断で失った後の再試行、中断したjoint membershipの復旧、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界の注入です。
+検証が残るのは、RPCの遅延と順序変更の広い組み合わせ、commit済み応答をソケット切断で失った後の再試行、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界の注入です。
 
 固定termモードはコンセンサスではありません。
 現在のRaft境界と残作業は[Raftコンセンサス設計](raft.md)に記載します。
@@ -46,9 +48,9 @@ failoverテストでは、非空の`AppendEntries`要求1件をRPC timeoutより
       ↓
 明示したvoter集合で起動する任意のRaftモード（実装済み。[Raftコンセンサス設計](raft.md)を参照）
       ↓
-learnerの追加、joint consensusによるvoter集合変更、3ノードのpartitionとfailoverのテスト（実装済み）
+learnerの追加、joint consensusによるvoter集合変更、3ノードのpartitionとfailover、中断したjoint membershipの復旧（実装済み）
       ↓
-遅延または順序変更の広い組み合わせ、中断したjoint membershipの復旧、クラッシュ境界のテスト（Raftの残作業）
+遅延または順序変更の広い組み合わせ、クラッシュ境界のテスト（Raftの残作業）
 ```
 
 各段階は、次の段階が依存する前に独立した契約を持たなければなりません。
@@ -271,7 +273,7 @@ Shard A
 
 - カタログ表現タグから独立したスキーマ移行。
 - 公開カタログlistenerのTLS、相互TLS、ストリーミング、永続的な再試行キュー、バックプレッシャー、authorityの検出。
-- 古い`AppendEntries`遅延1件を超える遅延または順序変更の組み合わせ、commit済み応答の喪失後にソケットを介して再試行するケース、中断したjoint membershipの復旧、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界の注入。
+- 古い`AppendEntries`遅延1件を超える遅延または順序変更の組み合わせ、commit済み応答の喪失後にソケットを介して再試行するケース、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界の注入。
 - 分散フォロワー読み取りの整合性と鮮度。
 - 遅延と転送状態の可観測性。
 

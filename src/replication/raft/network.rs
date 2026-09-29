@@ -6,6 +6,8 @@ use crate::replication::{
     ReplicationRetryPolicy,
 };
 use openraft::BasicNode;
+#[cfg(test)]
+use openraft::EntryPayload;
 use openraft::error::{InstallSnapshotError, NetworkError, RPCError, RaftError, RemoteError};
 use openraft::network::{RPCOption, RaftNetwork, RaftNetworkFactory};
 use openraft::raft::{
@@ -110,6 +112,14 @@ impl RaftHttpNetworkFactory {
         target: u64,
     ) -> Result<AppendDelayHandle, String> {
         self.faults.delay_next_append_entries(target)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn delay_next_uniform_membership_append(
+        &self,
+        target: u64,
+    ) -> Result<AppendDelayHandle, String> {
+        self.faults.delay_next_uniform_membership_append(target)
     }
 
     pub(crate) fn prepare_learner(
@@ -354,10 +364,21 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
         option: RPCOption,
     ) -> Result<AppendEntriesResponse<u64>, RPCError<u64, BasicNode, RaftError<u64>>> {
         #[cfg(test)]
+        let has_uniform_membership = rpc.entries.iter().any(|entry| {
+            matches!(
+                &entry.payload,
+                EntryPayload::Membership(membership)
+                    if membership.get_joint_config().len() == 1
+            )
+        });
+        #[cfg(test)]
         let delay = if rpc.entries.is_empty() {
             None
         } else {
-            match self.faults.take_append_delay(self.target_id) {
+            match self
+                .faults
+                .take_append_delay(self.target_id, has_uniform_membership)
+            {
                 Ok(delay) => delay,
                 Err(error) => return map_rpc_result(self.target_id, Err(error)),
             }
@@ -371,9 +392,18 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
         let network = self.clone();
         let result = tokio::task::spawn_blocking(move || {
             #[cfg(test)]
-            if let Some(delay) = &delay {
-                // The blocking worker survives the Raft timeout and sends this RPC after release.
-                delay.pause();
+            let can_send = match delay.as_ref() {
+                Some(delay) => delay.pause(),
+                None => true,
+            };
+            #[cfg(test)]
+            if !can_send {
+                // A cancelled test RPC must not reach its peer.
+                let error = "test network cancelled AppendEntries RPC".to_owned();
+                if let Some(delay) = delay {
+                    delay.complete(Err(error.clone()));
+                }
+                return Err(error);
             }
             let result =
                 network.rpc::<_, _, RaftError<u64>>(RAFT_APPEND_PATH, rpc, option.hard_ttl());

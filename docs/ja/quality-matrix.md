@@ -165,6 +165,8 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 | QRY-012 | 結合ストリームは一致するsidecarをテーブルイメージと照合し、出力前に読み取りロックを解放します。7種類の結合型と出力順を保ち、最終段を有界出力します。順序を保てないindex計画はフォールバックし、前段は既存上限内でマテリアライズします。 | [取得](https://github.com/redpeacock78/txBASE/blob/main/src/query/join/stream.rs); [索引の検証](https://github.com/redpeacock78/txBASE/blob/main/src/query/join_index.rs); [プランナー](https://github.com/redpeacock78/txBASE/blob/main/src/query/join_pipeline/stages/dispatch.rs); [ストリーム](https://github.com/redpeacock78/txBASE/blob/main/src/query/join_pipeline/stream.rs); [行処理](https://github.com/redpeacock78/txBASE/blob/main/src/query/join_pipeline/stream/rows.rs); [仕様](https://github.com/redpeacock78/txBASE/blob/main/docs/joins.md) | `streams_nested_join_types`; `streams_merge_without_key_leaks`; `planner_selects_fresh_stream_index`; `streams_index_join_types` | Boundary |
 | HTTP-010 | カタログサーバーは`/join/stream`で有界な結合JSON文書を受け付け、結合行を`application/x-ndjson`で一行ずつ返し、`at`による過去読み取りに対応し、ヘッダー送信後の失敗時には不完全な出力を破棄するようクライアントに求める。 | `src/server/catalog.rs`; `src/server/stream.rs`; `src/query/join/stream.rs`; `src/server/catalog_tests.rs`; `docs/ja/http-semantics.md` | `catalog_server_query_join_executes_and_exposes_schema` | Boundary |
 
+| RAFT-008 | 旧leaderが両方の新voterへの最終uniform構成`AppendEntries`を送る前に停止し、生存voterがjoint configを保持するケースを検査する。生存voterの新leaderは同じ変更先を受けて処理を再開し、収束後に旧leaderをlearnerとして再参加させる。 | [fault injection](https://github.com/redpeacock78/txBASE/blob/main/src/replication/raft/network_faults.rs); [network adapter](https://github.com/redpeacock78/txBASE/blob/main/src/replication/raft/network.rs); [membership handler](https://github.com/redpeacock78/txBASE/blob/main/src/server/raft/peer/membership.rs); [recovery test](https://github.com/redpeacock78/txBASE/blob/main/src/server/raft_tests/membership_recovery.rs); [Raft contract](raft.md) | `interrupted_joint_membership_resumes_after_leader_restart` | Boundary |
+
 ## 明示的に残るギャップ
 
 次の話題には文書または設計メモがありますが、マトリクスで現在の実装とは主張していません。
@@ -177,7 +179,7 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 - 選定したICU4X・CLDRフィクスチャを超える、上流CJK照合の適合テスト一式。
 - スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針。
 - デプロイ済みWorkerまたはWASIのランタイムfixture、WASIのクエリスケジューリング、futureのキャンセルを超えるホストI/O中断の保証、公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、権威検出。
-- RAFT-006の古い`AppendEntries`遅延1件を超える遅延または順序変更の組み合わせ、commit応答喪失後のソケット再試行、中断したjoint membershipの復旧、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界の注入を扱う決定的なテスト。
+- RAFT-006の古い`AppendEntries`遅延1件を超える遅延または順序変更の組み合わせ、commit応答喪失後のソケット再試行、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界の注入を扱う決定的なテスト。
 
 これらのいずれかをCurrentへ移す前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。
 
