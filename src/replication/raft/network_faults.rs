@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::time::Duration;
@@ -134,6 +135,7 @@ enum AppendDelayAction {
 
 pub(crate) struct AppendDelay {
     entered: SyncSender<()>,
+    claimed: AtomicBool,
     state: Mutex<AppendDelayAction>,
     released: Condvar,
     completed: SyncSender<Result<(), String>>,
@@ -145,6 +147,7 @@ impl AppendDelay {
         let (completed, completed_rx) = mpsc::sync_channel(1);
         let delay = Arc::new(Self {
             entered,
+            claimed: AtomicBool::new(false),
             state: Mutex::new(AppendDelayAction::Pending),
             released: Condvar::new(),
             completed,
@@ -158,6 +161,10 @@ impl AppendDelay {
                 completed: completed_rx,
             },
         )
+    }
+
+    pub(crate) fn claim(&self) -> bool {
+        !self.claimed.swap(true, Ordering::AcqRel)
     }
 
     pub(crate) fn pause(&self) -> bool {

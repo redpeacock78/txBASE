@@ -405,6 +405,13 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
                 return map_rpc_result(self.target_id, Err(error));
             }
         }
+        #[cfg(test)]
+        if let Some(delay) = delay.as_ref() {
+            if !delay.claim() {
+                let error = "test network already holds an AppendEntries RPC for this peer";
+                return map_rpc_result(self.target_id, Err(error.to_owned()));
+            }
+        }
         // A test-held RPC must outlive OpenRaft's timeout so release can deliver it later.
         let network = self.clone();
         let result = tokio::task::spawn_blocking(move || {
