@@ -41,7 +41,8 @@ Read-oriented commands must state whether normal recovery can change on-disk sta
 
 Mutation commands reuse the lock, recovery, and journal path owned by the DBF, catalog, or XBF operation.
 
-A command that changes only a sidecar must say so in its help and topic document.
+Commands that change only a sidecar must state their write boundary in the CLI reference and relevant feature documentation.
+The root help summarizes syntax and selected behavior; the CLI has no command-specific help mode.
 
 ## Compatibility boundary
 
