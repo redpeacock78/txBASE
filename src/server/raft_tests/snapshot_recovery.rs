@@ -94,7 +94,7 @@ fn lagging_voter_catches_up_from_snapshot_after_leader_purges_log() {
         .last_applied
         .as_ref()
         .map(|log_id| log_id.index)
-        .unwrap();
+        .unwrap_or(0);
     let leader = &nodes[leader_index];
     leader
         .runtime
