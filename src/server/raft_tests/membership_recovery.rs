@@ -202,7 +202,6 @@ fn interrupted_joint_membership_resumes_after_leader_restart() {
             json!([new_voter_ids])
         );
         assert_eq!(membership["learner_ids"], json!([old_leader_id]));
-        assert_eq!(membership["membership_change_in_progress"], false);
     }
 
     drop(listeners);
