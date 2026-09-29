@@ -92,7 +92,7 @@ impl FilesystemObjectStore {
             let prefix_is_below = prefix
                 .strip_prefix(&key)
                 .is_some_and(|remainder| remainder.starts_with('/'));
-            if !key.starts_with(prefix) && !(file_type.is_dir() && prefix_is_below) {
+            if !(key.starts_with(prefix) || file_type.is_dir() && prefix_is_below) {
                 continue;
             }
             if file_type.is_dir() {
