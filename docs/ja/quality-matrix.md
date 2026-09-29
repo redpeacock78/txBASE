@@ -168,6 +168,8 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 | RAFT-008 | 旧leaderが両方の新voterへの最終uniform構成`AppendEntries`を送る前に停止し、生存voterがjoint configを保持するケースを検査する。生存voterの新leaderは同じ変更先を受けて処理を再開し、収束後に旧leaderをlearnerとして再参加させる。 | [fault injection](https://github.com/redpeacock78/txBASE/blob/main/src/replication/raft/network_faults.rs); [network adapter](https://github.com/redpeacock78/txBASE/blob/main/src/replication/raft/network.rs); [membership handler](https://github.com/redpeacock78/txBASE/blob/main/src/server/raft/peer/membership.rs); [recovery test](https://github.com/redpeacock78/txBASE/blob/main/src/server/raft_tests/membership_recovery.rs); [Raft contract](raft.md) | `interrupted_joint_membership_resumes_after_leader_restart` | Boundary |
 | RAFT-009 | 3 node統合テストでvoter 1台を分断し、残るquorumで4件をcommitしてsnapshotを作成し、leaderがsnapshot対象ログをpurgeします。接続の復旧後に遅延voterがsnapshotをインストールして追いつき、次のclient sequenceを適用することで、ログ圧縮後のカタログと再試行状態の転送を検査します。 | [network fault injection](https://github.com/redpeacock78/txBASE/blob/main/src/replication/raft/network_faults.rs); [network adapter](https://github.com/redpeacock78/txBASE/blob/main/src/replication/raft/network.rs); [Raft state machine](https://github.com/redpeacock78/txBASE/blob/main/src/replication/raft/state_machine.rs); [snapshot recovery test](https://github.com/redpeacock78/txBASE/blob/main/src/server/raft_tests/snapshot_recovery.rs); [Raft contract](raft.md) | `lagging_voter_catches_up_from_snapshot_after_leader_purges_log` | Boundary |
 
+| RAFT-010 | 3 nodeの`/transaction`統合テストは、実HTTPソケットとローカルTCP proxyを通じて、同一client sequenceの再試行要求と競合要求を送ります。proxyはcommit後の最初の成功応答を破棄します。同一要求の再試行が同じJSON結果とtransaction IDを返して更新を1回だけ適用し、同じsequenceの異なる本文には`409`を返すことを検査します。 | [transaction handler](https://github.com/redpeacock78/txBASE/blob/main/src/server/catalog_transaction.rs); [Raft state machine](https://github.com/redpeacock78/txBASE/blob/main/src/replication/raft/state_machine.rs); [統合テスト](https://github.com/redpeacock78/txBASE/blob/main/src/server/raft_tests/idempotency.rs); [Raft仕様](raft.md) | `transaction_retry_after_lost_response_returns_the_committed_result_once` | Boundary |
+
 ## 明示的に残るギャップ
 
 次の話題には文書または設計メモがありますが、マトリクスで現在の実装とは主張していません。
@@ -180,7 +182,7 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 - 選定したICU4X・CLDRフィクスチャを超える、上流CJK照合の適合テスト一式。
 - スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針。
 - デプロイ済みWorkerまたはWASI production hostのfixture、futureのキャンセルを超えるホストI/O中断の保証、公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、権威検出。
-- RAFT-006の現行の4要求をpeer IDの逆順に解放するケース以外の遅延パターンと順序変更パターン、commit応答喪失後のソケット再試行、クラッシュ境界の注入を扱う決定的なテスト。
+- RAFT-006の現行の4要求をpeer IDの逆順に解放するケース以外の遅延パターンと順序変更パターン、クラッシュ境界の注入を扱う決定的なテスト。
 
 これらのいずれかをCurrentへ移す前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。
 

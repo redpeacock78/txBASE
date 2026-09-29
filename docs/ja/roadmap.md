@@ -537,7 +537,9 @@ membershipテストではlearnerを空catalogから起動し、通常のログ�
 replacement leaderの選出後に残るvoter間のRPCを遮断すると、そのleaderへのcatalog読み取りは`503`で失敗します。
 通信を復旧し、read barrierが成功した後に`GET /catalog`が`200`を返すことも確認します。
 peer RPCのHTTPS統合テストでは、テスト用rootで信頼した証明書を受け入れ、未信頼証明書とホスト名不一致を拒否します。
-3 nodeの`/transaction`テストでは、commit後にhandler応答を破棄し、同じ要求の再試行が元のtransaction IDを返して更新を重複適用しないことと、同じclient sequenceで異なる本文を拒否することを検査します。
+3 nodeの`/transaction`テストは、実HTTP要求をローカルTCP proxy経由で送ります。
+proxyはcommit後の最初の成功応答を破棄します。
+同じ要求の再試行が同一のJSON結果とtransaction IDを返して更新を重複適用しないこと、同じclient sequenceの異なる本文が`409`になることを検査します。
 別の3 nodeテストでは、voter 1台を分断して残るquorumで4件をcommitし、snapshot対象ログをpurgeした後、復旧したvoterがsnapshotをインストールして次のclient sequenceを適用することを検査します。
 子プロセステストでは、通常ログエントリの永続化後、commit markerの永続化後、カタログ更新と適用位置の原子的な公開後、OpenRaftの適用結果を受信した後に、3つの論理nodeを動かすプロセスを強制終了します。
 再起動後に同じ要求を再試行し、全nodeで更新が一度だけ適用されることを検査します。

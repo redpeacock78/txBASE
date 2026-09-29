@@ -10,7 +10,9 @@ Raft統合テストで、quorum喪失、leader交代、ログの再同期、分�
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも検査します。
 replacement leaderの選出後に残るvoter間のRPCを遮断すると、そのleaderへのcatalog読み取りは`503`で失敗します。
 通信を復旧すると、read barrierの成功後に`GET /catalog`が`200`を返すことも確認します。
-3 nodeの`/transaction`テストでは、commit後にhandlerが返した成功応答を破棄し、同じ要求の再試行が元のtransaction IDを返して更新を重複適用しないことと、同じclient sequenceで異なる本文を拒否することを検査します。
+3 nodeの`/transaction`テストは、実HTTP要求をローカルTCP proxy経由で送ります。
+proxyはcommit後の最初の成功応答を破棄します。
+同じ要求の再試行が同一のJSON結果とtransaction IDを返し、更新が重複適用されず、同じclient sequenceの異なる要求が`409`になることを検査します。
 別のmembership復旧テストでは、両方の新voterへの最終uniform構成の`AppendEntries`を保留して旧leaderを停止し、生存voterが同じ変更要求を再送して収束することと、旧leaderがlearnerとして再参加することを検査します。
 別の3 nodeテストでは、voter 1台を分断した状態で残るquorumが4件のコマンドをcommitし、leaderでsnapshotを作って対象ログをpurgeします。
 接続を戻したvoterがsnapshotをインストールして追いつき、次のclient sequenceを適用することも検査します。
@@ -41,7 +43,7 @@ replacement leaderの選出後に残るvoter間のRPCを遮断すると、その
 - 3 nodeのCIテストで、空catalogのlearnerに非空genesis catalogとcommit済み更新をsnapshot転送することを検査する。
 - 子プロセステストで、3つの論理nodeを動かすプロセスをログ永続化、commit位置の永続化、カタログ更新と適用位置の原子的な公開、OpenRaftの応答受信後に強制終了する。再起動後に同じ要求を再試行し、更新が一度だけ適用されることを検査する。
 - 3 nodeのCIテストで、voter 1台を分断したまま残るquorumが4件をcommitし、leaderがsnapshot対象ログをpurgeした後、復旧したvoterがsnapshotから追いついて次のclient sequenceを適用することを検査する。
-- 3 nodeの`/transaction`テストで、commit後にhandler応答を破棄し、同一要求の再試行、更新の重複排除、同じsequenceに対する異なる要求の拒否を検査する。
+- 3 nodeの`/transaction`テストは、commit後にローカルTCP proxyで最初の成功HTTP応答を破棄する。同一要求の再試行が同じJSON結果とtransaction IDを返し、更新が一度だけ適用され、同じsequenceの異なる要求が`409`になることを検査する。
 - joint membership変更中に旧leaderを停止し、同じ変更要求を生存voterから再送して収束させ、旧leaderをlearnerとして再参加させる3 nodeテストを実行する。
 - peer RPCのHTTPS統合テストで、テスト用rootで信頼した証明書を受け入れ、未信頼証明書とpeer URLのhostに一致しないSANを拒否する。
 - `RaftLogStore`はnode専用ディレクトリにvote、ログエントリ、commit済み位置、最後にpurgeしたlog IDを永続化する。
@@ -269,7 +271,8 @@ leader側の更新がカタログへ適用されないこと、残るquorumが�
 別の3 nodeテストではvoter 1台を分断し、残るquorumで4件をcommitしてsnapshotを作成します。
 leaderがsnapshot対象ログをpurgeした後に接続を戻し、遅延voterのsnapshot適用、追いつき、次のclient sequenceの適用を確認します。
 統合テストは、状態照会、learner追加、昇格、冪等な再試行、降格で型付きmembership clientも検査する。CLIテストはコマンド振り分けとvoter IDの入力検証を確認する。
-再試行テストはhandlerが返した応答を破棄する。ソケット切断は直接検査しない。
+3 nodeの`/transaction`再試行テストでは、ローカルTCP proxyがcommit後の成功HTTP応答を破棄します。
+同じ要求の再試行が同一のJSON結果とtransaction IDを返し、更新が一度だけ適用され、同じsequenceの異なる要求が`409`になることを検査します。
 failoverテストでは、分断された旧leaderの読み取りbarrierが失敗し、新leaderの選出時にはbarrierが成功することも検査します。
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認します。
 replacement leaderの選出後に残るvoter間のRPCを遮断し、そのleaderへのcatalog読み取りが`503`で失敗することを検査します。

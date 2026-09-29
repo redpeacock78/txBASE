@@ -5,7 +5,7 @@ The peer API and `txbase raft membership` CLI add learners, report effective mem
 Raft integration tests cover quorum loss, leader replacement, log reconciliation, restart, membership recovery, and snapshot catch-up.
 The five-node failover test holds non-empty `AppendEntries` requests to all four remaining voters beyond their RPC timeouts, then releases them in reverse peer order after the remaining quorum commits.
 It also verifies that reads fail closed without a quorum and recover after connectivity returns.
-The `/transaction` retry test verifies that an exact retry returns the original transaction ID without applying the mutation twice and that a different payload at the same client sequence is rejected.
+The `/transaction` retry test sends real HTTP requests through a local TCP proxy, drops the first successful response after commit, and verifies an identical retry, one-time mutation, and `409` for a different payload at the same client sequence.
 A child-process test now terminates the process hosting the three-node test cluster at four durability boundaries, restarts the same node directories, and verifies exact retry and one-time application.
 Delayed or reordered RPC schedules beyond this single four-request, reverse-peer-order `AppendEntries` delivery remain outstanding.
 Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
@@ -29,7 +29,7 @@ This document records the implemented Raft boundary and the remaining authority,
 - Raft writes to `/transaction` and named-table mutation routes require `X-Txbase-Client-Id` and a positive `X-Txbase-Client-Sequence`. Exact retries return the stored result.
 - Normal catalog reads call OpenRaft's linearizable read barrier before reading the local catalog. The server does not provide an explicitly stale follower-read mode.
 - A three-node CI test exercises quorum commit and retry deduplication, learner catch-up before promotion, joint voter promotion and demotion, retained-learner shutdown, and quorum writes after demotion.
-- A three-node `/transaction` test discards the handler response after commit, verifies that an identical retry returns the same transaction ID without a duplicate mutation, and rejects a different payload at the same client sequence.
+- A three-node `/transaction` test sends requests through a local TCP proxy that drops the first successful HTTP response after commit; an exact retry returns identical JSON and transaction ID without a duplicate mutation, while a different payload at the same client sequence returns `409`.
 - A child-process test terminates the process hosting three logical nodes after log-entry persistence, commit-marker persistence, atomic catalog and applied-state publication, or receipt of the OpenRaft application response. It restarts all three node directories, retries the same client request, and verifies one catalog mutation at every node.
 - A two-node CI test verifies that an empty-catalog learner can join a cluster with an empty genesis catalog.
 - A three-node CI test verifies that a blank learner receives the non-empty genesis catalog and a committed update before it joins as a learner.
@@ -186,7 +186,8 @@ The membership integration test exercises a quorum commit, blank-learner snapsho
 The five-node failover integration test holds non-empty `AppendEntries` requests to all four remaining voters beyond their RPC timeouts, isolates the current leader from all four peers, verifies that its write does not reach the catalog and its read barrier fails, commits the next client sequence on the remaining quorum, selects a replacement only after its read barrier succeeds, releases the four held requests sequentially in reverse peer order, heals the partition, and restarts the isolated node before checking catalog and membership convergence.
 It sends a client-facing `GET /catalog` to the isolated former leader and verifies `503 raft_unavailable`.
 After observing the replacement election, it blocks RPC between the remaining voters and verifies that `GET /catalog` on the reported leader also fails closed with `503`; after restoring connectivity, it waits for a successful read barrier and verifies `200` from the elected leader.
-The `/transaction` retry test discards the successful handler response after commit and verifies exact retry and same-sequence conflict behavior; it does not exercise a socket-level disconnect.
+The three-node `/transaction` retry test uses a local TCP proxy to discard the successful HTTP response after commit.
+It verifies that an exact retry returns the same JSON result and transaction ID, applies the mutation once, and rejects a different request at the same client sequence with `409`.
 The two-node test continues to cover blank-learner joining when the genesis catalog is empty.
 It also exercises the typed membership client for status, learner addition, promotion, idempotent retry, and demotion; CLI argument tests cover command routing and voter-ID validation.
 The crash-recovery test terminates its child process after a normal log entry is synced but before the in-memory log changes, after a commit marker is synced but before the in-memory committed position changes, after one catalog-journal commit publishes the mutation with its applied position and client result, or after OpenRaft returns the application result but before the `/transaction` handler constructs its HTTP response.

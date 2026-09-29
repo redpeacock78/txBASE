@@ -465,7 +465,8 @@ The five-node failover test injects a partition between the initial leader and t
 It verifies that the isolated former leader fails its linearizable read barrier and that its `GET /catalog` returns `503 raft_unavailable`.
 After observing the replacement election, the test blocks RPC between the remaining voters and verifies that the leader's `GET /catalog` also returns `503`; after restoring connectivity, it verifies `200` once the read barrier succeeds.
 The peer-RPC HTTPS integration test accepts a certificate trusted by its test root and rejects an untrusted certificate or a hostname mismatch.
-A three-node `/transaction` test discards the successful handler response after commit, verifies an identical retry returns the original transaction ID without a duplicate mutation, and rejects a different payload at the same client sequence.
+A three-node `/transaction` test sends real HTTP requests through a local TCP proxy that discards the first successful response after commit.
+It verifies that an identical retry returns the same JSON result and transaction ID without a duplicate mutation, and that a different payload at the same client sequence returns `409`.
 A separate three-node recovery test disconnects a voter, commits four commands on the remaining quorum, creates a snapshot, purges the leader log through that snapshot, and verifies that the voter installs it and applies the next client sequence after reconnecting.
 The child-process test terminates the process hosting three logical nodes after log-entry persistence, commit-marker persistence, atomic catalog and applied-state publication, or receipt of the OpenRaft application response.
 It restarts all node directories, retries the same client request, and verifies one-time application at every node.
