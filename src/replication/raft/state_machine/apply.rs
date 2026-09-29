@@ -217,6 +217,8 @@ fn apply_command(
     );
     match commit {
         Ok((transaction_id, bytes)) => {
+            #[cfg(test)]
+            crate::test_support::crash_at("catalog_and_applied_state_persisted");
             let committed = RaftApplicationState::from_bytes(&bytes)?;
             if committed.catalog_transaction_id != transaction_id {
                 return Err("Raft state sidecar has the wrong catalog transaction".into());

@@ -14,7 +14,8 @@ replacement leaderの選出後に残るvoter間のRPCを遮断すると、その
 別のmembership復旧テストでは、両方の新voterへの最終uniform構成の`AppendEntries`を保留して旧leaderを停止し、生存voterが同じ変更要求を再送して収束することと、旧leaderがlearnerとして再参加することを検査します。
 別の3 nodeテストでは、voter 1台を分断した状態で残るquorumが4件のコマンドをcommitし、leaderでsnapshotを作って対象ログをpurgeします。
 接続を戻したvoterがsnapshotをインストールして追いつき、次のclient sequenceを適用することも検査します。
-より広いRPCの遅延や順序変更、クラッシュ境界の注入は未検証です。
+子プロセステストでは、3つの論理nodeを動かすプロセスを4つの永続化境界で強制終了し、同じnodeディレクトリから再起動して同一要求を再試行します。
+より広いRPCの遅延や順序変更は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -38,6 +39,7 @@ replacement leaderの選出後に残るvoter間のRPCを遮断すると、その
 - 3 nodeのCIテストでquorum commitと再試行の重複排除、昇格前のlearner同期、joint membershipによるvoter昇格と降格、learner停止後に残るvoterでのquorum更新を検査する。
 - 2 nodeのCIテストで、genesis catalogが空のclusterへ空catalogのlearnerが参加できることを検査する。
 - 3 nodeのCIテストで、空catalogのlearnerに非空genesis catalogとcommit済み更新をsnapshot転送することを検査する。
+- 子プロセステストで、3つの論理nodeを動かすプロセスをログ永続化、commit位置の永続化、カタログ更新と適用位置の原子的な公開、OpenRaftの応答受信後に強制終了する。再起動後に同じ要求を再試行し、更新が一度だけ適用されることを検査する。
 - 3 nodeのCIテストで、voter 1台を分断したまま残るquorumが4件をcommitし、leaderがsnapshot対象ログをpurgeした後、復旧したvoterがsnapshotから追いついて次のclient sequenceを適用することを検査する。
 - 3 nodeの`/transaction`テストで、commit後にhandler応答を破棄し、同一要求の再試行、更新の重複排除、同じsequenceに対する異なる要求の拒否を検査する。
 - joint membership変更中に旧leaderを停止し、同じ変更要求を生存voterから再送して収束させ、旧leaderをlearnerとして再参加させる3 nodeテストを実行する。
@@ -48,7 +50,7 @@ replacement leaderの選出後に残るvoter間のRPCを遮断すると、その
 
 ### 未実装
 
-- より広いRPCの遅延や順序変更、クラッシュ境界の注入を検査する決定的なテスト。
+- より広いRPCの遅延や順序変更を検査する決定的なテスト。
 - mutual TLSと公開catalog listenerのTLS。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
@@ -272,11 +274,10 @@ failoverテストでは、分断された旧leaderの読み取りbarrierが失�
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認します。
 replacement leaderの選出後に残るvoter間のRPCを遮断し、そのleaderへのcatalog読み取りが`503`で失敗することを検査します。
 通信を復旧し、read barrierの成功後にleaderへの`GET /catalog`が`200`を返すことも確認します。
-完了には、今回の制御された古い`AppendEntries`要求2件を超える、より広い遅延・順序変更を検証します。
-ログ永続化からclient応答までのクラッシュ注入も検証します。
-
-ログ永続化、quorum commit、カタログジャーナル公開、適用済み位置の永続化、client応答の各境界でプロセスを強制終了し、再起動後の状態を検証する。
-単一nodeの成功やメモリ上のプロトコルテストだけでは、これらの保証を確認できない。
+子プロセステストでは、通常ログエントリを同期した直後、commit markerを同期した直後、カタログ更新と適用位置およびclient再試行結果を1つのjournal commitで公開した直後、OpenRaftが適用結果を返した直後にプロセスを強制終了します。
+各境界で親プロセスが3つのnodeディレクトリを再起動し、同じclient IDとsequenceを再試行して、全カタログがtransaction 2に収束し更新が1回だけ適用されることを確認します。
+3つの論理nodeは同じ子プロセスで動くため、このテストは単一voterだけを個別に停止する障害を扱いません。
+今回の制御された古い`AppendEntries`要求2件を超える、より広い遅延・順序変更は未検証です。
 
 ## 一次資料と適用範囲
 

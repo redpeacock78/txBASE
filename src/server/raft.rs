@@ -237,6 +237,8 @@ impl RaftRuntime {
                     false,
                 )
             })?;
+        #[cfg(test)]
+        crate::test_support::crash_at("raft_response_received");
         match response.result {
             RaftResponseResult::Applied { transaction_id } => Ok(transaction_id),
             RaftResponseResult::Rejected { reason } => Err(rejection_response(reason)),

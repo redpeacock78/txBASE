@@ -1,3 +1,4 @@
+mod crash_recovery;
 mod failover;
 mod idempotency;
 mod membership;

@@ -20,6 +20,8 @@ pub mod xbf;
 mod collation;
 mod json_order;
 mod query_path;
+#[cfg(test)]
+mod test_support;
 
 pub use collation::Collation;
 

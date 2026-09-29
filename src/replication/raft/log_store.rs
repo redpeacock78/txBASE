@@ -219,7 +219,15 @@ impl StoreInner {
             }
         }
 
+        #[cfg(test)]
+        let contains_normal_entry = entries
+            .iter()
+            .any(|entry| matches!(&entry.payload, openraft::EntryPayload::Normal(_)));
         self.persist_records(entries.iter().cloned().map(JournalRecord::Append))?;
+        #[cfg(test)]
+        if contains_normal_entry {
+            crate::test_support::crash_at("log_entry_persisted");
+        }
         self.state.entries.split_off(&first_index);
         for entry in entries {
             self.state.entries.insert(entry.log_id.index, entry);
@@ -254,7 +262,18 @@ impl StoreInner {
                 }
             }
         }
+        #[cfg(test)]
+        let includes_normal_entry = committed.is_some_and(|last| {
+            self.state
+                .entries
+                .range(..=last.index)
+                .any(|(_, entry)| matches!(&entry.payload, openraft::EntryPayload::Normal(_)))
+        });
         self.persist_records(std::iter::once(JournalRecord::Committed(committed)))?;
+        #[cfg(test)]
+        if includes_normal_entry {
+            crate::test_support::crash_at("commit_marker_persisted");
+        }
         self.state.committed = committed;
         Ok(())
     }
