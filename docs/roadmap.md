@@ -76,7 +76,7 @@ The repository currently provides:
   Its authenticated peer API adds learners, reports local effective membership, and changes voter sets through joint consensus.
   It waits for promoted learners to catch up and retains demoted voters as learners.
   The `txbase raft membership` CLI exposes status, learner addition, and voter changes through this peer control plane; status reports the contacted node's local metrics, and mutations target the current leader.
-  Blank learners can join clusters with empty or non-empty genesis catalogs. A three-node failure-injection test covers quorum loss, leader replacement, partition healing, and restart of the isolated node; it also releases one non-empty `AppendEntries` request after its RPC timeout and after the remaining quorum commits. A separate test resumes an interrupted joint-membership change through a surviving leader and verifies that the former leader rejoins as a learner. Another three-node test disconnects one voter, commits four commands on the remaining quorum, purges a leader snapshot's covered log, then verifies snapshot catch-up and the next client sequence after reconnecting. Broader delayed or reordered RPC schedules and crash-boundary coverage remain open. See [Raft consensus design](raft.md).
+  Blank learners can join clusters with empty or non-empty genesis catalogs. A three-node failure-injection test covers quorum loss, leader replacement, partition healing, and restart of the isolated node; it also releases one non-empty `AppendEntries` request after its RPC timeout and after the remaining quorum commits. The test sends `GET /catalog` to the isolated former leader and expects `503`; after the replacement election it blocks RPC between the remaining voters and confirms the catalog read fails with `503`, then restores connectivity and confirms `200` after the read barrier succeeds. A separate test resumes an interrupted joint-membership change through a surviving leader and verifies that the former leader rejoins as a learner. Another three-node test disconnects one voter, commits four commands on the remaining quorum, purges a leader snapshot's covered log, then verifies snapshot catch-up and the next client sequence after reconnecting. Broader delayed or reordered RPC schedules and crash-boundary coverage remain open. See [Raft consensus design](raft.md).
 - Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit, after validating the declared primary or unique parent key; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
 - Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with ordered per-transaction mode changes in the Rust and HTTP transaction APIs; deferred `CHECK` is a txBASE extension.
 
@@ -89,7 +89,7 @@ The baseline intentionally does not include the following:
 - References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
-- Additional Raft failure coverage beyond the single delayed `AppendEntries` case, including broader delayed or reordered RPC schedules, catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check, and crash boundaries; distributed follower reads and partitioning.
+- Additional Raft failure coverage beyond the single delayed `AppendEntries` case, including broader delayed or reordered RPC schedules and crash boundaries; distributed follower reads and partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -460,18 +460,18 @@ The API waits for newly promoted learners to catch up and retains demoted voters
 OpenRaft storage, the catalog state machine, snapshots, startup recovery, and three-node integration coverage are included in the CI test suite.
 The membership test starts a learner from an empty catalog and verifies snapshot transfer of the non-empty genesis catalog and a committed update before normal log replication.
 The failover test injects a three-node partition, checks quorum loss and leader replacement, heals the partition, and restarts the isolated node before checking convergence.
-It also verifies that the isolated former leader fails its linearizable read barrier, that the replacement leader passes the barrier, and that `GET /catalog` to the isolated former leader returns `503 raft_unavailable`.
-HTTP read timing coordinated with the replacement election remains untested.
+It verifies that the isolated former leader fails its linearizable read barrier and that its `GET /catalog` returns `503 raft_unavailable`.
+After observing the replacement election, the test blocks RPC between the remaining voters and verifies that the leader's `GET /catalog` also returns `503`; after restoring connectivity, it verifies `200` once the read barrier succeeds.
 The peer-RPC HTTPS integration test accepts a certificate trusted by its test root and rejects an untrusted certificate or a hostname mismatch.
 A three-node `/transaction` test discards the successful handler response after commit, verifies an identical retry returns the original transaction ID without a duplicate mutation, and rejects a different payload at the same client sequence.
 A separate three-node recovery test disconnects a voter, commits four commands on the remaining quorum, creates a snapshot, purges the leader log through that snapshot, and verifies that the voter installs it and applies the next client sequence after reconnecting.
-Broader delayed or reordered RPC schedules beyond the single stale `AppendEntries` case, catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check, and crash-boundary injection remain outstanding.
+Broader delayed or reordered RPC schedules beyond the single stale `AppendEntries` case and crash-boundary injection remain outstanding.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Add deterministic tests for delayed or reordered RPC schedules beyond the single stale `AppendEntries` case, catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check, and crash boundaries; see [Raft consensus design](raft.md).
+- Add deterministic tests for delayed or reordered RPC schedules beyond the single stale `AppendEntries` case and crash boundaries; see [Raft consensus design](raft.md).
 - TLS for the public catalog listener, mutual TLS, durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.

@@ -8,11 +8,13 @@ peer APIと`txbase raft membership` CLIは、learner追加、有効なmembership
 非空の`AppendEntries`要求をRPC timeoutより長く保留して解放するケースも検査します。
 分断された旧leaderでは読み取りbarrierが失敗し、新leaderはbarrierが成功した場合だけ選択されることも確認します。
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも検査します。
+replacement leaderの選出後に残るvoter間のRPCを遮断すると、そのleaderへのcatalog読み取りは`503`で失敗します。
+通信を復旧すると、read barrierの成功後に`GET /catalog`が`200`を返すことも確認します。
 3 nodeの`/transaction`テストでは、commit後にhandlerが返した成功応答を破棄し、同じ要求の再試行が元のtransaction IDを返して更新を重複適用しないことと、同じclient sequenceで異なる本文を拒否することを検査します。
 別のmembership復旧テストでは、両方の新voterへの最終uniform構成の`AppendEntries`を保留して旧leaderを停止し、生存voterが同じ変更要求を再送して収束することと、旧leaderがlearnerとして再参加することを検査します。
 別の3 nodeテストでは、voter 1台を分断した状態で残るquorumが4件のコマンドをcommitし、leaderでsnapshotを作って対象ログをpurgeします。
 接続を戻したvoterがsnapshotをインストールして追いつき、次のclient sequenceを適用することも検査します。
-より広いRPCの遅延や順序変更、leader交代のタイミングに合わせたcatalog HTTP読み取り（隔離後の旧leaderに対する`503`確認を超えるケース）、クラッシュ境界の注入は未検証です。
+より広いRPCの遅延や順序変更、クラッシュ境界の注入は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -46,7 +48,7 @@ peer APIと`txbase raft membership` CLIは、learner追加、有効なmembership
 
 ### 未実装
 
-- より広いRPCの遅延や順序変更、leader交代のタイミングに合わせたcatalog HTTP読み取り（隔離後の旧leaderに対する`503`確認を超えるケース）、クラッシュ境界の注入を検査する決定的なテスト。
+- より広いRPCの遅延や順序変更、クラッシュ境界の注入を検査する決定的なテスト。
 - mutual TLSと公開catalog listenerのTLS。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
@@ -268,9 +270,9 @@ leaderがsnapshot対象ログをpurgeした後に接続を戻し、遅延voter�
 再試行テストはhandlerが返した応答を破棄する。ソケット切断は直接検査しない。
 failoverテストでは、分断された旧leaderの読み取りbarrierが失敗し、新leaderの選出時にはbarrierが成功することも検査します。
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認します。
-leader交代のタイミングに合わせたHTTP読み取り要求は未検証です。
-完了には、今回の非空`AppendEntries`遅延1件を超える遅延・順序変更、leader交代時のcatalog HTTP読み取りを検証します。
-HTTP読み取りでは、隔離後の旧leaderに対する`503`確認を超えるケースを扱います。
+replacement leaderの選出後に残るvoter間のRPCを遮断し、そのleaderへのcatalog読み取りが`503`で失敗することを検査します。
+通信を復旧し、read barrierの成功後にleaderへの`GET /catalog`が`200`を返すことも確認します。
+完了には、今回の非空`AppendEntries`遅延1件を超える遅延・順序変更を検証します。
 ログ永続化からclient応答までのクラッシュ注入も検証します。
 
 ログ永続化、quorum commit、カタログジャーナル公開、適用済み位置の永続化、client応答の各境界でプロセスを強制終了し、再起動後の状態を検証する。

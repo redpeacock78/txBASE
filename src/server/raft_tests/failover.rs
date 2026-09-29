@@ -67,6 +67,11 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
     let mut delayed_append = nodes[initial_leader_index]
         .delay_next_append_entries(delayed_peer_id)
         .unwrap();
+    let majority = nodes
+        .iter()
+        .filter(|node| node.node_id != initial_leader_id)
+        .cloned()
+        .collect::<Vec<_>>();
 
     for node in &nodes {
         if node.node_id == initial_leader_id {
@@ -80,11 +85,6 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         }
     }
 
-    let majority = nodes
-        .iter()
-        .filter(|node| node.node_id != initial_leader_id)
-        .cloned()
-        .collect::<Vec<_>>();
     let uncommitted = record_command(
         &root.join(format!("catalog-{initial_leader_id}")),
         2,
@@ -112,8 +112,8 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         .runtime
         .block_on(no_quorum_write);
     drop(isolated_leader);
-    let mut isolated_catalog =
-        Catalog::from_path(root.join(format!("catalog-{initial_leader_id}"))).unwrap();
+    let isolated_catalog_root = root.join(format!("catalog-{initial_leader_id}"));
+    let isolated_catalog = Catalog::from_path(&isolated_catalog_root).unwrap();
     assert_eq!(isolated_catalog.transaction_id().unwrap(), Some(2));
     assert_eq!(
         isolated_catalog
@@ -123,32 +123,64 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
             .len(),
         4
     );
-    let http_server = tiny_http::Server::http("127.0.0.1:0").unwrap();
-    let authority = http_server.server_addr().to_ip().unwrap().to_string();
-    let client = thread::spawn(move || {
-        peer_request(
-            &format!("http://{authority}"),
-            "GET",
-            "/catalog",
-            None,
-            "ci-token",
-        )
-    });
-    let request = http_server.recv().unwrap();
-    super::super::catalog::handle_raft_request(
-        request,
-        &mut isolated_catalog,
-        &nodes[initial_leader_index],
-    );
-    let (status, body) = response_json(&client.join().unwrap());
+    let (status, body) = catalog_http_request(&nodes[initial_leader_index], &isolated_catalog_root);
     assert_eq!(
         status, 503,
         "an isolated former leader served a catalog read without quorum: {body}"
     );
     assert_eq!(body["error"]["code"], "raft_unavailable");
 
+    let election_deadline = Instant::now() + Duration::from_secs(20);
+    let (transition_leader_index, transition_leader_id) = loop {
+        if let Some((index, leader)) = majority
+            .iter()
+            .enumerate()
+            .find(|(_, node)| node.node.metrics().borrow().current_leader == Some(node.node_id))
+        {
+            break (index, leader.node_id);
+        }
+        assert!(
+            Instant::now() < election_deadline,
+            "the remaining quorum did not elect a replacement leader"
+        );
+        thread::sleep(Duration::from_millis(100));
+    };
+    for source in &majority {
+        let target_id = majority
+            .iter()
+            .find(|node| node.node_id != source.node_id)
+            .unwrap()
+            .node_id;
+        source.set_peer_blocked(target_id, true).unwrap();
+    }
+
+    let transition_catalog_root = root.join(format!("catalog-{transition_leader_id}"));
+    let (status, body) =
+        catalog_http_request(&majority[transition_leader_index], &transition_catalog_root);
+    assert_eq!(
+        status, 503,
+        "leader served a catalog read after losing quorum during the transition: {body}"
+    );
+    assert_eq!(body["error"]["code"], "raft_unavailable");
+
+    for source in &majority {
+        let target_id = majority
+            .iter()
+            .find(|node| node.node_id != source.node_id)
+            .unwrap()
+            .node_id;
+        source.set_peer_blocked(target_id, false).unwrap();
+    }
     let replacement_index = current_leader_index(&majority, Duration::from_secs(20));
     let replacement_id = majority[replacement_index].node_id;
+    let replacement_catalog_root = root.join(format!("catalog-{replacement_id}"));
+    let (status, body) =
+        catalog_http_request(&majority[replacement_index], &replacement_catalog_root);
+    assert_eq!(
+        status, 200,
+        "replacement leader did not serve a catalog read: {body}"
+    );
+
     assert_ne!(replacement_id, initial_leader_id);
     let replacement_command = record_command(
         &root.join(format!("catalog-{replacement_id}")),
@@ -235,4 +267,22 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
     }
     drop(nodes);
     fs::remove_dir_all(root).unwrap();
+}
+
+fn catalog_http_request(raft: &RaftRuntime, catalog_root: &Path) -> (u16, Value) {
+    let http_server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+    let authority = http_server.server_addr().to_ip().unwrap().to_string();
+    let client = thread::spawn(move || {
+        peer_request(
+            &format!("http://{authority}"),
+            "GET",
+            "/catalog",
+            None,
+            "ci-token",
+        )
+    });
+    let request = http_server.recv().unwrap();
+    let mut catalog = Catalog::from_path(catalog_root).unwrap();
+    super::super::catalog::handle_raft_request(request, &mut catalog, raft);
+    response_json(&client.join().unwrap())
 }

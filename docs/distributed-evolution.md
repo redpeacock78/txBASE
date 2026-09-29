@@ -9,14 +9,15 @@ barrier, authenticated peer RPC, and peer HTTPS. Its peer API adds learners,
 changes voter sets through joint consensus, and waits for learner catch-up
 before promotion. CI covers learner snapshot transfer and membership changes,
 plus a three-node partition, failover, healing, and restart scenario.
-The failover test also verifies that the isolated former leader fails its read barrier, that the replacement leader passes one, and that `GET /catalog` to the isolated former leader returns `503 raft_unavailable`.
+The failover test also verifies that the isolated former leader fails its read barrier and that its `GET /catalog` returns `503 raft_unavailable`.
+After the replacement election, it blocks RPC between the remaining voters and checks that the leader's catalog read returns `503`; after restoring connectivity, a leader that passes the read barrier serves the catalog with `200`.
 Another deterministic test withholds the final uniform-membership append from both target voters, stops the old leader while those voters retain the joint configuration, resubmits the same voter set through a surviving leader, then restarts the former leader as a learner.
 
 CI verifies peer HTTPS certificate trust and hostname matching.
 The failover test also holds one non-empty `AppendEntries` request past its RPC timeout and releases it after the remaining quorum commits.
 This covers one stale-request case, not broad delayed or reordered RPC schedules.
 The `/transaction` retry test drops a successful handler response after commit, but does not simulate a socket disconnect.
-Broader delayed or reordered schedules, socket-level retries after losing a committed response, catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check, and crash-boundary injection remain open.
+Broader delayed or reordered schedules, socket-level retries after losing a committed response, and crash-boundary injection remain open.
 
 The fixed-term mode is not consensus. The current Raft boundary and remaining
 work are documented in [Raft consensus design](raft.md).
@@ -324,7 +325,7 @@ The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
 - TLS for the public catalog listener, mutual TLS, streaming, durable retry queues, backpressure, and authority discovery;
-- broader delayed or reordered RPC schedules beyond one stale `AppendEntries` case; socket-level retries after losing a committed response; catalog HTTP reads coordinated with an active leader transition beyond the isolated-node `503` check; and crash-boundary injection;
+- broader delayed or reordered RPC schedules beyond one stale `AppendEntries` case; socket-level retries after losing a committed response; and crash-boundary injection;
 - observability for lag and transport state;
 
 Change data capture, persistent WAL history, and replication must share the same ordering contract.

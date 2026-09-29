@@ -15,9 +15,11 @@ CIはpeer HTTPSで証明書の信頼性とホスト名の一致を検証しま�
 failoverテストでは、非空の`AppendEntries`要求1件をRPC timeoutより長く保留し、残るquorumがcommitした後に解放します。
 このテストは、分断された旧leaderの読み取りbarrierが失敗し、新leaderの選出時にはbarrierが成功することも検査します。
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認します。
+replacement leaderの選出後に残るvoter間のRPCを遮断すると、そのleaderへのcatalog読み取りは`503`で失敗します。
+通信を復旧し、read barrierの成功後に`GET /catalog`が`200`を返すことも確認します。
 これは古い要求を1件扱う検証であり、RPCの遅延と順序変更の広い組み合わせは対象外です。
 `/transaction`の再試行テストはcommit後のhandler応答を破棄しますが、ソケット切断は再現しません。
-検証が残るのは、RPCの遅延と順序変更の広い組み合わせ、commit済み応答をソケット切断で失った後の再試行、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界の注入です。
+検証が残るのは、RPCの遅延と順序変更の広い組み合わせ、commit済み応答をソケット切断で失った後の再試行、クラッシュ境界の注入です。
 
 固定termモードはコンセンサスではありません。
 現在のRaft境界と残作業は[Raftコンセンサス設計](raft.md)に記載します。
@@ -275,7 +277,7 @@ Shard A
 
 - カタログ表現タグから独立したスキーマ移行。
 - 公開カタログlistenerのTLS、相互TLS、ストリーミング、永続的な再試行キュー、バックプレッシャー、authorityの検出。
-- 古い`AppendEntries`遅延1件を超える遅延または順序変更の組み合わせ、commit済み応答の喪失後にソケットを介して再試行するケース、隔離後の旧leaderに対する`503`確認を超えるleader交代時のcatalog HTTP読み取り、クラッシュ境界の注入。
+- 古い`AppendEntries`遅延1件を超える遅延または順序変更の組み合わせ、commit済み応答の喪失後にソケットを介して再試行するケース、クラッシュ境界の注入。
 - 分散フォロワー読み取りの整合性と鮮度。
 - 遅延と転送状態の可観測性。
 
