@@ -14,7 +14,7 @@ mod component {
     use txbase::edge::{AsyncObjectTable, SyncObjectStoreAdapter};
     use txbase::query;
 
-    use crate::object_store::ReadOnlyFilesystemObjectStore;
+    use crate::object_store::FilesystemObjectStore;
     use crate::output::stream_to_stdout;
 
     wasip3::cli::command::export!(WasiQueryCommand);
@@ -105,7 +105,9 @@ mod component {
         query_json: String,
         generation: Option<u64>,
     ) -> Result<(), String> {
-        let store = SyncObjectStoreAdapter::new(ReadOnlyFilesystemObjectStore::new(root));
+        let store = SyncObjectStoreAdapter::new(
+            FilesystemObjectStore::new(root).map_err(|error| error.to_string())?,
+        );
         let table = AsyncObjectTable::new(store, namespace).map_err(|error| error.to_string())?;
         let request = query::parse(query_json.as_bytes()).map_err(|error| error.to_string())?;
         let stream = match generation {

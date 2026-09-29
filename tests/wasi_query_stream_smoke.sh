@@ -158,15 +158,25 @@ grep -q 'streaming query supports filter, projection, skip, and limit only' \
 printf '%s\n' \
   '{"version":1,"base_generation":null,"target_generation":0,"root":"users/snapshots/0.xbf","wal_head":0}' \
   > "$temp_dir/object-store/users/wal/0.json"
-if wasmtime run --dir "$temp_dir::/data" "$component" \
+wasmtime run --dir "$temp_dir::/data" "$component" \
   --object-store /data/object-store users '{"projection":{"NAME":1}}' \
-  > "$temp_dir/pending-wal.stdout" 2> "$temp_dir/pending-wal.stderr"; then
-  printf '%s\n' 'read-only object store unexpectedly recovered a pending WAL' >&2
-  exit 1
-fi
+  > "$temp_dir/pending-wal.ndjson"
+cmp "$temp_dir/expected-xbf.ndjson" "$temp_dir/pending-wal.ndjson"
+test ! -e "$temp_dir/object-store/users/wal/0.json"
 
-test ! -s "$temp_dir/pending-wal.stdout"
-grep -q 'object store is read-only' "$temp_dir/pending-wal.stderr"
+# Recovery publishes a missing manifest with compare-and-swap, then removes the WAL.
+mkdir -p "$temp_dir/recovery-store/users/snapshots" "$temp_dir/recovery-store/users/wal"
+cp "$temp_dir/object-store/users/snapshots/0.xbf" \
+  "$temp_dir/recovery-store/users/snapshots/0.xbf"
+printf '%s\n' \
+  '{"version":1,"base_generation":null,"target_generation":0,"root":"users/snapshots/0.xbf","wal_head":0}' \
+  > "$temp_dir/recovery-store/users/wal/0.json"
+wasmtime run --dir "$temp_dir::/data" "$component" \
+  --object-store /data/recovery-store users '{"projection":{"NAME":1}}' \
+  > "$temp_dir/recovered-wal.ndjson"
+cmp "$temp_dir/expected-xbf.ndjson" "$temp_dir/recovered-wal.ndjson"
+grep -q '"generation":0' "$temp_dir/recovery-store/users/manifest.json"
+test ! -e "$temp_dir/recovery-store/users/wal/0.json"
 
 cp "$temp_dir/object-store/users/snapshots/0.xbf" "$temp_dir/outside.xbf"
 mkdir -p "$temp_dir/symlink-store/users/snapshots" "$temp_dir/symlink-store/users/wal"

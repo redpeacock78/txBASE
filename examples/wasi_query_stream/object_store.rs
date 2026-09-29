@@ -1,19 +1,24 @@
 use std::fs;
 use std::io;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use txbase::edge::{ObjectStore, ObjectStoreError};
 
 const LOCK_FILE: &str = ".txbase-object-store.lock";
 const TEMP_PREFIX: &str = ".txbase-object-store-tmp-";
+static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-pub struct ReadOnlyFilesystemObjectStore {
+pub struct FilesystemObjectStore {
     root: PathBuf,
 }
 
-impl ReadOnlyFilesystemObjectStore {
-    pub fn new(root: PathBuf) -> Self {
-        Self { root }
+impl FilesystemObjectStore {
+    pub fn new(root: PathBuf) -> Result<Self, ObjectStoreError> {
+        fs::create_dir_all(&root)
+            .map_err(|error| io_error("create object-store root", &root, error))?;
+        Ok(Self { root })
     }
 
     fn path_for(&self, key: &str) -> Result<PathBuf, ObjectStoreError> {
@@ -52,13 +57,6 @@ impl ReadOnlyFilesystemObjectStore {
             }
         }
         Ok(path)
-    }
-
-    fn read_only_error<T>(&self) -> Result<T, ObjectStoreError> {
-        Err(ObjectStoreError::Unavailable(
-            "WASI query object store is read-only; pending recovery requires a writable host"
-                .into(),
-        ))
     }
 
     fn collect_keys(
@@ -107,7 +105,7 @@ impl ReadOnlyFilesystemObjectStore {
     }
 }
 
-impl ObjectStore for ReadOnlyFilesystemObjectStore {
+impl ObjectStore for FilesystemObjectStore {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ObjectStoreError> {
         let path = self.path_for(key)?;
         match fs::read(&path) {
@@ -117,21 +115,43 @@ impl ObjectStore for ReadOnlyFilesystemObjectStore {
         }
     }
 
-    fn put_if_absent(&self, _key: &str, _bytes: &[u8]) -> Result<(), ObjectStoreError> {
-        self.read_only_error()
+    fn put_if_absent(&self, key: &str, bytes: &[u8]) -> Result<(), ObjectStoreError> {
+        let path = self.path_for(key)?;
+        if let Some(existing) = read_optional(&path)? {
+            return if existing == bytes {
+                Ok(())
+            } else {
+                Err(ObjectStoreError::Conflict(format!(
+                    "object already exists with different bytes: {key}"
+                )))
+            };
+        }
+        write_new(&path, bytes)?;
+        sync_directory(path.parent().unwrap_or(&self.root))
     }
 
     fn compare_and_swap(
         &self,
-        _key: &str,
-        _expected: Option<&[u8]>,
-        _replacement: &[u8],
+        key: &str,
+        expected: Option<&[u8]>,
+        replacement: &[u8],
     ) -> Result<(), ObjectStoreError> {
-        self.read_only_error()
+        let path = self.path_for(key)?;
+        if read_optional(&path)?.as_deref() != expected {
+            return Err(ObjectStoreError::Conflict(format!(
+                "compare-and-swap precondition failed: {key}"
+            )));
+        }
+        replace_atomically(&path, replacement)
     }
 
-    fn delete(&self, _key: &str) -> Result<(), ObjectStoreError> {
-        self.read_only_error()
+    fn delete(&self, key: &str) -> Result<(), ObjectStoreError> {
+        let path = self.path_for(key)?;
+        match fs::remove_file(&path) {
+            Ok(()) => sync_directory(path.parent().unwrap_or(&self.root)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(io_error("delete object", &path, error)),
+        }
     }
 
     fn list(&self, prefix: &str) -> Result<Vec<String>, ObjectStoreError> {
@@ -145,6 +165,69 @@ impl ObjectStore for ReadOnlyFilesystemObjectStore {
         keys.sort();
         Ok(keys)
     }
+}
+
+fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, ObjectStoreError> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(io_error("read object", path, error)),
+    }
+}
+
+fn write_new(path: &Path, bytes: &[u8]) -> Result<(), ObjectStoreError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| io_error("create object parent", parent, error))?;
+    }
+    let mut file = match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            return Err(ObjectStoreError::Conflict(format!(
+                "object already exists: {}",
+                path.display()
+            )));
+        }
+        Err(error) => return Err(io_error("create object", path, error)),
+    };
+    if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+        let _ = fs::remove_file(path);
+        return Err(io_error("write object", path, error));
+    }
+    Ok(())
+}
+
+fn replace_atomically(path: &Path, bytes: &[u8]) -> Result<(), ObjectStoreError> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent).map_err(|error| io_error("create object parent", parent, error))?;
+    let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("object");
+    let temporary = parent.join(format!("{TEMP_PREFIX}{name}-{sequence}"));
+    write_new(&temporary, bytes)?;
+    if let Err(error) = fs::rename(&temporary, path) {
+        let _ = fs::remove_file(&temporary);
+        return Err(io_error("replace object", path, error));
+    }
+    sync_directory(parent)
+}
+
+#[cfg(unix)]
+fn sync_directory(directory: &Path) -> Result<(), ObjectStoreError> {
+    fs::File::open(directory)
+        .and_then(|file| file.sync_all())
+        .map_err(|error| io_error("sync object directory", directory, error))
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_directory: &Path) -> Result<(), ObjectStoreError> {
+    Ok(())
 }
 
 fn io_error(operation: &str, path: &Path, error: io::Error) -> ObjectStoreError {

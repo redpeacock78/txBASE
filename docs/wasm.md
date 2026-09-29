@@ -49,8 +49,9 @@ The host boundary must not make core behavior depend on POSIX files, a JavaScrip
   The generated WASM Promise methods do not expose that Rust token.
   Worker signal-aware queries pass a per-query `AbortSignal` to the host operations.
   See [asynchronous streaming](async-streaming.md) and [Worker query streaming](worker-query-stream.md) for cancellation details.
-- The WASI 0.3 CLI component queries DBF files or current and retained XBF snapshots through a read-only preopened filesystem store.
-  It streams rows through asynchronous stdout, while filesystem reads remain synchronous.
+- The WASI 0.3 CLI component queries DBF files or current and retained XBF snapshots through a writable, single-writer preopened filesystem store.
+  It recovers pending WAL records before emitting rows when the host grants write access, while filesystem operations remain synchronous.
+  The adapter does not coordinate concurrent writers.
   See [WASI query streaming](wasi-query-stream.md) for its command and runtime contract.
 
 ## 4. Verification boundary
@@ -70,7 +71,7 @@ The [quality matrix](quality-matrix.md) lists the assertions and their test name
 
 The repository does not claim production Worker deployment or live R2 service validation.
 
-Writable or provider-backed WASI storage and non-blocking WASI filesystem I/O remain unimplemented.
+Provider-backed WASI storage and non-blocking WASI filesystem I/O remain unimplemented.
 
 Browser storage, Node.js WASI, Deno, and Bun are not compatibility commitments.
 

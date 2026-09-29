@@ -21,6 +21,8 @@ wasmtime run --dir ./data::/data target/wasm32-wasip2/release/examples/wasi_quer
 The command prints one JSON object per line.
 Wasmtime passes the component filename as argument zero, followed by the DBF path and query JSON.
 The `--dir` option grants access to the host directory and maps it to `/data` inside the component.
+The object-store form may need write access to recover a pending WAL before it can emit rows.
+The host must grant that capability to the preopened directory.
 The object-store form reads the current generation by default; `--generation` selects one retained generation.
 
 ## 2. Query contract
@@ -28,12 +30,14 @@ The object-store form reads the current generation by default; `--generation` se
 The DBF form reads one preopened DBF file into memory, then reuses `DbfTable::from_bytes`, `query::parse`, and `query::stream_query`.
 The object-store form reads `namespace/manifest.json`, its XBF snapshot, and the namespace WAL directory through the existing `AsyncObjectTable::query_stream` or `query_stream_at` contract.
 Its store root must be a directory exposed by `--dir`; the existing object-table layout places snapshots under `namespace/snapshots/` and recovery records under `namespace/wal/`.
-The filesystem adapter is read-only and uses synchronous `std::fs` operations through `SyncObjectStoreAdapter`.
-That adapter makes the calls fit the async trait but does not make filesystem I/O non-blocking.
+The filesystem adapter uses synchronous `std::fs` operations through `SyncObjectStoreAdapter`.
+It creates immutable objects exclusively, replaces manifests through a synced temporary file and rename, and deletes recovered WAL records.
+The adapter makes the calls fit the async trait but does not make filesystem I/O non-blocking.
 The adapter validates namespace and object-key components, rejects `.` and `..`, and refuses to traverse symbolic links.
 The smoke test verifies that a `..` namespace, snapshot roots containing `.` or `..`, and a symlinked snapshot fail without writing rows to stdout.
-The object store must remain stable during the query; this adapter does not coordinate with concurrent writers.
-Because `AsyncObjectTable` recovers pending WAL records before reading, a recovery that needs to publish a manifest or delete a WAL record fails on the read-only store.
+The object store must remain stable during the query, and only one process may write to it at a time.
+The WASI filesystem API does not provide the process-shared lock used by the native filesystem adapter, so this adapter does not coordinate concurrent writers.
+Because `AsyncObjectTable` recovers pending WAL records before reading, the host must allow writes when recovery needs to publish a manifest or delete a WAL record.
 Snapshot loading and recovery finish before the first row is emitted.
 
 Both forms reuse the shared query parser and query-stream contract.
@@ -49,7 +53,7 @@ The smoke check delays stdout consumption while a DBF query emits 131,072 copies
 
 Argument, file, DBF, object-store, query, and stdout errors are written to stderr and return a failed command result.
 Streaming can emit earlier rows before a later row error, so stdout is not an atomic result.
-Storage, snapshot, and recovery errors occur before row production; the CI smoke test verifies that pending-WAL recovery fails without writing any row.
+Storage, snapshot, and recovery errors occur before row production; the CI smoke test verifies that pending-WAL recovery completes before writing rows.
 The CI smoke test also verifies that rejected streaming controls fail before writing any row.
 
 Dropping the Rust query stream ends row production.
@@ -59,7 +63,8 @@ This command does not make synchronous DBF or object-store filesystem reads inte
 
 The `wasi-query-stream` CI job installs the WASI target and Wasmtime `49.0.0`, builds the query component and the pending-stream fixture, and passes both components to `tests/wasi_query_stream_smoke.sh`.
 The smoke check decodes pinned DBF and XBF fixtures and compares DBF, current-XBF, and retained-XBF query results while exercising `filter`, `projection`, `skip`, and `limit`.
-It also verifies that `sort`, invalid namespaces and snapshot roots, symbolic-link traversal, and pending-WAL recovery fail without stdout output.
+It also verifies that `sort`, invalid namespaces and snapshot roots, and symbolic-link traversal fail without stdout output.
+Pending-WAL recovery is checked both when the manifest already reflects the pending generation and when recovery must publish the missing manifest.
 It reads the first stdout byte, pauses the pipe reader for 100 ms during a 131,072-row DBF query, then checks the complete output after the reader resumes.
 The pending-stream fixture returns `Poll::Pending` once and stores the supplied waker.
 A separate future invokes that waker only after the stream poll returns, after which the fixture must emit exactly one row.
@@ -68,13 +73,14 @@ This covers executor re-poll scheduling through the WASI query-output path, not 
 
 This proves the component build and CLI behavior on the pinned Wasmtime `49.0.0` runtime, not production readiness of a WASI host.
 WASI 0.3.1 is a stable specification, but Wasmtime's `wasmtime-wasi::p3` host module is documented as experimental, unstable, and incomplete.
-This smoke test does not validate a custom embedded host, deployment in another runtime, writable or provider-backed storage, or non-blocking filesystem I/O.
+The smoke test covers writable local storage and recovery on this runtime, but does not validate a custom embedded host, deployment in another runtime, provider-backed storage, or non-blocking filesystem I/O.
 
 ## Primary references and scope
 
 - [WASI 0.3 and native async](https://wasi.dev/releases/wasi-p3)
 - [`wasip3` 0.9.0 bindings](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/)
 - [Rust `wasm32-wasip2` target](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
+- [WASI filesystem interface](https://github.com/WebAssembly/wasi-filesystem/blob/main/wit/types.wit)
 - [Wasmtime CLI options](https://docs.wasmtime.dev/cli-options.html)
 - [Wasmtime's WASI P3 host implementation](https://docs.rs/wasmtime-wasi/latest/wasmtime_wasi/p3/index.html)
 - [Bytecode Alliance Wasmtime setup action](https://github.com/bytecodealliance/actions)
