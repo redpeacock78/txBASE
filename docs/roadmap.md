@@ -89,7 +89,7 @@ The baseline intentionally does not include the following:
 - References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
-- Additional Raft failure coverage beyond the single delayed `AppendEntries` case, including broader delayed or reordered RPC schedules, interrupted joint-membership recovery, reads during leadership changes, and crash boundaries; distributed follower reads and partitioning.
+- Additional Raft failure coverage beyond the single delayed `AppendEntries` case, including broader delayed or reordered RPC schedules, interrupted joint-membership recovery, catalog HTTP reads racing leadership changes, and crash boundaries; distributed follower reads and partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -459,15 +459,17 @@ The API waits for newly promoted learners to catch up and retains demoted voters
 OpenRaft storage, the catalog state machine, snapshots, startup recovery, and three-node integration coverage are included in the CI test suite.
 The membership test starts a learner from an empty catalog and verifies snapshot transfer of the non-empty genesis catalog and a committed update before normal log replication.
 The failover test injects a three-node partition, checks quorum loss and leader replacement, heals the partition, and restarts the isolated node before checking convergence.
+It also verifies that the isolated former leader fails its linearizable read barrier and that the replacement leader passes the barrier.
+Catalog HTTP read requests racing a leadership transition remain untested.
 The peer-RPC HTTPS integration test accepts a certificate trusted by its test root and rejects an untrusted certificate or a hostname mismatch.
 A three-node `/transaction` test discards the successful handler response after commit, verifies an identical retry returns the original transaction ID without a duplicate mutation, and rejects a different payload at the same client sequence.
-Broader delayed or reordered RPC schedules beyond the single stale `AppendEntries` case, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain outstanding.
+Broader delayed or reordered RPC schedules beyond the single stale `AppendEntries` case, interrupted joint-membership recovery, catalog HTTP reads racing leadership changes, and crash-boundary injection remain outstanding.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Add deterministic tests for delayed or reordered RPC schedules beyond the single stale `AppendEntries` case, interrupted joint-membership recovery, reads during leadership changes, and crash boundaries; see [Raft consensus design](raft.md).
+- Add deterministic tests for delayed or reordered RPC schedules beyond the single stale `AppendEntries` case, interrupted joint-membership recovery, catalog HTTP reads racing leadership changes, and crash boundaries; see [Raft consensus design](raft.md).
 - TLS for the public catalog listener, mutual TLS, durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.

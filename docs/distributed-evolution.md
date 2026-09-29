@@ -9,12 +9,13 @@ barrier, authenticated peer RPC, and peer HTTPS. Its peer API adds learners,
 changes voter sets through joint consensus, and waits for learner catch-up
 before promotion. CI covers learner snapshot transfer and membership changes,
 plus a three-node partition, failover, healing, and restart scenario.
+The failover test also verifies that the isolated former leader fails its read barrier and that the replacement leader passes one.
 
 CI verifies peer HTTPS certificate trust and hostname matching.
 The failover test also holds one non-empty `AppendEntries` request past its RPC timeout and releases it after the remaining quorum commits.
 This covers one stale-request case, not broad delayed or reordered RPC schedules.
 The `/transaction` retry test drops a successful handler response after commit, but does not simulate a socket disconnect.
-Broader delayed or reordered schedules, socket-level retries after losing a committed response, interrupted joint-membership recovery, reads during leadership changes, and crash-boundary injection remain open.
+Broader delayed or reordered schedules, socket-level retries after losing a committed response, interrupted joint-membership recovery, catalog HTTP reads racing leadership changes, and crash-boundary injection remain open.
 
 The fixed-term mode is not consensus. The current Raft boundary and remaining
 work are documented in [Raft consensus design](raft.md).
@@ -322,7 +323,7 @@ The following contracts remain open:
 
 - schema migrations independent of the catalog representation tag;
 - TLS for the public catalog listener, mutual TLS, streaming, durable retry queues, backpressure, and authority discovery;
-- broader delayed or reordered RPC schedules beyond one stale `AppendEntries` case; socket-level retries after losing a committed response; interrupted joint-membership recovery; reads during leadership changes; and crash-boundary injection;
+- broader delayed or reordered RPC schedules beyond one stale `AppendEntries` case; socket-level retries after losing a committed response; interrupted joint-membership recovery; catalog HTTP reads racing leadership changes; and crash-boundary injection;
 - observability for lag and transport state;
 
 Change data capture, persistent WAL history, and replication must share the same ordering contract.
