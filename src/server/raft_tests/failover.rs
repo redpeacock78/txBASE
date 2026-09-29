@@ -274,7 +274,14 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4], verify_successive_
         restarted.spawn_peer_listener(server).unwrap(),
     );
     nodes.insert(initial_leader_index, restarted);
-    wait_for_transaction(&nodes, &root, 3, Duration::from_secs(20));
+    let expected_transaction_id = if verify_successive_delays { 5 } else { 3 };
+    let expected_record_count = if verify_successive_delays { 7 } else { 5 };
+    wait_for_transaction(
+        &nodes,
+        &root,
+        expected_transaction_id,
+        Duration::from_secs(20),
+    );
     wait_for_membership(
         &nodes,
         &expected_voters,
@@ -282,8 +289,6 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4], verify_successive_
         Duration::from_secs(20),
     );
     current_leader_index(&nodes, Duration::from_secs(20));
-    let expected_transaction_id = if verify_successive_delays { 5 } else { 3 };
-    let expected_record_count = if verify_successive_delays { 7 } else { 5 };
     for node in &nodes {
         let catalog = Catalog::from_path(root.join(format!("catalog-{}", node.node_id))).unwrap();
         assert_eq!(
