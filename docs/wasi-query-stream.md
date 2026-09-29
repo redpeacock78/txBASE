@@ -38,7 +38,7 @@ Snapshot loading and recovery finish before the first row is emitted.
 
 Both forms reuse the shared query parser and query-stream contract.
 They accept the shared streaming controls: `filter`, `projection`, `skip`, and `limit`.
-It rejects `sort`, aggregation, pagination, and cursor controls before writing a row.
+Queries with `sort`, aggregation, pagination, or cursor controls fail before writing any rows.
 
 The component polls the existing `AsyncQueryStream` and serializes each result as one UTF-8 NDJSON line.
 It writes rows to a WASI component-model byte stream and awaits `wasi:cli/stdout.write-via-stream` concurrently.
