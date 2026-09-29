@@ -4,8 +4,8 @@
 このモードではquorum更新、線形化可能な読み取りbarrier、認証付きの専用peer listenerを使います。
 peer APIと`txbase raft membership` CLIは、learner追加、有効なmembershipの照会、joint consensusによるvoter変更を提供します。
 空catalogのlearnerは、genesis catalogが空または非空のclusterへ参加できます。
-3 nodeの決定的な障害テストで、quorum喪失、leader交代、ログの再同期、分断されたnodeの再起動を検査します。
-両方の残るvoter宛ての非空`AppendEntries`要求をRPC timeoutより長く保留し、quorumのcommit後に逆順で解放するケースも検査します。
+Raft統合テストで、quorum喪失、leader交代、ログの再同期、分断されたnodeの再起動、membership復旧、snapshot追いつきを検査します。
+5 nodeのfailoverテストでは、残る4台すべてへの非空`AppendEntries`要求をRPC timeoutより長く保留し、quorumのcommit後にpeer IDの逆順で解放します。
 分断された旧leaderでは読み取りbarrierが失敗し、新leaderはbarrierが成功した場合だけ選択されることも確認します。
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも検査します。
 replacement leaderの選出後に残るvoter間のRPCを遮断すると、そのleaderへのcatalog読み取りは`503`で失敗します。
@@ -15,7 +15,7 @@ replacement leaderの選出後に残るvoter間のRPCを遮断すると、その
 別の3 nodeテストでは、voter 1台を分断した状態で残るquorumが4件のコマンドをcommitし、leaderでsnapshotを作って対象ログをpurgeします。
 接続を戻したvoterがsnapshotをインストールして追いつき、次のclient sequenceを適用することも検査します。
 子プロセステストでは、3つの論理nodeを動かすプロセスを4つの永続化境界で強制終了し、同じnodeディレクトリから再起動して同一要求を再試行します。
-より広いRPCの遅延や順序変更は未検証です。
+現行の4要求をpeer IDの逆順に解放するケース以外の遅延パターンと順序変更パターンは未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -263,8 +263,8 @@ voter集合を推測したり、古いfollowerログを自動で昇格したり�
 CIのstate machineテストでは、カタログcommitの原子性、再起動後の再試行、sequence拒否、no-opとmembership、snapshotインストールを検証する。
 storage adapterのテストでは、OpenRaftの`testing::Suite`と再起動後の復旧確認を実行する。
 membershipの統合テストでは、quorum commit、空learnerへのsnapshot転送、昇格と降格、降格後に残るvoterでのquorum更新を検査する。
-failoverの統合テストでは、両方の残るvoter宛ての非空`AppendEntries`要求をRPC timeoutより長く保留し、現在のleaderを他の2 nodeから分断する。
-leader側の更新がカタログへ適用されないこと、残るquorumが次のclient sequenceをcommitすること、遅延要求をquorumのcommit後にpeer IDの逆順で解放してログが再同期すること、分断されたnodeの再起動後にカタログとmembershipが収束することを検査する。
+failoverの統合テストでは、5 node clusterの現在のleaderを他の4 nodeから分断し、残る4台すべてへの非空`AppendEntries`要求をRPC timeoutより長く保留する。
+leader側の更新がカタログへ適用されないこと、残るquorumが次のclient sequenceをcommitすること、遅延させた4要求をquorumのcommit後にpeer IDの逆順で解放してログが再同期すること、分断されたnodeの再起動後にカタログとmembershipが収束することを検査する。
 2 nodeのテストでは、genesis catalogが空のclusterへのlearner参加を引き続き検査する。
 別の3 nodeテストではvoter 1台を分断し、残るquorumで4件をcommitしてsnapshotを作成します。
 leaderがsnapshot対象ログをpurgeした後に接続を戻し、遅延voterのsnapshot適用、追いつき、次のclient sequenceの適用を確認します。
@@ -277,7 +277,7 @@ replacement leaderの選出後に残るvoter間のRPCを遮断し、そのleader
 子プロセステストでは、通常ログエントリを同期した直後、commit markerを同期した直後、カタログ更新と適用位置およびclient再試行結果を1つのjournal commitで公開した直後、OpenRaftが適用結果を返した直後にプロセスを強制終了します。
 各境界で親プロセスが3つのnodeディレクトリを再起動し、同じclient IDとsequenceを再試行して、全カタログがtransaction 2に収束し更新が1回だけ適用されることを確認します。
 3つの論理nodeは同じ子プロセスで動くため、このテストは単一voterだけを個別に停止する障害を扱いません。
-今回の制御された古い`AppendEntries`要求2件を超える、より広い遅延・順序変更は未検証です。
+現行の4要求をpeer IDの逆順に解放するケース以外の遅延パターンと順序変更パターンは未検証です。
 
 ## 一次資料と適用範囲
 

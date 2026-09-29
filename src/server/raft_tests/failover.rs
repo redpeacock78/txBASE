@@ -2,8 +2,10 @@ use super::*;
 
 #[test]
 fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_restart() {
+    const NODE_COUNT: u64 = 5;
+
     let root = temporary_cluster();
-    let addresses = (0..3).map(|_| free_address()).collect::<Vec<_>>();
+    let addresses = (0..NODE_COUNT).map(|_| free_address()).collect::<Vec<_>>();
     let members = addresses
         .iter()
         .enumerate()
@@ -13,7 +15,7 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
     let mut listeners = Vec::new();
     let mut configs = Vec::new();
 
-    for node_id in 1..=3 {
+    for node_id in 1..=NODE_COUNT {
         let catalog_root = root.join(format!("catalog-{node_id}"));
         prepare_catalog(&catalog_root);
         let config = CatalogRaftConfig {
@@ -36,9 +38,10 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         nodes.push(node);
     }
 
+    let expected_voters = (1..=NODE_COUNT).collect::<BTreeSet<_>>();
     wait_for_membership(
         &nodes,
-        &BTreeSet::from([1, 2, 3]),
+        &expected_voters,
         &BTreeSet::new(),
         Duration::from_secs(20),
     );
@@ -76,10 +79,11 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         })
         .collect::<Vec<_>>();
     delayed_appends.sort_by_key(|(peer_id, _)| *peer_id);
+    assert_eq!(delayed_appends.len(), (NODE_COUNT - 1) as usize);
 
     for node in &nodes {
         if node.node_id == initial_leader_id {
-            for peer_id in 1..=3 {
+            for peer_id in 1..=NODE_COUNT {
                 if peer_id != initial_leader_id {
                     node.set_peer_blocked(peer_id, true).unwrap();
                 }
@@ -152,12 +156,11 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
         thread::sleep(Duration::from_millis(100));
     };
     for source in &majority {
-        let target_id = majority
-            .iter()
-            .find(|node| node.node_id != source.node_id)
-            .unwrap()
-            .node_id;
-        source.set_peer_blocked(target_id, true).unwrap();
+        for target in &majority {
+            if source.node_id != target.node_id {
+                source.set_peer_blocked(target.node_id, true).unwrap();
+            }
+        }
     }
 
     let transition_catalog_root = root.join(format!("catalog-{transition_leader_id}"));
@@ -170,12 +173,11 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
     assert_eq!(body["error"]["code"], "raft_unavailable");
 
     for source in &majority {
-        let target_id = majority
-            .iter()
-            .find(|node| node.node_id != source.node_id)
-            .unwrap()
-            .node_id;
-        source.set_peer_blocked(target_id, false).unwrap();
+        for target in &majority {
+            if source.node_id != target.node_id {
+                source.set_peer_blocked(target.node_id, false).unwrap();
+            }
+        }
     }
     let replacement_index = current_leader_index(&majority, Duration::from_secs(20));
     let replacement_id = majority[replacement_index].node_id;
@@ -209,7 +211,7 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
     }
 
     for source in &nodes {
-        for target_id in 1..=3 {
+        for target_id in 1..=NODE_COUNT {
             if source.node_id != target_id {
                 source.set_peer_blocked(target_id, false).unwrap();
             }
@@ -252,7 +254,7 @@ fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_rest
     wait_for_transaction(&nodes, &root, 3, Duration::from_secs(20));
     wait_for_membership(
         &nodes,
-        &BTreeSet::from([1, 2, 3]),
+        &expected_voters,
         &BTreeSet::new(),
         Duration::from_secs(20),
     );

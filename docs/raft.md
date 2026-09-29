@@ -2,12 +2,12 @@
 
 Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and an authenticated peer listener.
 The peer API and `txbase raft membership` CLI add learners, report effective membership, and change voters through joint consensus; blank learners can join clusters with empty or non-empty genesis catalogs.
-Three-node tests cover quorum loss, leader replacement, log reconciliation, restart, membership recovery, and snapshot catch-up.
-The failover test holds non-empty `AppendEntries` requests to both remaining voters beyond their RPC timeouts, then releases them in reverse peer order after the remaining quorum commits.
+Raft integration tests cover quorum loss, leader replacement, log reconciliation, restart, membership recovery, and snapshot catch-up.
+The five-node failover test holds non-empty `AppendEntries` requests to all four remaining voters beyond their RPC timeouts, then releases them in reverse peer order after the remaining quorum commits.
 It also verifies that reads fail closed without a quorum and recover after connectivity returns.
 The `/transaction` retry test verifies that an exact retry returns the original transaction ID without applying the mutation twice and that a different payload at the same client sequence is rejected.
 A child-process test now terminates the process hosting the three-node test cluster at four durability boundaries, restarts the same node directories, and verifies exact retry and one-time application.
-Broader delayed or reordered RPC schedules beyond the controlled pair of stale `AppendEntries` requests remain outstanding.
+Delayed or reordered RPC schedules beyond this single four-request, reverse-peer-order `AppendEntries` delivery remain outstanding.
 Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
@@ -41,7 +41,7 @@ This document records the implemented Raft boundary and the remaining authority,
 
 ### Not implemented
 
-- Broader deterministic coverage for delayed or reordered RPC schedules beyond the controlled pair of stale `AppendEntries` requests.
+- Broader deterministic coverage for delayed or reordered RPC schedules beyond the single four-request, reverse-peer-order `AppendEntries` delivery.
 - Mutual TLS and TLS for the public catalog listener.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
@@ -183,7 +183,7 @@ Migration from a fixed-term `TXRP` authority is manual. Stop the old writers, ch
 The state-machine CI tests cover catalog commit atomicity, restart-safe retries, sequence rejection, no-op and membership entries, and snapshot installation.
 The storage adapter's tests run OpenRaft's `testing::Suite` and restart-recovery checks.
 The membership integration test exercises a quorum commit, blank-learner snapshot transfer, promotion and demotion, and quorum writes after a voter is demoted.
-The failover integration test holds non-empty `AppendEntries` requests to both remaining voters beyond their RPC timeouts, isolates the current leader from both peers, verifies that its write does not reach the catalog and its read barrier fails, commits the next client sequence on the remaining quorum, selects a replacement only after its read barrier succeeds, releases the held requests sequentially in reverse peer order, heals the partition, and restarts the isolated node before checking catalog and membership convergence.
+The five-node failover integration test holds non-empty `AppendEntries` requests to all four remaining voters beyond their RPC timeouts, isolates the current leader from all four peers, verifies that its write does not reach the catalog and its read barrier fails, commits the next client sequence on the remaining quorum, selects a replacement only after its read barrier succeeds, releases the four held requests sequentially in reverse peer order, heals the partition, and restarts the isolated node before checking catalog and membership convergence.
 It sends a client-facing `GET /catalog` to the isolated former leader and verifies `503 raft_unavailable`.
 After observing the replacement election, it blocks RPC between the remaining voters and verifies that `GET /catalog` on the reported leader also fails closed with `503`; after restoring connectivity, it waits for a successful read barrier and verifies `200` from the elected leader.
 The `/transaction` retry test discards the successful handler response after commit and verifies exact retry and same-sequence conflict behavior; it does not exercise a socket-level disconnect.
@@ -192,7 +192,7 @@ It also exercises the typed membership client for status, learner addition, prom
 The crash-recovery test terminates its child process after a normal log entry is synced but before the in-memory log changes, after a commit marker is synced but before the in-memory committed position changes, after one catalog-journal commit publishes the mutation with its applied position and client result, or after OpenRaft returns the application result but before the `/transaction` handler constructs its HTTP response.
 For each point, the parent restarts all three node directories, retries the same client ID and sequence, and checks that every catalog reaches transaction 2 with exactly one mutation.
 The three logical nodes share the child process, so this test does not model an independent process crash for a single voter.
-Broader delayed or reordered RPC delivery beyond the controlled pair of stale `AppendEntries` requests remains outstanding.
+Delayed or reordered RPC delivery beyond this single four-request, reverse-peer-order schedule remains outstanding.
 
 ## Primary references and scope
 

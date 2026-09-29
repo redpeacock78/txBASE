@@ -99,7 +99,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
   状態照会は接続先nodeのローカルmetricsを返し、変更操作は現在のleaderへ送る。
   空catalogのlearnerは、空または非空のgenesis catalogを持つclusterへ参加できる。
   3 nodeの障害注入テストでquorum喪失、leader交代、partition復旧、分断nodeの再起動を検査する。
-  両方の残るvoter宛ての非空`AppendEntries`要求をRPC timeoutより長く保留し、quorumのcommit後にpeer IDの逆順で解放するケースも検査する。
+  残る4台すべてへの非空`AppendEntries`要求をRPC timeoutより長く保留し、quorumのcommit後にpeer IDの逆順で解放するケースも検査する。
   failoverテストでは、分断された旧leaderの読み取りbarrierが失敗し、新leaderの選出時にはbarrierが成功することも検査する。
   旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも確認する。
   replacement leaderの選出後に残るvoter間のRPCを遮断すると、そのleaderへのcatalog読み取りは`503`で失敗する。
@@ -123,7 +123,7 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - カタログルートをまたぐ参照は未対応である。
 - XBF出力とtxBASEロックを無視する読み手に対する、厳密な複数ファイル読み取りアトミック性。
 - R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針、永続的な再試行キュー。
-- 制御された古い`AppendEntries`要求2件を超える遅延または順序変更の組み合わせを扱う追加のRaft障害テスト。分散フォロワー読み取りと分散パーティショニング。
+- 現行の4要求をpeer IDの逆順に解放するケース以外の遅延パターンと順序変更パターンを扱う追加のRaft障害テスト。分散フォロワー読み取りと分散パーティショニング。
 
 ## 3. フェーズ 1：小さなローカル DBMS を完成させる
 
@@ -527,7 +527,8 @@ authorityは、検証済みで単調なフォロワー適用位置を受け付�
 昇格するlearnerの同期を待ち、降格したvoterはlearnerとして保持します。
 OpenRaft storage suite、カタログstate machine、スナップショット、起動時復旧、3 nodeでの昇格・降格と降格後のquorum更新をCIで検査します。
 membershipテストではlearnerを空catalogから起動し、通常のログ複製を始める前に非空genesis catalogとcommit済み更新をsnapshot転送します。
-failoverテストでは3 nodeを分断し、quorum喪失とleader交代を確認してからpartitionを復旧し、分断したnodeを再起動して状態の収束を検査します。
+5 nodeのfailoverテストでは、初期leaderを他の4 voterから分断し、quorum喪失とleader交代を確認してからpartitionを復旧します。
+分断したnodeを再起動して状態の収束も検査します。
 このテストは、分断された旧leaderの読み取りbarrierが失敗し、新leaderの選出時にbarrierが成功することも確認します。
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも検査します。
 replacement leaderの選出後に残るvoter間のRPCを遮断すると、そのleaderへのcatalog読み取りは`503`で失敗します。
@@ -537,13 +538,13 @@ peer RPCのHTTPS統合テストでは、テスト用rootで信頼した証明書
 別の3 nodeテストでは、voter 1台を分断して残るquorumで4件をcommitし、snapshot対象ログをpurgeした後、復旧したvoterがsnapshotをインストールして次のclient sequenceを適用することを検査します。
 子プロセステストでは、通常ログエントリの永続化後、commit markerの永続化後、カタログ更新と適用位置の原子的な公開後、OpenRaftの適用結果を受信した後に、3つの論理nodeを動かすプロセスを強制終了します。
 再起動後に同じ要求を再試行し、全nodeで更新が一度だけ適用されることを検査します。
-制御された古い`AppendEntries`要求2件を超える遅延または順序変更の組み合わせは未検証です。
+現行の4要求をpeer IDの逆順に解放するケース以外の遅延パターンと順序変更パターンは未検証です。
 
 ### 候補範囲
 
 - テーブル間または分散環境の長寿命スナップショットトランザクション。
 - 現在のテーブル、カタログ、`TXRP`、`TXRG`サイドカーを超える永続WAL履歴。
-- 制御された古い`AppendEntries`要求2件を超える遅延または順序変更の組み合わせを検査する決定的なテストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
+- 現行の4要求をpeer IDの逆順に解放するケース以外の遅延パターンと順序変更パターンを検査する決定的なテストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
 - 公開カタログlistenerのTLS、相互TLS、永続的な再試行キュー、バックプレッシャー、authorityの検出。
 - 分散フォロワー読み取りの保証。
 - 分散パーティショニング。
