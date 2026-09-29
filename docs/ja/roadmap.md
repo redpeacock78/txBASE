@@ -490,6 +490,8 @@ WASI 0.3 CLIコンポーネントは共有する`AsyncQueryStream`を動かし�
 ストリームのバックプレッシャーを使って非同期stdoutへNDJSONを書き込みます。
 固定したWasmtimeによるCIスモーク検査はDBF、現行XBF、保持世代XBFの各経路で、共有するfilter、projection、skip、limitを検査します。
 131,072行のDBFクエリではstdoutの読み手を一時停止し、読み取り再開後に全出力を検証します。
+Pending用fixtureは`Poll::Pending`を返し、そのpollが戻った後に別futureがwakerを呼びます。
+スモーク検査はexecutorが再pollして1行だけ出力することを確認します。
 XBFアダプターは同期ファイルシステム操作を使い、同時書き込みには対応しません。
 保留中WALの復旧で書き込みが必要になると、行を出力する前に失敗します。
 WASI 0.3.1仕様は安定版ですが、Wasmtimeの`wasmtime-wasi::p3`ホスト実装は上流資料で実験的かつ不安定で、未完成と説明されています。

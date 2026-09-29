@@ -57,10 +57,14 @@ This command does not make synchronous DBF or object-store filesystem reads inte
 
 ## 4. CI boundary
 
-The `wasi-query-stream` CI job installs the WASI target and Wasmtime `49.0.0`, builds the component, and runs `tests/wasi_query_stream_smoke.sh`.
+The `wasi-query-stream` CI job installs the WASI target and Wasmtime `49.0.0`, builds the query component and the pending-stream fixture, and passes both components to `tests/wasi_query_stream_smoke.sh`.
 The smoke check decodes pinned DBF and XBF fixtures and compares DBF, current-XBF, and retained-XBF query results while exercising `filter`, `projection`, `skip`, and `limit`.
 It also verifies that `sort`, invalid namespaces and snapshot roots, symbolic-link traversal, and pending-WAL recovery fail without stdout output.
 It reads the first stdout byte, pauses the pipe reader for 100 ms during a 131,072-row DBF query, then checks the complete output after the reader resumes.
+The pending-stream fixture returns `Poll::Pending` once and stores the supplied waker.
+A separate future invokes that waker only after the stream poll returns, after which the fixture must emit exactly one row.
+A ten-second timeout makes a lost or ignored wake fail the smoke check.
+This covers executor re-poll scheduling through the WASI query-output path, not host-I/O wake sources or asynchronous-storage lifecycle behavior.
 
 This proves the component build and CLI behavior on the pinned Wasmtime `49.0.0` runtime, not production readiness of a WASI host.
 WASI 0.3.1 is a stable specification, but Wasmtime's `wasmtime-wasi::p3` host module is documented as experimental, unstable, and incomplete.

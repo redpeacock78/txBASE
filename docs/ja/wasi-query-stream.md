@@ -65,11 +65,17 @@ Rustのクエリストリームを破棄すると、行の生成を終了しま�
 
 ## 4. CIの範囲
 
-`wasi-query-stream` CIジョブはWASIターゲットとWasmtime `49.0.0`を導入し、コンポーネントをビルドして`tests/wasi_query_stream_smoke.sh`を実行します。
+`wasi-query-stream` CIジョブはWASIターゲットとWasmtime `49.0.0`を導入し、クエリ用コンポーネントとPendingストリーム用fixtureをビルドします。
+両方のコンポーネントを`tests/wasi_query_stream_smoke.sh`へ渡します。
 スモーク検査は固定DBF・XBFフィクスチャをデコードし、`filter`、`projection`、`skip`、`limit`を適用したDBF、現行XBF、保持世代XBFの結果を比較します。
 131,072行のDBFクエリでstdoutの先頭1バイトを読んだ後、読み取りを100ミリ秒停止します。
 再開後の出力全体を検証します。
 `sort`、不正なnamespaceとsnapshot root、symbolic linkの経由、保留中WALの復旧が、stdoutへ行を出さずに失敗することも確認します。
+Pending用fixtureは最初のpollで`Poll::Pending`を返し、受け取ったwakerを保存します。
+別futureはストリームのpollが戻った後にwakerを呼び、fixtureはその後に1行だけ出力します。
+10秒のtimeoutを設け、wakeの欠落や無視をスモーク検査の失敗にします。
+この検査はWASIクエリ出力経路におけるexecutorの再pollを確認します。
+ホストI/Oをwake元とする処理や非同期storage lifecycleは検査しません。
 
 この検査が示すのは、固定したWasmtime `49.0.0`ランタイムでのコンポーネントのビルドとCLI動作であり、WASIホストの本番対応ではありません。
 WASI 0.3.1仕様は安定版ですが、Wasmtimeの`wasmtime-wasi::p3`ホスト実装は上流資料で実験的かつ不安定で、未完成と説明されています。

@@ -414,6 +414,7 @@ preopened filesystem store, and writes NDJSON through asynchronous stdout with
 stream backpressure; a pinned Wasmtime CI smoke check covers both input paths
 and the shared filter, projection, skip, and limit controls.
 The smoke check also pauses its stdout reader during a 131,072-row DBF query and verifies the complete output after draining resumes.
+The pending-stream fixture returns `Poll::Pending`, then a separately polled future wakes it after that poll completes; the smoke check requires the executor to re-poll it and emit exactly one row.
 The XBF adapter uses synchronous filesystem operations, is not safe for
 concurrent writers, and fails before row output if pending-WAL recovery needs a
 write.

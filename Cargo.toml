@@ -47,3 +47,8 @@ rcgen = "=0.13.2"
 name = "wasi-query-stream"
 crate-type = ["cdylib"]
 path = "examples/wasi-query-stream.rs"
+
+[[example]]
+name = "wasi-query-stream-pending"
+crate-type = ["cdylib"]
+path = "examples/wasi-query-stream-pending.rs"

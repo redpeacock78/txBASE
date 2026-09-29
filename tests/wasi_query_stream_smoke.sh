@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-component=${1:?usage: wasi_query_stream_smoke.sh <component>}
+component=${1:?usage: wasi_query_stream_smoke.sh <component> <pending-component>}
+pending_component=${2:?usage: wasi_query_stream_smoke.sh <component> <pending-component>}
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 temp_dir=$(mktemp -d)
 trap 'rm -rf "$temp_dir"' EXIT
@@ -10,7 +11,12 @@ xxd -r -p < "$repo_root/tests/fixtures/users.dbf.hex" > "$temp_dir/users.dbf"
 printf '%s\n' '{"NAME":"Alice"}' > "$temp_dir/expected-dbf.ndjson"
 printf '%s\n' '{"NAME":"Alice"}' '{"NAME":"Bob"}' > "$temp_dir/expected-xbf.ndjson"
 printf '%s\n' '{"NAME":"Bob"}' > "$temp_dir/expected-bob.ndjson"
+printf '%s\n' '{"state":"resumed"}' > "$temp_dir/expected-pending.ndjson"
 : > "$temp_dir/expected-empty.ndjson"
+
+# A separate future resumes the stream after its first Pending poll.
+timeout 10s wasmtime run "$pending_component" > "$temp_dir/pending-wake.ndjson"
+cmp "$temp_dir/expected-pending.ndjson" "$temp_dir/pending-wake.ndjson"
 
 # Generate more than 2 MiB of output so a delayed pipe reader exercises backpressure.
 backpressure_records=131072
