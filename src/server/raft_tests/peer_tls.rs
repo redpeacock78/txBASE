@@ -46,5 +46,6 @@ fn raft_peer_listener_requires_a_trusted_client_certificate() {
 
     drop(peer_listener);
     raft.shutdown().unwrap();
+    drop(raft);
     fs::remove_dir_all(root).unwrap();
 }
