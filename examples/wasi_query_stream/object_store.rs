@@ -52,7 +52,7 @@ impl FilesystemObjectStore {
                     ));
                 }
                 Ok(_) => {}
-                Err(error) if error.kind() == io::ErrorKind::NotFound => break,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
                 Err(error) => return Err(io_error("inspect object path", &path, error)),
             }
         }
