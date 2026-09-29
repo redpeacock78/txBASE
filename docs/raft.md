@@ -3,7 +3,7 @@
 Status: `serve-catalog` has an optional OpenRaft mode with explicit initial voters, quorum writes, a linearizable read barrier, and an authenticated peer listener.
 The peer API and `txbase raft membership` CLI add learners, report effective membership, and change voters through joint consensus; blank learners can join clusters with empty or non-empty genesis catalogs.
 Raft integration tests cover quorum loss, leader replacement, log reconciliation, restart, membership recovery, and snapshot catch-up.
-The five-node failover test runs the partition and recovery scenario under three release orders for four held non-empty `AppendEntries` requests: descending peer ID, the interleaved order second, fourth, first, third by ascending peer ID, and ascending peer ID.
+The five-node failover test runs the partition and recovery scenario under all 24 release-order permutations of four held non-empty `AppendEntries` requests, one to each peer.
 After each delayed stale request is delivered, the target peer must retain catalog transaction 3 and the `Failover` record.
 It also verifies that reads fail closed without a quorum and recover after connectivity returns.
 The `/transaction` retry test sends real HTTP requests through a local TCP proxy, drops the first successful response after commit, and verifies an identical retry, one-time mutation, and `409` for a different payload at the same client sequence.
@@ -13,8 +13,8 @@ Each delay matches one of the next two expected log indices and stays armed acro
 The test arms the second delay while the first request is paused, then releases the requests in sequence.
 During this sequence, the current leader is the sole voter and every peer is a learner; other nodes are blocked from sending to the delayed target until catch-up.
 The test restores the original voter set after every node catches up.
-OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so this covers successive requests rather than overlapping calls from the same leader to that peer.
-Other delayed or reordered RPC schedules remain outstanding.
+OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so this covers successive requests rather than overlapping calls from the same leader to that peer ([threading model](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/src/docs/internal/threading.md); [replication implementation](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/src/replication/mod.rs)).
+The 24 orders exhaust release order only for these four held requests; schedules with different request batches, terms, or partition conditions remain outstanding.
 Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
@@ -49,7 +49,7 @@ This document records the implemented Raft boundary and the remaining authority,
 
 ### Not implemented
 
-- Broader deterministic coverage for delayed or reordered RPC schedules beyond the three four-request release orders and the tested same-peer request pair.
+- Broader deterministic coverage for delayed or reordered RPC schedules outside the 24 release-order permutations of this fixed four-request case and the tested same-peer request pair.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
 The serialized command limit is 1 MiB.
@@ -196,7 +196,7 @@ Migration from a fixed-term `TXRP` authority is manual. Stop the old writers, ch
 The state-machine CI tests cover catalog commit atomicity, restart-safe retries, sequence rejection, no-op and membership entries, and snapshot installation.
 The storage adapter's tests run OpenRaft's `testing::Suite` and restart-recovery checks.
 The membership integration test exercises a quorum commit, blank-learner snapshot transfer, promotion and demotion, and quorum writes after a voter is demoted.
-The five-node failover integration test repeats the same partition and recovery scenario with three release orders for the four held non-empty `AppendEntries` requests: descending peer ID, second, fourth, first, third by ascending peer ID, and ascending peer ID.
+The five-node failover integration test repeats the same partition and recovery scenario for all 24 release-order permutations of the four held non-empty `AppendEntries` requests, one to each peer.
 After each held request is delivered, it verifies that the target peer retains transaction 3 and the `Failover` record.
 Each run isolates the current leader from all four peers, verifies that its write does not reach the catalog and its read barrier fails, commits the next client sequence on the remaining quorum, selects a replacement only after its read barrier succeeds, releases the held requests after that commit, heals the partition, and restarts the isolated node before checking catalog and membership convergence.
 It sends a client-facing `GET /catalog` to the isolated former leader and verifies `503 raft_unavailable`.
@@ -213,7 +213,7 @@ Each delay matches one command's log index and stays armed across RPC retries un
 The test blocks every other sender to the target while it holds the two requests, so another replication stream cannot satisfy the catch-up check.
 After all nodes catch up, it restores the original voter set.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so the test does not claim to hold overlapping calls from the same leader to that peer.
-Other delayed or reordered RPC schedules remain outstanding beyond these three release orders and the successive same-peer request pair.
+The 24 orders exhaust release order only for these four held requests; schedules with different request batches, terms, or partition conditions remain outstanding beyond them and the successive same-peer request pair.
 
 ## Primary references and scope
 

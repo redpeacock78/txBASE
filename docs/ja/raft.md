@@ -5,8 +5,8 @@
 peer APIと`txbase raft membership` CLIは、learner追加、有効なmembershipの照会、joint consensusによるvoter変更を提供します。
 空catalogのlearnerは、genesis catalogが空または非空のclusterへ参加できます。
 Raft統合テストで、quorum喪失、leader交代、ログの再同期、分断されたnodeの再起動、membership復旧、snapshot追いつきを検査します。
-5 nodeのfailoverテストは、同じ分断・復旧シナリオを3通りの解放順序で実行します。
-4台への非空`AppendEntries`要求をquorum commit後に、peer IDの降順、昇順の一覧に対する2番目、4番目、1番目、3番目の順、peer IDの昇順の3通りで解放します。
+5 nodeのfailoverテストは、同じ分断・復旧シナリオを4台のpeerに保留した非空`AppendEntries`要求の24通りすべての解放順序で実行します。
+各シナリオで4台に1件ずつ保留した要求を、replacement leader側のquorum commit後に解放します。
 遅延させた古い要求を配送した後も、対象peerのcatalogがtransaction ID 3と`Failover`レコードを維持することを確認します。
 分断された旧leaderでは読み取りbarrierが失敗し、新leaderはbarrierが成功した場合だけ選択されることも確認します。
 旧leaderへのHTTP `GET /catalog`が`503 raft_unavailable`を返すことも検査します。
@@ -24,8 +24,8 @@ RAFT-006では、1つのleaderから同一peerへ送る連続した非空`Append
 1件目の保留中に2件目の遅延を設定し、1件目を解放してから2件目を解放します。
 逐次遅延中はcurrent leaderだけをvoterにし、ほかのnodeをlearnerにします。対象peerにはcurrent leader以外から送信できないようにします。
 全nodeが追いついた後に、元のvoter構成へ戻します。
-OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries` futureの完了を待つため、このテストが扱うのは逐次要求です。同一leaderから同じpeerへの同時呼び出しではありません。
-これら3通りの解放順序と同一peerへの連続要求以外の遅延・順序変更パターンは未検証です。
+OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries` futureの完了を待つため、このテストが扱うのは逐次要求です。同一leaderから同じpeerへの同時呼び出しではありません（[task構成](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/src/docs/internal/threading.md)、[複製実装](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/src/replication/mod.rs)）。
+この24通りで網羅するのは、同じ4要求の解放順序です。要求batch、term、partition条件を変えた遅延・順序変更は、同一peerへの連続要求とともに未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -61,7 +61,7 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 
 ### 未実装
 
-- 3通りのpeer間解放順序と検証済みの同一peerへの連続2要求を超えるRPCの遅延・順序変更を検査する決定的なテスト。
+- 固定4要求の24通りの解放順序と検証済みの同一peerへの連続2要求以外について、要求batch、term、partition条件を変えたRPC遅延・順序変更を検査する決定的なテスト。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
 正のsequenceと空でないカタログtagが必要です。
@@ -286,8 +286,8 @@ voter集合を推測したり、古いfollowerログを自動で昇格したり�
 CIのstate machineテストでは、カタログcommitの原子性、再起動後の再試行、sequence拒否、no-opとmembership、snapshotインストールを検証する。
 storage adapterのテストでは、OpenRaftの`testing::Suite`と再起動後の復旧確認を実行する。
 membershipの統合テストでは、quorum commit、空learnerへのsnapshot転送、昇格と降格、降格後に残るvoterでのquorum更新を検査する。
-failoverの統合テストは、5 node clusterで同じ分断・復旧シナリオを3通りの順序で実行し、4台への非空`AppendEntries`要求を解放する。
-peer IDの降順、昇順の一覧に対する2番目、4番目、1番目、3番目の順、peer IDの昇順で要求を解放する。
+failoverの統合テストは、5 node clusterで同じ分断・復旧シナリオを24通りすべての解放順序で実行します。
+4台に1件ずつ保留した非空`AppendEntries`要求を、replacement leader側のquorum commit後に解放します。
 各要求の配送後に、対象peerがtransaction 3と`Failover`レコードを保持することも確認する。
 各実行では現在のleaderを他の4 nodeから分断し、leaderの更新がカタログへ適用されず、読み取りbarrierが失敗することを確認する。
 残るquorumが次のclient sequenceをcommitし、read barrier成功後にreplacement leaderを選出した後で保留要求を解放する。
@@ -310,7 +310,7 @@ failoverテストでは、current leaderから同一peerへ送る非空`AppendEn
 別nodeからの複製が追いつき確認を先に満たさないよう、要求を保留している間は対象peerへの送信をcurrent leader以外で遮断します。
 全nodeの追いつきを確認してから、元のvoter構成へ戻します。
 OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries` futureの完了を待つため、このテストは同一leaderから同一peerへの逐次要求を扱います。
-これら3通りの解放順序と同一peerへの連続要求以外の遅延・順序変更パターンは未検証です。
+この24通りで網羅するのは、同じ4要求の解放順序です。要求batch、term、partition条件を変えた遅延・順序変更は、同一peerへの連続要求とともに未検証です。
 
 ## 一次資料と適用範囲
 

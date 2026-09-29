@@ -4,11 +4,41 @@ use super::*;
 
 #[test]
 fn partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_restart() {
-    const RELEASE_ORDERS: [[usize; 4]; 3] = [
-        [3, 2, 1, 0], // descending peer ID
-        [1, 3, 0, 2], // second, fourth, first, third in ascending peer-ID order
-        [0, 1, 2, 3], // ascending peer ID
+    const RELEASE_ORDERS: [[usize; 4]; 24] = [
+        [0, 1, 2, 3],
+        [0, 1, 3, 2],
+        [0, 2, 1, 3],
+        [0, 2, 3, 1],
+        [0, 3, 1, 2],
+        [0, 3, 2, 1],
+        [1, 0, 2, 3],
+        [1, 0, 3, 2],
+        [1, 2, 0, 3],
+        [1, 2, 3, 0],
+        [1, 3, 0, 2],
+        [1, 3, 2, 0],
+        [2, 0, 1, 3],
+        [2, 0, 3, 1],
+        [2, 1, 0, 3],
+        [2, 1, 3, 0],
+        [2, 3, 0, 1],
+        [2, 3, 1, 0],
+        [3, 0, 1, 2],
+        [3, 0, 2, 1],
+        [3, 1, 0, 2],
+        [3, 1, 2, 0],
+        [3, 2, 0, 1],
+        [3, 2, 1, 0],
     ];
+    let unique_orders = RELEASE_ORDERS.into_iter().collect::<BTreeSet<_>>();
+    assert_eq!(unique_orders.len(), 24, "release orders must be unique");
+    let expected_peers = BTreeSet::from([0, 1, 2, 3]);
+    assert!(
+        unique_orders
+            .iter()
+            .all(|order| BTreeSet::from(*order) == expected_peers),
+        "every release order must be a permutation of the four peers"
+    );
     for (scenario_index, release_order) in RELEASE_ORDERS.into_iter().enumerate() {
         run_partitioned_leader_scenario(release_order, scenario_index == 0);
     }
