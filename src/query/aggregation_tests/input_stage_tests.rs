@@ -181,6 +181,54 @@ fn sets_computed_fields_before_matching_and_grouping() {
 }
 
 #[test]
+fn evaluates_conditional_expressions_in_input_fields_and_group_keys() {
+    let adult = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"AGE": 29}).as_object().unwrap().clone(),
+    };
+    let minor = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"AGE": 7}).as_object().unwrap().clone(),
+    };
+    let records = [&adult, &minor];
+    let stages = vec![
+        json!({"$set": {
+            "STATUS": {"$cond": {
+                "if": {"$gte": ["$AGE", 18]},
+                "then": {"$literal": "adult"},
+                "else": {"$literal": "minor"}
+            }}
+        }})
+        .as_object()
+        .unwrap()
+        .clone(),
+        json!({"$group": {
+            "_id": {"$cond": [
+                {"$eq": ["$STATUS", "adult"]},
+                "adult",
+                "minor"
+            ]},
+            "status": {"$first": "$STATUS"},
+            "count": {"$count": {}}
+        }})
+        .as_object()
+        .unwrap()
+        .clone(),
+        json!({"$sort": {"_id": 1}}).as_object().unwrap().clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![
+            json!({"_id": "adult", "status": "adult", "count": 1}),
+            json!({"_id": "minor", "status": "minor", "count": 1})
+        ]
+    );
+}
+
+#[test]
 fn add_fields_alias_sets_input_fields() {
     let record = DbfRecord {
         number: 1,

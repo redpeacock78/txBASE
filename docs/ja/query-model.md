@@ -202,7 +202,7 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 | 所属 | `$in`、`$nin` | 値を候補値のリストと照合する |
 | 配列 | `$all`、`$elemMatch`、`$size` | 配列の内容、1つの配列要素の条件、または配列の正確な長さを照合する |
 | 論理 | `$and`、`$or`、`$not` | 述語文書を合成または反転する |
-| 式 | `$expr` | 同じレコードのスカラーリテラル、フィールド参照、`$literal`、2オペランドの`$ifNull`、有界な文字列`$concat` / `$toLower` / `$toUpper`、または有界な数値`$abs` / `$add` / `$subtract` / `$multiply` / `$divide` / `$mod`式を比較する |
+| 式 | `$expr` | 同じレコードのスカラーリテラル、フィールド参照、`$literal`、2オペランドの`$ifNull`、条件式`$cond`、有界な文字列`$concat` / `$toLower` / `$toUpper`、または有界な数値`$abs` / `$add` / `$subtract` / `$multiply` / `$divide` / `$mod`式を比較する |
 
 空の`$and`はすべてのレコードに一致します。
 
@@ -232,11 +232,22 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 
 `$ifNull`はスカラー式を2つだけ受け付け、最初の値が欠損または明示的な`null`の場合に2番目を評価します。
 
+`$cond`は式をちょうど3つ持つ配列形式、または`if`、`then`、`else`だけを持つオブジェクト形式を受け付けます。
+
+`if`には`$expr`が受け付ける論理式または比較式を指定します。
+
+条件の結果に応じて一方の枝だけを評価し、もう一方は評価しません。
+
+各枝には、ネストした`$cond`を含む共有スカラー式サブセットを指定できます。
+
+真偽値を含む裸の値や未対応のMongoDB式演算子は拒否します。
+この境界はMongoDB式との互換性を主張しません。
+
 `$concat`はスカラー式を2つ以上受け付けます。解決した各オペランドは文字列でなければならず、欠損、`null`、文字列以外のオペランドは比較不一致になります。
 
 `$toLower`と`$toUpper`は、文字列へ解決されるスカラー式を1つ受け付け、ロケールに依存しないUnicodeの大文字と小文字の変換を適用します。
 
-共有スカラー式評価器を`$expr`と集計の`$set`/`$addFields`で使うため、フィールド、リテラル、nullフォールバック、文字列、数値式の意味論は両方の表面で同じです。
+共有スカラー式評価器を`$expr`と集計の`$set`/`$addFields`で使うため、フィールド、リテラル、nullフォールバック、条件分岐、文字列、数値式の意味論は両方の表面で同じです。
 
 計算した文字列の結果は1 MiBまでです。上限を超える場合は、無制限の割り当てを避けてクエリエラーにします。
 
@@ -288,6 +299,7 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 - [MongoDB `$all` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/all/)
 - [MongoDB `$elemMatch` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/elemmatch/)
 - [MongoDB `$size` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/size/)
+- [MongoDB `$cond` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/cond/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
 - [Unicode Standard Annex #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/)

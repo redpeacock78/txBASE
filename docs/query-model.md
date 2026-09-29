@@ -208,7 +208,7 @@ The complete boundary is documented in [asynchronous query streaming](async-stre
 | Membership | `$in`, `$nin` | Match a value against a list of candidate values |
 | Array | `$all`, `$elemMatch`, `$size` | Match array contents, one array element's conditions, or exact array length |
 | Logical | `$and`, `$or`, `$not` | Compose or invert predicate documents |
-| Expression | `$expr` | Compare scalar literals, field references, `$literal`, two-operand `$ifNull`, bounded string `$concat`/`$toLower`/`$toUpper`, or bounded numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` expressions from the same record |
+| Expression | `$expr` | Compare scalar literals, field references, `$literal`, two-operand `$ifNull`, conditional `$cond`, bounded string `$concat`/`$toLower`/`$toUpper`, or bounded numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` expressions from the same record |
 
 An empty `$and` matches every record.
 
@@ -238,11 +238,19 @@ These choices are tested in `src/query/tests.rs` and `src/query/malformed_tests.
 
 `$ifNull` accepts exactly two scalar expressions and evaluates the second when the first is missing or explicitly `null`.
 
+`$cond` accepts either an array of exactly three expressions or an object containing exactly `if`, `then`, and `else`.
+
+The `if` value must use the boolean expression grammar supported by `$expr`; the selected branch is evaluated and the other branch is skipped.
+
+Each branch accepts the shared scalar-expression subset, including nested `$cond` expressions.
+
+Bare values, including booleans, and unsupported MongoDB expression operators are rejected, so this boundary does not claim MongoDB expression compatibility.
+
 `$concat` accepts at least two scalar expressions. Every resolved operand must be a string; a missing, `null`, or non-string operand makes the comparison not match.
 
 `$toLower` and `$toUpper` accept one scalar expression that resolves to a string and apply locale-independent Unicode case conversion.
 
-The shared scalar-expression evaluator is used by `$expr` and aggregation `$set`/`$addFields`, so both surfaces have the same field, literal, null-fallback, string, and numeric-expression semantics.
+The shared scalar-expression evaluator is used by `$expr` and aggregation `$set`/`$addFields`, so both surfaces have the same field, literal, null-fallback, conditional, string, and numeric-expression semantics.
 
 Computed string results are limited to 1 MiB. Exceeding that limit is a query error rather than an unbounded allocation.
 
@@ -294,6 +302,7 @@ The current implementation does not promise every MongoDB projection rule, posit
 - [MongoDB `$all` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/all/)
 - [MongoDB `$elemMatch` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/elemmatch/)
 - [MongoDB `$size` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/size/)
+- [MongoDB `$cond` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/cond/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
 - [Unicode Standard Annex #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/)

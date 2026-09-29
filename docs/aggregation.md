@@ -43,11 +43,17 @@ Input `$skip` and `$limit` discard or truncate records before the terminal stage
 
 `$set` and `$addFields` are aliases for one bounded input stage that preserves existing fields and computes named top-level fields before later stages.
 
-Each computed field accepts a scalar literal, a field reference including a dotted path, `$literal`, `$ifNull` with exactly two operands, `$concat` with at least two string expressions, `$toLower`, `$toUpper`, or the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions.
+Each computed field accepts a scalar literal, a field reference including a dotted path, `$literal`, `$ifNull` with exactly two operands, `$cond`, `$concat` with at least two string expressions, `$toLower`, `$toUpper`, or the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions.
 
 All expressions in one stage read the record as it entered that stage, so one computed field cannot depend on another field computed in the same stage.
 
 Missing field references, missing or nonnumeric numeric results, and missing, null, or non-string string results become `null`; `$ifNull` treats missing and explicit `null` as null and evaluates its fallback in that case.
+
+`$cond` accepts the three-expression array form or an object with exactly `if`, `then`, and `else`.
+
+Its `if` value must use the boolean expression grammar from `$expr`, and evaluation computes only the selected branch.
+
+Each branch uses the shared scalar-expression subset.
 
 `$concat` preserves operand order and returns `null` when any operand is missing, `null`, or not a string. `$toLower` and `$toUpper` use locale-independent Unicode case conversion.
 
@@ -135,7 +141,7 @@ The stage materializes at most 10,000 numeric input values, does not spill to di
 }
 ```
 
-The expression can be a field reference, scalar literal, `$literal`, `$ifNull`, `$concat`, `$toLower`, `$toUpper`, or the bounded numeric expression subset used by `$expr` and `$set`.
+The expression can be a field reference, scalar literal, `$literal`, `$ifNull`, `$cond`, `$concat`, `$toLower`, `$toUpper`, or the bounded numeric expression subset used by `$expr` and `$set`.
 
 It is evaluated for each input record.
 Missing or null expression results form the `null` group.
@@ -271,7 +277,7 @@ Additional grouping, bucket, bucket-auto, sort-by-count, count, or distinct stag
 
 After `$group`, `$bucket`, `$bucketAuto`, or `$sortByCount`, stages after the group-output `$limit` remain unsupported.
 
-`$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp` operands remain numeric-only. `$expr` also accepts the shared scalar `$literal`, `$ifNull`, `$concat`, `$toLower`, and `$toUpper` forms described in the query model.
+`$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp` operands remain numeric-only. `$expr` also accepts the shared scalar `$literal`, `$ifNull`, `$cond`, `$concat`, `$toLower`, and `$toUpper` forms described in the query model.
 
 Broader expression evaluation remains unsupported.
 
@@ -304,6 +310,7 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 - [MongoDB `$set` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)
 - [MongoDB `$addFields` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)
 - [MongoDB `$ifNull` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ifnull/)
+- [MongoDB `$cond` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/cond/)
 - [MongoDB `$literal` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/literal/)
 - [MongoDB `$concat` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/concat/)
 - [MongoDB `$toLower` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/tolower/)

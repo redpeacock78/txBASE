@@ -129,6 +129,50 @@ fn string_scalar_expressions_support_null_fallback_and_literal_values() {
 }
 
 #[test]
+fn conditional_scalar_expressions_accept_both_forms_and_evaluate_only_the_selected_branch() {
+    let values = json!({"AGE": 29, "KIND": "adult"});
+    let filter = json!({
+        "$expr": {"$and": [
+            {"$eq": [
+                {"$cond": [
+                    {"$gte": ["$AGE", 18]},
+                    {"$toUpper": "$KIND"},
+                    {"$divide": ["$AGE", 0]}
+                ]},
+                "ADULT"
+            ]},
+            {"$eq": [
+                {"$cond": {
+                    "if": {"$lt": ["$AGE", 18]},
+                    "then": {"$divide": ["$AGE", 0]},
+                    "else": {"$literal": "adult"}
+                }},
+                "adult"
+            ]}
+        ]}
+    });
+
+    assert!(matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap());
+
+    let selected_error = json!({
+        "$expr": {"$eq": [
+            {"$cond": [
+                {"$gte": ["$AGE", 18]},
+                {"$divide": ["$AGE", 0]},
+                "safe"
+            ]},
+            0
+        ]}
+    });
+    let error = matches_filter(
+        values.as_object().unwrap(),
+        selected_error.as_object().unwrap(),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("cannot divide by zero"));
+}
+
+#[test]
 fn rejects_string_scalar_results_over_the_shared_expression_limit() {
     let values = json!({
         "VALUE": "x".repeat(crate::MAX_JSON_INPUT_BYTES)
@@ -274,4 +318,15 @@ fn rejects_unsupported_or_malformed_expr() {
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$concat":["$A"]},"x"]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$toLower":["$A","$B"]},"x"]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$toUpper":true},"x"]}}}"#).is_err());
+    assert!(
+        parse(br#"{"filter":{"$expr":{"$eq":[{"$cond":[{"$gt":["$AGE",18]},"adult"]},"adult"]}}}"#)
+            .is_err()
+    );
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$cond":{"if":{"$gt":["$AGE",18]},"then":"adult"}},"adult"]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$cond":{"if":{"$gt":["$AGE",18]},"then":"adult","else":"minor","extra":true}},"adult"]}}}"#).is_err());
+    assert!(
+        parse(br#"{"filter":{"$expr":{"$eq":[{"$cond":["$AGE","adult","minor"]},"adult"]}}}"#)
+            .is_err()
+    );
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$cond":[{"$gt":["$AGE",18]},["adult","minor"],"unknown"]},"adult"]}}}"#).is_err());
 }

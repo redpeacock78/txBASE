@@ -11,6 +11,11 @@ pub enum ScalarExpression {
     Field(String),
     Literal(Value),
     Numeric(NumericExpression),
+    Cond {
+        condition: Value,
+        then_expression: Box<ScalarExpression>,
+        else_expression: Box<ScalarExpression>,
+    },
     IfNull(Box<ScalarExpression>, Box<ScalarExpression>),
     Concat(Vec<ScalarExpression>),
     ToLower(Box<ScalarExpression>),
@@ -101,6 +106,21 @@ pub(super) fn parse_scalar_operand(
     }
     match operator.as_str() {
         "$literal" => Ok(ScalarExpression::Literal(value.clone())),
+        "$cond" => {
+            let (condition, then_value, else_value) = parse_conditional_operands(value, path)?;
+            validate(condition, &format!("{path}.$cond.if"))?;
+            Ok(ScalarExpression::Cond {
+                condition: condition.clone(),
+                then_expression: Box::new(parse_scalar_operand(
+                    then_value,
+                    &format!("{path}.$cond.then"),
+                )?),
+                else_expression: Box::new(parse_scalar_operand(
+                    else_value,
+                    &format!("{path}.$cond.else"),
+                )?),
+            })
+        }
         "$ifNull" => {
             let operands = value
                 .as_array()
@@ -153,6 +173,42 @@ pub(super) fn parse_scalar_operand(
     }
 }
 
+fn parse_conditional_operands<'a>(
+    value: &'a Value,
+    path: &str,
+) -> Result<(&'a Value, &'a Value, &'a Value), QueryError> {
+    if let Some(operands) = value.as_array() {
+        let [condition, then_value, else_value] = operands.as_slice() else {
+            return Err(QueryError::Invalid(format!(
+                "{path}.$cond requires exactly three array operands"
+            )));
+        };
+        return Ok((condition, then_value, else_value));
+    }
+
+    if let Some(operands) = value.as_object() {
+        if operands.len() != 3 {
+            return Err(QueryError::Invalid(format!(
+                "{path}.$cond object must contain exactly if, then, and else"
+            )));
+        }
+        let condition = operands
+            .get("if")
+            .ok_or_else(|| QueryError::Invalid(format!("{path}.$cond object is missing if")))?;
+        let then_value = operands
+            .get("then")
+            .ok_or_else(|| QueryError::Invalid(format!("{path}.$cond object is missing then")))?;
+        let else_value = operands
+            .get("else")
+            .ok_or_else(|| QueryError::Invalid(format!("{path}.$cond object is missing else")))?;
+        return Ok((condition, then_value, else_value));
+    }
+
+    Err(QueryError::Invalid(format!(
+        "{path}.$cond must be an array or object"
+    )))
+}
+
 fn parse_unary_scalar_operand(
     value: &Value,
     operator: &str,
@@ -176,6 +232,17 @@ pub(super) fn evaluate_scalar(
         ScalarExpression::Field(field) => Ok(crate::query_path::field_value(values, field)),
         ScalarExpression::Literal(value) => Ok(Some(value.clone())),
         ScalarExpression::Numeric(expression) => evaluate_numeric(values, expression, path),
+        ScalarExpression::Cond {
+            condition,
+            then_expression,
+            else_expression,
+        } => {
+            if matches_at(values, condition, &format!("{path}.$cond.if"))? {
+                evaluate_scalar(values, then_expression, &format!("{path}.$cond.then"))
+            } else {
+                evaluate_scalar(values, else_expression, &format!("{path}.$cond.else"))
+            }
+        }
         ScalarExpression::IfNull(first, fallback) => {
             let value = evaluate_scalar(values, first, &format!("{path}.$ifNull[0]"))?;
             if value.as_ref().is_none_or(Value::is_null) {
@@ -251,24 +318,32 @@ fn evaluate_case_expression(
 }
 
 pub(super) fn matches(values: &Map<String, Value>, expression: &Value) -> Result<bool, QueryError> {
+    matches_at(values, expression, "filter.$expr")
+}
+
+fn matches_at(
+    values: &Map<String, Value>,
+    expression: &Value,
+    path: &str,
+) -> Result<bool, QueryError> {
     let expression = expression
         .as_object()
-        .ok_or_else(|| QueryError::Invalid("filter.$expr must be an object".into()))?;
+        .ok_or_else(|| QueryError::Invalid(format!("{path} must be an object")))?;
     let Some((operator, operands)) = expression.iter().next() else {
-        return Err(QueryError::Invalid("filter.$expr cannot be empty".into()));
+        return Err(QueryError::Invalid(format!("{path} cannot be empty")));
     };
     if expression.len() != 1 {
-        return Err(QueryError::Invalid(
-            "filter.$expr supports one expression operator".into(),
-        ));
+        return Err(QueryError::Invalid(format!(
+            "{path} supports one expression operator"
+        )));
     }
     match operator.as_str() {
         "$and" => {
             let expressions = operands
                 .as_array()
-                .ok_or_else(|| QueryError::Invalid("filter.$expr.$and must be an array".into()))?;
-            for expression in expressions {
-                if !matches(values, expression)? {
+                .ok_or_else(|| QueryError::Invalid(format!("{path}.$and must be an array")))?;
+            for (index, expression) in expressions.iter().enumerate() {
+                if !matches_at(values, expression, &format!("{path}.$and[{index}]"))? {
                     return Ok(false);
                 }
             }
@@ -277,15 +352,15 @@ pub(super) fn matches(values: &Map<String, Value>, expression: &Value) -> Result
         "$or" => {
             let expressions = operands
                 .as_array()
-                .ok_or_else(|| QueryError::Invalid("filter.$expr.$or must be an array".into()))?;
-            for expression in expressions {
-                if matches(values, expression)? {
+                .ok_or_else(|| QueryError::Invalid(format!("{path}.$or must be an array")))?;
+            for (index, expression) in expressions.iter().enumerate() {
+                if matches_at(values, expression, &format!("{path}.$or[{index}]"))? {
                     return Ok(true);
                 }
             }
             return Ok(false);
         }
-        "$not" => return Ok(!matches(values, operands)?),
+        "$not" => return Ok(!matches_at(values, operands, &format!("{path}.$not"))?),
         "$eq" | "$ne" | "$gt" | "$gte" | "$lt" | "$lte" => {}
         _ => {
             return Err(QueryError::Invalid(format!(
@@ -295,22 +370,20 @@ pub(super) fn matches(values: &Map<String, Value>, expression: &Value) -> Result
     }
     let operands = operands
         .as_array()
-        .ok_or_else(|| QueryError::Invalid(format!("filter.$expr.{operator} must be an array")))?;
+        .ok_or_else(|| QueryError::Invalid(format!("{path}.{operator} must be an array")))?;
     let [left, right] = operands.as_slice() else {
         return Err(QueryError::Invalid(format!(
-            "filter.$expr.{operator} requires two operands"
+            "{path}.{operator} requires two operands"
         )));
     };
+    let left_path = format!("{path}.{operator}[0]");
+    let right_path = format!("{path}.{operator}[1]");
     let (Some(left), Some(right)) = (
+        evaluate_scalar(values, &parse_scalar_operand(left, &left_path)?, &left_path)?,
         evaluate_scalar(
             values,
-            &parse_scalar_operand(left, "filter.$expr")?,
-            "filter.$expr",
-        )?,
-        evaluate_scalar(
-            values,
-            &parse_scalar_operand(right, "filter.$expr")?,
-            "filter.$expr",
+            &parse_scalar_operand(right, &right_path)?,
+            &right_path,
         )?,
     ) else {
         return Ok(false);
