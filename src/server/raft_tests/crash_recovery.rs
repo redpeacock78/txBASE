@@ -127,8 +127,18 @@ fn with_cluster<T>(
         };
         let node = RaftRuntime::start(&catalog_root, config.clone(), Some("ci-token".into()))
             .unwrap_or_else(|error| {
+                let catalog_entries = std::fs::read_dir(&catalog_root)
+                    .map(|entries| {
+                        entries
+                            .filter_map(Result::ok)
+                            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_else(|directory_error| {
+                        vec![format!("<unreadable: {directory_error}>")]
+                    });
                 panic!(
-                    "crash point {crash_point}: cannot start node {node_id} with catalog {} and node directory {}: {error}",
+                    "crash point {crash_point}: cannot start node {node_id} with catalog {} and node directory {}: {error}; catalog entries: {catalog_entries:?}",
                     catalog_root.display(),
                     config.node_directory.display()
                 )
