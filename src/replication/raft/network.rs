@@ -405,16 +405,22 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
                 return map_rpc_result(self.target_id, Err(error));
             }
         }
-        #[cfg(test)]
-        if let Some(delay) = delay.as_ref() {
-            if !delay.pause().await {
-                let error = "test network cancelled AppendEntries RPC".to_owned();
-                delay.complete(Err(error.clone()));
-                return map_rpc_result(self.target_id, Err(error));
-            }
-        }
+        // A test-held RPC must outlive OpenRaft's timeout so release can deliver it later.
         let network = self.clone();
         let result = tokio::task::spawn_blocking(move || {
+            #[cfg(test)]
+            let can_send = match delay.as_ref() {
+                Some(delay) => delay.pause(),
+                None => true,
+            };
+            #[cfg(test)]
+            if !can_send {
+                let error = "test network cancelled AppendEntries RPC".to_owned();
+                if let Some(delay) = delay {
+                    delay.complete(Err(error.clone()));
+                }
+                return Err(error);
+            }
             let result =
                 network.rpc::<_, _, RaftError<u64>>(RAFT_APPEND_PATH, rpc, option.hard_ttl());
             #[cfg(test)]

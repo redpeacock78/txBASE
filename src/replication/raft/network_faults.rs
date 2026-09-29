@@ -1,8 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::mpsc::{self, Receiver, SyncSender};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::time::Duration;
-use tokio::sync::watch;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum AppendDelayKind {
@@ -118,6 +117,7 @@ impl FaultController {
         key: (u64, AppendDelayKind),
     ) -> Option<Arc<AppendDelay>> {
         let delay = Arc::clone(delays.get(&key)?);
+        // Keep a pending gate so a retry cannot bypass the test fault.
         if !delay.is_pending() {
             delays.remove(&key);
         }
@@ -134,18 +134,19 @@ enum AppendDelayAction {
 
 pub(crate) struct AppendDelay {
     entered: SyncSender<()>,
-    state: watch::Sender<AppendDelayAction>,
+    state: Mutex<AppendDelayAction>,
+    released: Condvar,
     completed: SyncSender<Result<(), String>>,
 }
 
 impl AppendDelay {
     fn new() -> (Arc<Self>, AppendDelayHandle) {
         let (entered, entered_rx) = mpsc::sync_channel(1);
-        let (state, _) = watch::channel(AppendDelayAction::Pending);
         let (completed, completed_rx) = mpsc::sync_channel(1);
         let delay = Arc::new(Self {
             entered,
-            state,
+            state: Mutex::new(AppendDelayAction::Pending),
+            released: Condvar::new(),
             completed,
         });
         (
@@ -159,29 +160,28 @@ impl AppendDelay {
         )
     }
 
-    pub(crate) async fn pause(&self) -> bool {
+    pub(crate) fn pause(&self) -> bool {
         let _ = self.entered.try_send(());
-        let mut state = self.state.subscribe();
-        loop {
-            let action = *state.borrow_and_update();
-            match action {
-                AppendDelayAction::Release => return true,
-                AppendDelayAction::Cancel => return false,
-                AppendDelayAction::Pending => {
-                    if state.changed().await.is_err() {
-                        return false;
-                    }
-                }
-            }
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        while *state == AppendDelayAction::Pending {
+            state = self
+                .released
+                .wait(state)
+                .unwrap_or_else(|error| error.into_inner());
         }
+        *state == AppendDelayAction::Release
     }
 
     fn is_pending(&self) -> bool {
-        *self.state.borrow() == AppendDelayAction::Pending
+        *self.state.lock().unwrap_or_else(|error| error.into_inner()) == AppendDelayAction::Pending
     }
 
     fn set_action(&self, action: AppendDelayAction) {
-        self.state.send_replace(action);
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        if *state == AppendDelayAction::Pending {
+            *state = action;
+            self.released.notify_all();
+        }
     }
 
     pub(crate) fn complete(&self, result: Result<(), String>) {
