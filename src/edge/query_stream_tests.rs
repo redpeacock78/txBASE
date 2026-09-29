@@ -145,6 +145,31 @@ fn async_object_query_stream_loads_one_snapshot_and_reuses_query_semantics() {
 }
 
 #[test]
+fn cancelling_after_a_row_stops_the_query_stream() {
+    let store = SyncObjectStoreAdapter::new(MemoryObjectStore::new());
+    let object_table = AsyncObjectTable::new(store, "users").unwrap();
+    block_on(object_table.commit(&table(0, &["Alice", "Bob"]))).unwrap();
+
+    let mut stream = object_table.query_stream(QueryRequest::default()).unwrap();
+    let cancellation = stream.cancellation_token();
+    let waker = Waker::noop();
+    let mut context = Context::from_waker(waker);
+
+    assert!(matches!(
+        AsyncQueryStream::poll_next(Pin::new(&mut stream), &mut context),
+        Poll::Ready(Some(Ok(value))) if value == json!({"NAME": "Alice"})
+    ));
+
+    stream.cancel();
+
+    assert!(cancellation.is_cancelled());
+    assert!(matches!(
+        AsyncQueryStream::poll_next(Pin::new(&mut stream), &mut context),
+        Poll::Ready(None)
+    ));
+}
+
+#[test]
 fn async_object_query_stream_reads_a_retained_generation() {
     let store = SyncObjectStoreAdapter::new(MemoryObjectStore::new());
     let object_table = AsyncObjectTable::new(store, "users").unwrap();
