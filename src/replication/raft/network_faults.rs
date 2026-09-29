@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::mpsc::{self, Receiver, SyncSender};
-use std::sync::{Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
+use tokio::sync::watch;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum AppendDelayKind {
@@ -13,7 +14,7 @@ enum AppendDelayKind {
 #[derive(Default)]
 pub(crate) struct FaultController {
     blocked_targets: RwLock<BTreeSet<u64>>,
-    delayed_appends: Mutex<BTreeMap<(u64, AppendDelayKind), AppendDelay>>,
+    delayed_appends: Mutex<BTreeMap<(u64, AppendDelayKind), Arc<AppendDelay>>>,
 }
 
 impl FaultController {
@@ -76,77 +77,122 @@ impl FaultController {
                 "an AppendEntries delay is already armed for peer {target}"
             ));
         }
-        delays.insert((target, kind), delay);
+        delays.insert((target, kind), Arc::clone(&delay));
         Ok(handle)
     }
 
-    pub(crate) fn take_append_delay(
+    pub(crate) fn append_delay_for(
         &self,
         target: u64,
         has_uniform_membership: bool,
         entry_log_indices: &[u64],
-    ) -> Result<Option<AppendDelay>, String> {
+    ) -> Result<Option<Arc<AppendDelay>>, String> {
         let mut delays = self
             .delayed_appends
             .lock()
             .map_err(|error| format!("test network delay lock poisoned: {error}"))?;
         if has_uniform_membership {
-            if let Some(delay) = delays.remove(&(target, AppendDelayKind::UniformMembership)) {
+            if let Some(delay) = Self::append_delay_for_key(
+                &mut delays,
+                (target, AppendDelayKind::UniformMembership),
+            ) {
                 return Ok(Some(delay));
             }
         }
         for log_index in entry_log_indices {
-            if let Some(delay) = delays.remove(&(target, AppendDelayKind::LogIndex(*log_index))) {
+            if let Some(delay) = Self::append_delay_for_key(
+                &mut delays,
+                (target, AppendDelayKind::LogIndex(*log_index)),
+            ) {
                 return Ok(Some(delay));
             }
         }
-        Ok(delays.remove(&(target, AppendDelayKind::Any)))
+        Ok(Self::append_delay_for_key(
+            &mut delays,
+            (target, AppendDelayKind::Any),
+        ))
+    }
+
+    fn append_delay_for_key(
+        delays: &mut BTreeMap<(u64, AppendDelayKind), Arc<AppendDelay>>,
+        key: (u64, AppendDelayKind),
+    ) -> Option<Arc<AppendDelay>> {
+        let delay = Arc::clone(delays.get(&key)?);
+        if !delay.is_pending() {
+            delays.remove(&key);
+        }
+        Some(delay)
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum AppendDelayAction {
+    Pending,
     Release,
     Cancel,
 }
 
 pub(crate) struct AppendDelay {
     entered: SyncSender<()>,
-    release: Receiver<AppendDelayAction>,
+    state: watch::Sender<AppendDelayAction>,
     completed: SyncSender<Result<(), String>>,
 }
 
 impl AppendDelay {
-    fn new() -> (Self, AppendDelayHandle) {
+    fn new() -> (Arc<Self>, AppendDelayHandle) {
         let (entered, entered_rx) = mpsc::sync_channel(1);
-        let (release_tx, release) = mpsc::sync_channel(1);
+        let (state, _) = watch::channel(AppendDelayAction::Pending);
         let (completed, completed_rx) = mpsc::sync_channel(1);
+        let delay = Arc::new(Self {
+            entered,
+            state,
+            completed,
+        });
         (
-            Self {
-                entered,
-                release,
-                completed,
-            },
+            Arc::clone(&delay),
             AppendDelayHandle {
                 entered: entered_rx,
-                release: Some(release_tx),
+                delay,
+                action_sent: false,
                 completed: completed_rx,
             },
         )
     }
 
-    pub(crate) fn pause(&self) -> bool {
-        let _ = self.entered.send(());
-        matches!(self.release.recv(), Ok(AppendDelayAction::Release))
+    pub(crate) async fn pause(&self) -> bool {
+        let _ = self.entered.try_send(());
+        let mut state = self.state.subscribe();
+        loop {
+            let action = *state.borrow_and_update();
+            match action {
+                AppendDelayAction::Release => return true,
+                AppendDelayAction::Cancel => return false,
+                AppendDelayAction::Pending => {
+                    if state.changed().await.is_err() {
+                        return false;
+                    }
+                }
+            }
+        }
     }
 
-    pub(crate) fn complete(self, result: Result<(), String>) {
-        let _ = self.completed.send(result);
+    fn is_pending(&self) -> bool {
+        *self.state.borrow() == AppendDelayAction::Pending
+    }
+
+    fn set_action(&self, action: AppendDelayAction) {
+        self.state.send_replace(action);
+    }
+
+    pub(crate) fn complete(&self, result: Result<(), String>) {
+        let _ = self.completed.try_send(result);
     }
 }
 
 pub(crate) struct AppendDelayHandle {
     entered: Receiver<()>,
-    release: Option<SyncSender<AppendDelayAction>>,
+    delay: Arc<AppendDelay>,
+    action_sent: bool,
     completed: Receiver<Result<(), String>>,
 }
 
@@ -158,14 +204,16 @@ impl AppendDelayHandle {
     }
 
     pub(crate) fn release(&mut self) {
-        if let Some(release) = self.release.take() {
-            let _ = release.send(AppendDelayAction::Release);
+        if !self.action_sent {
+            self.delay.set_action(AppendDelayAction::Release);
+            self.action_sent = true;
         }
     }
 
     pub(crate) fn cancel(&mut self) {
-        if let Some(release) = self.release.take() {
-            let _ = release.send(AppendDelayAction::Cancel);
+        if !self.action_sent {
+            self.delay.set_action(AppendDelayAction::Cancel);
+            self.action_sent = true;
         }
     }
 
