@@ -91,6 +91,10 @@ impl FaultController {
             .delayed_appends
             .lock()
             .map_err(|error| format!("test network delay lock poisoned: {error}"))?;
+        #[cfg(test)]
+        if delays.keys().any(|(peer_id, _)| *peer_id == target) {
+            eprintln!("AppendEntries gate lookup target={target} entries={entry_log_indices:?}");
+        }
         if has_uniform_membership {
             if let Some(delay) = Self::append_delay_for_key(
                 &mut delays,
