@@ -87,13 +87,13 @@ The repository currently provides:
   After every stale request is delivered, the target peer must retain transaction 3 and the `Failover` record.
   One run also delays two successive non-empty requests to one follower and releases them sequentially.
   Another isolates one voter while the remaining quorum commits two commands, then holds the request for the second command until the first has applied at the voter.
-  A separate three-node CI test sets `max_payload_entries` to 16 and tests one isolated voter through catch-up rounds with 2, 4, 8, 16, 17, and 32 committed entries.
-  It holds each first request; for the 17- and 32-entry rounds, it also holds a follow-up request containing the first log index beyond the 16-entry limit.
-  The follow-up stays within the limit, the target log does not advance past the first 16 entries, and no tail record is applied before release.
+  A separate three-node CI test sets `max_payload_entries` to 16 and tests one isolated voter through catch-up rounds with 2, 4, 8, 16, 17, 32, and 65 committed entries.
+  It holds the request carrying the first missing log index at every 16-entry boundary, including later batches in the larger rounds.
+  Each held request stays within the limit, the target log does not advance beyond the preceding boundary, and no record from the held tail is applied before release.
   Every node then converges with each record applied exactly once.
   The tests reject catalog reads from the isolated former leader (`503`) and from a replacement leader without quorum, then verify `200` after connectivity and the read barrier recover.
   Separate tests resume an interrupted joint-membership change through a surviving leader, verify that the former leader rejoins as a learner, check snapshot catch-up after log purge, and exercise child-process crash recovery at four durable-operation boundaries.
-  Payloads larger than 32 entries, additional term histories, and other partition conditions remain open beyond these fixed schedules.
+  Payloads larger than 65 entries, additional term histories, and other partition conditions remain open beyond these fixed schedules.
   See [Raft consensus design](raft.md).
 - Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit, after validating the declared primary or unique parent key; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
 - Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with ordered per-transaction mode changes in the Rust and HTTP transaction APIs; deferred `CHECK` is a txBASE extension.
@@ -111,7 +111,7 @@ The baseline intentionally does not include the following:
 - References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
-- Additional Raft failure coverage beyond the 24 release-order permutations of four held cross-peer requests, the tested pair of successive same-peer requests, the isolated-voter two-command catch-up with its second request delayed, and catch-up payloads of 2, 4, 8, 16, 17, and 32 entries; payloads larger than 32 entries, other term histories or partition conditions, follower-read freshness beyond applied-index tokens, and partitioning.
+- Additional Raft failure coverage beyond the 24 release-order permutations of four held cross-peer requests, the tested pair of successive same-peer requests, the isolated-voter two-command catch-up with its second request delayed, and catch-up payloads of 2, 4, 8, 16, 17, 32, and 65 entries; payloads larger than 65 entries, other term histories or partition conditions, follower-read freshness beyond applied-index tokens, and partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -513,15 +513,16 @@ The child-process test terminates the process hosting three logical nodes after 
 It restarts all node directories, retries the same client request, and verifies one-time application at every node.
 The five-node test also delays and releases two successive non-empty `AppendEntries` requests to one peer, then isolates one voter while a four-node quorum commits two commands.
 It holds the request for the second command until the first command has applied at the isolated voter, then checks one-time application after release.
-The separate three-node test verifies catch-up payloads containing 2, 4, 8, 16, 17, and 32 entries in one cluster.
-For the 17- and 32-entry batches, it holds a follow-up request containing the first log index beyond the limit and verifies that the request stays within the limit, the target log does not advance past the first 16 entries, and no tail record is applied before release.
-Schedules with payloads larger than 32 entries, other term histories, or other partition conditions remain outstanding beyond the 24 release-order permutations of the fixed four-request scenario, the tested same-peer request pair, and the catch-up cases.
+The separate three-node test verifies catch-up payloads containing 2, 4, 8, 16, 17, 32, and 65 entries in one cluster.
+It holds the request carrying the first missing log index at every 16-entry boundary, including all later batches in the 65-entry round.
+Each request stays within the configured limit, the target log does not advance beyond the preceding boundary, and no record from the held tail is applied before release.
+Schedules with payloads larger than 65 entries, other term histories, or other partition conditions remain outstanding beyond the 24 release-order permutations of the fixed four-request scenario, the tested same-peer request pair, and the catch-up cases.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Add deterministic tests for delayed or reordered RPC schedules beyond the 24 release-order permutations of this fixed four-request scenario, the tested pair of successive same-peer requests, the isolated-voter two-command catch-up with its second request delayed, and catch-up payloads of up to 32 entries in one or two requests; test payloads above 32 entries, additional term histories, or other partition conditions. See [Raft consensus design](raft.md).
+- Add deterministic tests for delayed or reordered RPC schedules beyond the 24 release-order permutations of this fixed four-request scenario, the tested pair of successive same-peer requests, the isolated-voter two-command catch-up with its second request delayed, and catch-up payloads of up to 65 entries across sequential requests; test payloads above 65 entries, additional term histories, or other partition conditions. See [Raft consensus design](raft.md).
 - Durable retry queues, backpressure, and authority discovery.
 - Follower reads that guarantee the latest quorum-committed state; applied-index tokens provide session monotonicity only.
 - Distributed partitioning.

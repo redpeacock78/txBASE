@@ -29,13 +29,12 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 同じ5 nodeテストの後半では、1台のvoterを隔離したまま、残るquorumで2件のcommandをcommitします。
 1件目のcommandがvoterに適用された後で、2件目のlog indexを含む`AppendEntries`要求を遅延させて解放します。
 配送後に両方のrecordが1回だけ適用されることを検査します。
-別の3 node CIテストでは`max_payload_entries`を16に設定し、同じcluster内でvoter 1台を隔離して、2、4、8、16、17、32件のcatch-upを順に検査します。
-各回で最初の`AppendEntries`要求を保留します。
-17件と32件では、上限の16件目より後のlog indexを含む後続要求も保留します。
-後続要求も上限を超えず、対象voterのlogが16件分の境界を越えず、tailのrecordも適用されないことを確認してから解放します。
-解放後は全nodeが収束し、各recordが一度だけ適用されます。
+別の3 node CIテストでは`max_payload_entries`を16に設定し、同じcluster内でvoter 1台を隔離して、2、4、8、16、17、32、65件のcatch-upを順に検査します。
+各回では16件ごとの境界に到達する`AppendEntries`要求を保留します。
+保留した要求のentry数が上限内であること、対象voterのlogが直前の境界を越えないこと、未配信のrecordが適用されないことを確認します。
+すべての要求を解放すると、全nodeが収束し、各recordが一度だけ適用されます。
 固定4要求の解放順序に対する24通りの順列はそのシナリオだけを対象にします。
-32件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
+65件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -71,7 +70,7 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 
 ### 未実装
 
-- 固定4要求の解放順序、同一peerへの逐次2要求、2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケース、catch-up payloadの2、4、8、16、17、32件を検査した範囲を超えるスケジュール。32件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証である。
+- 固定4要求の解放順序、同一peerへの逐次2要求、2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケース、catch-up payloadの2、4、8、16、17、32、65件を検査した範囲を超えるスケジュール。65件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証である。
 - 最新のquorum commit状態を保証するfollower読み取り。読み取りtokenが保証するのはセッション内の読み取り単調性だけである。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
@@ -339,11 +338,11 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 同じ5 node実行で1台のvoterを隔離したまま、残る4 nodeが2件のcommandをcommitするシナリオも検査します。
 1件目のcommandがvoterへ適用された後で、2件目の`AppendEntries`要求を保留します。
 全nodeで各recordを1回だけ適用し、transaction 7へ収束します。
-別の3 node CIテストでは、`max_payload_entries = 16`を設定し、同じcluster内で各回1台のvoterを隔離して、2、4、8、16、17、32件のpayloadによるcatch-upを検査します。
-各回の最初の`AppendEntries`要求を保留し、17件と32件では上限後のlog indexを含む後続要求も保留します。
-後続要求のentry数が上限内であること、対象voterのlogが16件分の境界を越えないこと、tailのrecordが適用されないことを確認してから解放します。
-解放後は全nodeが収束し、各recordが一度だけ適用されます。
-32件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
+別の3 node CIテストでは、`max_payload_entries = 16`を設定し、同じcluster内で各回1台のvoterを隔離して、2、4、8、16、17、32、65件のpayloadによるcatch-upを検査します。
+各回では16件ごとの境界に到達する`AppendEntries`要求を保留します。
+保留した要求のentry数が上限内であること、対象voterのlogが直前の境界を越えないこと、未配信のrecordが適用されないことを確認します。
+すべての要求を解放すると、全nodeが収束し、各recordが一度だけ適用されます。
+65件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
 
 ## 一次資料と適用範囲
 
