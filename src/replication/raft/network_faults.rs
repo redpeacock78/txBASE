@@ -134,7 +134,7 @@ enum AppendDelayAction {
 }
 
 pub(crate) struct AppendDelay {
-    entered: SyncSender<()>,
+    entered: SyncSender<usize>,
     claimed: AtomicBool,
     state: Mutex<AppendDelayAction>,
     released: Condvar,
@@ -167,8 +167,8 @@ impl AppendDelay {
         !self.claimed.swap(true, Ordering::AcqRel)
     }
 
-    pub(crate) fn pause(&self) -> bool {
-        let _ = self.entered.try_send(());
+    pub(crate) fn pause(&self, entry_count: usize) -> bool {
+        let _ = self.entered.try_send(entry_count);
         let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
         while *state == AppendDelayAction::Pending {
             state = self
@@ -197,14 +197,14 @@ impl AppendDelay {
 }
 
 pub(crate) struct AppendDelayHandle {
-    entered: Receiver<()>,
+    entered: Receiver<usize>,
     delay: Arc<AppendDelay>,
     action_sent: bool,
     completed: Receiver<Result<(), String>>,
 }
 
 impl AppendDelayHandle {
-    pub(crate) fn wait_until_paused(&self, timeout: Duration) -> Result<(), String> {
+    pub(crate) fn wait_until_paused(&self, timeout: Duration) -> Result<usize, String> {
         self.entered
             .recv_timeout(timeout)
             .map_err(|error| format!("AppendEntries RPC was not paused: {error}"))

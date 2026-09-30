@@ -14,7 +14,9 @@ The test arms the second delay while the first request is paused, then releases 
 During this sequence, the current leader is the sole voter and every peer is a learner; other nodes are blocked from sending to the delayed target until catch-up.
 The test restores the original voter set after every node catches up.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so this covers successive requests rather than overlapping calls from the same leader to that peer ([threading model](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/docs/internal/threading.md); [replication implementation](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/replication/mod.rs)).
-The 24 orders exhaust release order only for these four held requests; schedules with different request batches, terms, or partition conditions remain outstanding.
+In a later phase of the same five-node test, one voter is isolated while the remaining quorum commits two commands.
+It holds a catch-up `AppendEntries` request matching the second missing log index, verifies that the single request contains both log entries, and checks that each record is applied once after delivery.
+The 24 orders exhaust release order only for the fixed four-request scenario; other request batches, terms, and partition conditions remain untested.
 Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
@@ -49,7 +51,7 @@ This document records the implemented Raft boundary and the remaining authority,
 
 ### Not implemented
 
-- Broader deterministic coverage for delayed or reordered RPC schedules outside the 24 release-order permutations of this fixed four-request case and the tested same-peer request pair.
+- Broader deterministic coverage for delayed or reordered RPC schedules beyond the fixed four-request release permutations, the sequential same-peer pair, and one two-entry catch-up batch; varied terms and partition conditions remain untested.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
 The serialized command limit is 1 MiB.
@@ -213,7 +215,9 @@ Each delay matches one command's log index and stays armed across RPC retries un
 The test blocks every other sender to the target while it holds the two requests, so another replication stream cannot satisfy the catch-up check.
 After all nodes catch up, it restores the original voter set.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so the test does not claim to hold overlapping calls from the same leader to that peer.
-The 24 orders exhaust release order only for these four held requests; schedules with different request batches, terms, or partition conditions remain outstanding beyond them and the successive same-peer request pair.
+The same five-node run then isolates one voter while the other four commit two commands.
+It holds the catch-up request matching the second missing log index and asserts that it contains both log entries before release; every node must apply both records once and converge at transaction 7.
+These cases do not cover larger catch-up batches, differing terms, or other partition conditions.
 
 ## Primary references and scope
 

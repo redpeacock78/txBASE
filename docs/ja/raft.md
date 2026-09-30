@@ -25,7 +25,10 @@ RAFT-006では、1つのleaderから同一peerへ送る連続した非空`Append
 逐次遅延中はcurrent leaderだけをvoterにし、ほかのnodeをlearnerにします。対象peerにはcurrent leader以外から送信できないようにします。
 全nodeが追いついた後に、元のvoter構成へ戻します。
 OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries` futureの完了を待つため、このテストが扱うのは逐次要求です。同一leaderから同じpeerへの同時呼び出しではありません（[task構成](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/docs/internal/threading.md)、[複製実装](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/replication/mod.rs)）。
-この24通りで網羅するのは、同じ4要求の解放順序です。要求batch、term、partition条件を変えた遅延・順序変更は、同一peerへの連続要求とともに未検証です。
+同じ5 nodeテストの後半では、1台のvoterを隔離したまま、残るquorumで2件のcommandをcommitします。
+2つ目の未配送log indexを含む追いつき要求を保留し、1つの`AppendEntries`要求にlog entryが2件含まれることを確認してから解放します。
+配送後に両方のrecordが1回だけ適用されることを検査します。
+この24通りで網羅するのは、固定した4要求の解放順序です。2件のcatch-up batch以外の要求batch、term、partition条件を変えた遅延・順序変更は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -61,7 +64,7 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 
 ### 未実装
 
-- 固定4要求の24通りの解放順序と検証済みの同一peerへの連続2要求以外について、要求batch、term、partition条件を変えたRPC遅延・順序変更を検査する決定的なテスト。
+- 固定4要求の解放順序、同一peerへの逐次2要求、2件のcatch-up batchを超える遅延・順序変更スケジュール。異なるtermとpartition条件の組み合わせも未検証である。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
 正のsequenceと空でないカタログtagが必要です。
@@ -310,7 +313,10 @@ failoverテストでは、current leaderから同一peerへ送る非空`AppendEn
 別nodeからの複製が追いつき確認を先に満たさないよう、要求を保留している間は対象peerへの送信をcurrent leader以外で遮断します。
 全nodeの追いつきを確認してから、元のvoter構成へ戻します。
 OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries` futureの完了を待つため、このテストは同一leaderから同一peerへの逐次要求を扱います。
-この24通りで網羅するのは、同じ4要求の解放順序です。要求batch、term、partition条件を変えた遅延・順序変更は、同一peerへの連続要求とともに未検証です。
+同じ5 node実行で1台のvoterを隔離したまま、残る4 nodeが2件のcommandをcommitするシナリオも検査します。
+2つ目の未配送log indexを含むcatch-up要求を保留し、単一の要求に2件のentryが含まれることを確認してから解放します。
+全nodeで各recordを1回だけ適用し、transaction 7へ収束します。
+この24通りで網羅するのは固定4要求の解放順序です。2件のcatch-up batchを超える要求batch、異なるtermやpartition条件は未検証です。
 
 ## 一次資料と適用範囲
 

@@ -332,10 +332,11 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4], verify_successive_
     );
     if verify_successive_delays {
         append_delivery::delay_successive_appends_to_single_peer(&nodes, &root);
+        append_delivery::delay_batched_catchup_to_single_peer(&nodes, &root);
     }
 
-    let expected_transaction_id = if verify_successive_delays { 5 } else { 3 };
-    let expected_record_count = if verify_successive_delays { 7 } else { 5 };
+    let expected_transaction_id = if verify_successive_delays { 7 } else { 3 };
+    let expected_record_count = if verify_successive_delays { 9 } else { 5 };
     wait_for_transaction(
         &nodes,
         &root,
@@ -359,7 +360,7 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4], verify_successive_
         assert_eq!(table.records().len(), expected_record_count);
         assert_eq!(table.active_record(5).unwrap().values["NAME"], "Failover");
         if verify_successive_delays {
-            for name in ["DelayedOne", "DelayedTwo"] {
+            for name in ["DelayedOne", "DelayedTwo", "BatchedOne", "BatchedTwo"] {
                 assert!(
                     table
                         .active_records()

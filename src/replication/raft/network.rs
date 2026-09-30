@@ -441,7 +441,7 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
         let result = tokio::task::spawn_blocking(move || {
             #[cfg(test)]
             let can_send = match delay.as_ref() {
-                Some(delay) => delay.pause(),
+                Some(delay) => delay.pause(rpc.entries.len()),
                 None => true,
             };
             #[cfg(test)]
