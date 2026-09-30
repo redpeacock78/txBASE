@@ -124,7 +124,7 @@ pub trait AsyncObjectStore {
         cancellation: &'a CancellationToken,
     ) -> AsyncObjectStoreFuture<'a, Result<(), ObjectStoreError>> {
         start_unless_cancelled(
-            || self.compare_and_swap(key, expected, replacement),
+            move || self.compare_and_swap(key, expected, replacement),
             cancellation,
         )
     }
