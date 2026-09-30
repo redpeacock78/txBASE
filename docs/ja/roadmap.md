@@ -402,10 +402,13 @@ alias testはlegacy alias全体をカバーします。
 
 別のテストでは、固定したICU4Xベンチマーク入力に対して、中国語、日本語のひらがなとカタカナ、韓国語の照合比較器の整合性を検査します。
 この入力リストは期待されるロケール順序を定義しません。
+選定した期待順序フィクスチャは、日本語のひらがな、中国語のピンイン、韓国語のハングルと漢字の順序を検証します。
+これらのフィクスチャは、[CLDR 48の日本語ルール](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ja.xml)、[中国語ルール](https://github.com/unicode-org/cldr/blob/release-48/common/collation/zh.xml)、[韓国語ルール](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml)から選んだ順序を固定したものです。
+ICU4X 2.1の変更履歴には、CLDRデータソースを48へ更新した記載があります（[ICU4X 2.1の変更履歴](https://github.com/unicode-org/icu4x/blob/icu@2.1.0/CHANGELOG.md)）。
 UTS #10の適合テストはテーラリング前のDUCETを対象とします。
-CLDRの対応テストはCLDRの`root`ロケールの照合順序を対象とします。
-どちらも`ja`、`zh`、`ko`のロケール固有の照合順序を検証するデータではありません（[UTS #10 §12.2](https://www.unicode.org/reports/tr10/)、[CLDR 48の照合テスト](https://github.com/unicode-org/cldr/tree/release-48/common/uca)）。
-確認した一次資料にロケール別の期待順序コーパスがないため、これらの照合の適合テスト一式は今後の作業です。
+CLDRの`common/uca`適合テストはroot順序を対象とします。
+どちらもロケール別の適合テスト一式ではありません（[UTS #10 §12.2](https://www.unicode.org/reports/tr10/)、[CLDR 48の照合テスト](https://github.com/unicode-org/cldr/tree/release-48/common/uca)）。
+フィクスチャは選定した規則だけを対象とするため、ロケール固有の期待順序を網羅するコーパスは今後の作業です。
 
 上流のJavaDBF GBKフィクスチャは、GBKでエンコードされた3つのCJKフィールド名と28件の実データをカバーします。
 

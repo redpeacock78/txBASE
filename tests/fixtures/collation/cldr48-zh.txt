@@ -1,0 +1,17 @@
+# Expected-order sentinels derived from the CLDR 48 default Chinese pinyin rules.
+# Source: https://github.com/unicode-org/cldr/blob/release-48/common/collation/zh.xml
+# Copyright © 1991-2014 Unicode, Inc.; terms: https://www.unicode.org/copyright.html
+# These characters are selected from consecutive pinyin groups, not a complete conformance corpus.
+阿
+啊
+哎
+啀
+矮
+艾
+安
+俺
+岸
+凹
+敖
+袄
+澳

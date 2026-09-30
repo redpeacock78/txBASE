@@ -1,0 +1,9 @@
+# Expected-order sentinels derived from the CLDR 48 Japanese collation rules.
+# Source: https://github.com/unicode-org/cldr/blob/release-48/common/collation/ja.xml
+# Copyright © 1991-2014 Unicode, Inc.; terms: https://www.unicode.org/copyright.html
+# These Hiragana anchors are a small sentinel, not a complete conformance corpus.
+あ
+い
+う
+え
+お

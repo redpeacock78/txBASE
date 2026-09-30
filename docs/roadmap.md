@@ -321,11 +321,13 @@ and write round-trips for all eight supported explicit codec names. The query la
 Japanese, Chinese, and Korean locale collations. Curated upstream fixtures cover Japanese Han/Kana,
 Chinese pinyin/Bopomofo, and Korean Hangul/Hanja ordering. A separate test checks comparator laws
 over pinned ICU4X benchmark inputs for Chinese, Japanese Hiragana and Katakana, and Korean names.
-Those inputs do not specify expected locale order. UTS #10's conformance files test untailored DUCET,
-while the corresponding CLDR files test the CLDR root order; neither defines the `ja`, `zh`, or `ko`
-locale-specific order ([UTS #10 §12.2](https://www.unicode.org/reports/tr10/), [CLDR 48 collation tests](https://github.com/unicode-org/cldr/tree/release-48/common/uca)).
-The inspected upstream sources do not provide a full locale-specific expected-order corpus, so
-that conformance suite remains future work.
+Those inputs do not specify expected locale order. Small expected-order sentinels now cover selected
+Japanese Hiragana, Chinese pinyin, and Korean Hangul/Hanja sequences derived from the [CLDR 48
+Japanese](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ja.xml), [Chinese](https://github.com/unicode-org/cldr/blob/release-48/common/collation/zh.xml), and [Korean](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml)
+rules. The ICU4X 2.1 changelog records its CLDR data-source update to version 48 ([ICU4X 2.1 changelog](https://github.com/unicode-org/icu4x/blob/icu@2.1.0/CHANGELOG.md)). UTS #10's conformance files test untailored DUCET, while CLDR's `common/uca` conformance
+files test root order; neither is a locale-specific conformance corpus ([UTS #10 §12.2](https://www.unicode.org/reports/tr10/), [CLDR 48 collation tests](https://github.com/unicode-org/cldr/tree/release-48/common/uca)).
+The sentinels cover only selected rule sequences, so a full locale-specific expected-order corpus
+remains future work.
 
 An upstream JavaDBF GBK fixture now covers three GBK-encoded CJK field names and 28 real records,
 including a read, mutation, and byte round-trip.
