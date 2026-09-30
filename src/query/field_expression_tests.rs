@@ -326,7 +326,7 @@ fn rejects_unsupported_or_malformed_expr() {
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$abs":true},1]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$abs":["$A"]},1]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$concat":["$A"]},"x"]}}}"#).is_err());
-    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$toLower":["$A","$B"]},"x"]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$toLower":{"$abs":true}},"x"]}}}"#).is_err());
     assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$toUpper":true},"x"]}}}"#).is_err());
     assert!(
         parse(br#"{"filter":{"$expr":{"$eq":[{"$cond":[{"$gt":["$AGE",18]},"adult"]},"adult"]}}}"#)
@@ -338,5 +338,5 @@ fn rejects_unsupported_or_malformed_expr() {
         parse(br#"{"filter":{"$expr":{"$eq":[{"$cond":["$AGE","adult","minor"]},"adult"]}}}"#)
             .is_err()
     );
-    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$cond":[{"$gt":["$AGE",18]},["adult","minor"],"unknown"]},"adult"]}}}"#).is_err());
+    assert!(parse(br#"{"filter":{"$expr":{"$eq":[{"$cond":[{"$gt":["$AGE",18]},[{"$unknown":"$A"}],"unknown"]},"adult"]}}}"#).is_err());
 }

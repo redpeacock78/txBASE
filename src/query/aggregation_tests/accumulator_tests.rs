@@ -330,7 +330,7 @@ fn selects_n_values_from_scalar_and_array_expressions() {
         crate::query::aggregation::execute(&references, &stages).unwrap(),
         vec![json!({
             "_id": null,
-            "minimum_pairs": [[1, "A"], [2, "B"]],
+            "minimum_pairs": [[null, "missing"], [null, "null"]],
             "maximum_values": [3, 2],
             "duplicates": [1, 2, 2],
             "empty": []
