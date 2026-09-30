@@ -102,7 +102,10 @@ jobs:
         run: cargo test --all-targets --all-features
       - if: runner.os == 'Windows'
         name: Run the suite without the heavy catch-up fixture
-        run: cargo test --all-targets --all-features -- --skip isolated_voter_applies_batched_catchup_payloads_once
+        run: cargo test --all-targets --all-features -- --skip isolated_voter_applies_batched_catchup_payloads_once --skip partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_restart
       - if: runner.os == 'Windows'
         name: Run the catch-up fixture without parallel test load
         run: cargo test --locked --lib --all-features isolated_voter_applies_batched_catchup_payloads_once
+      - if: runner.os == 'Windows'
+        name: Run the failover fixture without parallel test load
+        run: cargo test --locked --lib --all-features partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_restart
