@@ -86,7 +86,9 @@ pub trait AsyncObjectStore {
         prefix: &'a str,
     ) -> AsyncObjectStoreFuture<'a, Result<Vec<String>, ObjectStoreError>>;
 
-    /// Read one object, dropping the read future after cancellation is polled.
+    /// Start reading one object on the first poll if cancellation has not been requested.
+    ///
+    /// After cancellation, the wrapper drops the read future when it is polled again.
     ///
     /// Whether this also stops underlying I/O depends on the store implementation.
     fn get_with_cancellation<'a>(
@@ -94,13 +96,10 @@ pub trait AsyncObjectStore {
         key: &'a str,
         cancellation: &'a CancellationToken,
     ) -> AsyncObjectStoreFuture<'a, Result<Option<Vec<u8>>, ObjectStoreError>> {
-        if cancellation.is_cancelled() {
-            return cancelled_future();
-        }
-        cancelable(self.get(key), cancellation)
+        cancelable(|| self.get(key), cancellation)
     }
 
-    /// Write one immutable object unless cancellation was already requested.
+    /// Start writing one immutable object on the first poll if cancellation has not been requested.
     ///
     /// Cancellation does not stop an accepted write; keep polling its future to observe its
     /// result.
@@ -110,13 +109,10 @@ pub trait AsyncObjectStore {
         bytes: &'a [u8],
         cancellation: &'a CancellationToken,
     ) -> AsyncObjectStoreFuture<'a, Result<(), ObjectStoreError>> {
-        if cancellation.is_cancelled() {
-            return cancelled_future();
-        }
-        self.put_if_absent(key, bytes)
+        start_unless_cancelled(|| self.put_if_absent(key, bytes), cancellation)
     }
 
-    /// Compare and swap one object unless cancellation was already requested.
+    /// Start comparing and swapping one object on the first poll if cancellation has not been requested.
     ///
     /// Cancellation does not stop an accepted write; keep polling its future to observe its
     /// result.
@@ -127,13 +123,13 @@ pub trait AsyncObjectStore {
         replacement: &'a [u8],
         cancellation: &'a CancellationToken,
     ) -> AsyncObjectStoreFuture<'a, Result<(), ObjectStoreError>> {
-        if cancellation.is_cancelled() {
-            return cancelled_future();
-        }
-        self.compare_and_swap(key, expected, replacement)
+        start_unless_cancelled(
+            || self.compare_and_swap(key, expected, replacement),
+            cancellation,
+        )
     }
 
-    /// Delete one object unless cancellation was already requested.
+    /// Start deleting one object on the first poll if cancellation has not been requested.
     ///
     /// Cancellation does not stop an accepted write; keep polling its future to observe its
     /// result.
@@ -142,13 +138,12 @@ pub trait AsyncObjectStore {
         key: &'a str,
         cancellation: &'a CancellationToken,
     ) -> AsyncObjectStoreFuture<'a, Result<(), ObjectStoreError>> {
-        if cancellation.is_cancelled() {
-            return cancelled_future();
-        }
-        self.delete(key)
+        start_unless_cancelled(|| self.delete(key), cancellation)
     }
 
-    /// List objects, dropping the list future after cancellation is polled.
+    /// Start listing objects on the first poll if cancellation has not been requested.
+    ///
+    /// After cancellation, the wrapper drops the list future when it is polled again.
     ///
     /// Whether this also stops underlying I/O depends on the store implementation.
     fn list_with_cancellation<'a>(
@@ -156,10 +151,7 @@ pub trait AsyncObjectStore {
         prefix: &'a str,
         cancellation: &'a CancellationToken,
     ) -> AsyncObjectStoreFuture<'a, Result<Vec<String>, ObjectStoreError>> {
-        if cancellation.is_cancelled() {
-            return cancelled_future();
-        }
-        cancelable(self.list(prefix), cancellation)
+        cancelable(|| self.list(prefix), cancellation)
     }
 }
 
@@ -225,24 +217,38 @@ impl<S: AsyncObjectStore + ?Sized> AsyncObjectStore for CancellableObjectStore<'
 }
 
 fn cancelable<'a, T, F>(
-    future: F,
-    cancellation: &CancellationToken,
+    operation: impl FnOnce() -> F + 'a,
+    cancellation: &'a CancellationToken,
 ) -> AsyncObjectStoreFuture<'a, Result<T, ObjectStoreError>>
 where
     F: Future<Output = Result<T, ObjectStoreError>> + 'a,
     T: 'a,
 {
-    let future = cancellation.abortable(future);
     Box::pin(async move {
-        match future.await {
+        if cancellation.is_cancelled() {
+            return Err(cancelled_error());
+        }
+        match cancellation.abortable(operation()).await {
             Ok(result) => result,
             Err(_) => Err(cancelled_error()),
         }
     })
 }
 
-fn cancelled_future<'a, T: 'a>() -> AsyncObjectStoreFuture<'a, Result<T, ObjectStoreError>> {
-    Box::pin(std::future::ready(Err(cancelled_error())))
+fn start_unless_cancelled<'a, T, F>(
+    operation: impl FnOnce() -> F + 'a,
+    cancellation: &'a CancellationToken,
+) -> AsyncObjectStoreFuture<'a, Result<T, ObjectStoreError>>
+where
+    F: Future<Output = Result<T, ObjectStoreError>> + 'a,
+    T: 'a,
+{
+    Box::pin(async move {
+        if cancellation.is_cancelled() {
+            return Err(cancelled_error());
+        }
+        operation().await
+    })
 }
 
 fn cancelled_error() -> ObjectStoreError {

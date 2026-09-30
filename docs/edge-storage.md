@@ -26,8 +26,9 @@ The filesystem backend is a local durable adapter and does not claim cloud-provi
 
 `AsyncObjectStore` defines the same five primitive operations as a runtime-neutral future boundary.
 Its cancellation-aware methods preserve existing store implementations through defaults.
-The default `get` and `list` wrappers drop their operation future after cancellation is observed on a poll; stopping the underlying I/O depends on the host future.
-The default mutation wrappers reject work when cancellation is already requested, but do not abort an accepted write.
+The default `get`, `list`, and mutation wrappers invoke the store method on their first poll only if cancellation has not been requested.
+If a read or list is cancelled after it starts, the wrapper drops its future when cancellation is observed on a later poll; stopping the underlying I/O depends on the host future.
+Cancellation before a mutation's first poll rejects it, while cancellation after admission does not abort the accepted write.
 Callers must keep polling an accepted write to observe its result, while dropping the containing future retains the host future's normal cancellation semantics.
 `SyncObjectStoreAdapter` exposes the existing synchronous stores through already-ready futures, so native tests can exercise the asynchronous contract without selecting an executor.
 `AsyncObjectTable` reuses the manifest, generation, recovery, retention, and orphan-cleanup rules through that future boundary.

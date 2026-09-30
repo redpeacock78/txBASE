@@ -99,8 +99,9 @@ The Worker-compatible Web Streams adapter supplies pull scheduling, bounded queu
 `WasmObjectTable.query_stream_json` and `query_stream_json_at` return a Promise that resolves after the runtime-neutral `AsyncObjectTable` has loaded the current or selected retained XBF snapshot.
 The Rust `AsyncObjectStore` contract provides operation-level cancellation methods that accept a `CancellationToken`.
 Each `AsyncObjectQueryStream` owns a separate token, exposes `cancel()` and `cancellation_token()`, and cancels it when the stream is dropped.
-The default read and list methods drop their operation future after cancellation is observed on a poll; whether that stops the underlying I/O depends on the host future.
-The default mutation methods reject work if cancellation is already requested, but do not abort an accepted write.
+The default read, list, and mutation methods invoke the store method on their first poll only if cancellation has not been requested.
+After a read or list starts, cancellation drops its future when a later poll observes the request; whether this stops underlying I/O depends on the host future.
+Cancellation before a mutation's first poll rejects it, while cancellation after admission does not abort the accepted write.
 Calling `cancel()` while a recovery write is in progress lets that write resolve before the stream ends; dropping the stream still drops its outstanding future according to the host future's cancellation behavior.
 `SyncObjectStoreAdapter` cannot interrupt a blocking filesystem operation.
 The generated WASM Promise methods do not expose this Rust token.

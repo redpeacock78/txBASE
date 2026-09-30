@@ -203,7 +203,7 @@ fn cancelling_before_first_poll_skips_storage() {
 }
 
 #[test]
-fn a_cancelled_token_rejects_new_store_operations() {
+fn cancellation_before_first_operation_poll_skips_store_methods() {
     let dropped = Arc::new(AtomicUsize::new(0));
     let calls = Arc::new(AtomicUsize::new(0));
     let store = PendingStore {
@@ -211,32 +211,35 @@ fn a_cancelled_token_rejects_new_store_operations() {
         calls: calls.clone(),
     };
     let cancellation = CancellationToken::new();
-    cancellation.cancel();
     let waker = Waker::noop();
     let mut context = Context::from_waker(waker);
 
     let mut read = Box::pin(store.get_with_cancellation("key", &cancellation));
+    let mut write = Box::pin(store.put_if_absent_with_cancellation("key", b"value", &cancellation));
+    let mut compare_and_swap =
+        Box::pin(store.compare_and_swap_with_cancellation("key", None, b"value", &cancellation));
+    let mut delete = Box::pin(store.delete_with_cancellation("key", &cancellation));
+    let mut list = Box::pin(store.list_with_cancellation("users/", &cancellation));
+
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    cancellation.cancel();
+
     assert!(matches!(
         read.as_mut().poll(&mut context),
         Poll::Ready(Err(ObjectStoreError::Cancelled(_)))
     ));
-    let mut write = Box::pin(store.put_if_absent_with_cancellation("key", b"value", &cancellation));
     assert!(matches!(
         write.as_mut().poll(&mut context),
         Poll::Ready(Err(ObjectStoreError::Cancelled(_)))
     ));
-    let mut compare_and_swap =
-        Box::pin(store.compare_and_swap_with_cancellation("key", None, b"value", &cancellation));
     assert!(matches!(
         compare_and_swap.as_mut().poll(&mut context),
         Poll::Ready(Err(ObjectStoreError::Cancelled(_)))
     ));
-    let mut delete = Box::pin(store.delete_with_cancellation("key", &cancellation));
     assert!(matches!(
         delete.as_mut().poll(&mut context),
         Poll::Ready(Err(ObjectStoreError::Cancelled(_)))
     ));
-    let mut list = Box::pin(store.list_with_cancellation("users/", &cancellation));
     assert!(matches!(
         list.as_mut().poll(&mut context),
         Poll::Ready(Err(ObjectStoreError::Cancelled(_)))
