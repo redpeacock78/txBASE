@@ -4,6 +4,8 @@ use super::codec::{
 use super::{XbfError, XbfField, XbfLimits, XbfRecord, XbfType, XbfValue};
 use std::collections::BTreeSet;
 
+const MIN_FIELD_DESCRIPTOR_SIZE: usize = 7;
+
 pub(super) fn encode_schema(fields: &[XbfField], limits: &XbfLimits) -> Result<Vec<u8>, XbfError> {
     let count = u32::try_from(fields.len())
         .map_err(|_| XbfError::Invalid("field count overflows u32".into()))?;
@@ -62,6 +64,11 @@ pub(super) fn decode_schema(bytes: &[u8], limits: &XbfLimits) -> Result<Vec<XbfF
     if count > limits.max_fields {
         return Err(XbfError::Invalid(
             "field count exceeds the configured limit".into(),
+        ));
+    }
+    if count > (bytes.len() - cursor) / MIN_FIELD_DESCRIPTOR_SIZE {
+        return Err(XbfError::Invalid(
+            "field count exceeds the schema section bounds".into(),
         ));
     }
     let mut names = BTreeSet::new();

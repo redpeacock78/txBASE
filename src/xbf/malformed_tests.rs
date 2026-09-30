@@ -379,6 +379,26 @@ fn rejects_malformed_schema_and_directory_metadata() {
 }
 
 #[test]
+fn rejects_field_count_that_cannot_fit_schema_before_allocation() {
+    let mut invalid = encode(&table_fixture()).unwrap();
+    let schema_offset = get_u64(&invalid, 16) as usize;
+    put_u32(&mut invalid, schema_offset, u32::MAX);
+    refresh_schema_checksum(&mut invalid);
+    let limits = XbfLimits {
+        max_fields: usize::MAX,
+        ..XbfLimits::default()
+    };
+
+    let error = decode_with_limits(&invalid, &limits).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("field count exceeds the schema section bounds"),
+        "got {error}"
+    );
+}
+
+#[test]
 fn rejects_malformed_xbf_utf8_and_payload_values() {
     let encoded = encode(&table_fixture()).unwrap();
     let data_offset = get_u64(&encoded, 56) as usize;
