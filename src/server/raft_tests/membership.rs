@@ -133,11 +133,11 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
 
     let command = record_command(&catalog_root, 1, 4, "Quorum", 43);
     assert_eq!(
-        commit(&nodes[leader_index], command.clone()),
+        commit(&nodes, command.clone()),
         RaftResponseResult::Applied { transaction_id: 2 }
     );
     assert_eq!(
-        commit(&nodes[leader_index], command),
+        commit(&nodes, command),
         RaftResponseResult::Applied { transaction_id: 2 }
     );
 
@@ -282,7 +282,7 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
         44,
     );
     assert_eq!(
-        commit(&nodes[leader_index], command),
+        commit(&nodes, command),
         RaftResponseResult::Applied { transaction_id: 3 }
     );
     wait_for_transaction(&nodes, &root, 3, Duration::from_secs(15));
@@ -326,7 +326,7 @@ fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
         45,
     );
     assert_eq!(
-        commit(&nodes[leader_index], command),
+        commit(&nodes, command),
         RaftResponseResult::Applied { transaction_id: 4 }
     );
     wait_for_transaction(&nodes, &root, 4, Duration::from_secs(15));

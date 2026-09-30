@@ -178,17 +178,39 @@ pub(super) fn record_command(
     .unwrap()
 }
 
-pub(super) fn commit(leader: &RaftRuntime, command: RaftCommand) -> RaftResponseResult {
-    leader
-        .runtime
-        .block_on(async {
-            tokio::time::timeout(Duration::from_secs(15), leader.node.client_write(command)).await
-        })
-        .unwrap()
-        .unwrap()
-        .data
-        .unwrap()
-        .result
+pub(super) fn commit(nodes: &[RaftRuntime], command: RaftCommand) -> RaftResponseResult {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut leader_index =
+        current_leader_index(nodes, deadline.saturating_duration_since(Instant::now()));
+
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        assert!(!remaining.is_zero(), "Raft write did not reach a leader");
+        let leader = &nodes[leader_index];
+        match leader.runtime.block_on(async {
+            tokio::time::timeout(remaining, leader.node.client_write(command.clone())).await
+        }) {
+            Ok(Ok(response)) => return response.data.unwrap().result,
+            Ok(Err(error)) => {
+                let forward = error
+                    .forward_to_leader::<openraft::BasicNode>()
+                    .unwrap_or_else(|| panic!("Raft write failed: {error}"));
+                leader_index = match forward.leader_id {
+                    Some(leader_id) => nodes
+                        .iter()
+                        .position(|node| node.node_id == leader_id)
+                        .unwrap_or_else(|| {
+                            panic!("forwarded Raft leader {leader_id} is not in the node set")
+                        }),
+                    None => current_leader_index(
+                        nodes,
+                        deadline.saturating_duration_since(Instant::now()),
+                    ),
+                };
+            }
+            Err(_) => panic!("Raft write timed out"),
+        }
+    }
 }
 
 pub(super) fn current_leader_index(nodes: &[RaftRuntime], timeout: Duration) -> usize {

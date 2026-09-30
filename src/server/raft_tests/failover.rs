@@ -99,7 +99,7 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4], verify_successive_
         43,
     );
     assert_eq!(
-        commit(&nodes[bootstrap_leader_index], initial_command),
+        commit(&nodes, initial_command),
         RaftResponseResult::Applied { transaction_id: 2 }
     );
     wait_for_transaction(&nodes, &root, 2, Duration::from_secs(15));

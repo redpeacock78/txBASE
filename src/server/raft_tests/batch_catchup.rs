@@ -55,10 +55,7 @@ fn isolated_voter_applies_batched_catchup_payloads_once() {
     let leader_id = nodes[leader_index].node_id;
     let leader_root = root.join(format!("catalog-{leader_id}"));
     assert_eq!(
-        commit(
-            &nodes[leader_index],
-            record_command(&leader_root, 1, 4, "Baseline", 43)
-        ),
+        commit(&nodes, record_command(&leader_root, 1, 4, "Baseline", 43)),
         RaftResponseResult::Applied { transaction_id: 2 }
     );
     wait_for_transaction(&nodes, &root, 2, Duration::from_secs(15));
@@ -110,6 +107,11 @@ fn isolated_voter_applies_batched_catchup_payloads_once() {
             target.set_peer_blocked(peer_id, true).unwrap();
         }
 
+        let healthy_nodes = nodes
+            .iter()
+            .filter(|node| node.node_id != target_id)
+            .cloned()
+            .collect::<Vec<_>>();
         let mut names = Vec::with_capacity(payload_size as usize);
         for offset in 0..payload_size {
             let sequence = baseline_transaction_id + offset;
@@ -117,7 +119,7 @@ fn isolated_voter_applies_batched_catchup_payloads_once() {
             let name = format!("Batch{record_id}");
             assert_eq!(
                 commit(
-                    leader,
+                    &healthy_nodes,
                     record_command(&leader_root, sequence, record_id, &name, 50 + record_id,)
                 ),
                 RaftResponseResult::Applied {
@@ -129,11 +131,6 @@ fn isolated_voter_applies_batched_catchup_payloads_once() {
         next_record_id += payload_size as i64;
 
         let final_transaction_id = baseline_transaction_id + payload_size;
-        let healthy_nodes = nodes
-            .iter()
-            .filter(|node| node.node_id != target_id)
-            .cloned()
-            .collect::<Vec<_>>();
         wait_for_transaction(
             &healthy_nodes,
             &root,

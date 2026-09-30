@@ -74,7 +74,7 @@ fn lagging_voter_catches_up_from_snapshot_after_leader_purges_log() {
             40 + sequence as i64,
         );
         assert_eq!(
-            commit(&nodes[leader_index], command),
+            commit(&nodes, command),
             RaftResponseResult::Applied {
                 transaction_id: sequence + 1
             }

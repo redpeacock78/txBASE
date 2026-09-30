@@ -112,7 +112,7 @@ fn follower_read_token_waits_for_its_index_and_can_be_chained() {
         .unwrap();
     let command = record_command(&catalog_root, transaction_id, 50, "Follower", 50);
     assert_eq!(
-        commit(&nodes[leader_index], command),
+        commit(&nodes, command),
         RaftResponseResult::Applied {
             transaction_id: transaction_id + 1
         }

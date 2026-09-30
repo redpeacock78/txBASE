@@ -50,7 +50,7 @@ pub(super) fn delay_successive_appends_to_single_peer(nodes: &[RaftRuntime], roo
         46,
     );
     assert_eq!(
-        commit(leader, first_command),
+        commit(nodes, first_command),
         RaftResponseResult::Applied { transaction_id: 4 }
     );
     first_delay
@@ -86,7 +86,7 @@ pub(super) fn delay_successive_appends_to_single_peer(nodes: &[RaftRuntime], roo
         47,
     );
     assert_eq!(
-        commit(leader, second_command),
+        commit(nodes, second_command),
         RaftResponseResult::Applied { transaction_id: 5 }
     );
     wait_for_transaction(&healthy_nodes, root, 5, Duration::from_secs(15));
@@ -180,7 +180,7 @@ pub(super) fn delay_second_catchup_append_to_single_peer(nodes: &[RaftRuntime], 
         48,
     );
     assert_eq!(
-        commit(leader, first_command),
+        commit(nodes, first_command),
         RaftResponseResult::Applied {
             transaction_id: first_transaction_id
         }
@@ -194,7 +194,7 @@ pub(super) fn delay_second_catchup_append_to_single_peer(nodes: &[RaftRuntime], 
         49,
     );
     assert_eq!(
-        commit(leader, second_command),
+        commit(nodes, second_command),
         RaftResponseResult::Applied {
             transaction_id: second_transaction_id
         }
