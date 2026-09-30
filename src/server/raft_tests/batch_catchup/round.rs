@@ -99,8 +99,15 @@ pub(super) fn run_isolated_voter_catchup_round(
         let request_entry_count = delayed_append
             .wait_until_paused(Duration::from_secs(10))
             .unwrap_or_else(|error| {
+                let leaders = nodes
+                    .iter()
+                    .map(|node| (node.node_id, node.node.metrics().borrow().current_leader))
+                    .collect::<Vec<_>>();
                 panic!(
-                    "payload of {payload_size} entries stalled at catch-up boundary {applied_entries_before_request}: {error}"
+                    "payload of {payload_size} entries stalled at catch-up boundary {applied_entries_before_request} (expected log index {}, target last log index {:?}, leaders {:?}): {error}",
+                    leader_log_index + applied_entries_before_request + 1,
+                    target.node.metrics().borrow().last_log_index,
+                    leaders
                 )
             });
         assert!(
