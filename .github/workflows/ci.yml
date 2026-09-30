@@ -97,4 +97,12 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo build --bin txbase
       - run: bash tests/e2e/cli_lifecycle.sh
-      - run: cargo test --all-targets --all-features
+      - if: runner.os != 'Windows'
+        name: Run all tests
+        run: cargo test --all-targets --all-features
+      - if: runner.os == 'Windows'
+        name: Run the suite without the heavy catch-up fixture
+        run: cargo test --all-targets --all-features -- --skip isolated_voter_applies_batched_catchup_payloads_once
+      - if: runner.os == 'Windows'
+        name: Run the catch-up fixture without parallel test load
+        run: cargo test --locked --lib --all-features isolated_voter_applies_batched_catchup_payloads_once
