@@ -411,13 +411,6 @@ impl RaftNetwork<TypeConfig> for RaftHttpNetwork {
             .map(|entry| entry.log_id.index)
             .collect::<Vec<_>>();
         #[cfg(test)]
-        if self.cluster_id == "ci-raft-batch-catchup" && !entry_log_indices.is_empty() {
-            eprintln!(
-                "catch-up AppendEntries sender={} target={} indices={entry_log_indices:?}",
-                self.sender_id, self.target_id
-            );
-        }
-        #[cfg(test)]
         let delay = if rpc.entries.is_empty() {
             None
         } else {

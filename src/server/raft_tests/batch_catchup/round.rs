@@ -83,7 +83,13 @@ pub(super) fn run_isolated_voter_catchup_round(
         final_transaction_id,
         Duration::from_secs(15),
     );
-    let mut delayed_appends = (0..payload_size)
+    // OpenRaft can send later batches before an earlier held request completes.
+    let controlled_payload_size = if payload_size > max_payload_entries * 2 {
+        max_payload_entries
+    } else {
+        payload_size
+    };
+    let mut delayed_appends = (0..controlled_payload_size)
         .step_by(max_payload_entries as usize)
         .map(|entry_offset| {
             leader
@@ -113,12 +119,6 @@ pub(super) fn run_isolated_voter_catchup_round(
                     leaders
                 )
             });
-        eprintln!(
-            "catch-up payload={payload_size} boundary={applied_entries_before_request} paused_entries={request_entry_count} leader={} target={} target_log={:?}",
-            leader.node_id,
-            target_id,
-            target.node.metrics().borrow().last_log_index
-        );
         assert!(
             (1..=max_payload_entries as usize).contains(&request_entry_count),
             "each catch-up AppendEntries request must respect the payload limit"
