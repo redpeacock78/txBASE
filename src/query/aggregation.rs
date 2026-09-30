@@ -5,6 +5,7 @@ use serde_json::{Map, Value};
 mod accumulators;
 mod bucket_auto;
 mod input;
+mod n_values;
 mod output;
 mod sort_by_count;
 mod standard_deviation;

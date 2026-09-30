@@ -20,6 +20,7 @@
 - [クエリモデル](query-model.md)
 - [非同期クエリストリーム](async-streaming.md)
 - [集約モデル](aggregation.md)
+- [集約アキュムレータ](aggregation-accumulators.md)
 - [結合モデル](joins.md)
 - [クエリ計画と外部語彙](query-planning.md)
 - [更新モデル](mutation-model.md)

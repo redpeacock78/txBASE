@@ -44,15 +44,12 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
 - beginからcommitまたはrollbackまで排他テーブルロックを保持する、任意選択の粗粒度serializable `DbfTransaction::begin_serializable`境界。
 - beginからcommit、rollback、またはdropまでカタログwrite lockと検出したすべてのテーブルロックを保持し、1つのカタログjournalで非公開テーブルコピーを公開する、任意選択の粗粒度serializable `Catalog::begin_serializable`境界。
 - 成功した読み取りの強いテーブルおよびカタログ表現ETag、GETとHEADのIf-None-Match検証、単一テーブル、名前付きテーブル、カタログ全体のトランザクション経路に対する更新側If-None-Match検証、単一テーブル更新、名前付きテーブル更新、カタログ全体のトランザクションの任意のIf-Match保護。
-- 有界集約パイプラインは、0個以上の入力`$match`とトップレベル配列に対する`$unwind`、入力用の`$set`または`$addFields`を合計1つまで、入力用の`$project`、`$sort`、`$skip`、`$limit`をそれぞれ1つまで受け付ける。
-  終端には`$count`、`$distinct`、`$group`、`$bucket`、結果が有限な数値になる有界なスカラー式を使う`$bucketAuto`、有界なスカラー式を使う`$sortByCount`のいずれか1つを置ける。
-  別の形として、`$count`、有界な数値式による`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を使う`$group`を1つ置く。
-  その後にグループ出力用の有界な`$match`、任意の`$project`1つ、最後の`$sort`、`$skip`、`$limit`を適用する。
-- 入力ステージは記載順に実行する。
-  `$set`と`$addFields`は既存フィールドを保ったまま、ステージ入力時点の値から共有する有界なフィールド参照、リテラル、null合体、条件分岐、文字列、数値式でトップレベルフィールドを計算する。計算した文字列は1 MiBまでである。
-  `$unwind`はトップレベルの`includeArrayIndex`と`preserveNullAndEmptyArrays`を受け付け、入力順と配列順を保ち、配列以外の値を拒否し、出力レコード数を10,000件までに制限する。
-  `$bucket`は共有するスカラー式のサブセット、有限な数値境界、下端を含み上端を含まない範囲、任意のdefaultバケット、有界なアキュムレータを使い、空バケットを出力しない。
-  `$bucketAuto`は共有するスカラー式を入力レコードごとに評価し、10,000件までの有限な数値結果から空でない範囲を導出し、欠損または数値以外の結果と`granularity`を拒否する。
+- 有界集約は記載順の入力ステージと終端ステージ1つを使う。
+  - 入力ステージ：`$match`、`$unwind`、`$set`/`$addFields`、`$project`。
+  - 入力の順序と件数制御：`$sort`、`$skip`、`$limit`。
+  - 終端ステージ：`$count`、`$distinct`、`$group`、`$bucket`、`$bucketAuto`。`$sortByCount`も使える。
+  - グループ出力ステージ：有界な`$match`、任意の`$project`、`$sort`、`$skip`、`$limit`。
+  - 式、アキュムレータ、順序、資源上限は[集約モデル](aggregation.md)と[集約アキュムレータ](aggregation-accumulators.md)に記載する。
 - 修飾付きフィルターとプロジェクションを備えた1つ以上のカタログテーブルに対する、有界な`inner`、`left`、`right`、`full`、`semi`、`anti`等値結合と有界な`cross`結合。
 - 直接および多段等値結合で、ハッシュとインデックス検索の経路を比較するコストモデル。
   フィルター前のキー基数の正確な推定、マテリアライズした行幅、DBFの論理ページ読み取り、インデックスサイドカーの論理ページ読み取りを含み、直接結合と条件を満たす多段ステージにはordered merge経路も含む。
@@ -128,9 +125,7 @@ frontendはHTTP/1.1をtokenで保護したloopback backendへストリーム転�
 - ファイルシステムとキャッシュを考慮したマージ結合コスト計画。
 - 本番WASIホストのライフサイクル意味論、プロバイダー接続型のオブジェクトストアアダプター、同期filesystem adapterを超える真にノンブロッキングなストレージI/O。
 - 述語単位のロックと分散serializable調整。
-- 入力の有界`$match`、文書形式のオプションを持つ`$unwind`、文書化した式サブセットを持つ`$set`/`$addFields`、`$project`、`$sort`、`$skip`、`$limit`を超える集約ステージは未実装である。
-- グループ出力の`$match`、`$count`、`$distinct`、有界なスカラー式を使う`$sortByCount`を超える集約ステージは未実装である。
-  有界な数値式による`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を使う`$group`、`$bucket`、または結果が有限な数値になる有界なスカラー式を使う`$bucketAuto`を超えるアキュムレータも未実装である。
+- [集約モデル](aggregation.md)と[集約アキュムレータ](aggregation-accumulators.md)で定めた有界な契約を超える集約ステージおよびアキュムレータ式。
 - カタログルートをまたぐ参照は未対応である。
 - XBF出力とtxBASEロックを無視する読み手に対する、厳密な複数ファイル読み取りアトミック性。
 - R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針、永続的な再試行キュー。
@@ -275,8 +270,7 @@ Rustの`Catalog::begin_serializable`は、同じカタログjournal経路を使�
 
 ### 候補範囲
 
-- 入力`$match`、オプション形式の`$unwind`、`$set`/`$addFields`の式サブセット、`$project`、`$sort`、`$skip`、`$limit`の各ステージと、`$group`、`$bucket`、結果が有限な数値になる有界なスカラー式を使う`$bucketAuto`、有界なスカラー式を使う`$sortByCount`ステージを超える追加の集約ステージ。
-  現在の`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`アキュムレータ式を超える追加のアキュムレータ式も対象とする。
+- [集約モデル](aggregation.md)と[集約アキュムレータ](aggregation-accumulators.md)に定めた有界契約を超える集約ステージおよびアキュムレータ式。
 - 有界`$expr`論理木と数値`$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod`オペランドを超える完全な式評価。
 - ファイルシステム、キャッシュ、ページ再利用を考慮したmerge計画と、nullおよび欠損フィールドのより広い意味論。
 
@@ -312,7 +306,8 @@ Rustの`Catalog::begin_serializable`は、同じカタログjournal経路を使�
 
 その後に、終端`$count`または`$distinct`を1つ許可します。
 
-`$group`または`$bucket`は、`$count`、有界な数値式による`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`、グループ出力に対する有界な`$match`と`$project`、最後のsort、skip、limitを受け付けます。
+`$group`と`$bucket`は、[集約アキュムレータ](aggregation-accumulators.md)に記載した同じアキュムレータ形式を使います。
+グループ出力には有界な`$match`、`$project`、最後のsort、skip、limitを置けます。
 
 `$bucketAuto`は、共有する有界なスカラー式を入力レコードごとに評価し、有限な数値結果をソートして、指定した正のバケット数以下の異なる値の範囲へ分割します。
 
@@ -323,11 +318,11 @@ Rustの`Catalog::begin_serializable`は、同じカタログjournal経路を使�
 
 既存の包含と除外のプロジェクション契約を再利用します。
 
-入力用の`$set`と`$addFields`は同じ意味を持つ別名であり、既存フィールドを保ったまま、フィールド参照、スカラーリテラル、`$literal`、2オペランドの`$ifNull`、`$cond`、`$concat`、`$toLower`、`$toUpper`、有界な数値式サブセットからトップレベルフィールドを計算します。
+入力用の`$set`と`$addFields`は同じ意味を持つ別名であり、既存フィールドを保ったまま、フィールド参照、スカラーリテラル、配列式、`$literal`、2オペランドの`$ifNull`、`$cond`、`$concat`、`$toLower`、`$toUpper`、有界な数値式サブセットからトップレベルフィールドを計算します。
 
 同じステージのすべての式はステージ入力スナップショットを参照し、欠損、型不一致、または数値以外の結果は`null`になります。
 
-ドット区切りの出力フィールド名と、ラップしていない配列リテラルは未サポートです。
+ドット区切りの出力フィールド名は未サポートです。
 
 プランナー説明の境界は`explain_query_at`、`explain_query_details_at`、`QUERY /explain`で実装済みです。
 

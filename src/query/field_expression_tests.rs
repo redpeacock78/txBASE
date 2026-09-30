@@ -113,6 +113,16 @@ fn compares_string_scalar_expression_results() {
 }
 
 #[test]
+fn compares_array_scalar_expression_results() {
+    let values = json!({"VALUE": 1});
+    let filter = json!({
+        "$expr": {"$eq": [["$VALUE", "$MISSING"], [1, null]]}
+    });
+
+    assert!(matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap());
+}
+
+#[test]
 fn string_scalar_expressions_support_null_fallback_and_literal_values() {
     let values = json!({"DISPLAY": "unknown!"});
     let filter = json!({

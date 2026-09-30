@@ -18,6 +18,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | Query document, predicates, cursors, and streams | [Query model](query-model.md) | Current subset |
 | Runtime-neutral asynchronous query streaming | [Asynchronous query streaming](async-streaming.md), [Worker query stream adapter](worker-query-stream.md), and [WASI query streaming](wasi-query-stream.md) | Current polling boundary, native threaded adapter, Worker-compatible Web Streams adapter, runtime-neutral asynchronous-storage adapter for current or retained XBF generations, and WASI 0.3 CLI query-stream component for DBF and current or retained XBF snapshots through a writable single-writer synchronous filesystem adapter; provider-backed WASI storage, non-blocking I/O, and production host lifecycle remain future |
 | Bounded aggregation contract | [Aggregation model](aggregation.md) | Current subset |
+| Bounded aggregation accumulators | [Aggregation accumulators](aggregation-accumulators.md) | Current subset and MongoDB references |
 | Bounded local join contract | [Join model](joins.md) and [Catalog](catalog.md) | Current boundary |
 | MongoDB predicates and query planning | [Query planning](query-planning.md) | Current subset plus reference |
 | Mutation operators and atomicity | [Mutation model](mutation-model.md) | Current subset plus future boundary |

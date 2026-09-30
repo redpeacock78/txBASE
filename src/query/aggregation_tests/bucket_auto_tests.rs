@@ -76,6 +76,36 @@ fn bucket_auto_preserves_input_order_for_accumulators_and_output_skip() {
 }
 
 #[test]
+fn bucket_auto_output_supports_n_value_accumulators() {
+    let records = [
+        record(1, json!({"AGE": 1, "VALUE": 8})),
+        record(2, json!({"AGE": 2, "VALUE": 7})),
+        record(3, json!({"AGE": 3, "VALUE": 6})),
+        record(4, json!({"AGE": 4, "VALUE": 5})),
+    ];
+
+    assert_eq!(
+        execute(
+            &records,
+            &[json!({
+                "$bucketAuto": {
+                    "groupBy": "$AGE",
+                    "buckets": 2,
+                    "output": {
+                        "maximum": {"$maxN": {"input": "$VALUE", "n": 2}}
+                    }
+                }
+            })],
+        )
+        .unwrap(),
+        vec![
+            json!({"_id": {"min": 1, "max": 3}, "maximum": [8, 7]}),
+            json!({"_id": {"min": 3, "max": 4}, "maximum": [6, 5]})
+        ]
+    );
+}
+
+#[test]
 fn bucket_auto_emits_fewer_buckets_for_duplicate_values() {
     let records = [
         record(1, json!({"VALUE": 1})),

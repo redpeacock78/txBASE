@@ -72,7 +72,7 @@ pub(super) fn execute_group<'a>(
     if spec.key_expression.is_none() {
         groups.insert(
             String::from("null"),
-            accumulators::new_group(Value::Null, spec),
+            accumulators::new_group(Value::Null, spec, "$group")?,
         );
     }
 
@@ -91,12 +91,15 @@ pub(super) fn execute_group<'a>(
                     "aggregate group count exceeds {MAX_GROUPS}"
                 )));
             }
-            groups.insert(encoded_key.clone(), accumulators::new_group(key, spec));
+            groups.insert(
+                encoded_key.clone(),
+                accumulators::new_group(key, spec, "$group")?,
+            );
         }
         let group = groups
             .get_mut(&encoded_key)
             .expect("group was inserted or already present");
-        accumulators::accumulate_record(group, record, spec, &mut collected_values)?;
+        accumulators::accumulate_record(group, record, spec, &mut collected_values, "$group")?;
     }
 
     let mut output = groups
@@ -123,12 +126,22 @@ fn execute_bucket<'a>(
     for record in records {
         let (group_index, key) = bucket_assignment(record, bucket)?;
         if groups[group_index].is_none() {
-            groups[group_index] = Some(accumulators::new_group(key, &bucket.output));
+            groups[group_index] = Some(accumulators::new_group(
+                key,
+                &bucket.output,
+                "$bucket.output",
+            )?);
         }
         let group = groups[group_index]
             .as_mut()
             .expect("bucket group was inserted or already present");
-        accumulators::accumulate_record(group, record, &bucket.output, &mut collected_values)?;
+        accumulators::accumulate_record(
+            group,
+            record,
+            &bucket.output,
+            &mut collected_values,
+            "$bucket.output",
+        )?;
     }
 
     let output = groups

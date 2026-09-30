@@ -98,8 +98,11 @@ pub(super) fn execute<'a>(
 
     let mut groups = ranges
         .iter()
-        .map(|range| Some(accumulators::new_group(range.key.clone(), &bucket.output)))
-        .collect::<Vec<_>>();
+        .map(|range| {
+            accumulators::new_group(range.key.clone(), &bucket.output, "$bucketAuto.output")
+                .map(Some)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let mut collected_values = 0;
     for (record, number) in input_records {
         let bucket_index = ranges
@@ -109,7 +112,13 @@ pub(super) fn execute<'a>(
         let group = groups[bucket_index]
             .as_mut()
             .expect("bucketAuto group was initialized");
-        accumulators::accumulate_record(group, record, &bucket.output, &mut collected_values)?;
+        accumulators::accumulate_record(
+            group,
+            record,
+            &bucket.output,
+            &mut collected_values,
+            "$bucketAuto.output",
+        )?;
     }
 
     let output = groups

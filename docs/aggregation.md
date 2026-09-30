@@ -43,7 +43,7 @@ Input `$skip` and `$limit` discard or truncate records before the terminal stage
 
 `$set` and `$addFields` are aliases for one bounded input stage that preserves existing fields and computes named top-level fields before later stages.
 
-Each computed field accepts a scalar literal, a field reference including a dotted path, `$literal`, `$ifNull` with exactly two operands, `$cond`, `$concat` with at least two string expressions, `$toLower`, `$toUpper`, or the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions.
+Each computed field accepts a scalar literal, a field reference including a dotted path, an array of supported expressions, `$literal`, `$ifNull` with exactly two operands, `$cond`, `$concat` with at least two string expressions, `$toLower`, `$toUpper`, or the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions.
 
 All expressions in one stage read the record as it entered that stage, so one computed field cannot depend on another field computed in the same stage.
 
@@ -59,7 +59,7 @@ Each branch uses the shared scalar-expression subset.
 
 The shared scalar-expression evaluator is used by `$set`/`$addFields` and `$expr`. Computed string results are capped at 1 MiB.
 
-An existing top-level field is overwritten, while dotted output field names and array literals outside `$literal` remain unsupported.
+An existing top-level field is overwritten, while dotted output field names remain unsupported.
 
 An input `$project` reuses the query projection rules and may appear once in the input phase, in the listed order with the other input stages.
 
@@ -130,6 +130,7 @@ Fewer buckets are emitted when the input contains fewer distinct numeric values 
 When `output` is omitted, `$bucketAuto` emits a `count` accumulator.
 
 When `output` is present, it uses the same bounded accumulator forms as `$group` and `$bucket`.
+See [Aggregation accumulators](aggregation-accumulators.md) for their inputs, ordering, and value limits.
 
 The stage materializes at most 10,000 numeric input values, does not spill to disk, and rejects the MongoDB `granularity` option until a txBASE-owned boundary-series contract exists.
 
@@ -141,7 +142,7 @@ The stage materializes at most 10,000 numeric input values, does not spill to di
 }
 ```
 
-The expression can be a field reference, scalar literal, `$literal`, `$ifNull`, `$cond`, `$concat`, `$toLower`, `$toUpper`, or the bounded numeric expression subset used by `$expr` and `$set`.
+The expression can be a field reference, scalar literal, array of supported expressions, `$literal`, `$ifNull`, `$cond`, `$concat`, `$toLower`, `$toUpper`, or the bounded numeric expression subset used by `$expr` and `$set`.
 
 It is evaluated for each input record.
 Missing or null expression results form the `null` group.
@@ -169,7 +170,9 @@ When `output` is omitted, `$bucket` emits a `count` accumulator.
 
 When `output` is present, it uses the same bounded accumulator forms as `$group` except that `_id` is assigned by the bucket stage.
 
-The stage supports at most 10,000 ranges, does not spill to disk, and shares the 10,000-value materialization bound with `$push` and `$addToSet`.
+See [Aggregation accumulators](aggregation-accumulators.md) for their inputs, ordering, and value limits.
+
+The stage supports at most 10,000 ranges and does not spill to disk.
 
 Group, bucket, bucket-auto, or `$sortByCount` output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, at most one `$skip`, and at most one final `$limit` stage.
 
@@ -177,11 +180,7 @@ Group, bucket, bucket-auto, or `$sortByCount` output may have zero or more `$mat
 
 The expression is evaluated once per input record; a missing or null result is grouped as `null`.
 
-Supported accumulators are `$count: {}`, numeric `$sum`, `$min: "$FIELD"`, `$max: "$FIELD"`, `$first: "$FIELD"`, `$last: "$FIELD"`, `$push: "$FIELD"`, and `$addToSet: "$FIELD"`, plus numeric `$avg`, `$stdDevPop`, and `$stdDevSamp` for finite JSON numbers.
-
-Numeric `$sum` and `$avg` operands accept a field reference, numeric literal, unary `$abs`, or binary `$add`, `$subtract`, `$multiply`, `$divide`, or `$mod` expression.
-
-The bounded numeric expression evaluator is shared with `$expr`; missing or nonnumeric resolved values are ignored by `$sum` and `$avg`.
+The supported accumulator operators and their value semantics are documented in [Aggregation accumulators](aggregation-accumulators.md).
 
 The filter runs before grouping or bucketing.
 
@@ -198,50 +197,6 @@ Projection runs before the following `$sort`, so sorting a projected-away field 
 A missing group field becomes `null`.
 
 Missing and explicit `null` values therefore share a group.
-
-Missing, `null`, and nonnumeric `$sum` inputs contribute zero.
-
-A numeric `$sum` literal contributes once for each input record.
-
-All-integral `$sum` inputs preserve an integer JSON result.
-
-If any fractional input occurs, `$sum` returns a finite JSON floating-point result.
-
-An accumulated `$sum` that is not finite or cannot be represented as JSON is rejected.
-
-Missing, `null`, and nonnumeric `$avg` inputs are ignored.
-
-An all-missing or all-nonnumeric group returns `null`, and a non-finite accumulated result is rejected.
-
-`$stdDevPop` returns the population standard deviation, and `$stdDevSamp` returns the sample standard deviation.
-
-Both standard-deviation accumulators accept the same bounded numeric expressions as `$sum` and `$avg`.
-
-Missing, `null`, and nonnumeric standard-deviation inputs are ignored.
-
-An all-missing or all-nonnumeric group returns `null` for either accumulator.
-
-`$stdDevPop` returns `0` for one numeric input, while `$stdDevSamp` returns `null` until two numeric inputs exist.
-
-Both accumulators use constant memory per group, return finite JSON floating-point values, and reject a non-finite intermediate or result.
-
-Missing and `null` `$min` and `$max` inputs are ignored.
-
-An all-missing or all-null group returns `null` for that accumulator.
-
-Non-null `$min` and `$max` values must be comparable under the existing JSON ordering rules.
-
-Incomparable values are rejected.
-
-`$first` and `$last` use input physical record order within each group.
-
-They return the first or last field value, including explicit `null`; a missing field is returned as `null`.
-
-`$push` returns every field value in input physical record order; `$addToSet` returns each JSON value once in its first-seen order.
-
-Missing fields are appended as `null` by both accumulators.
-
-The combined materialized value count for all `$push` and `$addToSet` accumulators is capped at 10,000.
 
 The executor rejects more than 10,000 groups, `$sortByCount` groups, bucket ranges, or `$bucketAuto` input values and rejects aggregation combined with top-level sort, projection, skip, limit, or cursor pagination.
 
@@ -292,16 +247,13 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 ## Related documents
 
 - [Query model](query-model.md)
+- [Aggregation accumulators](aggregation-accumulators.md)
 - [Query planning and external vocabulary](query-planning.md)
 - [Quality contract matrix](quality-matrix.md)
 
 ## Primary references
 
 - [MongoDB `$group` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
-- [MongoDB `$sum` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sum/)
-- [MongoDB `$avg` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
-- [MongoDB `$stdDevPop` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevpop/)
-- [MongoDB `$stdDevSamp` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB `$count` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB `$bucket` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucket/)
 - [MongoDB `$bucketAuto` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucketAuto/)

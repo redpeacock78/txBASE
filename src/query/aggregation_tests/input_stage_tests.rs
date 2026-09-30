@@ -254,6 +254,31 @@ fn add_fields_alias_sets_input_fields() {
 }
 
 #[test]
+fn sets_array_scalar_expressions() {
+    let record = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"VALUE": 1}).as_object().unwrap().clone(),
+    };
+    let records = [&record];
+    let stages = vec![
+        json!({"$set": {"PAIR": ["$VALUE", "$MISSING"]}})
+            .as_object()
+            .unwrap()
+            .clone(),
+        json!({"$group": {"_id": null, "pair": {"$first": "$PAIR"}}})
+            .as_object()
+            .unwrap()
+            .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({"_id": null, "pair": [1, null]})]
+    );
+}
+
+#[test]
 fn sets_string_scalar_expressions_before_matching_and_grouping() {
     let first = DbfRecord {
         number: 1,

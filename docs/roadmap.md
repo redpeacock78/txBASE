@@ -46,7 +46,11 @@ The repository currently provides:
 - An opt-in coarse-grained serializable `DbfTransaction::begin_serializable` boundary that holds the exclusive table lock from begin through commit or rollback.
 - An opt-in coarse-grained serializable `Catalog::begin_serializable` boundary that holds the catalog write lock and every discovered table lock from begin through commit, rollback, or drop, then publishes private table copies through one catalog journal.
 - Strong table and catalog representation ETags on successful reads, GET/HEAD If-None-Match validation, mutation-side If-None-Match validation for single-table, named-table, and catalog-wide transaction routes, and optional If-Match protection for single-table mutations, named-table mutations, and catalog-wide transactions.
-- A bounded aggregation pipeline with zero or more input `$match` and top-level-array `$unwind` stages, at most one input `$set` or `$addFields` stage in total, at most one input `$project`, `$sort`, `$skip`, and `$limit` stage each, and one terminal `$count` or `$distinct` stage, one `$group` or `$bucket` stage using `$count`, bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, one bounded scalar-expression `$bucketAuto` stage whose result is finite numeric, or one bounded scalar-expression `$sortByCount` stage, followed by bounded group-output `$match` stages, one optional `$project`, and final `$sort`, `$skip`, and `$limit` stages. Input stages execute in listed order. Input `$set` and `$addFields` preserve existing fields and compute top-level fields from the shared bounded field, literal, null-coalescing, conditional, string, and numeric expressions against the stage-input snapshot; computed string results are capped at 1 MiB. Input `$project` reuses the 0/1 query projection contract and materializes fields before later stages. `$unwind` supports the top-level document options `includeArrayIndex` and `preserveNullAndEmptyArrays`, preserves input and array order, rejects non-array values, and caps all emitted records at 10,000. `$bucket` uses the shared scalar-expression subset for numeric range assignment, finite ascending numeric boundaries, inclusive lower and exclusive upper ranges, an optional default bucket, bounded accumulators, and omits empty buckets. `$bucketAuto` derives at most 10,000 numeric input values into approximately even non-empty ranges, rejects missing or nonnumeric expression results, and rejects `granularity`. `$sortByCount` emits `_id` and `count` in descending count order and shares the 10,000-group bound.
+- Bounded aggregation uses ordered input stages and one terminal stage.
+  - Input stages: `$match`, `$unwind`, `$set`/`$addFields`, `$project`, `$sort`, `$skip`, and `$limit`.
+  - Terminal stages: `$count`, `$distinct`, `$group`, `$bucket`, and `$bucketAuto`; `$sortByCount` is also supported.
+  - Group-output stages: bounded `$match`, optional `$project`, `$sort`, `$skip`, and `$limit`.
+  - [Aggregation model](aggregation.md) and [Aggregation accumulators](aggregation-accumulators.md) define expressions, ordering, and resource limits.
 - A bounded local `inner`, `left`, `right`, `full`, `semi`, or `anti` equality join plus a bounded `cross` join over one or more catalog tables with qualified filtering and projection.
 - Direct and chained equality-join cost models that compare hash and index-nested-loop paths with exact pre-filter key-cardinality estimates, materialized row-width work, logical input page reads, and logical index-sidecar page reads, plus ordered-merge paths for direct joins and eligible chained stages.
 - A catalog HTTP server exposing table schemas, named-table records and plans, independent named-table mutations, the bounded local join, and `QUERY /join/stream` as joined-row NDJSON.
@@ -91,7 +95,7 @@ The baseline intentionally does not include the following:
 - Filesystem- and cache-aware merge join costing.
 - Production WASI host lifecycle semantics, provider-backed object-store adapters, and genuinely non-blocking storage I/O beyond the current synchronous filesystem adapter.
 - Predicate-level locking and distributed serializable coordination.
-- Aggregation stages or accumulators beyond bounded input `$match`, `$unwind` with its documented top-level options, `$set`/`$addFields` with its documented expression subset, `$project`, `$sort`, `$skip`, and `$limit`, group-output `$match`, `$count`, `$distinct`, `$group`, `$bucket`, bounded scalar-expression `$bucketAuto` with finite numeric results, and bounded scalar-expression `$sortByCount` with bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`.
+- Aggregation stages and accumulator expressions outside the current bounded contracts in [Aggregation model](aggregation.md) and [Aggregation accumulators](aggregation-accumulators.md).
 - References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
@@ -231,7 +235,7 @@ The current record scan remains the reference execution path while the query mod
 
 ### Candidate scope
 
-- Additional aggregation stages and accumulator expressions beyond the current bounded input `$match`, `$unwind` option form, `$set`/`$addFields` expression subset, `$project`, `$sort`, `$skip`, and `$limit` stages and the documented `$group`, `$bucket`, bounded scalar-expression `$bucketAuto` with finite numeric results, and bounded scalar-expression `$sortByCount` stages and accumulators.
+- Additional aggregation stages and accumulator expressions beyond the bounded contracts in [Aggregation model](aggregation.md) and [Aggregation accumulators](aggregation-accumulators.md).
 - Full expression evaluation beyond the bounded `$expr` boolean-tree form and its numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` operands.
 - Filesystem-, cache-, and page-reuse-aware merge planning, plus broader null and missing-field semantics.
 
@@ -258,7 +262,7 @@ The current aggregation slice permits zero or more input `$match` and top-level-
 
 The input `$unwind` document form supports `includeArrayIndex` and `preserveNullAndEmptyArrays` for top-level fields while retaining strict rejection of non-array non-null values.
 
-It then permits one terminal `$count` or `$distinct` stage, one `$group` or `$bucket` with `$count`, bounded numeric-expression `$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp`, `$min`, `$max`, `$first`, `$last`, `$push`, and `$addToSet`, one bounded scalar-expression `$bucketAuto` stage whose result is finite numeric, or one bounded scalar-expression `$sortByCount` stage, followed by bounded group-output `$match` stages and a bounded `$project` before the final sort, skip, and limit.
+It then permits one terminal `$count`, `$distinct`, `$group`, `$bucket`, `$bucketAuto`, or `$sortByCount` stage, followed by bounded group-output stages. See [Aggregation model](aggregation.md) and [Aggregation accumulators](aggregation-accumulators.md) for the supported expressions, accumulators, and limits.
 
 Input stages execute in listed order. `$unwind` preserves input and array order, drops missing, null, or empty-array fields by default, preserves one record for each of them when requested, rejects non-array values, and caps all emitted records at 10,000.
 
@@ -266,9 +270,9 @@ Input stages execute in listed order. `$unwind` preserves input and array order,
 
 It reuses the existing include/exclude projection contract.
 
-The input `$set` and `$addFields` aliases preserve existing fields and compute top-level fields from field references, scalar literals, `$literal`, two-operand `$ifNull`, `$cond`, `$concat`, `$toLower`, `$toUpper`, and the bounded numeric expression subset.
+The input `$set` and `$addFields` aliases preserve existing fields and compute top-level fields from field references, scalar literals, array expressions, `$literal`, two-operand `$ifNull`, `$cond`, `$concat`, `$toLower`, `$toUpper`, and the bounded numeric expression subset.
 
-All expressions in one stage read the stage-input snapshot, and missing, incompatible, or nonnumeric results become `null`; dotted output field names and unwrapped array literals remain unsupported.
+All expressions in one stage read the stage-input snapshot, and missing, incompatible, or nonnumeric results become `null`; dotted output field names remain unsupported.
 
 The planner explanation boundary is implemented by `explain_query_at`, `explain_query_details_at`, and `QUERY /explain`.
 The public explanation exposes deterministic row-equivalent scan and candidate-work costs when a valid index sidecar is available.

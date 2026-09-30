@@ -101,6 +101,37 @@ fn bucket_evaluates_a_shared_scalar_expression() {
 }
 
 #[test]
+fn bucket_output_supports_n_value_accumulators() {
+    let records = [
+        record(1, json!({"AGE": 7, "VALUE": 3})),
+        record(2, json!({"AGE": 18, "VALUE": 1})),
+        record(3, json!({"AGE": 29, "VALUE": 2})),
+    ];
+    let stages = vec![
+        json!({
+            "$bucket": {
+                "groupBy": "$AGE",
+                "boundaries": [0, 20, 40],
+                "output": {
+                    "minimum": {"$minN": {"input": "$VALUE", "n": 2}}
+                }
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records.iter().collect::<Vec<_>>(), &stages).unwrap(),
+        vec![
+            json!({"_id": 0, "minimum": [1, 3]}),
+            json!({"_id": 20, "minimum": [2]})
+        ]
+    );
+}
+
+#[test]
 fn rejects_invalid_bucket_boundaries_and_unmatched_values() {
     let records = [record(1, json!({"AGE": 7}))];
     let invalid_stages = [

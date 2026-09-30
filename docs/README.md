@@ -22,6 +22,7 @@ Research and future work do not imply an implemented feature.
 - [Query model](query-model.md)
 - [Asynchronous query streaming](async-streaming.md)
 - [Aggregation model](aggregation.md)
+- [Aggregation accumulators](aggregation-accumulators.md)
 - [Join model](joins.md)
 - [Query planning and external vocabulary](query-planning.md)
 - [Mutation model](mutation-model.md)

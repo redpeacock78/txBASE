@@ -43,7 +43,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 `$set`と`$addFields`は同じ意味を持つ別名であり、既存フィールドを保ったまま、後続ステージの前に名前付きトップレベルフィールドを計算する有界な入力ステージです。
 
-計算フィールドは、スカラーリテラル、ドット区切りを含むフィールド参照、`$literal`、オペランドをちょうど2つ持つ`$ifNull`、`$cond`、2つ以上の文字列式を持つ`$concat`、`$toLower`、`$toUpper`、または有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`式を受け付けます。
+計算フィールドは、スカラーリテラル、ドット区切りを含むフィールド参照、対応する式を要素に持つ配列、`$literal`、オペランドをちょうど2つ持つ`$ifNull`、`$cond`、2つ以上の文字列式を持つ`$concat`、`$toLower`、`$toUpper`、または有界な数値`$abs`、`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`式を受け付けます。
 
 同じステージのすべての式はステージ入力時点のレコードを参照するため、同じステージで計算したフィールドを別の計算フィールドから参照できません。
 
@@ -61,7 +61,7 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 共有スカラー式評価器を`$set`/`$addFields`と`$expr`で使います。計算した文字列の結果は1 MiBまでです。
 
-既存のトップレベルフィールドは上書きしますが、ドット区切りの出力フィールド名と`$literal`の外側にある配列リテラルは未サポートです。
+既存のトップレベルフィールドは上書きしますが、ドット区切りの出力フィールド名は未サポートです。
 
 入力用の`$project`はクエリのプロジェクション規則を再利用し、入力フェーズで1回だけ、他の入力ステージと記載順に組み合わせて置けます。
 
@@ -142,6 +142,8 @@ txBASEは、フィルターに使う同じJSONクエリ文書上の有界パイ�
 
 `output`を指定した場合は、`$group`および`$bucket`と同じ有界なアキュムレータ形式を使います。
 
+入力、順序、値の上限は[集約アキュムレータ](aggregation-accumulators.md)に記載しています。
+
 このステージが具体化する数値入力は10,000件までであり、ディスクへ退避しません。
 
 MongoDBの`granularity`オプションは、txBASE独自の境界系列の契約を定義するまで拒否します。
@@ -154,7 +156,7 @@ MongoDBの`granularity`オプションは、txBASE独自の境界系列の契約
 }
 ```
 
-式には、フィールド参照、スカラーリテラル、`$literal`、`$ifNull`、`$cond`、`$concat`、`$toLower`、`$toUpper`、または`$expr`と`$set`で使う有界な数値式を指定できます。
+式には、フィールド参照、スカラーリテラル、対応する式を要素に持つ配列、`$literal`、`$ifNull`、`$cond`、`$concat`、`$toLower`、`$toUpper`、または`$expr`と`$set`で使う有界な数値式を指定できます。
 
 式は各入力レコードに対して評価します。
 
@@ -183,7 +185,9 @@ MongoDBの`granularity`オプションは、txBASE独自の境界系列の契約
 
 `output`を指定した場合は、`_id`をバケットステージが設定する点を除き、`$group`と同じ有界なアキュムレータ形式を使います。
 
-範囲は10,000個までであり、ディスクへ退避せず、`$push`と`$addToSet`に対する10,000値の具体化上限を共有します。
+入力、順序、値の上限は[集約アキュムレータ](aggregation-accumulators.md)に記載しています。
+
+範囲は10,000個までであり、ディスクへ退避しません。
 
 グループ、バケット、`$bucketAuto`、または`$sortByCount`の出力には0個以上の`$match`を置けます。
 その後に任意の`$project`を1つ、最後の`$sort`、`$skip`、`$limit`をそれぞれ最大1つ置けます。
@@ -192,11 +196,7 @@ MongoDBの`granularity`オプションは、txBASE独自の境界系列の契約
 
 式は入力レコードごとに1回評価し、結果が欠損またはnullの場合は`null`としてグループ化します。
 
-サポートするアキュムレータは`$count: {}`、数値の`$sum`、`$min: "$FIELD"`、`$max: "$FIELD"`、`$first: "$FIELD"`、`$last: "$FIELD"`、`$push: "$FIELD"`、`$addToSet: "$FIELD"`、および有限なJSON数値に対する数値の`$avg`、`$stdDevPop`、`$stdDevSamp`です。
-
-数値の`$sum`と`$avg`のオペランドは、フィールド参照、数値リテラル、単項の`$abs`、または二項の`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`式を受け付けます。
-
-有界な数値式の評価器は`$expr`と共有し、解決した値が欠損または数値以外の場合は`$sum`と`$avg`で無視します。
+サポートするアキュムレータと値の規則は[集約アキュムレータ](aggregation-accumulators.md)に記載しています。
 
 フィルターはグループ化またはバケット化より前に実行します。
 
@@ -213,50 +213,6 @@ MongoDBの`granularity`オプションは、txBASE独自の境界系列の契約
 欠損したグループフィールドは`null`になります。
 
 そのため欠損値と明示的な`null`は同じグループになります。
-
-欠損、`null`、数値以外の`$sum`入力は0として扱います。
-
-数値の`$sum`リテラルは入力レコードごとに一度加算します。
-
-`$sum`の数値入力がすべて整数なら、結果もJSONの整数になります。
-
-小数を1つでも含む場合、`$sum`は有限なJSON浮動小数点数を返します。
-
-`$sum`の累積結果が有限でない場合、またはJSONで表現できない場合は拒否します。
-
-欠損、`null`、数値以外の`$avg`入力は無視します。
-
-すべてが欠損または数値以外のグループは`null`を返し、非有限の累積結果は拒否します。
-
-`$stdDevPop`は母標準偏差を返し、`$stdDevSamp`は標本標準偏差を返します。
-
-どちらの標準偏差アキュムレータも、`$sum`および`$avg`と同じ有界な数値式を受け付けます。
-
-標準偏差に対する欠損、`null`、数値以外の入力は無視します。
-
-すべてが欠損または数値以外のグループでは、どちらのアキュムレータも`null`を返します。
-
-数値入力が1つの場合、`$stdDevPop`は`0`を返し、`$stdDevSamp`は数値入力が2つになるまで`null`を返します。
-
-どちらのアキュムレータもグループごとに一定量のメモリだけを使い、有限なJSON浮動小数点数を返し、中間値または結果が非有限の場合は拒否します。
-
-欠損と`null`の`$min`および`$max`入力は無視します。
-
-すべてが欠損または`null`のグループでは、そのアキュムレータは`null`になります。
-
-非`null`の`$min`および`$max`値は、既存のJSON順序規則で比較できなければなりません。
-
-比較できない値は拒否します。
-
-`$first`と`$last`は、各グループ内の入力物理レコード順を使います。
-
-明示的な`null`を含めて最初または最後のフィールド値を返し、欠損フィールドは`null`として返します。
-
-`$push`は入力物理レコード順のすべてのフィールド値を返し、`$addToSet`はJSON値ごとに一度だけ初出順で返します。
-
-どちらのアキュムレータも、存在しないフィールドを`null`として追加します。
-
-すべての`$push`と`$addToSet`がマテリアライズする値の合計は10,000件に制限されます。
 
 10,000を超えるグループ、`$sortByCount`のグループ、バケット範囲、または`$bucketAuto`の入力値は拒否し、集約とトップレベルの`sort`、`projection`、`skip`、`limit`、cursorページングの併用も拒否します。
 
@@ -309,16 +265,13 @@ txBASEはMongoDBの完全なパイプライン互換性を主張せず、その�
 ## 関連文書
 
 - [クエリモデル](query-model.md)
+- [集約アキュムレータ](aggregation-accumulators.md)
 - [クエリ計画と外部語彙](query-planning.md)
 - [品質契約マトリクス](quality-matrix.md)
 
 ## 主な参照先
 
 - [MongoDB の`$group`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
-- [MongoDB の`$sum`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sum/)
-- [MongoDB の`$avg`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
-- [MongoDB の`$stdDevPop`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevpop/)
-- [MongoDB の`$stdDevSamp`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB の`$count`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/count/)
 - [MongoDB の`$bucket`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucket/)
 - [MongoDB の`$bucketAuto`集約ステージ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/bucketAuto/)

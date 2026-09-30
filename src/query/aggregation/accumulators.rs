@@ -18,6 +18,7 @@ enum AccumulatorState {
     },
     Min(Option<Value>),
     Max(Option<Value>),
+    NValues(super::n_values::State),
     First(Option<Value>),
     Last(Option<Value>),
     Values(Vec<Value>),
@@ -29,13 +30,16 @@ pub(super) struct GroupState {
     accumulators: Vec<AccumulatorState>,
 }
 
-pub(super) fn new_group(key: Value, spec: &aggregation_plan::GroupSpec) -> GroupState {
-    GroupState {
-        key,
-        accumulators: spec
-            .accumulators
-            .iter()
-            .map(|accumulator| match &accumulator.kind {
+pub(super) fn new_group(
+    key: Value,
+    spec: &aggregation_plan::GroupSpec,
+    path_prefix: &str,
+) -> Result<GroupState, QueryError> {
+    let accumulators = spec
+        .accumulators
+        .iter()
+        .map(|accumulator| {
+            Ok(match &accumulator.kind {
                 aggregation_plan::AccumulatorKind::Count => AccumulatorState::Count(0),
                 aggregation_plan::AccumulatorKind::Average(_) => AccumulatorState::Average {
                     total: 0.0,
@@ -51,6 +55,22 @@ pub(super) fn new_group(key: Value, spec: &aggregation_plan::GroupSpec) -> Group
                 },
                 aggregation_plan::AccumulatorKind::Min(_) => AccumulatorState::Min(None),
                 aggregation_plan::AccumulatorKind::Max(_) => AccumulatorState::Max(None),
+                aggregation_plan::AccumulatorKind::MinN { n, .. } => {
+                    AccumulatorState::NValues(super::n_values::State::new(
+                        &key,
+                        n,
+                        true,
+                        &format!("{path_prefix}.{}.$minN.n", accumulator.name),
+                    )?)
+                }
+                aggregation_plan::AccumulatorKind::MaxN { n, .. } => {
+                    AccumulatorState::NValues(super::n_values::State::new(
+                        &key,
+                        n,
+                        false,
+                        &format!("{path_prefix}.{}.$maxN.n", accumulator.name),
+                    )?)
+                }
                 aggregation_plan::AccumulatorKind::First(_) => AccumulatorState::First(None),
                 aggregation_plan::AccumulatorKind::Last(_) => AccumulatorState::Last(None),
                 aggregation_plan::AccumulatorKind::Push(_)
@@ -58,8 +78,9 @@ pub(super) fn new_group(key: Value, spec: &aggregation_plan::GroupSpec) -> Group
                     AccumulatorState::Values(Vec::new())
                 }
             })
-            .collect(),
-    }
+        })
+        .collect::<Result<Vec<_>, QueryError>>()?;
+    Ok(GroupState { key, accumulators })
 }
 
 pub(super) fn accumulate_record(
@@ -67,6 +88,7 @@ pub(super) fn accumulate_record(
     record: &DbfRecord,
     spec: &aggregation_plan::GroupSpec,
     collected_values: &mut usize,
+    path_prefix: &str,
 ) -> Result<(), QueryError> {
     for (state, accumulator) in group.accumulators.iter_mut().zip(&spec.accumulators) {
         match (state, &accumulator.kind) {
@@ -161,6 +183,25 @@ pub(super) fn accumulate_record(
             (AccumulatorState::Max(current), aggregation_plan::AccumulatorKind::Max(field)) => {
                 update_extreme(current, record, field, false)?;
             }
+            (
+                AccumulatorState::NValues(values),
+                kind @ (aggregation_plan::AccumulatorKind::MinN { .. }
+                | aggregation_plan::AccumulatorKind::MaxN { .. }),
+            ) => {
+                let (operator, input) = match kind {
+                    aggregation_plan::AccumulatorKind::MinN { input, .. } => ("$minN", input),
+                    aggregation_plan::AccumulatorKind::MaxN { input, .. } => ("$maxN", input),
+                    _ => unreachable!("matched N-value accumulator"),
+                };
+                let path = format!("{path_prefix}.{}.{operator}.input", accumulator.name);
+                if let Some(value) =
+                    crate::query::expression::evaluate_scalar(&record.values, input, &path)?
+                {
+                    if !value.is_null() {
+                        values.insert(value, collected_values)?;
+                    }
+                }
+            }
             (AccumulatorState::First(current), aggregation_plan::AccumulatorKind::First(field)) => {
                 if current.is_none() {
                     *current = Some(field_value(&record.values, field).unwrap_or(Value::Null));
@@ -249,6 +290,7 @@ pub(super) fn finish_group(
             | AccumulatorState::Max(value)
             | AccumulatorState::First(value)
             | AccumulatorState::Last(value) => value.unwrap_or(Value::Null),
+            AccumulatorState::NValues(values) => values.finish(),
             AccumulatorState::Values(values) => Value::Array(values),
         };
         output.insert(accumulator.name.clone(), value);
@@ -302,12 +344,7 @@ fn update_extreme(
         *current = Some(value);
         return Ok(());
     };
-    let ordering =
-        super::super::ordering::compare_values(current_value, &value).ok_or_else(|| {
-            QueryError::Invalid(format!(
-                "aggregate extreme field {field} contains incomparable values"
-            ))
-        })?;
+    let ordering = super::n_values::compare_values(current_value, &value);
     let replace = if choose_min {
         ordering.is_gt()
     } else {

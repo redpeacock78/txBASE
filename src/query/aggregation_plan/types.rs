@@ -76,6 +76,14 @@ pub enum AccumulatorKind {
     Sum(NumericExpression),
     Min(String),
     Max(String),
+    MinN {
+        input: ScalarExpression,
+        n: ScalarExpression,
+    },
+    MaxN {
+        input: ScalarExpression,
+        n: ScalarExpression,
+    },
     First(String),
     Last(String),
     Push(String),

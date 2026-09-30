@@ -1,5 +1,7 @@
 use super::{AccumulatorKind, AccumulatorSpec, GroupSpec, QueryError, field_reference};
-use crate::query::expression::{parse_numeric_operand, parse_scalar_operand};
+use crate::query::expression::{
+    parse_numeric_operand, parse_scalar_operand, uses_only_group_key_fields,
+};
 use serde_json::{Map, Value};
 
 pub(super) fn parse_group(definition: &Value) -> Result<GroupSpec, QueryError> {
@@ -52,6 +54,33 @@ pub(super) fn parse_accumulators(
             "$stdDevPop" => AccumulatorKind::StdDevPop(parse_numeric_operand(operand, &path)?),
             "$stdDevSamp" => AccumulatorKind::StdDevSamp(parse_numeric_operand(operand, &path)?),
             "$sum" => AccumulatorKind::Sum(parse_numeric_operand(operand, &path)?),
+            "$minN" | "$maxN" => {
+                let definition = operand.as_object().ok_or_else(|| {
+                    QueryError::Invalid(format!(
+                        "{path} must contain exactly input and n expressions"
+                    ))
+                })?;
+                if definition.len() != 2
+                    || !definition.contains_key("input")
+                    || !definition.contains_key("n")
+                {
+                    return Err(QueryError::Invalid(format!(
+                        "{path} must contain exactly input and n expressions"
+                    )));
+                }
+                let input = parse_scalar_operand(&definition["input"], &format!("{path}.input"))?;
+                let n = parse_scalar_operand(&definition["n"], &format!("{path}.n"))?;
+                if !uses_only_group_key_fields(&n) {
+                    return Err(QueryError::Invalid(format!(
+                        "{path}.n may reference only the group _id"
+                    )));
+                }
+                if operator == "$minN" {
+                    AccumulatorKind::MinN { input, n }
+                } else {
+                    AccumulatorKind::MaxN { input, n }
+                }
+            }
             "$min" | "$max" | "$first" | "$last" | "$push" | "$addToSet" => {
                 let field = field_reference(
                     operand.as_str().ok_or_else(|| {

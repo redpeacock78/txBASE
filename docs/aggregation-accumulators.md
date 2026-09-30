@@ -1,0 +1,54 @@
+# Aggregation accumulators
+
+`$group`, `$bucket`, and `$bucketAuto` use the same bounded accumulator set. See [Aggregation model](aggregation.md) for pipeline placement, stage order, and bucket behavior.
+
+## Numeric accumulators
+
+- `$count: {}` counts each record in the group.
+- `$sum` accepts a field reference, numeric literal, `$abs`, or binary `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions. Missing, `null`, and nonnumeric results contribute zero. Integral inputs retain an integer JSON result; any fractional input produces a finite floating-point result.
+- `$avg` accepts the same expressions. Missing, `null`, and nonnumeric results are ignored; a group with no numeric inputs returns `null`.
+- `$stdDevPop` and `$stdDevSamp` accept the same expressions and use constant memory per group. They ignore missing, `null`, and nonnumeric results. `$stdDevPop` returns zero for one numeric input; `$stdDevSamp` returns `null` until two inputs exist.
+
+Non-finite intermediate or result values are rejected. The numeric expression evaluator is shared with `$expr`.
+
+## Extrema and N-value selection
+
+`$min` and `$max` take a field reference. They ignore missing and `null` inputs and return `null` when a group has no other value.
+
+`$minN` and `$maxN` take an `input` expression and an `n` expression:
+
+```json
+{
+  "$minN": {
+    "input": ["$SCORE", "$PLAYER"],
+    "n": 2
+  }
+}
+```
+
+`input` is evaluated for each record. Missing and `null` results are ignored, and duplicate values remain in the output. Array expressions can combine field references and other supported scalar expressions.
+If every result is missing or `null`, the accumulator returns an empty array.
+
+`n` must evaluate to a positive integer no greater than 10,000. It may be constant or depend only on the output group's `_id`; txBASE evaluates it once when it creates the group. This bound is specific to txBASE.
+
+txBASE returns `$minN` values in ascending order and `$maxN` values in descending order; equal values retain input order. MongoDB does not promise a particular output order for these accumulators, so txBASE's deterministic ordering is an explicit difference.
+
+The comparison follows MongoDB's BSON type order for JSON values: `null`, numbers, strings, objects, arrays, then booleans. Strings use binary ordering; arrays compare lexicographically; objects compare member pairs by value type, field name, and value in txBASE's JSON map iteration order. BSON-only values and BSON object insertion order are outside the JSON data model.
+
+## Order and collection accumulators
+
+- `$first` and `$last` use input physical-record order. They return the selected field value, including explicit `null`; a missing field becomes `null`.
+- `$push` returns all field values in input physical-record order. `$addToSet` returns each structurally equal JSON value once, in first-seen order. Both append missing fields as `null`.
+
+The combined retained-value limit for `$push`, `$addToSet`, `$minN`, and `$maxN` is 10,000 values per aggregation result. Each `n` therefore cannot exceed 10,000.
+
+## Primary references
+
+- [MongoDB `$group` stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/)
+- [MongoDB `$sum` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/sum/)
+- [MongoDB `$avg` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
+- [MongoDB `$stdDevPop` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevpop/)
+- [MongoDB `$stdDevSamp` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
+- [MongoDB `$minN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/minn/)
+- [MongoDB `$maxN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/maxn/)
+- [MongoDB BSON comparison order](https://www.mongodb.com/docs/v8.0/reference/bson-type-comparison-order/)

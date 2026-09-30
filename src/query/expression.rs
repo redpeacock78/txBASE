@@ -10,6 +10,7 @@ const MAX_STRING_EXPRESSION_BYTES: usize = crate::MAX_JSON_INPUT_BYTES;
 pub enum ScalarExpression {
     Field(String),
     Literal(Value),
+    Array(Vec<ScalarExpression>),
     Numeric(NumericExpression),
     Cond {
         condition: Value,
@@ -87,12 +88,15 @@ pub(super) fn parse_scalar_operand(
         }
         return Ok(ScalarExpression::Field(reference.to_owned()));
     }
+    if let Some(values) = operand.as_array() {
+        return values
+            .iter()
+            .enumerate()
+            .map(|(index, value)| parse_scalar_operand(value, &format!("{path}[{index}]")))
+            .collect::<Result<Vec<_>, _>>()
+            .map(ScalarExpression::Array);
+    }
     if !operand.is_object() {
-        if operand.is_array() {
-            return Err(QueryError::Invalid(format!(
-                "{path} must be a scalar literal, field reference, or supported expression"
-            )));
-        }
         return Ok(ScalarExpression::Literal(operand.clone()));
     }
     let object = operand.as_object().expect("object checked above");
@@ -231,6 +235,18 @@ pub(super) fn evaluate_scalar(
     match expression {
         ScalarExpression::Field(field) => Ok(crate::query_path::field_value(values, field)),
         ScalarExpression::Literal(value) => Ok(Some(value.clone())),
+        ScalarExpression::Array(expressions) => expressions
+            .iter()
+            .enumerate()
+            .map(|(index, expression)| {
+                Ok(
+                    evaluate_scalar(values, expression, &format!("{path}[{index}]"))?
+                        .unwrap_or(Value::Null),
+                )
+            })
+            .collect::<Result<Vec<_>, QueryError>>()
+            .map(Value::Array)
+            .map(Some),
         ScalarExpression::Numeric(expression) => evaluate_numeric(values, expression, path),
         ScalarExpression::Cond {
             condition,
@@ -277,6 +293,60 @@ pub(super) fn evaluate_scalar(
         ScalarExpression::ToUpper(expression) => {
             evaluate_case_expression(values, expression, path, true)
         }
+    }
+}
+
+pub(super) fn uses_only_group_key_fields(expression: &ScalarExpression) -> bool {
+    match expression {
+        ScalarExpression::Field(field) => is_group_key_field(field),
+        ScalarExpression::Literal(_) => true,
+        ScalarExpression::Array(expressions) | ScalarExpression::Concat(expressions) => {
+            expressions.iter().all(uses_only_group_key_fields)
+        }
+        ScalarExpression::Numeric(expression) => numeric_uses_only_group_key_fields(expression),
+        ScalarExpression::Cond {
+            condition,
+            then_expression,
+            else_expression,
+        } => {
+            condition_uses_only_group_key_fields(condition)
+                && uses_only_group_key_fields(then_expression)
+                && uses_only_group_key_fields(else_expression)
+        }
+        ScalarExpression::IfNull(first, fallback) => {
+            uses_only_group_key_fields(first) && uses_only_group_key_fields(fallback)
+        }
+        ScalarExpression::ToLower(expression) | ScalarExpression::ToUpper(expression) => {
+            uses_only_group_key_fields(expression)
+        }
+    }
+}
+
+fn is_group_key_field(field: &str) -> bool {
+    field == "_id"
+        || field
+            .strip_prefix("_id.")
+            .is_some_and(|path| !path.is_empty())
+}
+
+fn numeric_uses_only_group_key_fields(expression: &NumericExpression) -> bool {
+    match expression {
+        NumericExpression::Field(field) => is_group_key_field(field),
+        NumericExpression::Literal(_) => true,
+        NumericExpression::Absolute(expression) => numeric_uses_only_group_key_fields(expression),
+        NumericExpression::Binary { left, right, .. } => {
+            numeric_uses_only_group_key_fields(left) && numeric_uses_only_group_key_fields(right)
+        }
+    }
+}
+
+fn condition_uses_only_group_key_fields(expression: &Value) -> bool {
+    match expression {
+        Value::String(value) => value.strip_prefix('$').is_none_or(is_group_key_field),
+        Value::Array(values) => values.iter().all(condition_uses_only_group_key_fields),
+        Value::Object(object) if object.len() == 1 && object.contains_key("$literal") => true,
+        Value::Object(object) => object.values().all(condition_uses_only_group_key_fields),
+        _ => true,
     }
 }
 
