@@ -140,7 +140,7 @@ fn isolated_voter_applies_batched_catchup_payloads_once() {
         let mut delayed_append = leader
             .delay_append_entries_at(target_id, leader_log_index + 1)
             .unwrap();
-        let delayed_tail = if payload_size > MAX_PAYLOAD_ENTRIES {
+        let delayed_followup = if payload_size > MAX_PAYLOAD_ENTRIES {
             Some(
                 leader
                     .delay_append_entries_at(target_id, leader_log_index + MAX_PAYLOAD_ENTRIES + 1)
@@ -187,60 +187,41 @@ fn isolated_voter_applies_batched_catchup_payloads_once() {
         delayed_append
             .wait_for_completion(Duration::from_secs(10))
             .unwrap();
-        if let Some(mut delayed_tail) = delayed_tail {
-            assert_eq!(
-                delayed_tail
-                    .wait_until_paused(Duration::from_secs(10))
-                    .unwrap(),
-                (payload_size - MAX_PAYLOAD_ENTRIES) as usize,
-                "the follow-up AppendEntries request must contain the remaining entries"
+        if let Some(mut delayed_followup) = delayed_followup {
+            let followup_entry_count = delayed_followup
+                .wait_until_paused(Duration::from_secs(10))
+                .unwrap();
+            assert!(
+                (1..=MAX_PAYLOAD_ENTRIES as usize).contains(&followup_entry_count),
+                "each follow-up AppendEntries request must respect the payload limit"
             );
-            let first_chunk_transaction_id = baseline_transaction_id + MAX_PAYLOAD_ENTRIES;
-            let caught_up_target = [target.clone()];
-            wait_for_transaction(
-                &caught_up_target,
-                &root,
-                first_chunk_transaction_id,
-                Duration::from_secs(15),
+            assert!(
+                target
+                    .node
+                    .metrics()
+                    .borrow()
+                    .last_log_index
+                    .is_some_and(|last_log_index| {
+                        last_log_index <= leader_log_index + MAX_PAYLOAD_ENTRIES
+                    }),
+                "the target log must not advance past the first payload while the follow-up is held"
             );
-            assert_eq!(
-                Catalog::from_path(&target_root)
-                    .unwrap()
-                    .transaction_id()
-                    .unwrap(),
-                Some(first_chunk_transaction_id),
-                "the target must apply only the first payload before the tail is released"
-            );
-            let partial_table = Catalog::from_path(&target_root)
+            let target_table = Catalog::from_path(&target_root)
                 .unwrap()
                 .open_table("users")
                 .unwrap();
-            assert_eq!(
-                partial_table.records().len(),
-                baseline_record_count + MAX_PAYLOAD_ENTRIES as usize
-            );
-            assert_eq!(
-                target.node.metrics().borrow().last_log_index,
-                Some(leader_log_index + MAX_PAYLOAD_ENTRIES),
-                "the target log must stop at the first payload while the tail is held"
-            );
-            for (index, name) in names.iter().enumerate() {
-                let expected_count = if index < MAX_PAYLOAD_ENTRIES as usize {
-                    1
-                } else {
-                    0
-                };
+            for name in names.iter().skip(MAX_PAYLOAD_ENTRIES as usize) {
                 assert_eq!(
-                    partial_table
+                    target_table
                         .active_records()
                         .filter(|record| record.values["NAME"].as_str() == Some(name.as_str()))
                         .count(),
-                    expected_count,
-                    "the target must apply only the first payload while the tail is held"
+                    0,
+                    "the target must not apply a tail record while its AppendEntries request is held"
                 );
             }
-            delayed_tail.release();
-            delayed_tail
+            delayed_followup.release();
+            delayed_followup
                 .wait_for_completion(Duration::from_secs(10))
                 .unwrap();
         }

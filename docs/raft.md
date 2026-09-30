@@ -18,7 +18,8 @@ OpenRaft 0.9.25 runs one replication task per target and awaits each `append_ent
 In a later phase of the same five-node test, one voter is isolated while the remaining quorum commits two commands.
 It delays the request for the second missing log index after verifying that the first command has reached the voter, then checks that each record is applied once after release.
 A separate three-node CI test sets `max_payload_entries` to 16 and, in one cluster, isolates a voter for successive catch-up rounds containing 2, 4, 8, 16, 17, and 32 committed log entries.
-Each first request is held; for 17- and 32-entry rounds, the test also holds the second request and verifies that only the first 16 entries have reached the target log and catalog before releasing the tail.
+Each first request is held; for 17- and 32-entry rounds, the test also holds a follow-up request containing the first log index beyond the 16-entry limit.
+The follow-up request must stay within the limit, the target log must not advance past the first 16 entries, and no tail record may be applied before release.
 After release, every node converges with each record applied exactly once.
 Payloads larger than 32 entries, additional term histories, and other partition conditions remain untested.
 Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
@@ -232,7 +233,7 @@ The same five-node run then isolates one voter while the other four commit two c
 It holds the second command's `AppendEntries` request after the first command has applied at that voter; every node must apply both records once and converge at transaction 7.
 A separate three-node CI test sets `max_payload_entries` to 16 and, within one cluster, isolates a voter for catch-up batches of 2, 4, 8, 16, 17, and 32 committed entries.
 The first request in each round is held and must contain no more than 16 entries.
-For batches of 17 and 32 entries, the test also holds the second request and verifies that the target has applied exactly the first 16 entries before the tail is released.
+For batches of 17 and 32 entries, the test also holds a follow-up request containing the first log index beyond the limit and verifies that the request stays within the limit, the target log does not advance past the first 16 entries, and no tail record is applied before release.
 All nodes must then converge with each record applied once.
 Payloads larger than 32 entries, additional term histories, and other partition conditions remain untested.
 

@@ -183,7 +183,7 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 
 | RAFT-015 | tokenなしは線形化barrierを使います。応答tokenはcluster単位の適用indexを示します。次の読み取りにtokenを渡すと、followerはそのindexまで追いつきます。読み取り単調性は保ちますが、最新状態は保証しません。不正token、cluster不一致、`at`併用は拒否します。 | `src/server/raft/read_token.rs`; `src/server/raft.rs`; `src/server/catalog.rs`; `src/server/raft_tests/follower_reads.rs`; `src/server/raft_tests/idempotency.rs`; `docs/ja/raft.md` | `read_token.rs`のunit test; `follower_read_token_waits_for_its_index_and_can_be_chained`; `transaction_retry_after_lost_response_returns_the_committed_result_once` | Boundary |
 
-| RAFT-016 | 3 node CIテストは`max_payload_entries`を16に設定し、voter 1台を隔離したcatch-upで2、4、8、16、17、32件のcommandを検査します。各回の最初の要求を保留し、17件と32件では2件目も保留します。tailの解放前に最初の16件だけが対象voterのlogとcatalogへ適用されたことを確認します。解放後は全nodeが収束し、各recordが一度だけ適用されます。 | `src/replication/raft/network.rs`; `src/replication/raft/network_faults.rs`; `src/server/raft_tests/batch_catchup.rs`; `docs/ja/raft.md` | `isolated_voter_applies_batched_catchup_payloads_once` | Boundary |
+| RAFT-016 | 3 node CIテストは`max_payload_entries`を16に設定し、voter 1台を隔離したcatch-upで2、4、8、16、17、32件のcommandを検査します。各回の最初の要求を保留し、17件と32件では上限後のlog indexを含む後続要求も保留します。後続要求のentry数が上限内であること、対象voterのlogが16件分の境界を越えないこと、tailのrecordが適用されないことを検査します。解放後は全nodeが収束し、各recordが一度だけ適用されます。 | `src/replication/raft/network.rs`; `src/replication/raft/network_faults.rs`; `src/server/raft_tests/batch_catchup.rs`; `docs/ja/raft.md` | `isolated_voter_applies_batched_catchup_payloads_once` | Boundary |
 
 ## 明示的に残るギャップ
 

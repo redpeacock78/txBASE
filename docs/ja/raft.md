@@ -31,7 +31,8 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 配送後に両方のrecordが1回だけ適用されることを検査します。
 別の3 node CIテストでは`max_payload_entries`を16に設定し、同じcluster内でvoter 1台を隔離して、2、4、8、16、17、32件のcatch-upを順に検査します。
 各回で最初の`AppendEntries`要求を保留します。
-17件と32件のpayloadでは2件目の要求も保留し、tailを解放する前に最初の16件だけが対象voterのlogとcatalogへ適用されたことを確認します。
+17件と32件では、上限の16件目より後のlog indexを含む後続要求も保留します。
+後続要求も上限を超えず、対象voterのlogが16件分の境界を越えず、tailのrecordも適用されないことを確認してから解放します。
 解放後は全nodeが収束し、各recordが一度だけ適用されます。
 固定4要求の解放順序に対する24通りの順列はそのシナリオだけを対象にします。
 32件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
@@ -339,8 +340,8 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 1件目のcommandがvoterへ適用された後で、2件目の`AppendEntries`要求を保留します。
 全nodeで各recordを1回だけ適用し、transaction 7へ収束します。
 別の3 node CIテストでは、`max_payload_entries = 16`を設定し、同じcluster内で各回1台のvoterを隔離して、2、4、8、16、17、32件のpayloadによるcatch-upを検査します。
-各回の最初の`AppendEntries`要求を保留し、17件と32件では2件目も保留します。
-後者では、tailの解放前に最初の16件だけが対象voterのlogとcatalogへ適用されたことを確認します。
+各回の最初の`AppendEntries`要求を保留し、17件と32件では上限後のlog indexを含む後続要求も保留します。
+後続要求のentry数が上限内であること、対象voterのlogが16件分の境界を越えないこと、tailのrecordが適用されないことを確認してから解放します。
 解放後は全nodeが収束し、各recordが一度だけ適用されます。
 32件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
 

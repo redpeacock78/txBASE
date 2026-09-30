@@ -88,7 +88,8 @@ The repository currently provides:
   One run also delays two successive non-empty requests to one follower and releases them sequentially.
   Another isolates one voter while the remaining quorum commits two commands, then holds the request for the second command until the first has applied at the voter.
   A separate three-node CI test sets `max_payload_entries` to 16 and tests one isolated voter through catch-up rounds with 2, 4, 8, 16, 17, and 32 committed entries.
-  It holds each first request; for the 17- and 32-entry rounds, it also holds the second request and verifies that only the first 16 entries have reached the target log and catalog before release.
+  It holds each first request; for the 17- and 32-entry rounds, it also holds a follow-up request containing the first log index beyond the 16-entry limit.
+  The follow-up stays within the limit, the target log does not advance past the first 16 entries, and no tail record is applied before release.
   Every node then converges with each record applied exactly once.
   The tests reject catalog reads from the isolated former leader (`503`) and from a replacement leader without quorum, then verify `200` after connectivity and the read barrier recover.
   Separate tests resume an interrupted joint-membership change through a surviving leader, verify that the former leader rejoins as a learner, check snapshot catch-up after log purge, and exercise child-process crash recovery at four durable-operation boundaries.
@@ -513,7 +514,7 @@ It restarts all node directories, retries the same client request, and verifies 
 The five-node test also delays and releases two successive non-empty `AppendEntries` requests to one peer, then isolates one voter while a four-node quorum commits two commands.
 It holds the request for the second command until the first command has applied at the isolated voter, then checks one-time application after release.
 The separate three-node test verifies catch-up payloads containing 2, 4, 8, 16, 17, and 32 entries in one cluster.
-For the 17- and 32-entry batches, it holds the second request and confirms that only the first 16 entries have reached the target log and catalog before releasing the tail.
+For the 17- and 32-entry batches, it holds a follow-up request containing the first log index beyond the limit and verifies that the request stays within the limit, the target log does not advance past the first 16 entries, and no tail record is applied before release.
 Schedules with payloads larger than 32 entries, other term histories, or other partition conditions remain outstanding beyond the 24 release-order permutations of the fixed four-request scenario, the tested same-peer request pair, and the catch-up cases.
 
 ### Candidate scope
