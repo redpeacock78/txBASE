@@ -178,6 +178,8 @@ The separate Ubuntu fuzz job runs the XBF decoder and query JSON parser with `ca
 
 | RAFT-014 | The five-node failover integration test isolates one voter while the remaining quorum commits two commands. The follower receives the first `AppendEntries`; the request for the second entry is held. After release, every node converges at transaction 7 with each record applied once. | `src/replication/raft/network.rs`; `src/replication/raft/network_faults.rs`; `src/server/raft_tests/failover.rs`; `src/server/raft_tests/failover/append_delivery.rs`; `docs/raft.md` | `partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_restart` | Boundary |
 
+| RAFT-015 | Token-free current-state reads retain the linearizable barrier. Read and mutation responses return a cluster-scoped applied-index token when available; a token-bearing read waits for its index locally, giving session monotonicity but not latest-state freshness. Malformed tokens, cluster mismatch, and historical `at` combinations are rejected. | `src/server/raft/read_token.rs`; `src/server/raft.rs`; `src/server/catalog.rs`; `src/replication/raft/state_machine.rs`; `src/server/raft_tests/follower_reads.rs`; `src/server/raft_tests/idempotency.rs`; `docs/raft.md`; [OpenRaft read operations](https://docs.rs/openraft/0.9.25/openraft/docs/protocol/read/index.html) | `token_round_trip_preserves_cluster_and_applied_index`; `token_rejects_invalid_version_cluster_and_index`; `follower_read_token_waits_for_its_index_and_can_be_chained`; `transaction_retry_after_lost_response_returns_the_committed_result_once` | Boundary |
+
 ## Gaps that remain explicit
 
 The following topics have documentation or design notes but do not have a current implementation claim in the matrix:

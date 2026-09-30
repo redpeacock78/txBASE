@@ -179,6 +179,8 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 
 | RAFT-014 | 5 nodeのfailover統合テストでは、1台のvoterを隔離したまま、残るquorumで2件のcommandをcommitします。voterに1件目の`AppendEntries`を適用し、2件目のentryを送る要求を保留します。解放後は全nodeがtransaction 7に収束し、各recordを1回だけ適用します。 | `src/replication/raft/network.rs`; `src/replication/raft/network_faults.rs`; `src/server/raft_tests/failover.rs`; `src/server/raft_tests/failover/append_delivery.rs`; `docs/ja/raft.md` | `partitioned_leader_cannot_commit_and_rejoins_after_majority_failover_and_restart` | Boundary |
 
+| RAFT-015 | tokenなしは線形化barrierを使います。応答tokenはcluster単位の適用indexを示します。次の読み取りにtokenを渡すと、followerはそのindexまで追いつきます。読み取り単調性は保ちますが、最新状態は保証しません。不正token、cluster不一致、`at`併用は拒否します。 | `src/server/raft/read_token.rs`; `src/server/raft.rs`; `src/server/catalog.rs`; `src/server/raft_tests/follower_reads.rs`; `src/server/raft_tests/idempotency.rs`; `docs/ja/raft.md` | `read_token.rs`のunit test; `follower_read_token_waits_for_its_index_and_can_be_chained`; `transaction_retry_after_lost_response_returns_the_committed_result_once` | Boundary |
+
 ## 明示的に残るギャップ
 
 次の話題には文書または設計メモがありますが、マトリクスで現在の実装とは主張していません。

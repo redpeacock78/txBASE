@@ -1,6 +1,7 @@
 mod config;
 mod learner;
 mod peer;
+mod read_token;
 
 use super::{CatalogRaftConfig, HttpResponse, error, json_response};
 use crate::catalog::Catalog;
@@ -19,6 +20,14 @@ use tokio::runtime::{Builder, Runtime};
 type Node = Raft<TypeConfig>;
 pub(super) const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 pub(super) const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(60);
+pub(super) const MIN_READ_TOKEN_HEADER: &str = "X-TXBASE-Raft-Min-Read-Token";
+pub(super) const READ_TOKEN_HEADER: &str = "X-TXBASE-Raft-Read-Token";
+
+pub(super) enum ReadPositionError {
+    InvalidToken,
+    ClusterMismatch,
+    Unavailable(String),
+}
 
 #[derive(Clone)]
 pub(super) struct RaftRuntime {
@@ -153,6 +162,43 @@ impl RaftRuntime {
             .map_err(|_| "Raft read barrier timed out".to_owned())?
             .map(|_| ())
             .map_err(|error| format!("Raft read barrier failed: {error}"))
+    }
+
+    pub(super) fn prepare_read(&self, token: Option<&str>) -> Result<(), ReadPositionError> {
+        let Some(token) = token else {
+            return self
+                .linearizable_read()
+                .map_err(ReadPositionError::Unavailable);
+        };
+        let index = read_token::parse(token, &self.cluster_id).map_err(|error| match error {
+            read_token::Error::Invalid => ReadPositionError::InvalidToken,
+            read_token::Error::ClusterMismatch => ReadPositionError::ClusterMismatch,
+        })?;
+        self.runtime
+            .block_on(
+                self.node
+                    .wait(Some(RPC_TIMEOUT))
+                    .applied_index_at_least(Some(index), "Raft read token"),
+            )
+            .map(|_| ())
+            .map_err(|error| {
+                ReadPositionError::Unavailable(format!(
+                    "timed out waiting for Raft read token: {error}"
+                ))
+            })
+    }
+
+    pub(super) fn current_read_token(&self) -> Result<String, ReadPositionError> {
+        let log_id = self
+            .state_machine
+            .last_applied_log_id()
+            .map_err(ReadPositionError::Unavailable)?
+            .ok_or_else(|| {
+                ReadPositionError::Unavailable(
+                    "Raft has no applied log position for a read token".into(),
+                )
+            })?;
+        Ok(read_token::encode(&self.cluster_id, log_id.index))
     }
 
     #[cfg(test)]

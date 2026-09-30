@@ -110,6 +110,15 @@ fn transaction_retry_after_lost_response_returns_the_committed_result_once() {
     assert_eq!(dropped_status, StatusCode(200));
     assert_eq!(retry_status, StatusCode(200));
     assert_eq!(retry_body, dropped_body);
+    let retry_headers = std::str::from_utf8(&retry_response)
+        .unwrap()
+        .split_once("\r\n\r\n")
+        .unwrap()
+        .0;
+    assert!(retry_headers.lines().any(|line| {
+        line.split_once(':')
+            .is_some_and(|(name, _)| name.eq_ignore_ascii_case("X-TXBASE-Raft-Read-Token"))
+    }));
     let transaction_id = retry_body["transaction_id"].as_u64().unwrap();
     assert_eq!(transaction_id, 2);
     wait_for_transaction(&nodes, &root, transaction_id, Duration::from_secs(15));

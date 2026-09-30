@@ -36,7 +36,7 @@ This document records the implemented Raft boundary and the remaining authority,
 - Peer traffic may use HTTPS with a node certificate and key. `--raft-peer-client-ca` enables mTLS and requires HTTPS for every initial member. A node presents its peer certificate and key as its client identity when connecting to an mTLS peer; each peer verifies that identity against its configured CA. Outgoing clients verify server certificates and host names with the operating system's trust facilities. The public catalog listener has separate TLS and mTLS options; see [public catalog listener transport security](catalog-listener-security.md).
 - `RaftMembershipHttpClient` and `txbase raft membership` provide authenticated status, learner-add, and voter-change operations. The client reuses the verified HTTP transport, supports an optional client certificate and key, and validates versioned response shapes and voter-set consistency.
 - Raft writes to `/transaction` and named-table mutation routes require `X-Txbase-Client-Id` and a positive `X-Txbase-Client-Sequence`. Exact retries return the stored result.
-- Normal catalog reads call OpenRaft's linearizable read barrier before reading the local catalog. The server does not provide an explicitly stale follower-read mode.
+- Token-free catalog reads call OpenRaft's linearizable read barrier before reading the local catalog. A read that supplies a minimum read token waits for the local applied index to reach that token instead.
 - A three-node CI test exercises quorum commit and retry deduplication, learner catch-up before promotion, joint voter promotion and demotion, retained-learner shutdown, and quorum writes after demotion.
 - A three-node `/transaction` test sends requests through a local TCP proxy that drops the first successful HTTP response after commit; an exact retry returns identical JSON and transaction ID without a duplicate mutation, while a different payload at the same client sequence returns `409`.
 - A child-process test terminates the process hosting three logical nodes after log-entry persistence, commit-marker persistence, atomic catalog and applied-state publication, or receipt of the OpenRaft application response. It restarts all three node directories, retries the same client request, and verifies one catalog mutation at every node.
@@ -52,6 +52,7 @@ This document records the implemented Raft boundary and the remaining authority,
 ### Not implemented
 
 - Broader deterministic coverage for delayed or reordered RPC schedules beyond the fixed four-request release permutations, the sequential same-peer pair, and one two-command voter catch-up with its second request delayed; varied terms and partition conditions remain untested.
+- Follower reads that guarantee the latest quorum-committed state; read tokens provide session monotonicity only.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
 The serialized command limit is 1 MiB.
@@ -78,6 +79,7 @@ The replicated state machine remains the catalog. Raft supplies leadership and a
 The current `ReplicationLog` is not a Raft log. It has one configured term, ties its index to catalog transaction IDs, and applies entries directly through the catalog journal. Raft also logs membership changes and other protocol entries, so its log position must remain distinct from the catalog transaction ID.
 
 This authority design does not provide distributed transactions across catalogs, partitioning, or linearizable reads from arbitrary followers. Those require separate contracts.
+The applied-index token read contract is described in [Client writes and reads](#5-client-writes-and-reads).
 
 ## 2. Protocol implementation
 
@@ -163,7 +165,13 @@ A mutation succeeds only after Raft commits it on a quorum and the local state m
 
 Every Raft mutation includes a bounded client ID and positive sequence. Clients serialize writes per ID and retry an uncertain request with the same ID, sequence, body, and precondition headers. The state machine retains the latest sequence and response for each client; a client must receive or resolve one sequence before advancing to the next.
 
-Normal catalog reads call `Raft::ensure_linearizable()` before reading the local applied state. If the node cannot satisfy the barrier, the server returns `503` instead of serving a possibly stale read. The current HTTP mode does not redirect reads to a leader or expose a stale follower-read option.
+Token-free catalog reads call `Raft::ensure_linearizable()` before reading the local applied state. If the node cannot satisfy the barrier, the server returns `503` instead of serving a possibly stale read.
+
+Current-state read responses and Raft mutation responses include `X-TXBASE-Raft-Read-Token` when an applied Raft position is available. A client can send that value as `X-TXBASE-Raft-Min-Read-Token` on a later current-state read. The node waits, for at most the configured Raft RPC timeout, until its local applied index reaches the token's index, then reads locally and returns its current token. If it does not catch up in time, the server returns `503 raft_unavailable`.
+
+Tokens use the form `v1.<cluster_id>.<applied_index>`. A malformed token returns `400`; a token for another cluster returns `409`. A token cannot be combined with the historical `?at=` parameter. Tokens are consistency metadata, not credentials.
+
+This provides session-monotonic reads when a client carries the token forward: a later read will not move behind the applied index observed by an earlier response. It does not guarantee the latest quorum-committed state or make a token-bearing read linearizable. Reads without a token retain the existing linearizable barrier.
 
 ## 6. Peer transport and security
 
@@ -226,6 +234,8 @@ These cases do not cover larger catch-up batches, differing terms, or other part
 - [OpenRaft feature flags](https://docs.rs/openraft/0.9.25/openraft/docs/feature_flags/) documents standard Raft mode and the temporary `storage-v2` API.
 - [OpenRaft `RaftLogStorage`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftLogStorage.html) defines durable log-store behavior.
 - [OpenRaft `RaftStateMachine`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftStateMachine.html) defines applied-state, entry application, and snapshot behavior.
+- [OpenRaft read operations](https://docs.rs/openraft/0.9.25/openraft/docs/protocol/read/index.html) define the quorum-confirmed read index and the applied-index condition used for linearizable reads.
+- [OpenRaft `Raft::wait`](https://docs.rs/openraft/0.9.25/openraft/raft/struct.Raft.html#method.wait) defines bounded waits for Raft metrics, including the applied index.
 - [OpenRaft getting started and storage test suite](https://docs.rs/openraft/0.9.25/openraft/docs/getting_started/) defines the application storage and network adapters and points to `testing::Suite`.
 - [OpenRaft cluster formation](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/cluster_formation/) defines the one-time `Raft::initialize()` operation.
 - [OpenRaft network traits](https://docs.rs/openraft/0.9.25/openraft/network/) define the peer RPC adapter.

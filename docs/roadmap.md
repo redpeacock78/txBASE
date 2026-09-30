@@ -95,7 +95,7 @@ The baseline intentionally does not include the following:
 - References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
-- Additional Raft failure coverage beyond the 24 release-order permutations of four held cross-peer requests, the tested pair of successive same-peer requests, and the isolated-voter two-command catch-up with its second request delayed; other delayed or reordered schedules, distributed follower reads, and partitioning.
+- Additional Raft failure coverage beyond the 24 release-order permutations of four held cross-peer requests, the tested pair of successive same-peer requests, and the isolated-voter two-command catch-up with its second request delayed; other delayed or reordered schedules, follower-read freshness beyond applied-index tokens, and partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -464,6 +464,9 @@ index for coordinated compaction. This safety gate applies to the fixed-term `TX
 
 The optional Raft implementation is connected to `serve-catalog` and uses an explicitly configured initial voter set.
 It provides quorum-committed writes, a linearizable read barrier, authenticated peer RPC, peer HTTPS for non-loopback URLs, and an authenticated endpoint that safely prepares and adds a learner before starting log replication.
+Token-free reads retain the linearizable barrier.
+Current-state reads and mutation responses return a cluster-scoped applied-index token; a later read can present it to wait for that index on a follower.
+This provides session-monotonic reads, not a guarantee of the latest quorum-committed state.
 An authenticated peer API reports local effective membership and supports compare-and-swap voter changes through OpenRaft joint consensus.
 The API waits for newly promoted learners to catch up and retains demoted voters as learners.
 OpenRaft storage, the catalog state machine, snapshots, startup recovery, and three-node integration coverage are included in the CI test suite.
@@ -490,12 +493,13 @@ Schedules with other request batches, terms, or partition conditions remain outs
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
 - Add deterministic tests for delayed or reordered RPC schedules outside the 24 release-order permutations of this fixed four-request scenario, the tested pair of successive same-peer requests, and the isolated-voter two-command catch-up with its second request delayed; vary request batches, terms, or partition conditions. See [Raft consensus design](raft.md).
 - Durable retry queues, backpressure, and authority discovery.
-- Distributed follower-read guarantees.
+- Follower reads that guarantee the latest quorum-committed state; applied-index tokens provide session monotonicity only.
 - Distributed partitioning.
 
-Distributed features beyond the current static-membership Raft mode still need
-contracts for network conflict semantics, schema-version handling, recovery
-procedures, transport observability, and follower-read guarantees.
+Distributed features beyond the current Raft mode still need contracts for
+network conflict semantics, schema-version handling, recovery procedures,
+transport observability, and follower-read freshness stronger than the
+applied-index token.
 
 The exclusive table lock and fixed-term replication mode do not imply consensus
 or multi-region behavior; the optional Raft mode provides only the boundary

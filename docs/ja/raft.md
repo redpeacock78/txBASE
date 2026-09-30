@@ -48,7 +48,7 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 - peer通信ではnodeごとの証明書と秘密鍵を使うHTTPSを利用できる。`--raft-peer-client-ca`を指定するとmTLSが有効になり、すべての初期memberでHTTPSが必要になる。nodeはmTLS peerへ接続するとき、peer証明書と鍵をclient identityとして提示する。各peerは設定したCAを使ってidentityを検証する。送信側clientはOSの信頼機構でserver証明書とホスト名を検証する。公開catalog listenerには独立したTLSとmTLSの設定がある。詳細は[公開カタログlistenerの通信保護](catalog-listener-security.md)を参照する。
 - `RaftMembershipHttpClient`と`txbase raft membership`は、認証付きの状態照会、learner追加、voter変更を提供する。共有HTTP transportの証明書検証を使い、任意のクライアント証明書と鍵に対応し、version付き応答とvoter集合の整合性を検証する。
 - `/transaction`と名前付きテーブル更新では`X-Txbase-Client-Id`と正の`X-Txbase-Client-Sequence`を指定する。同じ要求の再試行には記録済み結果を返す。
-- 通常のcatalog読み取り前にOpenRaftの線形化可能な読み取りbarrierを呼び出す。明示的にstaleなfollower読み取りは提供しない。
+- tokenを指定しないcatalog読み取りは、OpenRaftの線形化可能な読み取りbarrierを呼び出す。最小読み取りtokenを指定した場合は、そのtokenが示す適用位置までローカルstate machineを待つ。
 - 3 nodeのCIテストでquorum commitと再試行の重複排除、昇格前のlearner同期、joint membershipによるvoter昇格と降格、learner停止後に残るvoterでのquorum更新を検査する。
 - 2 nodeのCIテストで、genesis catalogが空のclusterへ空catalogのlearnerが参加できることを検査する。
 - 3 nodeのCIテストで、空catalogのlearnerに非空genesis catalogとcommit済み更新をsnapshot転送することを検査する。
@@ -65,6 +65,7 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 ### 未実装
 
 - 固定4要求の解放順序、同一peerへの逐次2要求、2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケースを超えるスケジュール。異なるtermとpartition条件の組み合わせも未検証である。
+- 最新のquorum commit状態を保証するfollower読み取り。読み取りtokenが保証するのはセッション内の読み取り単調性だけである。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
 正のsequenceと空でないカタログtagが必要です。
@@ -103,6 +104,7 @@ Raftログにはmembership変更やプロトコル上のエントリも入るた
 
 この権威設計だけでは、カタログをまたぐ分散transaction、partitioning、任意のfollowerからのlinearizable readは提供しない。
 これらには別の契約が必要です。
+適用済み位置tokenを使う読み取り契約は、[clientの更新と読み取り](#5-clientの更新と読み取り)に記載します。
 
 ## 2. プロトコルの実装
 
@@ -226,9 +228,22 @@ termが固定され、すべてのentryがカタログtransaction sequenceを進
 更新は、Raftがquorumにcommitし、ローカルstate machineが永続的に適用した後に限り成功する。
 quorumを失った場合はunavailableまたはnot-leaderを返し、ローカルだけの更新には切り替えない。
 
-通常のカタログ読み取りでは、ローカルの適用済み状態を読む前に`Raft::ensure_linearizable()`を呼び出します。
+tokenを指定しないカタログ読み取りでは、ローカルの適用済み状態を読む前に`Raft::ensure_linearizable()`を呼び出します。
 barrierを満たせない場合、serverはstaleな読み取りを返さず`503`を返します。
-現在のHTTP modeは読み取りをleaderへ転送せず、staleなfollower読み取りも提供しません。
+
+現在状態の読み取り応答とRaft更新応答は、適用済みRaft位置がある場合に`X-TXBASE-Raft-Read-Token`を返します。
+クライアントはこの値を、次の現在状態読み取りの`X-TXBASE-Raft-Min-Read-Token`に指定できます。
+nodeは設定済みRaft RPC timeoutの範囲で、ローカル適用indexがtokenのindex以上になるまで待ってから読み取り、現在のtokenを返します。
+期限内に追いつかない場合、serverは`503 raft_unavailable`を返します。
+
+tokenの形式は`v1.<cluster_id>.<applied_index>`です。
+形式が不正な場合は`400`を返し、別clusterのtokenには`409`を返します。
+tokenと過去時点を指定する`?at=`は併用できません。
+tokenは整合性情報であり、認証情報ではありません。
+
+クライアントがtokenを次の要求へ引き継ぐと、後続の読み取りが先行する応答で観測した適用位置より前へ戻らないという、セッション内の読み取り単調性を得られます。
+最新のquorum commit状態を保証するものではなく、token付き読み取りをlinearizableにするものでもありません。
+tokenを指定しない読み取りは、従来どおり線形化可能なbarrierを使います。
 
 ## 6. peer転送とセキュリティ
 
@@ -325,6 +340,8 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 - [OpenRaftのfeature flags](https://docs.rs/openraft/0.9.25/openraft/docs/feature_flags/)は、標準Raft modeと一時的な`storage-v2` APIを説明する。
 - [OpenRaft `RaftLogStorage`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftLogStorage.html)は、永続ログstorageの契約を定義する。
 - [OpenRaft `RaftStateMachine`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftStateMachine.html)は、適用済み状態、エントリの適用、snapshotの契約を定義する。
+- [OpenRaftの読み取り操作](https://docs.rs/openraft/0.9.25/openraft/docs/protocol/read/index.html)は、quorum確認済みread indexと線形化可能な読み取りに使う適用indexの条件を定義する。
+- [OpenRaft `Raft::wait`](https://docs.rs/openraft/0.9.25/openraft/raft/struct.Raft.html#method.wait)は、適用indexを含むRaft metricsを期限付きで待つAPIを定義する。
 - [OpenRaftの導入手順とストレージテストスイート](https://docs.rs/openraft/0.9.25/openraft/docs/getting_started/)は、アプリケーション用ストレージとネットワークのadapter、および`testing::Suite`を説明する。
 - [OpenRaftのcluster初期化](https://docs.rs/openraft/0.9.25/openraft/docs/cluster_control/cluster_formation/)は、一度限りの`Raft::initialize()`を定義する。
 - [OpenRaftのnetwork trait](https://docs.rs/openraft/0.9.25/openraft/network/)は、peer RPC adapterの契約を定義する。

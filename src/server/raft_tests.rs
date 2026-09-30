@@ -1,5 +1,6 @@
 mod crash_recovery;
 mod failover;
+mod follower_reads;
 mod idempotency;
 mod membership;
 mod membership_recovery;

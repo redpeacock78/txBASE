@@ -243,6 +243,11 @@ impl RaftCatalogStateMachine {
             && state.last_membership.membership().nodes().next().is_none()
             && state.clients.is_empty())
     }
+
+    pub(crate) fn last_applied_log_id(&self) -> Result<Option<LogId<u64>>, String> {
+        let catalog = lock_catalog(&self.catalog)?;
+        read_state(&catalog).map(|(state, _)| state.last_applied)
+    }
 }
 
 pub(crate) fn genesis_fingerprint(catalog: &Catalog) -> Result<Vec<u8>, String> {

@@ -178,37 +178,72 @@ pub(super) fn handle_raft_request(
     let response = if request.method().as_str() == "OPTIONS" {
         options_response("GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE, QUERY")
     } else if is_catalog_mutation(request.method(), &path) {
-        if matches!(request.method(), Method::Post) && path == "/transaction" {
+        let response = if matches!(request.method(), Method::Post) && path == "/transaction" {
             super::catalog_transaction::response_with_raft(&mut request, catalog, raft)
         } else {
             super::catalog_mutation::response_with_raft(&mut request, &path, catalog, raft)
-        }
-    } else if let Err(message) = raft.linearizable_read() {
-        json_response(503, error("raft_unavailable", &message), false)
-            .with_header(header("Retry-After", "1"))
-    } else if matches!(request.method(), Method::Get | Method::Head) && path == "/cdc" {
-        super::cdc::catalog_response(&url, catalog)
+        };
+        with_read_token(response, raft)
     } else {
-        match catalog_for_url(&url, request.method(), catalog) {
+        raft_read_response(&mut request, &url, &path, catalog, raft)
+    };
+    if let Err(error) = request.respond(response) {
+        eprintln!("failed to send HTTP response: {error}");
+    }
+}
+
+fn raft_read_response(
+    request: &mut Request,
+    url: &str,
+    path: &str,
+    catalog: &Catalog,
+    raft: &super::raft::RaftRuntime,
+) -> HttpResponse {
+    let historical_snapshot = match snapshot_parameter(url) {
+        Ok(snapshot) => snapshot.is_some(),
+        Err(response) => return response,
+    };
+    let token = match minimum_read_token(request) {
+        Ok(token) => token,
+        Err(response) => return response,
+    };
+    if token.is_some() && historical_snapshot {
+        return json_response(
+            400,
+            error(
+                "invalid_raft_read_token",
+                "a Raft read token cannot be combined with the historical at parameter",
+            ),
+            false,
+        );
+    }
+    if let Err(error) = raft.prepare_read(token.as_deref()) {
+        return read_position_error_response(error);
+    }
+
+    let response = if matches!(request.method(), Method::Get | Method::Head) && path == "/cdc" {
+        super::cdc::catalog_response(url, catalog)
+    } else {
+        match catalog_for_url(url, request.method(), catalog) {
             Err(response) => response,
             Ok(snapshot) => {
                 let catalog = snapshot.as_ref().unwrap_or(catalog);
                 if matches!(request.method(), Method::Get | Method::Head) && path == "/catalog" {
-                    schema_response(&request, catalog)
+                    schema_response(request, catalog)
                 } else if matches!(request.method(), Method::Get | Method::Head)
-                    && record_route(&path).is_some()
+                    && record_route(path).is_some()
                 {
-                    table_response(&request, &path, catalog)
+                    table_response(request, path, catalog)
                 } else if request.method().as_str() == "QUERY" && path == "/join/stream" {
-                    join_stream_response(&mut request, catalog)
+                    join_stream_response(request, catalog)
                 } else if request.method().as_str() == "QUERY" && path == "/join" {
-                    join_response(&mut request, catalog)
+                    join_response(request, catalog)
                 } else if request.method().as_str() == "QUERY"
-                    && table_explain_route(&path).is_some()
+                    && table_explain_route(path).is_some()
                 {
-                    table_explain_response(&mut request, &path, catalog)
-                } else if request.method().as_str() == "QUERY" && record_route(&path).is_some() {
-                    table_query_response(&mut request, &path, catalog)
+                    table_explain_response(request, path, catalog)
+                } else if request.method().as_str() == "QUERY" && record_route(path).is_some() {
+                    table_query_response(request, path, catalog)
                 } else {
                     json_response(
                         405,
@@ -226,8 +261,63 @@ pub(super) fn handle_raft_request(
             }
         }
     };
-    if let Err(error) = request.respond(response) {
-        eprintln!("failed to send HTTP response: {error}");
+    if historical_snapshot {
+        response
+    } else {
+        with_read_token(response, raft)
+    }
+}
+
+fn minimum_read_token(request: &Request) -> Result<Option<String>, HttpResponse> {
+    let mut headers = request
+        .headers()
+        .iter()
+        .filter(|header| header.field.equiv(super::raft::MIN_READ_TOKEN_HEADER));
+    let Some(header) = headers.next() else {
+        return Ok(None);
+    };
+    if headers.next().is_some() {
+        return Err(json_response(
+            400,
+            error(
+                "invalid_raft_read_token",
+                "the minimum Raft read token header was repeated",
+            ),
+            false,
+        ));
+    }
+    Ok(Some(header.value.as_str().to_owned()))
+}
+
+fn with_read_token(response: HttpResponse, raft: &super::raft::RaftRuntime) -> HttpResponse {
+    match raft.current_read_token() {
+        Ok(token) => response.with_header(header(super::raft::READ_TOKEN_HEADER, &token)),
+        Err(error) => read_position_error_response(error),
+    }
+}
+
+fn read_position_error_response(position_error: super::raft::ReadPositionError) -> HttpResponse {
+    match position_error {
+        super::raft::ReadPositionError::InvalidToken => json_response(
+            400,
+            error(
+                "invalid_raft_read_token",
+                "the minimum Raft read token is malformed",
+            ),
+            false,
+        ),
+        super::raft::ReadPositionError::ClusterMismatch => json_response(
+            409,
+            error(
+                "raft_read_token_cluster_mismatch",
+                "the minimum Raft read token belongs to another cluster",
+            ),
+            false,
+        ),
+        super::raft::ReadPositionError::Unavailable(message) => {
+            json_response(503, error("raft_unavailable", &message), false)
+                .with_header(header("Retry-After", "1"))
+        }
     }
 }
 
