@@ -317,8 +317,11 @@ and write round-trips for all eight supported explicit codec names. The query la
 Japanese, Chinese, and Korean locale collations. Curated upstream fixtures cover Japanese Han/Kana,
 Chinese pinyin/Bopomofo, and Korean Hangul/Hanja ordering. A separate test checks comparator laws
 over pinned ICU4X benchmark inputs for Chinese, Japanese Hiragana and Katakana, and Korean names.
-Those inputs do not specify expected locale order, so the full upstream CJK collation conformance
-corpus remains future work.
+Those inputs do not specify expected locale order. UTS #10's conformance files test untailored DUCET,
+while the corresponding CLDR files test the CLDR root order; neither defines the `ja`, `zh`, or `ko`
+locale-specific order ([UTS #10 §12.2](https://www.unicode.org/reports/tr10/), [CLDR 48 collation tests](https://github.com/unicode-org/cldr/tree/release-48/common/uca)).
+The inspected upstream sources do not provide a full locale-specific expected-order corpus, so
+that conformance suite remains future work.
 
 An upstream JavaDBF GBK fixture now covers three GBK-encoded CJK field names and 28 real records,
 including a read, mutation, and byte round-trip.

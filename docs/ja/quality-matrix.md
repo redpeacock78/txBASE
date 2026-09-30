@@ -190,7 +190,7 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 - 入力`$match`、`$unwind`、式サブセットを持つ`$set`/`$addFields`、`$project`、`$sort`、`$skip`、`$limit`、グループ出力の`$match`、`$count`、`$distinct`、`$group`、`$bucket`、結果が有限な数値になる有界なスカラー式を使う`$bucketAuto`、有界なスカラー式を使う`$sortByCount`を超える集約ステージ。
   `$group`または`$bucket`の`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`を超えるアキュムレータも対象とする。
 - 述語単位のロックと分散serializable調整。
-- 選定した期待順序フィクスチャとベンチマーク入力を使った比較器の法則検査を超える、上流CJK照合の適合テスト一式。
+- `ja`、`zh`、`ko`のロケール固有の期待順序を定義する独立したコーパス。UTS #10のテストはテーラリング前のDUCETを対象とし、CLDRのコーパスはCLDRの`root`ロケールの照合順序を対象とするため、各ロケールの期待順序を検証できません（[UTS #10 §12.2](https://www.unicode.org/reports/tr10/)、[CLDR 48の照合テスト](https://github.com/unicode-org/cldr/tree/release-48/common/uca)）。
 - スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針。
 - デプロイ済みWorkerまたはWASI production hostのfixture、futureのキャンセルを超えるホストI/O中断の保証、永続的な再試行キュー、権威検出。
 - RAFT-006の固定4要求の解放順序と同一peerへの逐次2要求、RAFT-014の2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケースを超える遅延・順序変更テスト。異なるtermやpartition条件の組み合わせも未検証である。RAFT-013の4地点以外でのクラッシュ注入も未完了である。
