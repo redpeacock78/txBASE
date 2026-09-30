@@ -1,12 +1,14 @@
+use super::tests::block_on;
 use super::{
-    AsyncObjectStore, AsyncObjectStoreFuture, AsyncObjectTable, CancellationToken, ObjectStoreError,
+    AsyncObjectStore, AsyncObjectStoreFuture, AsyncObjectTable, CancellationToken,
+    MemoryObjectStore, ObjectStore, ObjectStoreError,
 };
 use crate::query::{AsyncQueryStream, parse};
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::{Context, Poll, Wake, Waker};
 
 struct PendingOperation<T> {
@@ -89,6 +91,88 @@ impl AsyncObjectStore for PendingStore {
         _prefix: &'a str,
     ) -> AsyncObjectStoreFuture<'a, Result<Vec<String>, ObjectStoreError>> {
         self.pending()
+    }
+}
+
+#[derive(Clone)]
+struct RecoveryStore {
+    inner: MemoryObjectStore,
+    fail_first_delete: Arc<AtomicBool>,
+    delay_wal_delete: Arc<AtomicBool>,
+    wal_delete_started: Arc<AtomicBool>,
+}
+
+impl AsyncObjectStore for RecoveryStore {
+    fn get<'a>(
+        &'a self,
+        key: &'a str,
+    ) -> AsyncObjectStoreFuture<'a, Result<Option<Vec<u8>>, ObjectStoreError>> {
+        Box::pin(async move { self.inner.get(key) })
+    }
+
+    fn put_if_absent<'a>(
+        &'a self,
+        key: &'a str,
+        bytes: &'a [u8],
+    ) -> AsyncObjectStoreFuture<'a, Result<(), ObjectStoreError>> {
+        Box::pin(async move { self.inner.put_if_absent(key, bytes) })
+    }
+
+    fn compare_and_swap<'a>(
+        &'a self,
+        key: &'a str,
+        expected: Option<&'a [u8]>,
+        replacement: &'a [u8],
+    ) -> AsyncObjectStoreFuture<'a, Result<(), ObjectStoreError>> {
+        Box::pin(async move { self.inner.compare_and_swap(key, expected, replacement) })
+    }
+
+    fn delete<'a>(
+        &'a self,
+        key: &'a str,
+    ) -> AsyncObjectStoreFuture<'a, Result<(), ObjectStoreError>> {
+        if self.fail_first_delete.swap(false, Ordering::SeqCst) {
+            return Box::pin(std::future::ready(Err(ObjectStoreError::Unavailable(
+                "injected WAL cleanup failure".into(),
+            ))));
+        }
+        if key == "users/wal/0.json" && self.delay_wal_delete.swap(false, Ordering::SeqCst) {
+            return Box::pin(DelayedDelete {
+                inner: self.inner.clone(),
+                key: key.to_owned(),
+                started: false,
+                wal_delete_started: self.wal_delete_started.clone(),
+            });
+        }
+        Box::pin(async move { self.inner.delete(key) })
+    }
+
+    fn list<'a>(
+        &'a self,
+        prefix: &'a str,
+    ) -> AsyncObjectStoreFuture<'a, Result<Vec<String>, ObjectStoreError>> {
+        Box::pin(async move { self.inner.list(prefix) })
+    }
+}
+
+struct DelayedDelete {
+    inner: MemoryObjectStore,
+    key: String,
+    started: bool,
+    wal_delete_started: Arc<AtomicBool>,
+}
+
+impl Future for DelayedDelete {
+    type Output = Result<(), ObjectStoreError>;
+
+    fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.started {
+            self.started = true;
+            self.wal_delete_started.store(true, Ordering::SeqCst);
+            context.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+        Poll::Ready(self.inner.delete(&self.key))
     }
 }
 
@@ -337,6 +421,56 @@ fn cancellation_does_not_abort_accepted_mutations() {
     drop(compare_and_swap);
     drop(delete);
     assert_eq!(dropped.load(Ordering::SeqCst), 3);
+}
+
+#[test]
+fn cancelling_a_query_finishes_an_accepted_recovery_write() {
+    let store = RecoveryStore {
+        inner: MemoryObjectStore::new(),
+        fail_first_delete: Arc::new(AtomicBool::new(true)),
+        delay_wal_delete: Arc::new(AtomicBool::new(false)),
+        wal_delete_started: Arc::new(AtomicBool::new(false)),
+    };
+    let table = AsyncObjectTable::new(store.clone(), "users").unwrap();
+    let snapshot = crate::xbf::XbfTable {
+        generation: 0,
+        fields: vec![crate::xbf::XbfField {
+            name: "NAME".into(),
+            ty: crate::xbf::XbfType::String,
+            nullable: true,
+            primary_key: false,
+            unique: false,
+        }],
+        records: vec![crate::xbf::XbfRecord {
+            deleted: false,
+            values: vec![crate::xbf::XbfValue::String("Alice".into())],
+        }],
+    };
+
+    assert!(matches!(
+        block_on(table.commit(&snapshot)),
+        Err(ObjectStoreError::Unavailable(_))
+    ));
+    store.delay_wal_delete.store(true, Ordering::SeqCst);
+
+    let mut stream = Box::pin(table.query_stream(parse(b"{}").unwrap()).unwrap());
+    let wake_count = Arc::new(CountWake::default());
+    let waker = Waker::from(wake_count.clone());
+    let mut context = Context::from_waker(&waker);
+    assert!(matches!(
+        stream.as_mut().poll_next(&mut context),
+        Poll::Pending
+    ));
+    assert!(store.wal_delete_started.load(Ordering::SeqCst));
+
+    stream.cancel();
+
+    assert!(wake_count.0.load(Ordering::SeqCst) > 0);
+    assert!(matches!(
+        stream.as_mut().poll_next(&mut context),
+        Poll::Ready(None)
+    ));
+    assert!(store.inner.get("users/wal/0.json").unwrap().is_none());
 }
 
 #[test]
