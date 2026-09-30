@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-component=${1:?usage: wasi_query_stream_smoke.sh <component> <pending-component>}
-pending_component=${2:?usage: wasi_query_stream_smoke.sh <component> <pending-component>}
+component=${1:?usage: wasi_query_stream_smoke.sh <component> <pending-component> <object-store-check-component>}
+pending_component=${2:?usage: wasi_query_stream_smoke.sh <component> <pending-component> <object-store-check-component>}
+object_store_check_component=${3:?usage: wasi_query_stream_smoke.sh <component> <pending-component> <object-store-check-component>}
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 temp_dir=$(mktemp -d)
 trap 'rm -rf "$temp_dir"' EXIT
@@ -42,6 +43,11 @@ xxd -r -p < "$repo_root/tests/fixtures/query-stream-users.xbf.hex" \
 printf '%s\n' \
   '{"version":1,"generation":0,"root":"users/snapshots/0.xbf","wal_head":0,"history":[0]}' \
   > "$temp_dir/object-store/users/manifest.json"
+
+# Exercise the async filesystem adapter directly, including streamed multi-megabyte I/O.
+timeout 30s wasmtime run --dir "$temp_dir::/data" "$object_store_check_component" \
+  > "$temp_dir/object-store-check.stdout" 2> "$temp_dir/object-store-check.stderr"
+test ! -s "$temp_dir/object-store-check.stdout"
 
 wasmtime run --dir "$temp_dir::/data" "$component" \
   /data/users.dbf '{"projection":{"NAME":1}}' > "$temp_dir/actual.ndjson"

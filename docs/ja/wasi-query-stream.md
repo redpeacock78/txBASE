@@ -32,9 +32,14 @@ DBF形式では、コンポーネントは事前公開されたDBFファイル�
 object-store形式では、既存の`AsyncObjectTable::query_stream`または`query_stream_at`契約を通じて、`namespace/manifest.json`、XBFスナップショット、namespaceのWALディレクトリを読み込みます。
 object-storeのrootには、`--dir`で公開したディレクトリを指定します。
 既存のオブジェクトテーブル配置では、スナップショットを`namespace/snapshots/`に、復旧記録を`namespace/wal/`に置きます。
-ファイルシステムアダプターは`SyncObjectStoreAdapter`を介して同期`std::fs`操作を使います。
-変更後に内容を変えないオブジェクトを排他的に作成し、同期済み一時ファイルとrenameでマニフェストを置き換え、復旧後にWAL記録を削除します。
-このアダプターは操作を非同期traitへ接続しますが、ファイルシステムI/Oをノンブロッキングにはしません。
+ファイルシステムアダプターはWASI 0.3のfilesystem descriptor、stream、futureを直接使って`AsyncObjectStore`を実装します。
+`std::fs`や`SyncObjectStoreAdapter`を介さず、WASI filesystemの非同期操作を待機します。
+ストアのrootは対応する事前公開ディレクトリの範囲内で解決します。
+各パスcomponentはディレクトリdescriptorから相対指定し、symbolic linkを辿りません。
+変更後に内容を変えないオブジェクトを排他的に作成します。
+マニフェストは`sync`を要求した一時ファイルを同じディレクトリ内でrenameして置き換えます。
+復旧後のWAL記録も削除します。
+書き込みではbyte producerとfilesystem consumerを同時にポーリングしてstreamを処理します。
 アダプターはnamespaceとobject keyの各componentを検証し、`.`と`..`を拒否します。
 symbolic linkも辿りません。
 スモーク検査では、`..`を含むnamespace、`.`/`..`を含むsnapshot root、symbolic link経由のsnapshot読み込みが、stdoutへ行を出さずに失敗することを確認します。
@@ -64,12 +69,16 @@ CIスモーク検査は、保留中のWAL記録を復旧してから行を出力
 拒否されるストリーミング制御も行の出力前に失敗することを確認します。
 
 Rustのクエリストリームを破棄すると、行の生成を終了します。
-このコマンドは同期DBF読み込みとobject-storeのファイルシステム読み込みを中断可能にはせず、ホストのタイムアウトやプロセスキャンセルの方針も定義しません。
+object-store経路はWASI filesystem操作を非同期で待機します。
+操作futureの破棄がホスト側の処理を中断するかどうかや、ホストのタイムアウトとプロセスキャンセルの方針は定義しません。
 
 ## 4. CIの範囲
 
-`wasi-query-stream` CIジョブはWASIターゲットとWasmtime `49.0.0`を導入し、クエリ用コンポーネントとPendingストリーム用fixtureをビルドします。
-両方のコンポーネントを`tests/wasi_query_stream_smoke.sh`へ渡します。
+`wasi-query-stream` CIジョブはWASIターゲットとWasmtime `49.0.0`を導入します。
+クエリ用コンポーネント、Pendingストリーム用fixture、object-store直接検査用コンポーネントをビルドします。
+3つのコンポーネントを`tests/wasi_query_stream_smoke.sh`へ渡します。
+WASIアダプターの直接検査では、未作成キーの読み取り、変更後に内容を変えないオブジェクトの作成と競合、再帰一覧、compare-and-swapの成功と競合、冪等な削除、パス検証を確認します。
+2 MiBのデータをstream経由で書き込み、読み戻す検査も実行します。
 スモーク検査は固定DBF・XBFフィクスチャをデコードし、`filter`、`projection`、`skip`、`limit`を適用したDBF、現行XBF、保持世代XBFの結果を比較します。
 131,072行のDBFクエリでstdoutの先頭1バイトを読んだ後、読み取りを100ミリ秒停止します。
 再開後の出力全体を検証します。
@@ -83,13 +92,16 @@ Pending用fixtureは最初のpollで`Poll::Pending`を返し、受け取ったwa
 
 この検査が示すのは、固定したWasmtime `49.0.0`ランタイムでのコンポーネントのビルドとCLI動作であり、WASIホストの本番対応ではありません。
 WASI 0.3.1仕様は安定版ですが、Wasmtimeの`wasmtime-wasi::p3`ホスト実装は上流資料で実験的かつ不安定で、未完成と説明されています。
-このスモーク検査は固定ランタイム上のローカル書き込みと復旧を検証しますが、独自に組み込んだホスト、別ランタイムへのデプロイ、プロバイダー接続型のストレージ、ノンブロッキングなファイルシステムI/Oは検証しません。
+このスモーク検査は固定ランタイム上の非同期filesystem呼び出し、ローカル書き込み、復旧を検証します。
+独自に組み込んだホスト、別ランタイムへのデプロイ、プロバイダー接続型のストレージ、ホスト側のスケジューリングとキャンセルの保証は検証しません。
 
 ## 一次資料と対象範囲
 
 - [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
 - [WASI 0.3とネイティブ非同期処理](https://wasi.dev/releases/wasi-p3)
 - [`wasip3` 0.9.0のバインディング](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/)
+- [`wasip3` filesystem descriptor API](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/filesystem/types/struct.Descriptor.html)
+- [`wasip3` preopened directories API](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/filesystem/preopens/fn.get_directories.html)
 - [Rustの`wasm32-wasip2`ターゲット](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
 - [WASI filesystemインターフェースのWIT定義](https://github.com/WebAssembly/WASI/blob/main/proposals/filesystem/wit/types.wit)
 - [Wasmtime CLIオプション](https://docs.wasmtime.dev/cli-options.html)

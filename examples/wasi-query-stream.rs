@@ -1,6 +1,10 @@
 #[cfg(all(target_arch = "wasm32", target_os = "wasi", target_env = "p2"))]
-#[path = "wasi_query_stream/object_store.rs"]
-mod object_store;
+#[path = "wasi_query_stream/keys.rs"]
+mod keys;
+
+#[cfg(all(target_arch = "wasm32", target_os = "wasi", target_env = "p2"))]
+#[path = "wasi_query_stream/wasi_object_store.rs"]
+mod wasi_object_store;
 
 #[cfg(all(target_arch = "wasm32", target_os = "wasi", target_env = "p2"))]
 #[path = "wasi_query_stream/output.rs"]
@@ -11,11 +15,11 @@ mod component {
     use std::ffi::OsString;
     use std::path::PathBuf;
 
-    use txbase::edge::{AsyncObjectTable, SyncObjectStoreAdapter};
+    use txbase::edge::AsyncObjectTable;
     use txbase::query;
 
-    use crate::object_store::FilesystemObjectStore;
     use crate::output::stream_to_stdout;
+    use crate::wasi_object_store::WasiFilesystemObjectStore;
 
     wasip3::cli::command::export!(WasiQueryCommand);
 
@@ -105,9 +109,12 @@ mod component {
         query_json: String,
         generation: Option<u64>,
     ) -> Result<(), String> {
-        let store = SyncObjectStoreAdapter::new(
-            FilesystemObjectStore::new(root).map_err(|error| error.to_string())?,
-        );
+        let root = root
+            .to_str()
+            .ok_or_else(|| "object-store root must be valid UTF-8".to_owned())?;
+        let store = WasiFilesystemObjectStore::new(root)
+            .await
+            .map_err(|error| error.to_string())?;
         let table = AsyncObjectTable::new(store, namespace).map_err(|error| error.to_string())?;
         let request = query::parse(query_json.as_bytes()).map_err(|error| error.to_string())?;
         let stream = match generation {

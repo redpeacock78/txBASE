@@ -53,7 +53,7 @@ The host boundary must not make core behavior depend on POSIX files, a JavaScrip
   See [asynchronous streaming](async-streaming.md) and [Worker query streaming](worker-query-stream.md) for cancellation details.
 - The WASI 0.3 CLI component queries DBF files or current and retained XBF snapshots through a writable preopened filesystem store.
   The host must prevent other processes from writing to the store while this command runs; the adapter does not coordinate concurrent writers.
-  It recovers pending WAL records before emitting rows when the host grants write access, while filesystem operations remain synchronous.
+  It uses WASI filesystem descriptors and streams through `AsyncObjectStore` and recovers pending WAL records before emitting rows.
   See [WASI query streaming](wasi-query-stream.md) for its command and runtime contract.
 
 ## 4. Verification boundary
@@ -62,7 +62,7 @@ CI builds the `wasm32-unknown-unknown` wrapper and runs the generated-wrapper sm
 
 Deterministic Node.js fixtures exercise the Worker Fetch, R2 binding, and Web Streams adapters.
 
-The `wasi-query-stream` job builds the WASI 0.3 component and runs its CLI smoke test on the pinned Wasmtime runtime.
+The `wasi-query-stream` job builds the query, pending-stream, and direct object-store-check WASI components and runs their smoke checks on the pinned Wasmtime runtime.
 
 These checks cover generated bindings and local host fixtures.
 They do not establish compatibility with a deployed Worker, a live R2 service, or a production WASI host.
@@ -73,7 +73,8 @@ The [quality matrix](quality-matrix.md) lists the assertions and their test name
 
 The repository does not claim production Worker deployment or live R2 service validation.
 
-Provider-backed WASI storage and non-blocking WASI filesystem I/O remain unimplemented.
+Provider-backed WASI storage remains unimplemented.
+Host-side scheduling, cancellation, lifecycle, and production-runtime guarantees remain unverified.
 
 Browser storage, Node.js WASI, Deno, and Bun are not compatibility commitments.
 

@@ -59,3 +59,8 @@ path = "examples/wasi-query-stream.rs"
 name = "wasi-query-stream-pending"
 crate-type = ["cdylib"]
 path = "examples/wasi-query-stream-pending.rs"
+
+[[example]]
+name = "wasi-object-store-check"
+crate-type = ["cdylib"]
+path = "examples/wasi-object-store-check.rs"

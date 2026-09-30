@@ -77,7 +77,8 @@ jobs:
           version: "49.0.0"
       - run: cargo build --locked --example wasi-query-stream --target wasm32-wasip2 --release
       - run: cargo build --locked --example wasi-query-stream-pending --target wasm32-wasip2 --release
-      - run: bash tests/wasi_query_stream_smoke.sh target/wasm32-wasip2/release/examples/wasi_query_stream.wasm target/wasm32-wasip2/release/examples/wasi_query_stream_pending.wasm
+      - run: cargo build --locked --example wasi-object-store-check --target wasm32-wasip2 --release
+      - run: bash tests/wasi_query_stream_smoke.sh target/wasm32-wasip2/release/examples/wasi_query_stream.wasm target/wasm32-wasip2/release/examples/wasi_query_stream_pending.wasm target/wasm32-wasip2/release/examples/wasi_object_store_check.wasm
 
   test:
     name: test (${{ matrix.os }})

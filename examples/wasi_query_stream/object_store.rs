@@ -4,10 +4,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::keys::{LOCK_FILE, TEMP_PREFIX, validate_key};
 use txbase::edge::{ObjectStore, ObjectStoreError};
 
-const LOCK_FILE: &str = ".txbase-object-store.lock";
-const TEMP_PREFIX: &str = ".txbase-object-store-tmp-";
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 pub struct FilesystemObjectStore {
@@ -22,28 +21,10 @@ impl FilesystemObjectStore {
     }
 
     fn path_for(&self, key: &str) -> Result<PathBuf, ObjectStoreError> {
-        if key.is_empty() || key.contains('\0') {
-            return Err(ObjectStoreError::Invalid(
-                "object key must be non-empty and must not contain NUL".into(),
-            ));
-        }
+        validate_key(key)?;
 
         let mut path = self.root.clone();
         for component in key.split('/') {
-            if component.is_empty()
-                || component == "."
-                || component == ".."
-                || component == LOCK_FILE
-                || component.starts_with(TEMP_PREFIX)
-                || component.ends_with([' ', '.'])
-                || component.chars().any(|character| {
-                    matches!(character, '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
-                })
-            {
-                return Err(ObjectStoreError::Invalid(format!(
-                    "object key component is not portable: {component}"
-                )));
-            }
             path.push(component);
             match fs::symlink_metadata(&path) {
                 Ok(metadata) if metadata.file_type().is_symlink() => {

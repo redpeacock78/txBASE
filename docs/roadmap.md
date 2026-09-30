@@ -106,7 +106,7 @@ The frontend streams HTTP/1.1 to a token-protected loopback backend and validate
 The baseline intentionally does not include the following:
 
 - Filesystem- and cache-aware merge join costing.
-- Production WASI host lifecycle semantics, provider-backed object-store adapters, and genuinely non-blocking storage I/O beyond the current synchronous filesystem adapter.
+- Production WASI host lifecycle semantics, provider-backed object-store adapters, and validation against custom or deployed WASI hosts.
 - Predicate-level locking and distributed serializable coordination.
 - Aggregation stages and accumulator expressions outside the current bounded contracts in [Aggregation model](aggregation.md) and [Aggregation accumulators](aggregation-accumulators.md).
 - References across catalog roots.
@@ -202,10 +202,10 @@ The mutation wrappers reject operations after cancellation but let accepted writ
 The token is not exposed by the generated WASM Promise methods, whose host requests use `AbortSignal` instead.
 Hosts that ignore that signal may continue their underlying request after the Promise caller stops awaiting it.
 The WASI CLI component also reads current or retained XBF snapshots through a
-writable preopened filesystem store. It uses synchronous filesystem operations
-through `SyncObjectStoreAdapter`, completes pending-WAL recovery before row
-delivery when the host grants write access, and does not coordinate concurrent
-writers. Provider-backed WASI storage, non-blocking storage I/O, and production
+writable preopened filesystem store. Its `AsyncObjectStore` adapter awaits WASI
+0.3 filesystem descriptor and stream operations instead of using synchronous
+`std::fs`; it completes pending-WAL recovery before row delivery and does not
+coordinate concurrent writers. Provider-backed WASI storage and production
 host lifecycle semantics remain future work.
 
 An index is not complete for the broader roadmap until insert, update, logical delete, recovery, stale-index detection, rebuild behavior, cost-model limits, direction compatibility, and crash behavior are specified and tested together.
@@ -449,17 +449,16 @@ A pinned Wasmtime CI smoke check covers both input paths and
 the shared filter, projection, skip, and limit controls.
 The smoke check also pauses its stdout reader during a 131,072-row DBF query and verifies the complete output after draining resumes.
 The pending-stream fixture returns `Poll::Pending`, then a separately polled future wakes it after that poll completes; the smoke check requires the executor to re-poll it and emit exactly one row.
-The XBF adapter uses synchronous filesystem operations and does not coordinate
-concurrent writers; callers must prevent other processes from writing while
-the CLI runs.
-It recovers a pending WAL before row output when the host grants write access;
-the smoke check covers both manifest publication and WAL removal.
+The XBF adapter uses WASI 0.3 asynchronous filesystem descriptor and stream
+operations and does not coordinate concurrent writers; callers must prevent
+other processes from writing while the CLI runs.
+It recovers a pending WAL before row output; the smoke check covers both
+manifest publication and WAL removal and exercises streamed object-store I/O.
 WASI 0.3.1 is a stable specification, but Wasmtime's `wasmtime-wasi::p3` host
 implementation is documented as experimental, unstable, and incomplete.
 The pinned CLI smoke test does not validate a custom production host.
-Provider-backed WASI storage, non-blocking storage I/O, host-specific lifecycle
-policies, provider integrations beyond R2, and live host validation remain
-future work.
+Provider-backed WASI storage, host-specific lifecycle policies, provider
+integrations beyond R2, and live host validation remain future work.
 
 WASM must reuse the DBF or XBF codec and query contracts instead of creating a second database implementation.
 

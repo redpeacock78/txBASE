@@ -1,3 +1,6 @@
+#[path = "../examples/wasi_query_stream/keys.rs"]
+mod keys;
+
 #[path = "../examples/wasi_query_stream/object_store.rs"]
 mod wasi_filesystem_store;
 
