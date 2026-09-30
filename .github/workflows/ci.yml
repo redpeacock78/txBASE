@@ -22,7 +22,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.85.0
-      - run: cargo test --locked --all-targets --all-features
+      - name: Run the suite without the heavy catch-up fixture
+        run: cargo test --locked --all-targets --all-features -- --skip isolated_voter_applies_batched_catchup_payloads_once
+      - name: Run the catch-up fixture without parallel test load
+        run: cargo test --locked --lib --all-features isolated_voter_applies_batched_catchup_payloads_once
 
   fuzz:
     name: bounded-fuzz
