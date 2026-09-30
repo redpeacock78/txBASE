@@ -98,7 +98,11 @@ pub(super) fn run_isolated_voter_catchup_round(
         let applied_entries_before_request = batch_index as u64 * max_payload_entries;
         let request_entry_count = delayed_append
             .wait_until_paused(Duration::from_secs(10))
-            .unwrap();
+            .unwrap_or_else(|error| {
+                panic!(
+                    "payload of {payload_size} entries stalled at catch-up boundary {applied_entries_before_request}: {error}"
+                )
+            });
         assert!(
             (1..=max_payload_entries as usize).contains(&request_entry_count),
             "each catch-up AppendEntries request must respect the payload limit"

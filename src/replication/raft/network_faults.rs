@@ -91,38 +91,51 @@ impl FaultController {
             .delayed_appends
             .lock()
             .map_err(|error| format!("test network delay lock poisoned: {error}"))?;
+        let mut released_delay = None;
         if has_uniform_membership {
-            if let Some(delay) = Self::append_delay_for_key(
+            if let Some((delay, is_pending)) = Self::append_delay_for_key(
                 &mut delays,
                 (target, AppendDelayKind::UniformMembership),
             ) {
-                return Ok(Some(delay));
+                if is_pending {
+                    return Ok(Some(delay));
+                }
+                released_delay = Some(delay);
             }
         }
         for log_index in entry_log_indices {
-            if let Some(delay) = Self::append_delay_for_key(
+            if let Some((delay, is_pending)) = Self::append_delay_for_key(
                 &mut delays,
                 (target, AppendDelayKind::LogIndex(*log_index)),
             ) {
-                return Ok(Some(delay));
+                if is_pending {
+                    return Ok(Some(delay));
+                }
+                released_delay.get_or_insert(delay);
             }
         }
-        Ok(Self::append_delay_for_key(
-            &mut delays,
-            (target, AppendDelayKind::Any),
-        ))
+        if let Some((delay, is_pending)) =
+            Self::append_delay_for_key(&mut delays, (target, AppendDelayKind::Any))
+        {
+            if is_pending {
+                return Ok(Some(delay));
+            }
+            released_delay.get_or_insert(delay);
+        }
+        Ok(released_delay)
     }
 
     fn append_delay_for_key(
         delays: &mut BTreeMap<(u64, AppendDelayKind), Arc<AppendDelay>>,
         key: (u64, AppendDelayKind),
-    ) -> Option<Arc<AppendDelay>> {
+    ) -> Option<(Arc<AppendDelay>, bool)> {
         let delay = Arc::clone(delays.get(&key)?);
+        let is_pending = delay.is_pending();
         // Keep a pending gate so a retry cannot bypass the test fault.
-        if !delay.is_pending() {
+        if !is_pending {
             delays.remove(&key);
         }
-        Some(delay)
+        Some((delay, is_pending))
     }
 }
 
@@ -250,5 +263,55 @@ impl AppendDelayHandle {
 impl Drop for AppendDelayHandle {
     fn drop(&mut self) {
         self.release();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn released_index_gate_does_not_shadow_a_later_pending_gate() {
+        let controller = FaultController::default();
+        let mut first = controller.delay_append_entries_at(7, 10).unwrap();
+        let first_delay = controller
+            .append_delay_for(7, false, &[10])
+            .unwrap()
+            .unwrap();
+        assert!(first_delay.claim());
+        first.release();
+
+        let later = controller.delay_append_entries_at(7, 20).unwrap();
+        let selected = controller
+            .append_delay_for(7, false, &[10, 20])
+            .unwrap()
+            .unwrap();
+        assert!(Arc::ptr_eq(&selected, &later.delay));
+        assert!(selected.claim());
+    }
+
+    #[test]
+    fn released_gate_rejects_one_in_flight_retry_before_removal() {
+        let controller = FaultController::default();
+        let mut gate = controller.delay_append_entries_at(7, 10).unwrap();
+        let first = controller
+            .append_delay_for(7, false, &[10])
+            .unwrap()
+            .unwrap();
+        assert!(first.claim());
+        gate.release();
+
+        let retry = controller
+            .append_delay_for(7, false, &[10])
+            .unwrap()
+            .unwrap();
+        assert!(Arc::ptr_eq(&first, &retry));
+        assert!(!retry.claim());
+        assert!(
+            controller
+                .append_delay_for(7, false, &[10])
+                .unwrap()
+                .is_none()
+        );
     }
 }
