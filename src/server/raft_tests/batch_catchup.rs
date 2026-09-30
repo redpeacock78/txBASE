@@ -56,7 +56,7 @@ fn isolated_voter_receives_two_log_entries_in_one_append_request() {
     assert_eq!(
         commit(
             &nodes[leader_index],
-            record_command(&leader_root, 1, 4, "BatchBaseline", 43)
+            record_command(&leader_root, 1, 4, "Baseline", 43)
         ),
         RaftResponseResult::Applied { transaction_id: 2 }
     );
