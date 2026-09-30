@@ -3,8 +3,8 @@ use super::*;
 #[test]
 fn isolated_voter_applies_batched_catchup_payloads_once() {
     const NODE_COUNT: u64 = 3;
-    const MAX_PAYLOAD_ENTRIES: u64 = 8;
-    const PAYLOAD_SIZES: [u64; 3] = [2, 4, 8];
+    const MAX_PAYLOAD_ENTRIES: u64 = 16;
+    const PAYLOAD_SIZES: [u64; 6] = [2, 4, 8, 16, 17, 32];
 
     let root = temporary_cluster();
     let addresses = free_addresses(NODE_COUNT as usize);
@@ -140,6 +140,15 @@ fn isolated_voter_applies_batched_catchup_payloads_once() {
         let mut delayed_append = leader
             .delay_append_entries_at(target_id, leader_log_index + 1)
             .unwrap();
+        let delayed_tail = if payload_size > MAX_PAYLOAD_ENTRIES {
+            Some(
+                leader
+                    .delay_append_entries_at(target_id, leader_log_index + MAX_PAYLOAD_ENTRIES + 1)
+                    .unwrap(),
+            )
+        } else {
+            None
+        };
         leader.set_peer_blocked(target_id, false).unwrap();
         target.set_peer_blocked(leader.node_id, false).unwrap();
 
@@ -147,8 +156,8 @@ fn isolated_voter_applies_batched_catchup_payloads_once() {
             delayed_append
                 .wait_until_paused(Duration::from_secs(10))
                 .unwrap(),
-            payload_size as usize,
-            "the catch-up AppendEntries request must contain the complete batch"
+            payload_size.min(MAX_PAYLOAD_ENTRIES) as usize,
+            "the catch-up AppendEntries request must respect the payload limit"
         );
         assert_eq!(
             Catalog::from_path(&target_root)
@@ -178,6 +187,63 @@ fn isolated_voter_applies_batched_catchup_payloads_once() {
         delayed_append
             .wait_for_completion(Duration::from_secs(10))
             .unwrap();
+        if let Some(mut delayed_tail) = delayed_tail {
+            assert_eq!(
+                delayed_tail
+                    .wait_until_paused(Duration::from_secs(10))
+                    .unwrap(),
+                (payload_size - MAX_PAYLOAD_ENTRIES) as usize,
+                "the follow-up AppendEntries request must contain the remaining entries"
+            );
+            let first_chunk_transaction_id = baseline_transaction_id + MAX_PAYLOAD_ENTRIES;
+            let caught_up_target = [target.clone()];
+            wait_for_transaction(
+                &caught_up_target,
+                &root,
+                first_chunk_transaction_id,
+                Duration::from_secs(15),
+            );
+            assert_eq!(
+                Catalog::from_path(&target_root)
+                    .unwrap()
+                    .transaction_id()
+                    .unwrap(),
+                Some(first_chunk_transaction_id),
+                "the target must apply only the first payload before the tail is released"
+            );
+            let partial_table = Catalog::from_path(&target_root)
+                .unwrap()
+                .open_table("users")
+                .unwrap();
+            assert_eq!(
+                partial_table.records().len(),
+                baseline_record_count + MAX_PAYLOAD_ENTRIES as usize
+            );
+            assert_eq!(
+                target.node.metrics().borrow().last_log_index,
+                Some(leader_log_index + MAX_PAYLOAD_ENTRIES),
+                "the target log must stop at the first payload while the tail is held"
+            );
+            for (index, name) in names.iter().enumerate() {
+                let expected_count = if index < MAX_PAYLOAD_ENTRIES as usize {
+                    1
+                } else {
+                    0
+                };
+                assert_eq!(
+                    partial_table
+                        .active_records()
+                        .filter(|record| record.values["NAME"].as_str() == Some(name.as_str()))
+                        .count(),
+                    expected_count,
+                    "the target must apply only the first payload while the tail is held"
+                );
+            }
+            delayed_tail.release();
+            delayed_tail
+                .wait_for_completion(Duration::from_secs(10))
+                .unwrap();
+        }
         wait_for_transaction(&nodes, &root, final_transaction_id, Duration::from_secs(20));
         for source in &nodes {
             if source.node_id != target_id {

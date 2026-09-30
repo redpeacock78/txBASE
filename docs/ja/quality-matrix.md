@@ -183,6 +183,8 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 
 | RAFT-015 | tokenなしは線形化barrierを使います。応答tokenはcluster単位の適用indexを示します。次の読み取りにtokenを渡すと、followerはそのindexまで追いつきます。読み取り単調性は保ちますが、最新状態は保証しません。不正token、cluster不一致、`at`併用は拒否します。 | `src/server/raft/read_token.rs`; `src/server/raft.rs`; `src/server/catalog.rs`; `src/server/raft_tests/follower_reads.rs`; `src/server/raft_tests/idempotency.rs`; `docs/ja/raft.md` | `read_token.rs`のunit test; `follower_read_token_waits_for_its_index_and_can_be_chained`; `transaction_retry_after_lost_response_returns_the_committed_result_once` | Boundary |
 
+| RAFT-016 | 3 node CIテストは`max_payload_entries`を16に設定し、voter 1台を隔離したcatch-upで2、4、8、16、17、32件のcommandを検査します。各回の最初の要求を保留し、17件と32件では2件目も保留します。tailの解放前に最初の16件だけが対象voterのlogとcatalogへ適用されたことを確認します。解放後は全nodeが収束し、各recordが一度だけ適用されます。 | `src/replication/raft/network.rs`; `src/replication/raft/network_faults.rs`; `src/server/raft_tests/batch_catchup.rs`; `docs/ja/raft.md` | `isolated_voter_applies_batched_catchup_payloads_once` | Boundary |
+
 ## 明示的に残るギャップ
 
 次の話題には文書または設計メモがありますが、マトリクスで現在の実装とは主張していません。
@@ -194,7 +196,7 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 - 選定した`ja`、`zh`、`ko`フィクスチャを超える、ロケール固有の期待順序コーパス。フィクスチャは[CLDR 48の日本語ルール](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ja.xml)、[中国語ルール](https://github.com/unicode-org/cldr/blob/release-48/common/collation/zh.xml)、[韓国語ルール](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml)に基づく。UTS #10のテストはテーラリング前のDUCETを対象とし、CLDRの`common/uca`コーパスはroot順序を対象とする（[UTS #10 §12.2](https://www.unicode.org/reports/tr10/)、[CLDR 48の照合テスト](https://github.com/unicode-org/cldr/tree/release-48/common/uca)）。
 - スキーマを保つXBFからDBFへのエクスポートにおける厳密な複数ファイル読み取りアトミック性、R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針。
 - デプロイ済みWorkerまたはWASI production hostのfixture、futureのキャンセルを超えるホストI/O中断の保証、永続的な再試行キュー、権威検出。
-- RAFT-006の固定4要求の解放順序と同一peerへの逐次2要求、RAFT-014の2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケースを超える遅延・順序変更テスト。異なるtermやpartition条件の組み合わせも未検証である。RAFT-013の4地点以外でのクラッシュ注入も未完了である。
+- RAFT-006の固定4要求の解放順序と同一peerへの逐次2要求、RAFT-014の2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケース、RAFT-016の1要求および2要求のpayload catch-upを超える遅延・順序変更テスト。32件を超えるpayload、異なるtermやpartition条件の組み合わせも未検証である。RAFT-013の4地点以外でのクラッシュ注入も未完了である。
 
 これらのいずれかをCurrentへ移す前に、公開契約、壊れた入力の動作、クラッシュまたは再試行の動作、フィクスチャまたは決定的テスト、この表の行を追加します。
 

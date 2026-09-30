@@ -17,9 +17,10 @@ The test restores the original voter set after every node catches up.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so this covers successive requests rather than overlapping calls from the same leader to that peer ([threading model](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/docs/internal/threading.md); [replication implementation](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/replication/mod.rs)).
 In a later phase of the same five-node test, one voter is isolated while the remaining quorum commits two commands.
 It delays the request for the second missing log index after verifying that the first command has reached the voter, then checks that each record is applied once after release.
-A separate three-node CI test sets `max_payload_entries` to 8 and, in one cluster, isolates a voter for successive catch-up rounds containing 2, 4, and 8 committed log entries.
-For each round, it holds one request containing the complete batch, verifies that the target log and catalog remain unchanged, and checks exactly-once application on every node after release.
-Payloads larger than eight entries, additional term histories, and other partition conditions remain untested.
+A separate three-node CI test sets `max_payload_entries` to 16 and, in one cluster, isolates a voter for successive catch-up rounds containing 2, 4, 8, 16, 17, and 32 committed log entries.
+Each first request is held; for 17- and 32-entry rounds, the test also holds the second request and verifies that only the first 16 entries have reached the target log and catalog before releasing the tail.
+After release, every node converges with each record applied exactly once.
+Payloads larger than 32 entries, additional term histories, and other partition conditions remain untested.
 Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
@@ -54,7 +55,7 @@ This document records the implemented Raft boundary and the remaining authority,
 
 ### Not implemented
 
-- Broader deterministic coverage for delayed or reordered RPC schedules beyond the fixed four-request release permutations, the sequential same-peer pair, the two-command voter catch-up with its second request delayed, and catch-up payloads of 2, 4, and 8 entries; payloads larger than eight entries, additional term histories, and other partition conditions remain untested.
+- Broader deterministic coverage for delayed or reordered RPC schedules beyond the fixed four-request release permutations, the sequential same-peer pair, the two-command voter catch-up with its second request delayed, and catch-up payloads of 2, 4, 8, 16, 17, and 32 entries; payloads larger than 32 entries, additional term histories, and other partition conditions remain untested.
 - Follower reads that guarantee the latest quorum-committed state; read tokens provide session monotonicity only.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
@@ -229,9 +230,11 @@ After all nodes catch up, it restores the original voter set.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so the test does not claim to hold overlapping calls from the same leader to that peer.
 The same five-node run then isolates one voter while the other four commit two commands.
 It holds the second command's `AppendEntries` request after the first command has applied at that voter; every node must apply both records once and converge at transaction 7.
-A separate three-node CI test sets `max_payload_entries` to 8 and, within one cluster, holds successive catch-up requests containing 2, 4, and 8 committed entries while a voter is isolated.
-For each size, the test verifies that the target log and catalog remain unchanged until release and that every node applies the complete batch once.
-These cases do not cover payloads larger than eight entries, additional term histories, or other partition conditions.
+A separate three-node CI test sets `max_payload_entries` to 16 and, within one cluster, isolates a voter for catch-up batches of 2, 4, 8, 16, 17, and 32 committed entries.
+The first request in each round is held and must contain no more than 16 entries.
+For batches of 17 and 32 entries, the test also holds the second request and verifies that the target has applied exactly the first 16 entries before the tail is released.
+All nodes must then converge with each record applied once.
+Payloads larger than 32 entries, additional term histories, and other partition conditions remain untested.
 
 ## Primary references and scope
 
