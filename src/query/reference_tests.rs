@@ -72,6 +72,14 @@ fn generated_filters() -> Vec<Value> {
             filters.push(field_filter("N", operator, candidates.clone()));
         }
     }
+    for expected in [false, true] {
+        filters.push(field_filter("OPTIONAL", "$exists", json!(expected)));
+    }
+    for operator in ["$in", "$nin"] {
+        for candidates in [json!([null]), json!([null, 0])] {
+            filters.push(field_filter("OPTIONAL", operator, candidates));
+        }
+    }
     for operator in ["$eq", "$ne"] {
         for expected in [json!(null), json!(-3), json!(0), json!(4)] {
             filters.push(field_filter("OPTIONAL", operator, expected));
@@ -91,6 +99,7 @@ fn generated_filters() -> Vec<Value> {
         json!({"$or": [{"N": {"$lt": -2}}, {"ACTIVE": true}]}),
         json!({"$not": {"N": {"$lt": 0}}}),
         json!({"$not": {"OPTIONAL": {"$eq": 1}}}),
+        json!({"OPTIONAL": {"$exists": true, "$ne": null}}),
     ]);
     filters
 }
@@ -150,6 +159,9 @@ fn reference_condition(actual: Option<&Value>, condition: &Value) -> bool {
             "$nin" => expected.as_array().is_some_and(|candidates| {
                 actual.is_none_or(|actual| candidates.iter().all(|candidate| candidate != actual))
             }),
+            "$exists" => expected
+                .as_bool()
+                .is_some_and(|expected| actual.is_some() == expected),
             "$not" => !reference_condition(actual, expected),
             _ => false,
         })

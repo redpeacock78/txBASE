@@ -146,6 +146,66 @@ fn supports_dotted_paths_for_nested_values() {
 }
 
 #[test]
+fn exists_predicate_distinguishes_absent_from_explicit_null() {
+    let values = serde_json::json!({
+        "PRESENT_NULL": null,
+        "PROFILE": {"CITY": "Tokyo", "ALIAS": null},
+        "ITEMS": [{"CODE": 1}, {}],
+        "EMPTY": []
+    })
+    .as_object()
+    .unwrap()
+    .clone();
+    let cases = [
+        (serde_json::json!({"PRESENT_NULL": {"$exists": true}}), true),
+        (
+            serde_json::json!({"PRESENT_NULL": {"$exists": false}}),
+            false,
+        ),
+        (serde_json::json!({"ABSENT": {"$exists": false}}), true),
+        (
+            serde_json::json!({"PROFILE.ALIAS": {"$exists": true}}),
+            true,
+        ),
+        (
+            serde_json::json!({"PROFILE.MISSING": {"$exists": false}}),
+            true,
+        ),
+        (serde_json::json!({"ITEMS.CODE": {"$exists": true}}), true),
+        (
+            serde_json::json!({"ITEMS.MISSING": {"$exists": false}}),
+            true,
+        ),
+        (serde_json::json!({"EMPTY": {"$exists": true}}), true),
+        (
+            serde_json::json!({"ITEMS": {"$elemMatch": {"MISSING": {"$exists": false}}}}),
+            true,
+        ),
+        (
+            serde_json::json!({"ABSENT": {"$exists": false, "$ne": null}}),
+            true,
+        ),
+        (
+            serde_json::json!({"$not": {"PRESENT_NULL": {"$exists": false}}}),
+            true,
+        ),
+    ];
+
+    assert!(SUPPORTED_FILTER_OPERATORS.contains(&"$exists"));
+    assert!(parse(br#"{"filter":{"PROFILE.ALIAS":{"$exists":true}}}"#).is_ok());
+    let error = parse(br#"{"filter":{"FIELD":{"$exists":null}}}"#).unwrap_err();
+    assert!(error.to_string().contains("$exists must be a boolean"));
+
+    for (filter, expected) in cases {
+        assert_eq!(
+            matches_filter(&values, filter.as_object().unwrap()).unwrap(),
+            expected,
+            "filter: {filter}"
+        );
+    }
+}
+
+#[test]
 fn supports_explicit_array_indices_in_paths() {
     let values = serde_json::json!({
         "PROFILE": {

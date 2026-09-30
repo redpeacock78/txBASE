@@ -207,14 +207,42 @@ The complete boundary is documented in [asynchronous query streaming](async-stre
 | Comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` | Compare decoded JSON values using the engine's explicit type rules |
 | Membership | `$in`, `$nin` | Match a value against a list of candidate values |
 | Array | `$all`, `$elemMatch`, `$size` | Match array contents, one array element's conditions, or exact array length |
+| Presence | `$exists` | Test whether the resolved field path is present; explicit `null` counts as present |
 | Logical | `$and`, `$or`, `$not` | Compose or invert predicate documents |
 | Expression | `$expr` | Compare scalar literals, field references, array constructors, `$literal`, two-operand `$ifNull`, conditional `$cond`, bounded string `$concat`/`$toLower`/`$toUpper`, or bounded numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` expressions from the same record |
+
+### Missing paths and explicit null
+
+A field-path lookup either resolves a JSON value or finds no value because the path is absent.
+
+An explicit `null` is a present JSON value.
+
+For scalar-valued fields, txBASE applies these rules:
+
+| Predicate | Missing path | Present `null` |
+| --- | --- | --- |
+| Literal `null` or `$eq: null` | No match | Match |
+| `$ne: null` | Match | No match |
+| `$in: [null]` | No match | Match |
+| `$nin: [null]` | Match | No match |
+| `$exists: true` | No match | Match |
+| `$exists: false` | Match | No match |
+
+`$exists` requires a boolean and uses the same path resolver as other predicates.
+
+For a dotted path through arrays, it matches `true` when at least one traversal resolves a value.
+
+The resolved value may be `null`, and an empty array at the requested path is still present.
+
+Conditions on one field are combined with AND, while `$not` negates the complete nested condition.
+
+These rules intentionally differ from MongoDB's null equality behavior, where a null query also matches a missing field.
+
+The MongoDB references below inform the `$exists` vocabulary only; they do not define txBASE's null, array, or planner behavior.
 
 An empty `$and` matches every record.
 
 An empty `$or` matches no record.
-
-Missing fields match `$ne` and `$nin` according to the current executor contract.
 
 When a field contains an array, a predicate can match when an array element satisfies the predicate.
 
@@ -228,7 +256,7 @@ When a field contains an array, a predicate can match when an array element sati
 
 These array predicates use a bounded table scan and are not index candidates.
 
-These choices are tested in `src/query/tests.rs` and `src/query/malformed_tests.rs`.
+These choices are tested by the independent scalar-predicate matrix, dotted-path presence cases, and array-predicate tests.
 
 `$abs` accepts exactly one numeric literal, field reference, or nested numeric expression.
 
@@ -300,6 +328,8 @@ The current implementation does not promise every MongoDB projection rule, posit
 
 - [MongoDB documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
+- [MongoDB `$exists` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/exists/)
+- [MongoDB queries for null or missing fields](https://www.mongodb.com/docs/manual/tutorial/query-for-null-fields/)
 - [MongoDB array predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
 - [MongoDB `$all` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/all/)
 - [MongoDB `$elemMatch` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/elemmatch/)

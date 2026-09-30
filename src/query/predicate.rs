@@ -97,6 +97,12 @@ pub(crate) fn matches_condition(
                             .all(|expected| !equality_matches(value, expected))
                     }))
                 }
+                "$exists" => {
+                    let expected = operand
+                        .as_bool()
+                        .ok_or_else(|| QueryError::Invalid("$exists must be a boolean".into()))?;
+                    Ok(actual.is_some() == expected)
+                }
                 "$all" => matches_all(actual, operand),
                 "$elemMatch" => matches_elem_match(actual, operand),
                 "$size" => matches_size(actual, operand),

@@ -119,6 +119,12 @@ It needs key encoding, null and missing-field rules, duplicate ordering, update 
 
 The current planner considers direct top-level equality, exact compound equality, compound equality-prefix candidates, single-bound-per-side range predicates, single-field ordered traversal, compound equality-prefix range predicates, and single-key or compound sort requests whose fields match an index suffix after an exact equality prefix.
 
+`$exists` does not select an index path by itself.
+
+When another conjunct selects an index, the executor rechecks the complete filter on every candidate; otherwise it uses `TableScan`.
+
+Sparse indexes and indexed field-presence queries are outside the current planner contract.
+
 For multiple usable single-field equality indexes, the planner compares each single-index candidate with one record-number intersection candidate and chooses the lowest bounded cost.
 
 The planner uses the sidecar's active-record count and each single-field index's distinct-key count to estimate equality cardinality before loading candidate lists.

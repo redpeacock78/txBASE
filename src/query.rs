@@ -73,6 +73,7 @@ pub const SUPPORTED_FILTER_OPERATORS: &[&str] = &[
     "$all",
     "$elemMatch",
     "$size",
+    "$exists",
     "$and",
     "$or",
     "$not",

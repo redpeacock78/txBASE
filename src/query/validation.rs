@@ -81,6 +81,13 @@ fn validate_condition(condition: &Value, path: &str) -> Result<(), QueryError> {
     for (operator, operand) in operators {
         match operator.as_str() {
             "$eq" | "$ne" | "$gt" | "$gte" | "$lt" | "$lte" => {}
+            "$exists" => {
+                if !operand.is_boolean() {
+                    return Err(QueryError::Invalid(format!(
+                        "{path}.$exists must be a boolean"
+                    )));
+                }
+            }
             "$in" | "$nin" => {
                 if !operand.is_array() {
                     return Err(QueryError::Invalid(format!(

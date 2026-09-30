@@ -201,14 +201,42 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 | 比較 | `$eq`、`$ne`、`$gt`、`$gte`、`$lt`、`$lte` | エンジン固有の型規則でデコード済み JSON 値を比較する |
 | 所属 | `$in`、`$nin` | 値を候補値のリストと照合する |
 | 配列 | `$all`、`$elemMatch`、`$size` | 配列の内容、1つの配列要素の条件、または配列の正確な長さを照合する |
+| 存在 | `$exists` | 解決したフィールドパスの有無を調べる。明示的な`null`は存在する値として扱う |
 | 論理 | `$and`、`$or`、`$not` | 述語文書を合成または反転する |
 | 式 | `$expr` | 同じレコードのスカラーリテラル、フィールド参照、配列構築子、`$literal`、2オペランドの`$ifNull`、条件式`$cond`、有界な文字列`$concat` / `$toLower` / `$toUpper`、または有界な数値`$abs` / `$add` / `$subtract` / `$multiply` / `$divide` / `$mod`式を比較する |
+
+### 欠損パスと明示的なnull
+
+フィールドパスの参照結果は、JSON値を解決するか、パスが欠けて値を解決できないかのどちらかです。
+
+明示的な`null`は存在するJSON値です。
+
+スカラー値のフィールドには、次の規則を適用します。
+
+| 述語 | パスが欠損 | 値が`null` |
+| --- | --- | --- |
+| リテラル`null`または`$eq: null` | 不一致 | 一致 |
+| `$ne: null` | 一致 | 不一致 |
+| `$in: [null]` | 不一致 | 一致 |
+| `$nin: [null]` | 一致 | 不一致 |
+| `$exists: true` | 不一致 | 一致 |
+| `$exists: false` | 一致 | 不一致 |
+
+`$exists`のオペランドには真偽値を指定します。他の述語と同じフィールドパス解決を使います。
+
+配列を通るドット区切りパスでは、1つ以上の走査で値を解決できれば`true`に一致します。
+
+解決した値は`null`でもよく、指定パスにある空配列も存在する値です。
+
+同じフィールドに指定した条件はANDで結合し、`$not`はネストした条件全体を反転します。
+
+この規則は、nullの等値検索が欠損フィールドにも一致するMongoDBの動作とは異なります。
+
+後述するMongoDBの資料は`$exists`という語彙の参照に限ります。txBASEのnull、配列、プランナーの動作は定義しません。
 
 空の`$and`はすべてのレコードに一致します。
 
 空の`$or`はどのレコードにも一致しません。
-
-欠損フィールドは、現在の実行器契約に従って`$ne`と`$nin`に一致します。
 
 フィールドが配列の場合、配列要素の1つが述語を満たせば一致することがあります。
 
@@ -222,7 +250,7 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 
 これらの配列述語は有界なテーブルスキャンを使い、インデックス候補にはなりません。
 
-これらの選択は`src/query/tests.rs`と`src/query/malformed_tests.rs`でテストします。
+この契約は、独立したスカラー述語マトリクス、ドット区切りパスの存在確認、配列述語テストで検査します。
 
 `$abs`は、数値リテラル、フィールド参照、またはネストした数値式を1つだけ受け付けます。
 
@@ -297,6 +325,8 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 
 - [MongoDB documents](https://www.mongodb.com/docs/manual/core/document/)
 - [MongoDB query predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/)
+- [MongoDB `$exists` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/exists/)
+- [MongoDB queries for null or missing fields](https://www.mongodb.com/docs/manual/tutorial/query-for-null-fields/)
 - [MongoDB array predicates](https://www.mongodb.com/docs/manual/reference/mql/query-predicates/arrays/)
 - [MongoDB `$all` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/all/)
 - [MongoDB `$elemMatch` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/elemmatch/)

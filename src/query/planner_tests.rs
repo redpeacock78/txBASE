@@ -46,6 +46,30 @@ fn uses_a_valid_equality_index_and_preserves_scan_results() {
         execute_query(&table, &request).unwrap()
     );
 
+    let exists_request = parse(br#"{"filter":{"NAME":{"$exists":true}}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &exists_request).unwrap(),
+        QueryPlan::TableScan
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &exists_request).unwrap(),
+        execute_query(&table, &exists_request).unwrap()
+    );
+
+    let indexed_with_exists =
+        parse(br#"{"filter":{"NAME":"Alice","AGE":{"$exists":true}}}"#).unwrap();
+    assert_eq!(
+        explain_query_at(&path, &indexed_with_exists).unwrap(),
+        QueryPlan::EqualityIndex {
+            name: "by_name".into(),
+            field: "NAME".into(),
+        }
+    );
+    assert_eq!(
+        execute_query_at(&table, &path, &indexed_with_exists).unwrap(),
+        execute_query(&table, &indexed_with_exists).unwrap()
+    );
+
     let intersection_request = parse(br#"{"filter":{"NAME":"Alice","AGE":29}}"#).unwrap();
     assert_eq!(
         explain_query_at(&path, &intersection_request).unwrap(),
