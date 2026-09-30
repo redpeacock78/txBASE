@@ -104,12 +104,21 @@ pub(super) fn run_isolated_voter_catchup_round(
                     .map(|node| (node.node_id, node.node.metrics().borrow().current_leader))
                     .collect::<Vec<_>>();
                 panic!(
-                    "payload of {payload_size} entries stalled at catch-up boundary {applied_entries_before_request} (expected log index {}, target last log index {:?}, leaders {:?}): {error}",
-                    leader_log_index + applied_entries_before_request + 1,
+                    "payload of {payload_size} entries stalled at catch-up boundary {applied_entries_before_request} (armed leader {} at log {:?}, target {} at log {:?}, expected log index {}, leaders {:?}): {error}",
+                    leader.node_id,
+                    leader.node.metrics().borrow().last_log_index,
+                    target_id,
                     target.node.metrics().borrow().last_log_index,
+                    leader_log_index + applied_entries_before_request + 1,
                     leaders
                 )
             });
+        eprintln!(
+            "catch-up payload={payload_size} boundary={applied_entries_before_request} paused_entries={request_entry_count} leader={} target={} target_log={:?}",
+            leader.node_id,
+            target_id,
+            target.node.metrics().borrow().last_log_index
+        );
         assert!(
             (1..=max_payload_entries as usize).contains(&request_entry_count),
             "each catch-up AppendEntries request must respect the payload limit"
