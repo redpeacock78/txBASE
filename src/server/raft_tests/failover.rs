@@ -245,8 +245,38 @@ fn run_partitioned_leader_scenario(release_order: [usize; 4], verify_successive_
         "Failover",
         45,
     );
+    let commit_deadline = Instant::now() + Duration::from_secs(15);
+    let mut write_index = replacement_index;
+    let write_response = loop {
+        let remaining = commit_deadline.saturating_duration_since(Instant::now());
+        assert!(
+            !remaining.is_zero(),
+            "the replacement leader did not stabilize before committing"
+        );
+        let leader = &majority[write_index];
+        match leader.runtime.block_on(async {
+            tokio::time::timeout(
+                remaining,
+                leader.node.client_write(replacement_command.clone()),
+            )
+            .await
+        }) {
+            Ok(Ok(response)) => break response,
+            Ok(Err(error)) => {
+                let leader_id = error
+                    .forward_to_leader::<openraft::BasicNode>()
+                    .and_then(|forward| forward.leader_id)
+                    .unwrap_or_else(|| panic!("replacement write failed: {error}"));
+                write_index = majority
+                    .iter()
+                    .position(|node| node.node_id == leader_id)
+                    .expect("the current leader belongs to the available majority");
+            }
+            Err(_) => panic!("replacement leader write timed out"),
+        }
+    };
     assert_eq!(
-        commit(&majority[replacement_index], replacement_command),
+        write_response.data.unwrap().result,
         RaftResponseResult::Applied { transaction_id: 3 }
     );
     wait_for_transaction(&majority, &root, 3, Duration::from_secs(15));
