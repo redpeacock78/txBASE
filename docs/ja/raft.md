@@ -29,11 +29,11 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 同じ5 nodeテストの後半では、1台のvoterを隔離したまま、残るquorumで2件のcommandをcommitします。
 1件目のcommandがvoterに適用された後で、2件目のlog indexを含む`AppendEntries`要求を遅延させて解放します。
 配送後に両方のrecordが1回だけ適用されることを検査します。
-別の3 node CIテストでは`max_payload_entries`を2に設定します。
-1台のvoterを隔離した状態で残るquorumが2件をcommitし、2件を含む1回のcatch-up `AppendEntries`要求を保留します。
-対象voterが解放まで変更前のtransaction IDとrecord数を維持し、解放後に各commandを1回だけ適用することを検査します。
+別の3 node CIテストでは`max_payload_entries`を8に設定し、同じcluster内で各回1台のvoterを隔離して、サイズ2、4、8のpayloadによるcatch-upを順に検査します。
+各回でcommit済みlog entryを含むcatch-up `AppendEntries`要求を保留します。
+解放前に対象voterのlog index、transaction ID、record数が変わらず、解放後に全nodeで全commandが一度だけ適用されることを検査します。
 固定4要求の解放順序に対する24通りの順列はそのシナリオだけを対象にします。
-2件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
+8件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -69,7 +69,7 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 
 ### 未実装
 
-- 固定4要求の解放順序、同一peerへの逐次2要求、2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケース、1回に2件を送るcatch-up payloadを超えるスケジュール。より大きなpayload、追加のterm推移、ほかのpartition条件は未検証である。
+- 固定4要求の解放順序、同一peerへの逐次2要求、2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケース、2件、4件、8件のcatch-up payloadを検査した範囲を超えるスケジュール。8件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証である。
 - 最新のquorum commit状態を保証するfollower読み取り。読み取りtokenが保証するのはセッション内の読み取り単調性だけである。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
@@ -337,9 +337,10 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 同じ5 node実行で1台のvoterを隔離したまま、残る4 nodeが2件のcommandをcommitするシナリオも検査します。
 1件目のcommandがvoterへ適用された後で、2件目の`AppendEntries`要求を保留します。
 全nodeで各recordを1回だけ適用し、transaction 7へ収束します。
-別の3 node CIテストでは、`max_payload_entries = 2`を設定して、2件を含む1回のcatch-up要求を保留します。
-対象voterが解放まで変更前の状態を維持し、全nodeが2件のrecordを1回ずつ適用することを検査します。
-2件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
+別の3 node CIテストでは、`max_payload_entries = 8`を設定し、同じcluster内で各回1台のvoterを隔離して、サイズ2、4、8のpayloadによるcatch-upを順に検査します。
+各回でcommit済みlog entryを含む要求を保留します。
+解放前に対象voterのlog index、transaction ID、record数が変わらず、解放後に全nodeでrecordが一度だけ適用されることを検査します。
+8件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
 
 ## 一次資料と適用範囲
 

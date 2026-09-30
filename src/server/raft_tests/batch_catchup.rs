@@ -1,9 +1,10 @@
 use super::*;
 
 #[test]
-fn isolated_voter_receives_two_log_entries_in_one_append_request() {
+fn isolated_voter_applies_batched_catchup_payloads_once() {
     const NODE_COUNT: u64 = 3;
-    const MAX_PAYLOAD_ENTRIES: u64 = 2;
+    const MAX_PAYLOAD_ENTRIES: u64 = 8;
+    const PAYLOAD_SIZES: [u64; 3] = [2, 4, 8];
 
     let root = temporary_cluster();
     let addresses = free_addresses(NODE_COUNT as usize);
@@ -62,155 +63,161 @@ fn isolated_voter_receives_two_log_entries_in_one_append_request() {
     );
     wait_for_transaction(&nodes, &root, 2, Duration::from_secs(15));
 
-    let leader_index = current_leader_index(&nodes, Duration::from_secs(20));
-    let leader = &nodes[leader_index];
-    let target = nodes
-        .iter()
-        .find(|node| node.node_id != leader.node_id)
-        .unwrap();
-    let target_id = target.node_id;
-    let target_root = root.join(format!("catalog-{target_id}"));
-    let leader_log_index = leader
-        .node
-        .metrics()
-        .borrow()
-        .last_log_index
-        .expect("the leader must have a committed log before isolation");
-    assert_eq!(
-        target.node.metrics().borrow().last_log_index,
-        Some(leader_log_index),
-        "the target must be caught up before isolation"
-    );
-    let baseline_transaction_id = Catalog::from_path(&target_root)
-        .unwrap()
-        .transaction_id()
-        .unwrap()
-        .unwrap();
-    let baseline_record_count = Catalog::from_path(&target_root)
-        .unwrap()
-        .open_table("users")
-        .unwrap()
-        .records()
-        .len();
-
-    for source in &nodes {
-        if source.node_id != target_id {
-            source.set_peer_blocked(target_id, true).unwrap();
-        }
-    }
-    for peer_id in nodes
-        .iter()
-        .filter(|node| node.node_id != target_id)
-        .map(|node| node.node_id)
-    {
-        target.set_peer_blocked(peer_id, true).unwrap();
-    }
-
-    let first_transaction_id = baseline_transaction_id + 1;
-    let second_transaction_id = first_transaction_id + 1;
-    assert_eq!(
-        commit(
-            leader,
-            record_command(&leader_root, baseline_transaction_id, 50, "BatchOne", 50)
-        ),
-        RaftResponseResult::Applied {
-            transaction_id: first_transaction_id
-        }
-    );
-    assert_eq!(
-        commit(
-            leader,
-            record_command(&leader_root, first_transaction_id, 51, "BatchTwo", 51,)
-        ),
-        RaftResponseResult::Applied {
-            transaction_id: second_transaction_id
-        }
-    );
-
-    let healthy_nodes = nodes
-        .iter()
-        .filter(|node| node.node_id != target_id)
-        .cloned()
-        .collect::<Vec<_>>();
-    wait_for_transaction(
-        &healthy_nodes,
-        &root,
-        second_transaction_id,
-        Duration::from_secs(15),
-    );
-    let mut delayed_append = leader
-        .delay_append_entries_at(target_id, leader_log_index + 1)
-        .unwrap();
-    leader.set_peer_blocked(target_id, false).unwrap();
-    target.set_peer_blocked(leader.node_id, false).unwrap();
-
-    assert_eq!(
-        delayed_append
-            .wait_until_paused(Duration::from_secs(10))
-            .unwrap(),
-        2,
-        "the catch-up AppendEntries request must contain both log entries"
-    );
-    assert_eq!(
-        Catalog::from_path(&target_root)
+    let mut next_record_id = 50_i64;
+    for payload_size in PAYLOAD_SIZES {
+        let leader_index = current_leader_index(&nodes, Duration::from_secs(20));
+        let leader = &nodes[leader_index];
+        let leader_root = root.join(format!("catalog-{}", leader.node_id));
+        let target = nodes
+            .iter()
+            .find(|node| node.node_id != leader.node_id)
+            .unwrap();
+        let target_id = target.node_id;
+        let target_root = root.join(format!("catalog-{target_id}"));
+        let leader_log_index = leader
+            .node
+            .metrics()
+            .borrow()
+            .last_log_index
+            .expect("the leader must have a committed log before isolation");
+        assert_eq!(
+            target.node.metrics().borrow().last_log_index,
+            Some(leader_log_index),
+            "the target must be caught up before isolation"
+        );
+        let baseline_transaction_id = Catalog::from_path(&target_root)
             .unwrap()
             .transaction_id()
-            .unwrap(),
-        Some(baseline_transaction_id),
-        "the paused catch-up request must not update the isolated voter"
-    );
-    assert_eq!(
-        Catalog::from_path(&target_root)
+            .unwrap()
+            .unwrap();
+        let baseline_record_count = Catalog::from_path(&target_root)
             .unwrap()
             .open_table("users")
             .unwrap()
             .records()
-            .len(),
-        baseline_record_count,
-        "the paused catch-up request must leave the target table unchanged"
-    );
+            .len();
 
-    delayed_append.release();
-    delayed_append
-        .wait_for_completion(Duration::from_secs(10))
-        .unwrap();
-    wait_for_transaction(
-        &nodes,
-        &root,
-        second_transaction_id,
-        Duration::from_secs(20),
-    );
-    for source in &nodes {
-        if source.node_id != target_id {
-            source.set_peer_blocked(target_id, false).unwrap();
+        for source in &nodes {
+            if source.node_id != target_id {
+                source.set_peer_blocked(target_id, true).unwrap();
+            }
         }
-    }
-    for peer_id in nodes
-        .iter()
-        .filter(|node| node.node_id != target_id)
-        .map(|node| node.node_id)
-    {
-        target.set_peer_blocked(peer_id, false).unwrap();
-    }
+        for peer_id in nodes
+            .iter()
+            .filter(|node| node.node_id != target_id)
+            .map(|node| node.node_id)
+        {
+            target.set_peer_blocked(peer_id, true).unwrap();
+        }
 
-    for node in &nodes {
-        let catalog = Catalog::from_path(root.join(format!("catalog-{}", node.node_id))).unwrap();
-        assert_eq!(
-            catalog.transaction_id().unwrap(),
-            Some(second_transaction_id)
-        );
-        let table = catalog.open_table("users").unwrap();
-        assert_eq!(table.records().len(), baseline_record_count + 2);
-        for name in ["BatchOne", "BatchTwo"] {
+        let mut names = Vec::with_capacity(payload_size as usize);
+        for offset in 0..payload_size {
+            let sequence = baseline_transaction_id + offset;
+            let record_id = next_record_id + offset as i64;
+            let name = format!("Batch{record_id}");
             assert_eq!(
-                table
-                    .active_records()
-                    .filter(|record| record.values["NAME"] == name)
-                    .count(),
-                1,
-                "node {} must apply {name} exactly once",
-                node.node_id
+                commit(
+                    leader,
+                    record_command(&leader_root, sequence, record_id, &name, 50 + record_id,)
+                ),
+                RaftResponseResult::Applied {
+                    transaction_id: sequence + 1
+                }
             );
+            names.push(name);
+        }
+        next_record_id += payload_size as i64;
+
+        let final_transaction_id = baseline_transaction_id + payload_size;
+        let healthy_nodes = nodes
+            .iter()
+            .filter(|node| node.node_id != target_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        wait_for_transaction(
+            &healthy_nodes,
+            &root,
+            final_transaction_id,
+            Duration::from_secs(15),
+        );
+        let mut delayed_append = leader
+            .delay_append_entries_at(target_id, leader_log_index + 1)
+            .unwrap();
+        leader.set_peer_blocked(target_id, false).unwrap();
+        target.set_peer_blocked(leader.node_id, false).unwrap();
+
+        assert_eq!(
+            delayed_append
+                .wait_until_paused(Duration::from_secs(10))
+                .unwrap(),
+            payload_size as usize,
+            "the catch-up AppendEntries request must contain the complete batch"
+        );
+        assert_eq!(
+            Catalog::from_path(&target_root)
+                .unwrap()
+                .transaction_id()
+                .unwrap(),
+            Some(baseline_transaction_id),
+            "the paused catch-up request must not update the isolated voter"
+        );
+        assert_eq!(
+            Catalog::from_path(&target_root)
+                .unwrap()
+                .open_table("users")
+                .unwrap()
+                .records()
+                .len(),
+            baseline_record_count,
+            "the paused catch-up request must leave the target table unchanged"
+        );
+        assert_eq!(
+            target.node.metrics().borrow().last_log_index,
+            Some(leader_log_index),
+            "the paused request must not append entries to the target log"
+        );
+
+        delayed_append.release();
+        delayed_append
+            .wait_for_completion(Duration::from_secs(10))
+            .unwrap();
+        wait_for_transaction(&nodes, &root, final_transaction_id, Duration::from_secs(20));
+        for source in &nodes {
+            if source.node_id != target_id {
+                source.set_peer_blocked(target_id, false).unwrap();
+            }
+        }
+        for peer_id in nodes
+            .iter()
+            .filter(|node| node.node_id != target_id)
+            .map(|node| node.node_id)
+        {
+            target.set_peer_blocked(peer_id, false).unwrap();
+        }
+
+        for node in &nodes {
+            let catalog =
+                Catalog::from_path(root.join(format!("catalog-{}", node.node_id))).unwrap();
+            assert_eq!(
+                catalog.transaction_id().unwrap(),
+                Some(final_transaction_id)
+            );
+            let table = catalog.open_table("users").unwrap();
+            assert_eq!(
+                table.records().len(),
+                baseline_record_count + payload_size as usize
+            );
+            for name in &names {
+                assert_eq!(
+                    table
+                        .active_records()
+                        .filter(|record| record.values["NAME"].as_str() == Some(name.as_str()))
+                        .count(),
+                    1,
+                    "node {} must apply {name} exactly once",
+                    node.node_id
+                );
+            }
         }
     }
 
