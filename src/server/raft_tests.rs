@@ -179,7 +179,15 @@ pub(super) fn record_command(
 }
 
 pub(super) fn commit(nodes: &[RaftRuntime], command: RaftCommand) -> RaftResponseResult {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    commit_with_timeout(nodes, command, Duration::from_secs(15))
+}
+
+pub(super) fn commit_with_timeout(
+    nodes: &[RaftRuntime],
+    command: RaftCommand,
+    timeout: Duration,
+) -> RaftResponseResult {
+    let deadline = Instant::now() + timeout;
     let mut leader_index =
         current_leader_index(nodes, deadline.saturating_duration_since(Instant::now()));
 

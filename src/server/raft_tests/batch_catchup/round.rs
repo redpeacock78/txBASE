@@ -64,9 +64,10 @@ pub(super) fn run_isolated_voter_catchup_round(
         let record_id = *next_record_id + offset as i64;
         let name = format!("Batch{record_id}");
         assert_eq!(
-            commit(
+            commit_with_timeout(
                 &healthy_nodes,
-                record_command(&leader_root, sequence, record_id, &name, 50 + record_id,)
+                record_command(&leader_root, sequence, record_id, &name, 50 + record_id),
+                Duration::from_secs(60),
             ),
             RaftResponseResult::Applied {
                 transaction_id: sequence + 1
