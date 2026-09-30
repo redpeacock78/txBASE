@@ -63,6 +63,9 @@ pub(super) fn delay_successive_appends_to_single_peer(nodes: &[RaftRuntime], roo
         .cloned()
         .collect::<Vec<_>>();
     wait_for_transaction(&healthy_nodes, root, 4, Duration::from_secs(15));
+    first_delay
+        .wait_until_retried(Duration::from_secs(15))
+        .unwrap();
     assert_eq!(
         Catalog::from_path(root.join(format!("catalog-{target_id}")))
             .unwrap()

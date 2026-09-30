@@ -10,6 +10,7 @@ The `/transaction` retry test sends real HTTP requests through a local TCP proxy
 A child-process test now terminates the process hosting the three-node test cluster at four durability boundaries, restarts the same node directories, and verifies exact retry and one-time application.
 RAFT-006 also delays two successive non-empty `AppendEntries` requests from one leader to one peer.
 Each delay matches one of the next two expected log indices and stays armed across RPC retries until release, so membership traffic or a timed-out attempt cannot bypass it.
+The test waits for a retry of the first held request to hit the pending gate, then confirms the target remains at transaction 3 before release.
 The test arms the second delay while the first request is paused, then releases the requests in sequence.
 During this sequence, the current leader is the sole voter and every peer is a learner; other nodes are blocked from sending to the delayed target until catch-up.
 The test restores the original voter set after every node catches up.

@@ -135,6 +135,7 @@ enum AppendDelayAction {
 
 pub(crate) struct AppendDelay {
     entered: SyncSender<usize>,
+    retried: SyncSender<()>,
     claimed: AtomicBool,
     state: Mutex<AppendDelayAction>,
     released: Condvar,
@@ -144,9 +145,11 @@ pub(crate) struct AppendDelay {
 impl AppendDelay {
     fn new() -> (Arc<Self>, AppendDelayHandle) {
         let (entered, entered_rx) = mpsc::sync_channel(1);
+        let (retried, retried_rx) = mpsc::sync_channel(1);
         let (completed, completed_rx) = mpsc::sync_channel(1);
         let delay = Arc::new(Self {
             entered,
+            retried,
             claimed: AtomicBool::new(false),
             state: Mutex::new(AppendDelayAction::Pending),
             released: Condvar::new(),
@@ -156,6 +159,7 @@ impl AppendDelay {
             Arc::clone(&delay),
             AppendDelayHandle {
                 entered: entered_rx,
+                retried: retried_rx,
                 delay,
                 action_sent: false,
                 completed: completed_rx,
@@ -164,7 +168,11 @@ impl AppendDelay {
     }
 
     pub(crate) fn claim(&self) -> bool {
-        !self.claimed.swap(true, Ordering::AcqRel)
+        let first_claim = !self.claimed.swap(true, Ordering::AcqRel);
+        if !first_claim {
+            let _ = self.retried.try_send(());
+        }
+        first_claim
     }
 
     pub(crate) fn pause(&self, entry_count: usize) -> bool {
@@ -198,6 +206,7 @@ impl AppendDelay {
 
 pub(crate) struct AppendDelayHandle {
     entered: Receiver<usize>,
+    retried: Receiver<()>,
     delay: Arc<AppendDelay>,
     action_sent: bool,
     completed: Receiver<Result<(), String>>,
@@ -208,6 +217,13 @@ impl AppendDelayHandle {
         self.entered
             .recv_timeout(timeout)
             .map_err(|error| format!("AppendEntries RPC was not paused: {error}"))
+    }
+
+    pub(crate) fn wait_until_retried(&self, timeout: Duration) -> Result<(), String> {
+        self.retried
+            .recv_timeout(timeout)
+            .map(|_| ())
+            .map_err(|error| format!("AppendEntries retry did not hit the pending delay: {error}"))
     }
 
     pub(crate) fn release(&mut self) {
