@@ -101,18 +101,12 @@ pub fn decode_with_limits(bytes: &[u8], limits: &XbfLimits) -> Result<XbfTable, 
             "XBF schema checksum does not match".into(),
         ));
     }
+    let fields = decode_schema(schema, limits)?;
     if get_u32(header, DIRECTORY_CRC)? != crc32c(directory) {
         return Err(XbfError::Invalid(
             "XBF record-directory checksum does not match".into(),
         ));
     }
-    if get_u32(header, DATA_CRC)? != crc32c(data) {
-        return Err(XbfError::Invalid(
-            "XBF record-data checksum does not match".into(),
-        ));
-    }
-
-    let fields = decode_schema(schema, limits)?;
     let record_count = usize_from_u64(get_u64(header, RECORD_COUNT)?, "record count")?;
     if record_count > limits.max_records {
         return Err(XbfError::Invalid(
@@ -167,6 +161,12 @@ pub fn decode_with_limits(bytes: &[u8], limits: &XbfLimits) -> Result<XbfTable, 
                 "XBF record directory entries overlap".into(),
             ));
         }
+    }
+
+    if get_u32(header, DATA_CRC)? != crc32c(data) {
+        return Err(XbfError::Invalid(
+            "XBF record-data checksum does not match".into(),
+        ));
     }
 
     let mut records = Vec::with_capacity(record_count);

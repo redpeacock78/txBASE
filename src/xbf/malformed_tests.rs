@@ -138,6 +138,45 @@ fn rejects_each_xbf_checksum_mismatch() {
 }
 
 #[test]
+fn validates_xbf_sections_in_draft_order() {
+    let encoded = encode(&table_fixture()).unwrap();
+    let schema_offset = get_u64(&encoded, 16) as usize;
+    let first_field_type = schema_offset + 4 + 2 + 4;
+    let directory_offset = get_u64(&encoded, 36) as usize;
+
+    let mut invalid_schema_and_directory_checksum = encoded.clone();
+    invalid_schema_and_directory_checksum[first_field_type] = 0x50;
+    refresh_schema_checksum(&mut invalid_schema_and_directory_checksum);
+    put_u32(
+        &mut invalid_schema_and_directory_checksum,
+        directory_offset + 16,
+        0x02,
+    );
+    let error = decode(&invalid_schema_and_directory_checksum).unwrap_err();
+    assert!(
+        error.to_string().contains("decimal type is reserved"),
+        "schema descriptors must be checked before the directory checksum: {error}"
+    );
+
+    let mut invalid_directory_and_data_checksum = encoded;
+    put_u32(
+        &mut invalid_directory_and_data_checksum,
+        directory_offset + 16,
+        0x02,
+    );
+    refresh_directory_checksum(&mut invalid_directory_and_data_checksum);
+    let data_offset = get_u64(&invalid_directory_and_data_checksum, 56) as usize;
+    invalid_directory_and_data_checksum[data_offset] ^= 1;
+    let error = decode(&invalid_directory_and_data_checksum).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("record directory contains unknown flags"),
+        "directory entries must be checked before the data checksum: {error}"
+    );
+}
+
+#[test]
 fn rejects_invalid_xbf_header_metadata() {
     let encoded = encode(&table_fixture()).unwrap();
     let mutations = [

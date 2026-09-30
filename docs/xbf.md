@@ -224,10 +224,10 @@ A reader validates in this order:
 
 1. Header size, magic, version, flags, and header checksum.
 2. Section bounds and non-overlap.
-3. Schema checksum and descriptors.
-4. Directory checksum and entries.
+3. Schema checksum and schema descriptors.
+4. Directory checksum, record-count limit, directory length, and entries.
 5. Data checksum and record payloads.
-6. Constraint and record-count invariants.
+6. Record constraints.
 
 No partially decoded table is exposed to the query layer.
 
