@@ -127,7 +127,7 @@ pub(super) fn delay_successive_appends_to_single_peer(nodes: &[RaftRuntime], roo
     );
 }
 
-pub(super) fn delay_batched_catchup_to_single_peer(nodes: &[RaftRuntime], root: &Path) {
+pub(super) fn delay_second_catchup_append_to_single_peer(nodes: &[RaftRuntime], root: &Path) {
     let leader_index = current_leader_index(nodes, Duration::from_secs(20));
     let leader = &nodes[leader_index];
     let target_id = nodes
@@ -140,7 +140,7 @@ pub(super) fn delay_batched_catchup_to_single_peer(nodes: &[RaftRuntime], root: 
         .metrics()
         .borrow()
         .last_log_index
-        .expect("the leader must have a log before batched catch-up");
+        .expect("the leader must have a log before follower catch-up");
     let target = nodes.iter().find(|node| node.node_id == target_id).unwrap();
     assert_eq!(
         target.node.metrics().borrow().last_log_index,
@@ -154,6 +154,7 @@ pub(super) fn delay_batched_catchup_to_single_peer(nodes: &[RaftRuntime], root: 
         .unwrap()
         .expect("the target must have an applied transaction before isolation");
     let baseline_record_count = target_catalog.open_table("users").unwrap().records().len();
+    drop(target_catalog);
 
     for source in nodes.iter().filter(|node| node.node_id != target_id) {
         source.set_peer_blocked(target_id, true).unwrap();
@@ -172,7 +173,7 @@ pub(super) fn delay_batched_catchup_to_single_peer(nodes: &[RaftRuntime], root: 
         &root.join(format!("catalog-{}", leader.node_id)),
         first_sequence,
         48,
-        "BatchedOne",
+        "CatchupOne",
         48,
     );
     assert_eq!(
@@ -186,7 +187,7 @@ pub(super) fn delay_batched_catchup_to_single_peer(nodes: &[RaftRuntime], root: 
         &root.join(format!("catalog-{}", leader.node_id)),
         first_sequence + 1,
         49,
-        "BatchedTwo",
+        "CatchupTwo",
         49,
     );
     assert_eq!(
@@ -234,16 +235,42 @@ pub(super) fn delay_batched_catchup_to_single_peer(nodes: &[RaftRuntime], root: 
         delayed_append
             .wait_until_paused(Duration::from_secs(10))
             .unwrap(),
-        2,
-        "the catch-up AppendEntries request must contain both accumulated log entries"
+        1,
+        "the second catch-up AppendEntries request must contain one log entry"
     );
+    let caught_up_target = [target.clone()];
+    wait_for_transaction(
+        &caught_up_target,
+        root,
+        first_transaction_id,
+        Duration::from_secs(15),
+    );
+    let target_table = Catalog::from_path(&target_root)
+        .unwrap()
+        .open_table("users")
+        .unwrap();
     assert_eq!(
         Catalog::from_path(&target_root)
             .unwrap()
             .transaction_id()
             .unwrap(),
-        Some(baseline_transaction_id),
-        "the delayed catch-up request escaped before release"
+        Some(first_transaction_id),
+        "the voter must apply only the first catch-up command while the second request is held"
+    );
+    assert_eq!(
+        target_table
+            .active_records()
+            .filter(|record| record.values["NAME"] == "CatchupOne")
+            .count(),
+        1
+    );
+    assert_eq!(
+        target_table
+            .active_records()
+            .filter(|record| record.values["NAME"] == "CatchupTwo")
+            .count(),
+        0,
+        "the second catch-up command applied before its held request was released"
     );
 
     delayed_append.release();
@@ -259,7 +286,7 @@ pub(super) fn delay_batched_catchup_to_single_peer(nodes: &[RaftRuntime], root: 
         );
         let table = catalog.open_table("users").unwrap();
         assert_eq!(table.records().len(), baseline_record_count + 2);
-        for name in ["BatchedOne", "BatchedTwo"] {
+        for name in ["CatchupOne", "CatchupTwo"] {
             assert_eq!(
                 table
                     .active_records()
