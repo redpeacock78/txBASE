@@ -7,7 +7,7 @@ use super::{
     DATA_CRC, DATA_LENGTH, DATA_OFFSET, DIRECTORY_CRC, DIRECTORY_ENTRY_SIZE, DIRECTORY_LENGTH,
     DIRECTORY_OFFSET, GENERATION, HEADER_CRC, HEADER_FLAGS, HEADER_LENGTH_OFFSET, RECORD_COUNT,
     RESERVED, SCHEMA_CRC, SCHEMA_LENGTH, SCHEMA_OFFSET, VERSION_MAJOR, VERSION_MINOR,
-    usize_from_u64, validate_limits,
+    usize_from_u32, usize_from_u64, validate_limits,
 };
 
 pub fn decode(bytes: &[u8]) -> Result<XbfTable, XbfError> {
