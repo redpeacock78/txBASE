@@ -138,9 +138,13 @@ current index sidecars.
 
 The index sidecar foundation is implemented for scalar and per-field-direction compound keys, exact scalar and compound equality, compound equality-prefix and range candidate lookup, equality-prefix compound range candidate lookup, histogram-estimated range ordering, single-field ordered traversal, ordered-prefix traversal for multi-key sorts, compound-prefix traversal for compatible mixed or uniform directions, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB index and DBF page reads, and sort work with non-selective-index table-scan fallback, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, path-aware planning, stale detection, explicit rebuild, and WAL-backed DBF/index recovery after normal persistence.
 
-It does not yet support cross-table index definitions.
+The index contract is table-local. Multi-table joins can use separate validated table-local sidecars
+where the planner supports them (see the [join model](joins.md)); this is not a catalog-wide index.
 
-The remaining items need a public contract, malformed-input behavior, crash behavior, and a fixture or deterministic test.
+The earlier phrase "cross-table index definitions" was underspecified: it could mean a catalog
+registry for table-local indexes or a persistent index over join results. Neither is part of the
+current contract. Before implementing either, define ownership, update, recovery, historical-read,
+malformed-input, and crash behavior, then add deterministic tests.
 
 The current cursor slice supports physical-record pagination and sorted keyset pagination with
 `page_size` and `cursor`.
@@ -542,4 +546,4 @@ The number of files is not a quality metric by itself.
 - Automatic CJK conversion when the declared encoding is ambiguous.
 - Filesystem- and cache-aware merge planning, aggregation, predicate-level serializable MVCC, durable XBF, provider integrations beyond R2, live R2 service validation, durable retry queues, authority discovery, quorum, or consensus code without a contract and end-to-end test.
 
-The current index slice is intentionally local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented, while cross-table index definitions and filesystem- or cache-aware merge planning remain future work.
+The current index slice is intentionally table-local: compatible compound directions, equality-prefix candidate choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB page reads, and sort work, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, are implemented. Filesystem- and cache-aware physical I/O modeling remains future work.

@@ -6,7 +6,9 @@ This is the first multi-table slice in the roadmap.
 
 Catalog-journal commits also retain a consistent historical image of every discovered table.
 
-It does not add relationships, cross-table index definitions, or a second storage format.
+Schema version 2 can declare foreign keys, and catalog operations validate them, but the catalog
+does not persist a separate catalog-wide relationship manifest. Index definitions remain scoped to
+individual tables. The catalog does not introduce a second storage format.
 
 ## Filesystem contract
 

@@ -6,6 +6,9 @@ The sidecar path for `users.dbf` is `users.txidx`.
 
 The DBF remains readable by legacy xBase tools because the index is not embedded in the DBF bytes.
 
+Each index definition and sidecar belongs to one DBF table. Multi-table joins can consult separate
+table-local sidecars where the join plan supports them; see the [join model](joins.md).
+
 ## Version 4 contract
 
 An index file is JSON with this top-level shape:
@@ -260,15 +263,18 @@ It still materializes candidate record numbers and sorts them by physical DBF or
 
 Freshness validation still reads the DBF and memo bytes, and the query executor still materializes candidate record numbers, so this is not a claim of zero-copy or end-to-end index I/O.
 
-More precise physical I/O and cross-table index definitions or query planning require separate contracts.
+The index definition does not span tables. The join planner may use separate table-local indexes,
+but this does not define a catalog-wide index or a persisted index over join results. Either feature
+would need its own contract. More precise physical I/O estimates also require a separate contract.
 
-The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, Unicode-key and ICU4X locale-collated ordered-index, logical-page cost, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior; broader index support still needs more precise physical modeling and cross-table index or planning contracts.
+The equality, equality-intersection, statistics-ordered, histogram-ordered range, compound-prefix range, single-field ordered, ordered-prefix, compound-prefix, Unicode-key and ICU4X locale-collated ordered-index, logical-page cost, and non-selective-index fallback planners are tested alongside mutation, recovery, stale-index, rebuild, and DBF/index WAL-target behavior. These tests cover the table-local index contract, not a multi-table index or filesystem- and cache-aware physical model.
 
 ## Primary references and scope
 
 - [MongoDB query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
 - [MongoDB compound-index sort order](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
 - [MongoDB equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
+- [SQLite `CREATE INDEX`](https://sqlite.org/lang_createindex.html)
 - [ICU4X 2.1.1 `Collator`](https://docs.rs/icu_collator/2.1.1/icu_collator/struct.Collator.html)
 - [ICU4X 2.1.1 `CollatorOptions`](https://docs.rs/icu_collator/2.1.1/icu_collator/options/struct.CollatorOptions.html)
 - [ICU4X 2.1.1 published crate source](https://docs.rs/crate/icu_collator/2.1.1/source/)
@@ -276,4 +282,5 @@ The equality, equality-intersection, statistics-ordered, histogram-ordered range
 
 The MongoDB sources provide planner vocabulary and compound-index ordering context only.
 The candidate bounds, local statistics, record-count cost model, and physical-order materialization are txBASE contracts, not MongoDB compatibility claims.
+SQLite's `CREATE INDEX` documentation is a comparison for table-local index scope, not a txBASE compatibility claim.
 ICU4X provides the locale-aware comparison API and default tertiary strength, while ICU4X and CLDR provide fixture provenance; txBASE defines the accepted locale identifiers, version binding, and index/cursor behavior.

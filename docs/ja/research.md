@@ -60,7 +60,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 | Rust標準ライブラリのタスク文書 | 公式Rust API文書です。 | `AsyncQueryStream`境界は、executorを選択せず、ランタイム互換性を主張せずに`Context`、`Poll`、`Waker`、`Pin`のタスクモデルを再利用します。ネイティブの`ThreadedQueryStream`アダプターは有界の標準ライブラリチャネルでこの契約を適用し、Worker Web Streamsアダプターは別のJavaScript pull境界を提供します。WASI 0.3 CLIコンポーネントはDBFと現在・保持中のXBFストリームを非同期stdoutへ接続します。XBFファイルシステムアダプターは`SyncObjectStoreAdapter`の背後で同期操作を使い、単一writerの保留中WALを復旧します。プロバイダー接続型ストレージとホストライフサイクルの保証はホスト固有です。 | ポーリング契約とホストアダプターの責務は[非同期クエリストリーム](async-streaming.md)、[Workerクエリストリームアダプター](worker-query-stream.md)、[WASIクエリストリーム](wasi-query-stream.md)に置き、txBASEのクエリ意味論は[クエリモデル](query-model.md)に置きます。 |
 | [Unicode Standard Annex #15](https://www.unicode.org/reports/tr15/)、[Rustの`char`大文字小文字API](https://doc.rust-lang.org/std/primitive.char.html)、[ICU4X 2.1.1 Collator](https://docs.rs/icu_collator/2.1.1/icu_collator/struct.Collator.html)／[CollatorOptions](https://docs.rs/icu_collator/2.1.1/icu_collator/options/struct.CollatorOptions.html) | Unicodeの規範的な正規化仕様、公式Rust API文書、バージョン付きICU4X API文書です。 | Unicode NFKC方式と小文字化方式は有界な文字列キーの意味を保ちます。バージョン付きの日本語・中国語・韓国語方式は、元の文字列をICU4X 2.1.1の既定照合オプションで比較します。ICUソートキーは保存せず、すべての言語への対応や完全な照合互換性も保証しません。 | 受け付ける方式、バージョン識別子、インデックス計画の境界は[クエリモデル](query-model.md)と[インデックス](indexes.md)に置き、資料の分類とアップグレード境界はここに残します。 |
 | FirestoreとRealtime Databaseの文書 | 公式製品文書です。 | Firebase文書はアーキテクチャ参照だけです。txBASEはFirebaseのトランザクション、オフラインキュー、セキュリティルール、イベント同期を実装しません。 | 比較は[Firebaseモデル](firebase-model.md)に残し、DBF、HTTP、トランザクション契約へ持ち込みません。 |
-| SQLite文書 | 公式プロジェクト文書です。 | 制約語彙、WALとアトミックコミットの根拠、クエリ計画語彙、テスト品質の実践を参照します。txBASEはDBFサイドカーと独自WALを使い、SQLiteのファイル、SQL、永続性互換性を主張しません。 | 根拠はスキーマ、MVCC、クエリ計画、テストの文書に置き、txBASEの動作は別に記述します。 |
+| SQLite文書 | 公式プロジェクト文書です。 | 制約語彙、WALとアトミックコミットの根拠、テーブル単位の`CREATE INDEX`の範囲、クエリ計画語彙、テスト品質の実践を参照します。txBASEはDBFサイドカーと独自WALを使い、SQLiteのファイル、SQL、永続性互換性を主張しません。 | 根拠はスキーマ、MVCC、クエリ計画、インデックス、テストの文書に置き、txBASEの動作は別に記述します。 |
 | PostgreSQLのトランザクション分離とMVCC文書 | 公式プロジェクト文書です。 | トランザクション、MVCC、カタログの文書で、既定のオプティミスティックな古い元データの検査と、テーブル集合の検証を伴う任意選択の粗粒度serializableテーブルまたはカタログロックを、未実装の述語単位および分散serializable保証から区別するために使います。 | 区別は[スナップショットトランザクション](transactions.md)、[MVCC](mvcc.md)、[カタログ](catalog.md)に置き、PostgreSQLの分離保証を現在の契約へコピーしません。 |
 | SQLiteセッション拡張とPostgreSQL論理デコード | 公式プロジェクト文書です。 | CDC文書は変更セットとコミット済みWAL利用者の語彙を参照しますが、単一テーブルcommit向けの`TXCD`と明示的な複数テーブルカタログcommit向けの`TXCC`という、物理レコードの状態差分サイドカーを定義します。利用者スロット、再生、レプリケーション互換性は提供しません。 | 外部資料との比較と範囲の境界は[変更データ取得](change-data-capture.md)に置き、DBFのcommit機構は[DBF互換性](dbf-compatibility.md)に、カタログジャーナル機構は[カタログ](catalog.md)に置きます。 |
 | Gitのコマンドラインインターフェース文書 | CLI設計の参照に使う公式プロジェクト文書です。 | txBASEの明示的なサブコマンドとオプションの形だけに影響します。Gitのコマンド群、リポジトリモデル、オプションの意味はコピーしません。 | 設計判断は[CLIコマンド体系の設計](cli-design.md)に置き、コマンド契約は[CLIコマンドリファレンス](cli.md)に置きます。MVCCやストレージの契約には置きません。 |
@@ -159,6 +159,7 @@ ICU4Xはこれらのリストをベンチマーク入力として扱い、計測
 - [SQLite TH3](https://sqlite.org/th3.html)
 - [SQLite limits](https://sqlite.org/limits.html)
 - [SQLite `CREATE TABLE` constraints](https://sqlite.org/lang_createtable.html)
+- [SQLite `CREATE INDEX`](https://sqlite.org/lang_createindex.html)
 - [SQLite foreign-key support](https://www.sqlite.org/foreignkeys.html)
 
 ### トランザクションと並行性

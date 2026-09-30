@@ -6,6 +6,10 @@
 
 インデックスをDBFバイト列へ埋め込まないため、DBFは従来のxBaseツールから引き続き読み取れます。
 
+インデックス定義とサイドカーは、それぞれ1つのDBFテーブルに属します。
+結合プランが対応する場合、複数テーブル結合はテーブルごとに独立したサイドカーを参照できます。
+詳しくは[結合モデル](joins.md)を参照してください。
+
 ## バージョン 4 の契約
 
 インデックスファイルは、次のトップレベル形状を持つJSONです。
@@ -288,18 +292,23 @@ XBF入力からインデックスをコピーすることはありません。
 
 freshnessの検証では引き続きDBFとmemoのバイト列を読み取り、クエリ実行器も候補レコード番号を具体化するため、ゼロコピーやエンドツーエンドのindex I/Oを主張するものではありません。
 
-より精密な物理I/O、テーブル間インデックス定義またはクエリ計画には個別の契約が必要です。
+インデックス定義は複数のテーブルにまたがりません。
+結合プランナーはテーブルごとに独立したインデックスを使えますが、カタログ全体のインデックスや結合結果を永続化するインデックスを定義するものではありません。
+これらの機能には個別の契約が必要です。
+より精密な物理I/O推定にも別の契約が必要です。
 
 等値、等値積集合、統計順、ヒストグラム順の範囲、複合プレフィックス範囲、単一フィールド順のプランナーをテストします。
 順序プレフィックス、複合プレフィックス、UnicodeキーおよびICU4Xロケール照合を使う順序付きインデックス、非選択的なインデックスのテーブルスキャンフォールバックも、更新、復旧、古いインデックス、再構築、DBFとインデックスのWAL対象動作と一緒にテストします。
 
-より広いインデックス対応には、より精密な物理モデルとテーブル間インデックスまたは計画の契約が必要です。
+これらのテストが対象とするのはテーブル単位のインデックス契約です。
+複数テーブルにまたがるインデックスや、ファイルシステムとキャッシュを考慮する物理モデルは対象外です。
 
 ## 主な参照先と適用範囲
 
 - [MongoDBのクエリ最適化](https://www.mongodb.com/docs/manual/core/query-optimization/)
 - [MongoDBの複合インデックスのソート順](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
 - [MongoDBの等値、ソート、範囲の指針](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
+- [SQLiteの`CREATE INDEX`](https://sqlite.org/lang_createindex.html)
 - [ICU4X 2.1.1 `Collator`](https://docs.rs/icu_collator/2.1.1/icu_collator/struct.Collator.html)
 - [ICU4X 2.1.1 `CollatorOptions`](https://docs.rs/icu_collator/2.1.1/icu_collator/options/struct.CollatorOptions.html)
 - [ICU4X 2.1.1の公開crateソース](https://docs.rs/crate/icu_collator/2.1.1/source/)
@@ -307,5 +316,6 @@ freshnessの検証では引き続きDBFとmemoのバイト列を読み取り、�
 
 MongoDBの資料は、プランナーの語彙と複合インデックスの順序を考える背景としてのみ使います。
 候補の上限、ローカル統計、レコード数によるコストモデル、物理順での具体化はtxBASEの契約であり、MongoDB互換性の主張ではありません。
+SQLiteの`CREATE INDEX`文書は、テーブル単位のインデックス範囲を比較するための資料であり、txBASEの互換性を主張するものではありません。
 ICU4Xはロケール対応比較APIと既定の第3照合レベルを提供し、ICU4XとCLDRの資料はフィクスチャの根拠を示します。
 受け付けるロケール識別子、版の固定、インデックスとカーソルの動作はtxBASEの契約です。
