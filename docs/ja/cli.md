@@ -150,7 +150,10 @@ txbase COMMAND [SUBCOMMAND] ARGUMENT...
 - データのあるカタログでは、最初のnodeに`--raft-bootstrap`を指定し、準備済みpeerには`--raft-initialize-catalog`を指定する。すべてのnodeを同じカタログイメージから開始する。
 - 広告URLがHTTPSの場合は`--raft-peer-cert`と`--raft-peer-key`の両方を指定し、HTTPの場合はどちらも指定しない。peer clientはOSの信頼機構でserver証明書とホスト名を検証する。
 - `--raft-peer-client-ca`はRaftモードだけに属する。すべての初期memberでHTTPSが必要になり、listenerは指定CAが発行したクライアント証明書を要求する。nodeは`--raft-peer-cert`と`--raft-peer-key`を送信側client identityとしても使う。
-- Raft peer RPCでは`TXBASE_REPLICATION_TOKEN`が必要である。`raft membership add-learner`と`change-voters`は現leaderへ送り、`status`は任意のpeerへ送る。
+- Raft peer RPCでは`TXBASE_REPLICATION_TOKEN`が必要である。`status`は任意のpeerへ送れる。
+- `raft membership add-learner`と`change-voters`では、呼び出し側が現在のleaderのpeer URLを指定する。
+  CLIはleaderを自動検出せず、要求を転送しない。
+  別peerに送った更新要求はHTTP `409`で拒否される。
 - `--cluster-id`と`--node-id`は`raft membership add-learner`だけに属する。`--peer-address`には参加nodeの広告peer URLを指定する。
 - `--expected-index`、`--expected-voter-ids`、`--voter-ids`は`raft membership change-voters`だけに属する。IDは重複のない正の整数をカンマ区切りで指定し、期待値には`raft membership status`の結果を使う。
 

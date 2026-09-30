@@ -149,7 +149,8 @@ The tables group the current command contract by responsibility.
 - For a populated catalog, use `--raft-bootstrap` on the first node and `--raft-initialize-catalog` on each prepared peer so they start from the same catalog image.
 - `--raft-peer-cert` and `--raft-peer-key` are both required when the advertised URL uses HTTPS and must be omitted for HTTP. Peer clients verify the server certificate and host name with the operating system's trust facilities.
 - `--raft-peer-client-ca` belongs only to Raft mode. It requires HTTPS for every initial member and makes the listener require a client certificate issued by that CA. The node reuses its `--raft-peer-cert` and `--raft-peer-key` pair as its outgoing client identity.
-- Raft mode requires `TXBASE_REPLICATION_TOKEN` for authenticated peer RPC. `raft membership add-learner` and `change-voters` target the current leader; `status` can target any peer.
+- Raft mode requires `TXBASE_REPLICATION_TOKEN` for authenticated peer RPC. `status` can target any peer.
+- The caller must provide the current leader's peer URL to `raft membership add-learner` and `change-voters`. The CLI does not discover a leader or forward requests; a mutation sent to another peer fails with HTTP `409`.
 - `--cluster-id` and `--node-id` belong only to `raft membership add-learner`; `--peer-address` supplies the joining node's advertised peer URL.
 - `--expected-index`, `--expected-voter-ids`, and `--voter-ids` belong only to `raft membership change-voters`. ID lists are comma-separated positive integers without duplicates; the expected values come from `raft membership status`.
 
