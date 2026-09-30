@@ -38,8 +38,8 @@ object-storeのrootには、`--dir`で公開したディレクトリを指定し
 アダプターはnamespaceとobject keyの各componentを検証し、`.`と`..`を拒否します。
 symbolic linkも辿りません。
 スモーク検査では、`..`を含むnamespace、`.`/`..`を含むsnapshot root、symbolic link経由のsnapshot読み込みが、stdoutへ行を出さずに失敗することを確認します。
-クエリの実行中はobject storeを変更せず、同時に書き込むプロセスを1つに制限します。
-WASI filesystem APIにはプロセス間ロックがないため、このアダプターは同時書き込みを調整しません。
+WASI filesystemインターフェースに、このアダプターが使えるプロセス間ロック機能はありません。
+コマンド実行中にほかのプロセスがオブジェクトストアへ書き込まないよう、ホスト側で制御してください。
 `AsyncObjectTable`は読み取り前に保留中のWAL記録を復旧します。
 復旧でマニフェストの公開やWAL記録の削除が必要な場合、ホストが書き込みを許可していなければ失敗します。
 スナップショットの読み込みと復旧は、最初の行を出力する前に完了します。
@@ -91,7 +91,7 @@ WASI 0.3.1仕様は安定版ですが、Wasmtimeの`wasmtime-wasi::p3`ホスト�
 - [WASI 0.3とネイティブ非同期処理](https://wasi.dev/releases/wasi-p3)
 - [`wasip3` 0.9.0のバインディング](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/)
 - [Rustの`wasm32-wasip2`ターゲット](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
-- [WASI filesystem interface](https://github.com/WebAssembly/wasi-filesystem/blob/main/wit/types.wit)
+- [WASI filesystemインターフェースのWIT定義](https://github.com/WebAssembly/WASI/blob/main/proposals/filesystem/wit/types.wit)
 - [Wasmtime CLIオプション](https://docs.wasmtime.dev/cli-options.html)
 - [Wasmtime 49.0.0のWASI P3ホスト実装](https://docs.rs/wasmtime-wasi/49.0.0/wasmtime_wasi/p3/index.html)
 - [Bytecode AllianceのWasmtimeセットアップアクション](https://github.com/bytecodealliance/actions)

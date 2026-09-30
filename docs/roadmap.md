@@ -61,7 +61,7 @@ The repository currently provides:
 - A rebuildable external scalar and compound-key index sidecar with scalar and compound equality, compound equality-prefix, range, and compound equality-prefix range candidate lookup, histogram-estimated range ordering, single-field and ordered-prefix traversal, per-field-direction compound-prefix sort traversal, bounded Unicode collated ordered keys, equality-prefix candidate counting, uniform-statistics ordering for equality candidates, single-index versus intersection cost choice, bounded cost choice based on candidate rows, index traversal, logical 4 KiB index and DBF page reads, and sort work with non-selective-index table-scan fallback, plus deterministic row-equivalent explanation fields for candidate record reads and filter evaluations, path-aware planning, and DBF/memo freshness checks.
 - Durable table-local row history stored with MVCC prepare/commit records, epoch-separated physical row IDs, retained row reads, baseline reconstruction during full-image GC, and optional independent per-row retention through `mvcc gc --keep-rows`.
 - A bounded XBF v1 codec, a DBF-to-XBF conversion helper that preserves representable field-level schema constraints and rejects unsupported metadata, bounded in-memory and schema-sidecar XBF-to-DBF export, durable snapshot path, generation-checked full-snapshot WAL recovery, and journaled schema-preserving file export with base-state conflict detection, index-sidecar recovery, and DBF-read recovery.
-- A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and single-operation or atomic-batch mutation contracts, a `wasm-bindgen` wrapper, a pinned Node.js wrapper smoke test, and a WASI 0.3 CLI query-stream component that reads DBF files and current or retained XBF snapshots through a writable single-writer preopened filesystem store, with a pinned Wasmtime smoke check.
+- A versioned host-independent DBF WASM core with byte-in/byte-out snapshots, the shared bounded query and single-operation or atomic-batch mutation contracts, a `wasm-bindgen` wrapper, a pinned Node.js wrapper smoke test, and a WASI 0.3 CLI query-stream component that reads DBF files and current or retained XBF snapshots through a writable preopened filesystem store. The caller must prevent other processes from writing while the component runs because the adapter does not coordinate writers. A pinned Wasmtime smoke check covers the component.
 - A runtime-neutral `AsyncObjectStore` primitive contract with operation-level `CancellationToken` methods, an `AsyncObjectTable` manifest protocol, and a synchronous-store adapter that exposes the five object operations as futures without selecting an executor.
 - A `wasm-bindgen` JavaScript host adapter that exposes the same asynchronous XBF object-table commit, recovery, historical-read, retention, and orphan-cleanup protocol through Promise-returning host methods.
 - A Worker-compatible Fetch object-store adapter with conditional HTTP publication, strong SHA-256 ETags, bounded request timeouts, explicit `AbortSignal` cancellation mapping, and a deterministic WASM-backed HTTP fixture.
@@ -423,13 +423,16 @@ The generated `WasmObjectTable` wrapper and Worker adapter also expose these
 queries through Promise-based initialization.
 A WASI 0.3 CLI component now drives the shared `AsyncQueryStream`, reads either
 a preopened DBF file or a current/retained XBF snapshot through a writable,
-single-writer preopened filesystem store, and writes NDJSON through asynchronous stdout with
-stream backpressure; a pinned Wasmtime CI smoke check covers both input paths
-and the shared filter, projection, skip, and limit controls.
+preopened filesystem store, and writes NDJSON through asynchronous stdout with
+stream backpressure; callers must prevent other processes from writing while
+the component runs because the adapter does not coordinate concurrent writers.
+A pinned Wasmtime CI smoke check covers both input paths and
+the shared filter, projection, skip, and limit controls.
 The smoke check also pauses its stdout reader during a 131,072-row DBF query and verifies the complete output after draining resumes.
 The pending-stream fixture returns `Poll::Pending`, then a separately polled future wakes it after that poll completes; the smoke check requires the executor to re-poll it and emit exactly one row.
-The XBF adapter uses synchronous filesystem operations and is not safe for
-concurrent writers.
+The XBF adapter uses synchronous filesystem operations and does not coordinate
+concurrent writers; callers must prevent other processes from writing while
+the CLI runs.
 It recovers a pending WAL before row output when the host grants write access;
 the smoke check covers both manifest publication and WAL removal.
 WASI 0.3.1 is a stable specification, but Wasmtime's `wasmtime-wasi::p3` host

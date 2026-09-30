@@ -35,8 +35,8 @@ It creates immutable objects exclusively, replaces manifests through a synced te
 The adapter makes the calls fit the async trait but does not make filesystem I/O non-blocking.
 The adapter validates namespace and object-key components, rejects `.` and `..`, and refuses to traverse symbolic links.
 The smoke test verifies that a `..` namespace, snapshot roots containing `.` or `..`, and a symlinked snapshot fail without writing rows to stdout.
-The object store must remain stable during the query, and only one process may write to it at a time.
-The WASI filesystem API does not provide the process-shared lock used by the native filesystem adapter, so this adapter does not coordinate concurrent writers.
+The WASI filesystem interface exposes no interprocess-lock operation used by this adapter.
+The host must prevent other processes from writing to the object store while this command runs; the adapter cannot enforce this single-writer precondition.
 Because `AsyncObjectTable` recovers pending WAL records before reading, the host must allow writes when recovery needs to publish a manifest or delete a WAL record.
 Snapshot loading and recovery finish before the first row is emitted.
 
@@ -81,7 +81,7 @@ The smoke test covers writable local storage and recovery on this runtime, but d
 - [WASI 0.3 and native async](https://wasi.dev/releases/wasi-p3)
 - [`wasip3` 0.9.0 bindings](https://docs.rs/wasip3/0.9.0%2Bwasi-0.3.0/wasip3/)
 - [Rust `wasm32-wasip2` target](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
-- [WASI filesystem interface](https://github.com/WebAssembly/wasi-filesystem/blob/main/wit/types.wit)
+- [WASI filesystem WIT interface](https://github.com/WebAssembly/WASI/blob/main/proposals/filesystem/wit/types.wit)
 - [Wasmtime CLI options](https://docs.wasmtime.dev/cli-options.html)
 - [Wasmtime 49.0.0 WASI P3 host implementation](https://docs.rs/wasmtime-wasi/49.0.0/wasmtime_wasi/p3/index.html)
 - [Bytecode Alliance Wasmtime setup action](https://github.com/bytecodealliance/actions)
