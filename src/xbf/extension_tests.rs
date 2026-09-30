@@ -180,8 +180,10 @@ fn rejects_malformed_xbf_extension_directory_and_payloads() {
     );
 
     let oversized = extension_fixture(&[(7, 1, &[0; 29])]);
-    let mut limits = XbfLimits::default();
-    limits.max_section_size = EXTENSION_ENTRY_SIZE;
+    let mut limits = XbfLimits {
+        max_section_size: EXTENSION_ENTRY_SIZE,
+        ..XbfLimits::default()
+    };
     assert!(
         decode_with_limits(&oversized, &limits)
             .unwrap_err()

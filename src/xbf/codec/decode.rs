@@ -35,6 +35,11 @@ pub fn decode_with_limits(bytes: &[u8], limits: &XbfLimits) -> Result<XbfTable, 
         )));
     }
     let minor = get_u16(fixed_header, 6)?;
+    if get_u32(fixed_header, 8)? != HEADER_FLAGS {
+        return Err(XbfError::Invalid(
+            "XBF header contains unknown feature flags".into(),
+        ));
+    }
     let header_length = usize_from_u32(
         get_u32(fixed_header, HEADER_LENGTH_OFFSET)?,
         "XBF header length",
@@ -56,11 +61,6 @@ pub fn decode_with_limits(bytes: &[u8], limits: &XbfLimits) -> Result<XbfTable, 
     if (header_length - HEADER_SIZE) % super::extensions::ENTRY_SIZE != 0 {
         return Err(XbfError::Invalid(
             "XBF extension directory length is invalid".into(),
-        ));
-    }
-    if get_u32(header, 8)? != HEADER_FLAGS {
-        return Err(XbfError::Invalid(
-            "XBF header contains unknown feature flags".into(),
         ));
     }
     if get_u32(header, RESERVED)? != 0 {
