@@ -78,7 +78,7 @@ The repository currently provides:
   Its authenticated peer API adds learners, reports local effective membership, and changes voter sets through joint consensus.
   It waits for promoted learners to catch up and retains demoted voters as learners.
   The `txbase raft membership` CLI exposes status, learner addition, and voter changes through this peer control plane; status reports the contacted node's local metrics, and mutations target the current leader.
-  Blank learners can join clusters with empty or non-empty genesis catalogs. A five-node failure-injection test covers quorum loss, leader replacement, partition healing, and isolated-node restart across all 24 release orders of four held non-empty `AppendEntries` requests, one to each peer. After every stale request is delivered, the target peer must retain transaction 3 and the `Failover` record. One run also delays two successive non-empty requests to one follower and releases them sequentially. The test rejects catalog reads from the isolated former leader (`503`) and from a replacement leader without quorum, then verifies `200` after connectivity and the read barrier recover. Separate tests resume an interrupted joint-membership change through a surviving leader, verify that the former leader rejoins as a learner, check snapshot catch-up after log purge, and exercise child-process crash recovery at four durable-operation boundaries. The 24 orders cover only release-order permutations of this fixed four-request scenario; broader delayed or reordered RPC schedules remain open. See [Raft consensus design](raft.md).
+  Blank learners can join clusters with empty or non-empty genesis catalogs. A five-node failure-injection test covers quorum loss, leader replacement, partition healing, and isolated-node restart across all 24 release orders of four held non-empty `AppendEntries` requests, one to each peer. After every stale request is delivered, the target peer must retain transaction 3 and the `Failover` record. One run also delays two successive non-empty requests to one follower and releases them sequentially. Another isolates one voter while the remaining quorum commits two commands, then holds the request for the second command until the first has applied at the voter. The test rejects catalog reads from the isolated former leader (`503`) and from a replacement leader without quorum, then verifies `200` after connectivity and the read barrier recover. Separate tests resume an interrupted joint-membership change through a surviving leader, verify that the former leader rejoins as a learner, check snapshot catch-up after log purge, and exercise child-process crash recovery at four durable-operation boundaries. The 24 orders cover only release-order permutations of the fixed four-request scenario; other delayed or reordered RPC schedules remain open. See [Raft consensus design](raft.md).
 - Schema-marked deferred scalar and composite foreign-key checks at catalog transaction commit, after validating the declared primary or unique parent key; `NO ACTION` may be repaired by a later operation in the same transaction, while `RESTRICT` remains immediate.
 - Schema version 2 named deferrable local `UNIQUE`, `PRIMARY KEY`, and `CHECK` constraints and scalar or composite foreign keys, with ordered per-transaction mode changes in the Rust and HTTP transaction APIs; deferred `CHECK` is a txBASE extension.
 
@@ -95,7 +95,7 @@ The baseline intentionally does not include the following:
 - References across catalog roots.
 - Strict multi-file reader atomicity for XBF export and readers that ignore the txBASE lock.
 - Provider integrations beyond R2, live R2 validation, provider-managed retention policy, and durable retry queues.
-- Additional Raft failure coverage beyond the 24 release-order permutations of four held cross-peer requests and the tested pair of successive same-peer requests; other delayed or reordered schedules, distributed follower reads, and partitioning.
+- Additional Raft failure coverage beyond the 24 release-order permutations of four held cross-peer requests, the tested pair of successive same-peer requests, and the isolated-voter two-command catch-up with its second request delayed; other delayed or reordered schedules, distributed follower reads, and partitioning.
 
 ## 3. Phase 1: complete the small local DBMS
 
@@ -229,9 +229,7 @@ The current record scan remains the reference execution path while the query mod
 
 - Additional aggregation stages and accumulator expressions beyond the current bounded input `$match`, `$unwind` option form, `$set`/`$addFields` expression subset, `$project`, `$sort`, `$skip`, and `$limit` stages and the documented `$group`, `$bucket`, bounded scalar-expression `$bucketAuto` with finite numeric results, and bounded scalar-expression `$sortByCount` stages and accumulators.
 - Full expression evaluation beyond the bounded `$expr` boolean-tree form and its numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` operands.
-- Joins.
-- Constraints.
-- Full physical cost planning for range and mixed-direction compound paths.
+- Filesystem-, cache-, and page-reuse-aware merge planning, plus broader null and missing-field semantics.
 
 The first join slice is local and bounded.
 
@@ -482,14 +480,15 @@ It verifies that an identical retry returns the same JSON result and transaction
 A separate three-node recovery test disconnects a voter, commits four commands on the remaining quorum, creates a snapshot, purges the leader log through that snapshot, and verifies that the voter installs it and applies the next client sequence after reconnecting.
 The child-process test terminates the process hosting three logical nodes after log-entry persistence, commit-marker persistence, atomic catalog and applied-state publication, or receipt of the OpenRaft application response.
 It restarts all node directories, retries the same client request, and verifies one-time application at every node.
-The five-node test also delays and releases two successive non-empty `AppendEntries` requests to one peer.
-Schedules with different request batches, terms, or partition conditions remain outstanding beyond the 24 release-order permutations of the fixed four-request scenario and the tested same-peer request pair.
+The five-node test also delays and releases two successive non-empty `AppendEntries` requests to one peer, then isolates one voter while a four-node quorum commits two commands.
+It holds the request for the second command until the first command has applied at the isolated voter, then checks one-time application after release.
+Schedules with other request batches, terms, or partition conditions remain outstanding beyond the 24 release-order permutations of the fixed four-request scenario, the tested same-peer request pair, and this two-command catch-up case.
 
 ### Candidate scope
 
 - Cross-table or distributed long-lived snapshot transactions.
 - Persistent WAL history beyond the current table, catalog, `TXRP`, and `TXRG` sidecars.
-- Add deterministic tests for delayed or reordered RPC schedules outside the 24 release-order permutations of this fixed four-request scenario and the tested pair of successive same-peer requests; vary request batches, terms, or partition conditions. See [Raft consensus design](raft.md).
+- Add deterministic tests for delayed or reordered RPC schedules outside the 24 release-order permutations of this fixed four-request scenario, the tested pair of successive same-peer requests, and the isolated-voter two-command catch-up with its second request delayed; vary request batches, terms, or partition conditions. See [Raft consensus design](raft.md).
 - Durable retry queues, backpressure, and authority discovery.
 - Distributed follower-read guarantees.
 - Distributed partitioning.

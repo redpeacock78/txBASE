@@ -113,7 +113,9 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
   別の3 nodeテストでは、voter 1台を分断した状態で残るquorumが4件をcommitし、leaderでsnapshotを作って対象ログをpurgeする。
   接続を戻したvoterがsnapshotをインストールして追いつき、次のclient sequenceを適用することも検査する。
   子プロセステストでは、3つの論理nodeを動かすプロセスを4つの永続化境界で強制終了し、同じnodeディレクトリから再起動して同一要求を再試行する。
-  24通りで網羅するのは、この4要求の解放順序だけである。要求batch、term、partition条件を変えたRPC遅延と順序変更は未検証である。
+  同じ5 node実行で1台のvoterを隔離したまま、残る4 nodeが2件のcommandをcommitし、1件目の適用後まで2件目の`AppendEntries`要求を保留する経路も検査する。
+  24通りで網羅するのは、この4要求の解放順序だけである。
+  隔離voterのcatch-upはこの2件のcommandを使うケースに限り、それ以外の要求batch、term、partition条件を変えたRPC遅延と順序変更は未検証である。
   詳細は[Raftコンセンサス設計](raft.md)を参照する。
 
 固定termとRaftの両モードで、公開カタログlistenerに任意のTLSを設定できます。
@@ -132,7 +134,7 @@ frontendはHTTP/1.1をtokenで保護したloopback backendへストリーム転�
 - カタログルートをまたぐ参照は未対応である。
 - XBF出力とtxBASEロックを無視する読み手に対する、厳密な複数ファイル読み取りアトミック性。
 - R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針、永続的な再試行キュー。
-- 固定した4要求の24通りの解放順序と、検証済みの同一peerへの連続2要求以外を扱うRaft障害テスト。要求batch、term、partition条件の違い、分散フォロワー読み取り、分散パーティショニング。
+- 固定した4要求の24通りの解放順序、同一peerへの連続2要求、隔離voterの2件catch-upで2件目の要求を遅延させるケースを超えるRaft障害テスト。分散フォロワー読み取り、分散パーティショニング。
 
 ## 3. フェーズ 1：小さなローカル DBMS を完成させる
 
@@ -272,9 +274,7 @@ Rustの`Catalog::begin_serializable`は、同じカタログjournal経路を使�
 - 入力`$match`、オプション形式の`$unwind`、`$set`/`$addFields`の式サブセット、`$project`、`$sort`、`$skip`、`$limit`の各ステージと、`$group`、`$bucket`、結果が有限な数値になる有界なスカラー式を使う`$bucketAuto`、有界なスカラー式を使う`$sortByCount`ステージを超える追加の集約ステージ。
   現在の`$sum`、`$avg`、`$stdDevPop`、`$stdDevSamp`、`$min`、`$max`、`$first`、`$last`、`$push`、`$addToSet`アキュムレータ式を超える追加のアキュムレータ式も対象とする。
 - 有界`$expr`論理木と数値`$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod`オペランドを超える完全な式評価。
-- 結合。
-- 制約。
-- 範囲および混在方向の複合経路に対する完全な物理コスト計画。
+- ファイルシステム、キャッシュ、ページ再利用を考慮したmerge計画と、nullおよび欠損フィールドのより広い意味論。
 
 最初の結合スライスはローカルで有界です。
 
@@ -557,13 +557,16 @@ proxyはcommit後の最初の成功応答を破棄します。
 5 nodeのfailoverテストでは、4台のpeerに1件ずつ保留した非空`AppendEntries`要求を、24通りすべての順序で解放します。
 各要求の配送後も、対象peerがtransaction ID 3と`Failover`レコードを保持することを確認します。
 同一peerへの連続した非空`AppendEntries`要求2件も遅延させ、順に解放します。
-この24通りで網羅するのは、同じ4要求の解放順序です。要求batch、term、partition条件を変えた遅延・順序変更は、同一peerへの連続要求とともに未検証です。
+同じ5 node実行で1台のvoterを隔離したまま残る4 nodeが2件のcommandをcommitし、1件目の適用後まで2件目の`AppendEntries`要求を保留します。
+解放後に、両方のrecordが各nodeで一度だけ適用されることを検査します。
+この24通りで網羅するのは、同じ4要求の解放順序です。
+隔離voterのcatch-upはこの2件のcommandを使うケースに限り、それ以外の要求batch、term、partition条件を変えた遅延・順序変更は未検証です。
 
 ### 候補範囲
 
 - テーブル間または分散環境の長寿命スナップショットトランザクション。
 - 現在のテーブル、カタログ、`TXRP`、`TXRG`サイドカーを超える永続WAL履歴。
-- 固定した4要求の24通りの解放順序と同一peerへの連続2要求以外について、要求batch、term、partition条件を変えた遅延・順序変更を検査する決定的なテストを追加する。詳細は[Raftコンセンサス設計](raft.md)に記載する。
+- 固定した4要求の24通りの解放順序、同一peerへの連続2要求、隔離voterの2件catch-upで2件目の要求を遅延させるケースを超える遅延・順序変更を検査する決定的なテストを追加する。要求batch、term、partition条件を変える。詳細は[Raftコンセンサス設計](raft.md)に記載する。
 - 永続的な再試行キュー、バックプレッシャー、authorityの検出。
 - 分散フォロワー読み取りの保証。
 - 分散パーティショニング。

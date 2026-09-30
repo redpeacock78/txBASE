@@ -197,7 +197,7 @@ fn lagging_voter_catches_up_from_snapshot_after_leader_purges_log() {
         45,
     );
     assert_eq!(
-        commit(&nodes[leader_index], command),
+        commit_after_leader_change(&nodes, command),
         RaftResponseResult::Applied { transaction_id: 6 }
     );
     wait_for_transaction(&nodes, &root, 6, Duration::from_secs(15));
@@ -221,4 +221,35 @@ fn lagging_voter_catches_up_from_snapshot_after_leader_purges_log() {
     }
     drop(nodes);
     fs::remove_dir_all(root).unwrap();
+}
+
+fn commit_after_leader_change(nodes: &[RaftRuntime], command: RaftCommand) -> RaftResponseResult {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        assert!(
+            !remaining.is_zero(),
+            "client write did not reach a stable leader"
+        );
+        let leader_index = current_leader_index(nodes, remaining);
+        let result = nodes[leader_index].runtime.block_on(async {
+            tokio::time::timeout(
+                remaining,
+                nodes[leader_index].node.client_write(command.clone()),
+            )
+            .await
+        });
+        match result {
+            Ok(Ok(response)) => return response.data.unwrap().result,
+            Ok(Err(error)) if error.forward_to_leader::<openraft::BasicNode>().is_some() => {
+                assert!(
+                    Instant::now() < deadline,
+                    "client write kept encountering leader changes"
+                );
+                thread::sleep(Duration::from_millis(50));
+            }
+            Ok(Err(error)) => panic!("client write failed: {error:?}"),
+            Err(_) => panic!("client write timed out while waiting for a leader"),
+        }
+    }
 }
