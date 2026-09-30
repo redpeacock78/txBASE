@@ -181,7 +181,6 @@ fn rejects_invalid_xbf_header_metadata() {
     let encoded = encode(&table_fixture()).unwrap();
     let mutations = [
         (4, 2, 2, "unsupported XBF major version"),
-        (6, 2, 1, "unsupported XBF minor version"),
         (12, 4, 99, "XBF header length is not 100"),
         (96, 4, 1, "XBF header reserved field is non-zero"),
     ];

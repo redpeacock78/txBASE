@@ -2,6 +2,7 @@ use super::{HEADER_SIZE, XbfError, XbfLimits};
 
 mod decode;
 mod encode;
+mod extensions;
 
 pub use decode::{decode, decode_with_limits};
 pub use encode::{encode, encode_with_limits};

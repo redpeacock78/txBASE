@@ -2,6 +2,7 @@ use super::super::checksum::crc32c;
 use super::super::schema::{decode_schema, validate_constraints};
 use super::super::values::decode_record;
 use super::super::{HEADER_SIZE, MAGIC, XbfError, XbfLimits, XbfRecord, XbfTable};
+use super::extensions::validate_extensions;
 use super::{
     DATA_CRC, DATA_LENGTH, DATA_OFFSET, DIRECTORY_CRC, DIRECTORY_ENTRY_SIZE, DIRECTORY_LENGTH,
     DIRECTORY_OFFSET, GENERATION, HEADER_CRC, HEADER_FLAGS, HEADER_LENGTH_OFFSET, RECORD_COUNT,
@@ -23,39 +24,53 @@ pub fn decode_with_limits(bytes: &[u8], limits: &XbfLimits) -> Result<XbfTable, 
     if bytes.len() < HEADER_SIZE {
         return Err(XbfError::Invalid("XBF header is truncated".into()));
     }
-    let header = &bytes[..HEADER_SIZE];
-    if header[..MAGIC.len()] != MAGIC {
+    let fixed_header = &bytes[..HEADER_SIZE];
+    if fixed_header[..MAGIC.len()] != MAGIC {
         return Err(XbfError::Invalid("XBF magic is invalid".into()));
     }
-    let major = get_u16(header, 4)?;
+    let major = get_u16(fixed_header, 4)?;
     if major != VERSION_MAJOR {
         return Err(XbfError::Invalid(format!(
             "unsupported XBF major version {major}"
         )));
     }
-    let minor = get_u16(header, 6)?;
-    if minor != VERSION_MINOR {
+    let minor = get_u16(fixed_header, 6)?;
+    let header_length = usize_from_u32(
+        get_u32(fixed_header, HEADER_LENGTH_OFFSET)?,
+        "XBF header length",
+    )?;
+    if minor == VERSION_MINOR && header_length != HEADER_SIZE {
+        return Err(XbfError::Invalid("XBF header length is not 100".into()));
+    }
+    if header_length < HEADER_SIZE || header_length > bytes.len() {
         return Err(XbfError::Invalid(format!(
-            "unsupported XBF minor version {minor}"
+            "XBF header length {header_length} is outside the file"
         )));
+    }
+    let header = &bytes[..header_length];
+    if header_length - HEADER_SIZE > limits.max_section_size {
+        return Err(XbfError::Invalid(
+            "XBF extension directory exceeds the configured limit".into(),
+        ));
+    }
+    if (header_length - HEADER_SIZE) % super::extensions::ENTRY_SIZE != 0 {
+        return Err(XbfError::Invalid(
+            "XBF extension directory length is invalid".into(),
+        ));
     }
     if get_u32(header, 8)? != HEADER_FLAGS {
         return Err(XbfError::Invalid(
             "XBF header contains unknown feature flags".into(),
         ));
     }
-    if get_u32(header, HEADER_LENGTH_OFFSET)? != HEADER_SIZE as u32 {
-        return Err(XbfError::Invalid("XBF header length is not 100".into()));
-    }
     if get_u32(header, RESERVED)? != 0 {
         return Err(XbfError::Invalid(
             "XBF header reserved field is non-zero".into(),
         ));
     }
-    let mut header_for_checksum = [0; HEADER_SIZE];
-    header_for_checksum.copy_from_slice(header);
-    header_for_checksum[HEADER_CRC..HEADER_CRC + 4].fill(0);
-    if get_u32(header, HEADER_CRC)? != crc32c(&header_for_checksum) {
+    if get_u32(header, HEADER_CRC)?
+        != super::super::checksum::crc32c_with_zeroed_range(header, HEADER_CRC..HEADER_CRC + 4)
+    {
         return Err(XbfError::Invalid(
             "XBF header checksum does not match".into(),
         ));
@@ -85,17 +100,18 @@ pub fn decode_with_limits(bytes: &[u8], limits: &XbfLimits) -> Result<XbfTable, 
     let data_end = data_offset
         .checked_add(data_length)
         .ok_or_else(|| XbfError::Invalid("record data bounds overflow".into()))?;
-    if schema_offset < HEADER_SIZE as u64
+    if schema_offset < header_length as u64
         || schema_end > directory_offset
-        || directory_offset < HEADER_SIZE as u64
+        || directory_offset < header_length as u64
         || directory_end > data_offset
-        || data_offset < HEADER_SIZE as u64
-        || data_end != bytes.len() as u64
+        || data_offset < header_length as u64
+        || data_end > bytes.len() as u64
     {
         return Err(XbfError::Invalid(
             "XBF sections are unordered, overlapping, or have trailing bytes".into(),
         ));
     }
+    validate_extensions(bytes, header, data_end, limits)?;
     if get_u32(header, SCHEMA_CRC)? != crc32c(schema) {
         return Err(XbfError::Invalid(
             "XBF schema checksum does not match".into(),

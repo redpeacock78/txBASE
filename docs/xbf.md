@@ -89,7 +89,7 @@ No XBF file may claim a committed generation until the snapshot bytes and its di
 
 All integer values are unsigned little-endian unless a field below says otherwise.
 
-The v1 header is exactly 100 bytes:
+The v1.0 header is exactly 100 bytes:
 
 | Offset | Size | Field |
 | ---: | ---: | --- |
@@ -97,7 +97,7 @@ The v1 header is exactly 100 bytes:
 | `4` | 2 | Major version, `1` |
 | `6` | 2 | Minor version, `0` |
 | `8` | 4 | Feature flags; unknown bits are an error |
-| `12` | 4 | Header length, `100` |
+| `12` | 4 | Header length: `100` for v1.0; total header length for later minor versions |
 | `16` | 8 | Schema offset |
 | `24` | 8 | Schema length |
 | `32` | 4 | CRC-32C of the schema section |
@@ -114,14 +114,27 @@ The v1 header is exactly 100 bytes:
 
 CRC-32C uses the Castagnoli polynomial, an initial value of `0xffffffff`, and a final XOR of `0xffffffff`.
 
-The three sections must be non-overlapping, ordered, and wholly contained in the file.
+### Minor-version extensions
 
-Offsets and lengths are checked with overflow-safe arithmetic before any allocation.
+Minor version `0` uses the fixed 100-byte header. A later minor version uses the same v1 core-section semantics and may append 28-byte extension descriptors after byte `99`; the header length is `100 + 28 * descriptor_count`. The header checksum covers the complete declared header, including these descriptors, with the checksum field zeroed.
 
-An unknown major version is rejected.
+Each descriptor has this layout:
 
-The current v1.0 reader rejects every minor version other than `0`.
-Forward-compatible minor-version reading is future work and must define how a reader skips every declared section before it is added; the current reader never silently downgrades an unknown version.
+| Offset within descriptor | Size | Field |
+| ---: | ---: | --- |
+| `0` | 4 | Nonzero section type; types are unique and strictly increasing |
+| `4` | 4 | Flags; bit `0` marks an optional section, zero means required, and all other bits are reserved |
+| `8` | 8 | Section offset |
+| `16` | 8 | Section length |
+| `24` | 4 | CRC-32C of the section payload |
+
+Descriptor order is also payload order. Extension payloads begin immediately after record data, are contiguous, and end at the end of the file. With no descriptors, record data ends at the end of the file.
+
+The reader validates descriptor ordering, section bounds, checksums, and configured size limits before decoding the table. The extension directory and each payload are subject to `max_section_size`; the complete file is subject to `max_file_size`. It rejects zero or duplicate section types, unsupported flag bits, required section types it does not recognize, arithmetic overflow, gaps, overlaps, and out-of-file ranges. The current codec defines no extension section types, so every extension it reads must be marked optional.
+
+Unknown optional sections are checksum-validated and then skipped. They must not change the meaning of v1 core sections, whose semantics remain unchanged across minor versions. `XbfTable` has no extension field, so re-encoding a decoded table drops skipped sections.
+
+The reader rejects an unknown major version and never silently downgrades an unknown version. A higher minor number alone does not establish layout compatibility. The explicit version and unknown-extension rules follow the design guidance in informational [RFC 6709 §4.1](https://www.rfc-editor.org/rfc/rfc6709.html#section-4.1) and [§4.7](https://www.rfc-editor.org/rfc/rfc6709.html#section-4.7).
 
 ## 4. Schema section
 
@@ -369,12 +382,7 @@ This prevents XBF from becoming a second unrelated database implementation.
 
 ## 11. Implementation gates
 
-The draft codec, snapshot writer, and generation-checked full-snapshot WAL currently have a deterministic fixture
-covering every non-reserved v1 type, corruption checks, constraint checks,
-explicit size limits, a malformed-header corpus, deterministic malformed
-section, schema metadata, directory metadata, UTF-8, NULL, fixed-width, and
-JSON payload cases, and a sync-and-reload path round trip. Before XBF is
-advertised as a complete supported format, the repository still needs:
+The draft codec, snapshot writer, and generation-checked full-snapshot WAL have deterministic fixtures for every non-reserved v1 type, corruption and constraint checks, explicit size limits, malformed headers and sections, optional extension handling, schema and directory metadata, UTF-8, NULL, fixed-width and JSON payloads, and a sync-and-reload path round trip. Before XBF is advertised as a complete supported format, the repository still needs:
 
 - A strict externally visible atomic snapshot contract for legacy readers. The
   current `TXSE` protocol and txBASE path-reader lock boundary provide

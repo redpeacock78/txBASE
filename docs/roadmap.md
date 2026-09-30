@@ -527,6 +527,8 @@ The DBF and XBF codecs should share query, transaction, HTTP, and storage interf
 
 The format-specific layer should own byte layout, field conversion, checksums, and recovery records.
 
+The major-version-1 reader accepts later minor versions only when the header follows the [XBF format](xbf.md) extension-directory rules; the descriptor list may be empty. It validates and discards unknown optional sections; the encoder continues to emit v1.0. The [quality matrix](quality-matrix.md) records these limits.
+
 This prevents XBF from becoming a second unrelated database implementation.
 
 ## 10. File granularity rule

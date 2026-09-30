@@ -14,6 +14,8 @@ pub(crate) use query::record_values;
 #[cfg(test)]
 mod export_tests;
 #[cfg(test)]
+mod extension_tests;
+#[cfg(test)]
 mod malformed_tests;
 #[cfg(test)]
 mod tests;
