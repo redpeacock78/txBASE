@@ -84,6 +84,14 @@ pub enum AccumulatorKind {
         input: ScalarExpression,
         n: ScalarExpression,
     },
+    FirstN {
+        input: ScalarExpression,
+        n: ScalarExpression,
+    },
+    LastN {
+        input: ScalarExpression,
+        n: ScalarExpression,
+    },
     First(String),
     Last(String),
     Push(String),

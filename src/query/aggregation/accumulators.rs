@@ -59,7 +59,7 @@ pub(super) fn new_group(
                     AccumulatorState::NValues(super::n_values::State::new(
                         &key,
                         n,
-                        true,
+                        super::n_values::Selection::Min,
                         &format!("{path_prefix}.{}.$minN.n", accumulator.name),
                     )?)
                 }
@@ -67,8 +67,24 @@ pub(super) fn new_group(
                     AccumulatorState::NValues(super::n_values::State::new(
                         &key,
                         n,
-                        false,
+                        super::n_values::Selection::Max,
                         &format!("{path_prefix}.{}.$maxN.n", accumulator.name),
+                    )?)
+                }
+                aggregation_plan::AccumulatorKind::FirstN { n, .. } => {
+                    AccumulatorState::NValues(super::n_values::State::new(
+                        &key,
+                        n,
+                        super::n_values::Selection::First,
+                        &format!("{path_prefix}.{}.$firstN.n", accumulator.name),
+                    )?)
+                }
+                aggregation_plan::AccumulatorKind::LastN { n, .. } => {
+                    AccumulatorState::NValues(super::n_values::State::new(
+                        &key,
+                        n,
+                        super::n_values::Selection::Last,
+                        &format!("{path_prefix}.{}.$lastN.n", accumulator.name),
                     )?)
                 }
                 aggregation_plan::AccumulatorKind::First(_) => AccumulatorState::First(None),
@@ -186,20 +202,27 @@ pub(super) fn accumulate_record(
             (
                 AccumulatorState::NValues(values),
                 kind @ (aggregation_plan::AccumulatorKind::MinN { .. }
-                | aggregation_plan::AccumulatorKind::MaxN { .. }),
+                | aggregation_plan::AccumulatorKind::MaxN { .. }
+                | aggregation_plan::AccumulatorKind::FirstN { .. }
+                | aggregation_plan::AccumulatorKind::LastN { .. }),
             ) => {
-                let (operator, input) = match kind {
-                    aggregation_plan::AccumulatorKind::MinN { input, .. } => ("$minN", input),
-                    aggregation_plan::AccumulatorKind::MaxN { input, .. } => ("$maxN", input),
+                let (operator, input, ignore_null) = match kind {
+                    aggregation_plan::AccumulatorKind::MinN { input, .. } => ("$minN", input, true),
+                    aggregation_plan::AccumulatorKind::MaxN { input, .. } => ("$maxN", input, true),
+                    aggregation_plan::AccumulatorKind::FirstN { input, .. } => {
+                        ("$firstN", input, false)
+                    }
+                    aggregation_plan::AccumulatorKind::LastN { input, .. } => {
+                        ("$lastN", input, false)
+                    }
                     _ => unreachable!("matched N-value accumulator"),
                 };
                 let path = format!("{path_prefix}.{}.{operator}.input", accumulator.name);
-                if let Some(value) =
+                let value =
                     crate::query::expression::evaluate_scalar(&record.values, input, &path)?
-                {
-                    if !value.is_null() {
-                        values.insert(value, collected_values)?;
-                    }
+                        .unwrap_or(Value::Null);
+                if !ignore_null || !value.is_null() {
+                    values.insert(value, collected_values)?;
                 }
             }
             (AccumulatorState::First(current), aggregation_plan::AccumulatorKind::First(field)) => {

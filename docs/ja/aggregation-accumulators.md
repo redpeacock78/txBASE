@@ -30,6 +30,21 @@
 
 すべての結果が欠損または`null`の場合、空配列を返します。
 
+`$firstN`と`$lastN`も同じ`input`式と`n`式を受け付けます。
+
+```json
+{
+  "first": {"$firstN": {"input": "$SCORE", "n": 2}},
+  "last": {"$lastN": {"input": "$SCORE", "n": 2}}
+}
+```
+
+どちらもレコードごとに`input`を評価し、グループの入力順で値を保持します。欠損した入力は`null`になり、明示的な`null`と重複値も結果に残ります。`$firstN`は先頭の`n`件を返し、`$lastN`は末尾の`n`件を入力順のまま返します。グループのレコード数が`n`未満なら、存在する値をすべて返します。
+
+前段に入力`$sort`がなければ、グループの入力順は物理レコード順です。入力`$sort`があれば、その順序を使います。
+
+txBASEがサポートする`$firstN`と`$lastN`は、`$group`、`$bucket`、`$bucketAuto`のアキュムレータ形式です。MongoDBの配列演算子の形式とwindow operator形式は対象外です。
+
 `n`は1以上10,000以下の整数に評価されなければなりません。定数、または出力グループの`_id`だけを参照する式を指定できます。グループを作成するときに一度評価します。この上限はtxBASE固有です。
 
 txBASEは`$minN`を昇順、`$maxN`を降順で返し、同値は入力順に並べます。MongoDBはこれらのアキュムレータの出力順を規定していないため、決定的な順序はtxBASE独自の動作です。
@@ -38,10 +53,10 @@ txBASEは`$minN`を昇順、`$maxN`を降順で返し、同値は入力順に並
 
 ## 入力順と配列アキュムレータ
 
-- `$first`と`$last`はグループ内の入力物理レコード順を使う。明示的な`null`を含めて選択したフィールド値を返し、欠損フィールドは`null`になる。
-- `$push`は入力物理レコード順ですべてのフィールド値を返す。`$addToSet`は構造的に等しいJSON値を1つにまとめ、最初に現れた順で返す。どちらも欠損フィールドを`null`として追加する。
+- `$first`と`$last`はグループの入力順を使い、前段に入力`$sort`がなければ物理レコード順、あればその順序になる。選択したフィールド値を返し、明示的な`null`を保持する。欠損フィールドは`null`になる。
+- `$push`はグループの入力順ですべてのフィールド値を返す。`$addToSet`は構造的に等しいJSON値を1つにまとめ、最初に現れた順を保つ。どちらも欠損フィールドを`null`として追加する。
 
-`$push`、`$addToSet`、`$minN`、`$maxN`が保持する値の合計は、集約結果ごとに10,000件までです。そのため`n`も10,000を超えられません。
+`$push`、`$addToSet`、`$minN`、`$maxN`、`$firstN`、`$lastN`が保持する値の合計は、集約結果ごとに10,000件までです。そのため`n`も10,000を超えられません。
 
 ## 主な参照先
 
@@ -52,4 +67,6 @@ txBASEは`$minN`を昇順、`$maxN`を降順で返し、同値は入力順に並
 - [MongoDBの`$stdDevSamp`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDBの`$minN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/minn/)
 - [MongoDBの`$maxN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/maxn/)
+- [MongoDBの`$firstN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/firstn/)
+- [MongoDBの`$lastN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/lastn/)
 - [MongoDBのBSON比較順](https://www.mongodb.com/docs/v8.0/reference/bson-type-comparison-order/)

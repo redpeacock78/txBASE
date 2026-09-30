@@ -29,6 +29,21 @@ Non-finite intermediate or result values are rejected. The numeric expression ev
 `input` is evaluated for each record. Missing and `null` results are ignored, and duplicate values remain in the output. Array expressions can combine field references and other supported scalar expressions.
 If every result is missing or `null`, the accumulator returns an empty array.
 
+`$firstN` and `$lastN` use the same `input` and `n` shape:
+
+```json
+{
+  "first": {"$firstN": {"input": "$SCORE", "n": 2}},
+  "last": {"$lastN": {"input": "$SCORE", "n": 2}}
+}
+```
+
+Both evaluate `input` for each record and retain values in group input order. Missing inputs become `null`, explicit `null` values remain, and duplicate values are retained. `$firstN` keeps the first `n` values; `$lastN` keeps the last `n` values and returns that suffix in input order. If a group has fewer than `n` records, the result contains all of its input values.
+
+Without a preceding input `$sort`, group input order follows physical record order. An input `$sort` establishes the order used by these accumulators.
+
+txBASE supports `$firstN` and `$lastN` only as `$group`, `$bucket`, and `$bucketAuto` accumulators. MongoDB's array-operator and window-operator forms are outside this contract.
+
 `n` must evaluate to a positive integer no greater than 10,000. It may be constant or depend only on the output group's `_id`; txBASE evaluates it once when it creates the group. This bound is specific to txBASE.
 
 txBASE returns `$minN` values in ascending order and `$maxN` values in descending order; equal values retain input order. MongoDB does not promise a particular output order for these accumulators, so txBASE's deterministic ordering is an explicit difference.
@@ -37,10 +52,10 @@ The comparison follows MongoDB's BSON type order for JSON values: `null`, number
 
 ## Order and collection accumulators
 
-- `$first` and `$last` use input physical-record order. They return the selected field value, including explicit `null`; a missing field becomes `null`.
-- `$push` returns all field values in input physical-record order. `$addToSet` returns each structurally equal JSON value once, in first-seen order. Both append missing fields as `null`.
+- `$first` and `$last` use group input order, which follows physical-record order unless an input `$sort` establishes another order. They return the selected field value, including explicit `null`; a missing field becomes `null`.
+- `$push` returns all field values in group input order. `$addToSet` returns each structurally equal JSON value once, in first-seen order. Both append missing fields as `null`.
 
-The combined retained-value limit for `$push`, `$addToSet`, `$minN`, and `$maxN` is 10,000 values per aggregation result. Each `n` therefore cannot exceed 10,000.
+The combined retained-value limit for `$push`, `$addToSet`, `$minN`, `$maxN`, `$firstN`, and `$lastN` is 10,000 values per aggregation result. Each `n` therefore cannot exceed 10,000.
 
 ## Primary references
 
@@ -51,4 +66,6 @@ The combined retained-value limit for `$push`, `$addToSet`, `$minN`, and `$maxN`
 - [MongoDB `$stdDevSamp` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
 - [MongoDB `$minN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/minn/)
 - [MongoDB `$maxN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/maxn/)
+- [MongoDB `$firstN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/firstn/)
+- [MongoDB `$lastN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/lastn/)
 - [MongoDB BSON comparison order](https://www.mongodb.com/docs/v8.0/reference/bson-type-comparison-order/)

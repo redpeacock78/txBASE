@@ -54,7 +54,7 @@ pub(super) fn parse_accumulators(
             "$stdDevPop" => AccumulatorKind::StdDevPop(parse_numeric_operand(operand, &path)?),
             "$stdDevSamp" => AccumulatorKind::StdDevSamp(parse_numeric_operand(operand, &path)?),
             "$sum" => AccumulatorKind::Sum(parse_numeric_operand(operand, &path)?),
-            "$minN" | "$maxN" => {
+            "$minN" | "$maxN" | "$firstN" | "$lastN" => {
                 let definition = operand.as_object().ok_or_else(|| {
                     QueryError::Invalid(format!(
                         "{path} must contain exactly input and n expressions"
@@ -75,10 +75,12 @@ pub(super) fn parse_accumulators(
                         "{path}.n may reference only the group _id"
                     )));
                 }
-                if operator == "$minN" {
-                    AccumulatorKind::MinN { input, n }
-                } else {
-                    AccumulatorKind::MaxN { input, n }
+                match operator.as_str() {
+                    "$minN" => AccumulatorKind::MinN { input, n },
+                    "$maxN" => AccumulatorKind::MaxN { input, n },
+                    "$firstN" => AccumulatorKind::FirstN { input, n },
+                    "$lastN" => AccumulatorKind::LastN { input, n },
+                    _ => unreachable!("matched N-value accumulator"),
                 }
             }
             "$min" | "$max" | "$first" | "$last" | "$push" | "$addToSet" => {

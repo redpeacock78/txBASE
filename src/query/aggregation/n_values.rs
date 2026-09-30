@@ -2,13 +2,27 @@ use super::super::QueryError;
 use crate::query::expression::{ScalarExpression, evaluate_scalar};
 use serde_json::{Map, Value};
 use std::cmp::Ordering;
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, VecDeque};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Selection {
+    Min,
+    Max,
+    First,
+    Last,
+}
+
+#[derive(Debug)]
+enum RetainedValues {
+    Ranked(BinaryHeap<Entry>),
+    Ordered(VecDeque<Value>),
+}
 
 #[derive(Debug)]
 pub(super) struct State {
-    values: BinaryHeap<Entry>,
+    values: RetainedValues,
     limit: usize,
-    choose_min: bool,
+    selection: Selection,
     next_order: usize,
 }
 
@@ -49,7 +63,7 @@ impl State {
     pub(super) fn new(
         group_key: &Value,
         expression: &ScalarExpression,
-        choose_min: bool,
+        selection: Selection,
         path: &str,
     ) -> Result<Self, QueryError> {
         let mut values = Map::new();
@@ -70,9 +84,12 @@ impl State {
             })?;
 
         Ok(Self {
-            values: BinaryHeap::new(),
+            values: match selection {
+                Selection::Min | Selection::Max => RetainedValues::Ranked(BinaryHeap::new()),
+                Selection::First | Selection::Last => RetainedValues::Ordered(VecDeque::new()),
+            },
             limit: count as usize,
-            choose_min,
+            selection,
             next_order: 0,
         })
     }
@@ -82,52 +99,81 @@ impl State {
         value: Value,
         collected_values: &mut usize,
     ) -> Result<(), QueryError> {
-        let is_full = self.values.len() == self.limit;
-        let replace_worst = is_full
-            && self.values.peek().is_some_and(|worst| {
-                let ordering = compare_values(&value, &worst.value);
-                if self.choose_min {
-                    ordering.is_lt()
-                } else {
-                    ordering.is_gt()
+        let selection = self.selection;
+        match (&mut self.values, selection) {
+            (RetainedValues::Ranked(values), Selection::Min | Selection::Max) => {
+                let choose_min = selection == Selection::Min;
+                let is_full = values.len() == self.limit;
+                let replace_worst = is_full
+                    && values.peek().is_some_and(|worst| {
+                        let ordering = compare_values(&value, &worst.value);
+                        if choose_min {
+                            ordering.is_lt()
+                        } else {
+                            ordering.is_gt()
+                        }
+                    });
+                if is_full && !replace_worst {
+                    return Ok(());
                 }
-            });
-        if is_full && !replace_worst {
-            return Ok(());
-        }
-        if !is_full && *collected_values >= super::MAX_COLLECTED_VALUES {
-            return Err(QueryError::Invalid(format!(
-                "aggregate collected value count exceeds {}",
-                super::MAX_COLLECTED_VALUES
-            )));
-        }
-        let order = self.next_order;
-        self.next_order = self.next_order.checked_add(1).ok_or_else(|| {
-            QueryError::Invalid("aggregate N-value input order overflows usize".into())
-        })?;
+                if !is_full {
+                    ensure_collection_capacity(*collected_values)?;
+                }
+                let order = self.next_order;
+                self.next_order = self.next_order.checked_add(1).ok_or_else(|| {
+                    QueryError::Invalid("aggregate N-value input order overflows usize".into())
+                })?;
 
-        if is_full {
-            self.values.pop();
-        } else {
-            *collected_values += 1;
+                if is_full {
+                    values.pop();
+                } else {
+                    *collected_values += 1;
+                }
+                values.push(Entry {
+                    value,
+                    order,
+                    choose_min,
+                });
+            }
+            (RetainedValues::Ordered(values), Selection::First | Selection::Last) => {
+                let is_full = values.len() == self.limit;
+                if is_full && selection == Selection::First {
+                    return Ok(());
+                }
+                if is_full {
+                    values.pop_front();
+                } else {
+                    ensure_collection_capacity(*collected_values)?;
+                    *collected_values += 1;
+                }
+                values.push_back(value);
+            }
+            _ => unreachable!("N-value selection and storage differ"),
         }
-        self.values.push(Entry {
-            value,
-            order,
-            choose_min: self.choose_min,
-        });
         Ok(())
     }
 
     pub(super) fn finish(self) -> Value {
-        Value::Array(
-            self.values
+        let values = match self.values {
+            RetainedValues::Ranked(values) => values
                 .into_sorted_vec()
                 .into_iter()
                 .map(|entry| entry.value)
                 .collect(),
-        )
+            RetainedValues::Ordered(values) => values.into_iter().collect(),
+        };
+        Value::Array(values)
     }
+}
+
+fn ensure_collection_capacity(collected_values: usize) -> Result<(), QueryError> {
+    if collected_values >= super::MAX_COLLECTED_VALUES {
+        return Err(QueryError::Invalid(format!(
+            "aggregate collected value count exceeds {}",
+            super::MAX_COLLECTED_VALUES
+        )));
+    }
+    Ok(())
 }
 
 pub(super) fn compare_values(left: &Value, right: &Value) -> Ordering {

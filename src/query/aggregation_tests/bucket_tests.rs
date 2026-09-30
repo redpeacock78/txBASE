@@ -105,7 +105,8 @@ fn bucket_output_supports_n_value_accumulators() {
     let records = [
         record(1, json!({"AGE": 7, "VALUE": 3})),
         record(2, json!({"AGE": 18, "VALUE": 1})),
-        record(3, json!({"AGE": 29, "VALUE": 2})),
+        record(3, json!({"AGE": 19, "VALUE": 9})),
+        record(4, json!({"AGE": 29, "VALUE": 2})),
     ];
     let stages = vec![
         json!({
@@ -113,7 +114,9 @@ fn bucket_output_supports_n_value_accumulators() {
                 "groupBy": "$AGE",
                 "boundaries": [0, 20, 40],
                 "output": {
-                    "minimum": {"$minN": {"input": "$VALUE", "n": 2}}
+                    "minimum": {"$minN": {"input": "$VALUE", "n": 2}},
+                    "first": {"$firstN": {"input": "$VALUE", "n": 2}},
+                    "last": {"$lastN": {"input": "$VALUE", "n": 2}}
                 }
             }
         })
@@ -125,8 +128,8 @@ fn bucket_output_supports_n_value_accumulators() {
     assert_eq!(
         crate::query::aggregation::execute(&records.iter().collect::<Vec<_>>(), &stages).unwrap(),
         vec![
-            json!({"_id": 0, "minimum": [1, 3]}),
-            json!({"_id": 20, "minimum": [2]})
+            json!({"_id": 0, "minimum": [1, 3], "first": [3, 1], "last": [1, 9]}),
+            json!({"_id": 20, "minimum": [2], "first": [2], "last": [2]})
         ]
     );
 }
