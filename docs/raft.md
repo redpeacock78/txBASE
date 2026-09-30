@@ -79,7 +79,7 @@ The replicated state machine remains the catalog. Raft supplies leadership and a
 The current `ReplicationLog` is not a Raft log. It has one configured term, ties its index to catalog transaction IDs, and applies entries directly through the catalog journal. Raft also logs membership changes and other protocol entries, so its log position must remain distinct from the catalog transaction ID.
 
 This authority design does not provide distributed transactions across catalogs, partitioning, or linearizable reads from arbitrary followers. Those require separate contracts.
-The applied-index token read contract is described in [Client writes and reads](#5-client-writes-and-reads).
+The applied-index token read contract is described in [Client writes and reads](#raft-read-token-contract).
 
 ## 2. Protocol implementation
 
@@ -159,6 +159,7 @@ The applied-position marker and request result must be durable with the catalog 
 
 The existing `TXRP` sidecar remains a pre-consensus replication format. It cannot serve as the Raft WAL because it stores one fixed term and assumes every entry advances the catalog transaction sequence.
 
+<a id="raft-read-token-contract"></a>
 ## 5. Client writes and reads
 
 A mutation succeeds only after Raft commits it on a quorum and the local state machine durably applies it. Without a quorum, the server returns an unavailable or not-leader response and does not fall back to a local write.

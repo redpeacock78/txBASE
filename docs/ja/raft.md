@@ -104,7 +104,7 @@ Raftログにはmembership変更やプロトコル上のエントリも入るた
 
 この権威設計だけでは、カタログをまたぐ分散transaction、partitioning、任意のfollowerからのlinearizable readは提供しない。
 これらには別の契約が必要です。
-適用済み位置tokenを使う読み取り契約は、[clientの更新と読み取り](#5-clientの更新と読み取り)に記載します。
+適用済み位置tokenを使う読み取り契約は、[clientの更新と読み取り](#raft-read-token-contract)に記載します。
 
 ## 2. プロトコルの実装
 
@@ -223,6 +223,7 @@ commit済み更新を二重適用したり、未commitの更新を成功と報�
 既存の`TXRP`サイドカーは、コンセンサス導入前のレプリケーション形式として維持する。
 termが固定され、すべてのentryがカタログtransaction sequenceを進める前提のため、Raft WALとしては使えない。
 
+<a id="raft-read-token-contract"></a>
 ## 5. clientの更新と読み取り
 
 更新は、Raftがquorumにcommitし、ローカルstate machineが永続的に適用した後に限り成功する。
