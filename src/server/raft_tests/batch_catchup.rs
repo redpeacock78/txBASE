@@ -6,7 +6,7 @@ mod round;
 fn isolated_voter_applies_batched_catchup_payloads_once() {
     const NODE_COUNT: u64 = 3;
     const MAX_PAYLOAD_ENTRIES: u64 = 16;
-    const PAYLOAD_SIZES: [u64; 7] = [2, 4, 8, 16, 17, 32, 65];
+    const PAYLOAD_SIZES: [u64; 9] = [2, 4, 8, 16, 17, 32, 65, 129, 257];
 
     let root = temporary_cluster();
     let addresses = free_addresses(NODE_COUNT as usize);

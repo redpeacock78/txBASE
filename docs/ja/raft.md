@@ -29,13 +29,13 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 同じ5 nodeテストの後半では、1台のvoterを隔離したまま、残るquorumで2件のcommandをcommitします。
 1件目のcommandがvoterに適用された後で、2件目のlog indexを含む`AppendEntries`要求を遅延させて解放します。
 配送後に両方のrecordが1回だけ適用されることを検査します。
-別の3 node CIテストでは`max_payload_entries`を16に設定し、同じcluster内でvoter 1台を隔離して、2、4、8、16、17、32、65件のcatch-upを順に検査します。
+別の3 node CIテストでは`max_payload_entries`を16に設定し、同じcluster内でvoter 1台を隔離して、2、4、8、16、17、32、65、129、257件のcatch-upを順に検査します。
 32件以下のpayloadでは、該当する16件ごとの各境界で要求を保留します。
-65件のpayloadでは最初の要求だけを保留し、解放後は残りの`AppendEntries`送信をOpenRaftに任せます。
+65、129、257件のpayloadでは最初の要求だけを保留し、解放後は残りの`AppendEntries`送信をOpenRaftに任せます。
 要求の保留中はentry数が上限内に収まり、対象voterのlogは直前の境界を越えず、その要求で保留したtailのrecordも適用されません。
 すべての要求を解放すると、全nodeが収束し、各recordが一度だけ適用されます。
 固定4要求の解放順序に対する24通りの順列はそのシナリオだけを対象にします。
-65件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
+257件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -71,7 +71,7 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 
 ### 未実装
 
-- 固定4要求の解放順序、同一peerへの逐次2要求、2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケース、RAFT-016で32件までの各境界を保留する検査と65件payloadで最初の要求を保留した後の収束確認を超えるスケジュール。65件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証である。
+- 固定4要求の解放順序、同一peerへの逐次2要求、2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケース、RAFT-016で32件までの各境界を保留する検査と65、129、257件のpayloadで最初の要求を保留した後の収束確認を超えるスケジュール。257件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証である。
 - 最新のquorum commit状態を保証するfollower読み取り。読み取りtokenが保証するのはセッション内の読み取り単調性だけである。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
@@ -339,12 +339,12 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 同じ5 node実行で1台のvoterを隔離したまま、残る4 nodeが2件のcommandをcommitするシナリオも検査します。
 1件目のcommandがvoterへ適用された後で、2件目の`AppendEntries`要求を保留します。
 全nodeで各recordを1回だけ適用し、transaction 7へ収束します。
-別の3 node CIテストでは、`max_payload_entries = 16`を設定し、同じcluster内で各回1台のvoterを隔離して、2、4、8、16、17、32、65件のpayloadによるcatch-upを検査します。
+別の3 node CIテストでは、`max_payload_entries = 16`を設定し、同じcluster内で各回1台のvoterを隔離して、2、4、8、16、17、32、65、129、257件のpayloadによるcatch-upを検査します。
 32件以下のpayloadでは、該当する16件ごとの各境界で`AppendEntries`要求を保留します。
-65件のpayloadでは最初の要求だけを保留します。解放後は残りの送信をOpenRaftに任せます。
+65、129、257件のpayloadでは最初の要求だけを保留します。解放後は残りの送信をOpenRaftに任せます。
 要求の保留中はentry数が上限内に収まり、対象voterのlogは直前の境界を越えず、その要求で保留したtailのrecordも適用されません。
 すべての要求を解放すると、全nodeが収束し、各recordが一度だけ適用されます。
-65件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
+257件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
 
 ## 一次資料と適用範囲
 

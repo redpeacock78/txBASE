@@ -111,13 +111,13 @@ HTTP、JSON、MCP、WASMはストレージ形式の上位にあるアクセス�
   接続を戻したvoterがsnapshotをインストールして追いつき、次のclient sequenceを適用することも検査する。
   子プロセステストでは、3つの論理nodeを動かすプロセスを4つの永続化境界で強制終了し、同じnodeディレクトリから再起動して同一要求を再試行する。
   同じ5 node実行で1台のvoterを隔離したまま、残る4 nodeが2件のcommandをcommitし、1件目の適用後まで2件目の`AppendEntries`要求を保留する経路も検査する。
-  別の3 node CIテストは`max_payload_entries`を16に設定し、同じcluster内で各回1台のvoterを隔離して、2、4、8、16、17、32、65件のpayloadによるcatch-upを検査する。
+  別の3 node CIテストは`max_payload_entries`を16に設定し、同じcluster内で各回1台のvoterを隔離して、2、4、8、16、17、32、65、129、257件のpayloadによるcatch-upを検査する。
   32件以下のpayloadでは、該当する16件ごとの各境界で要求を保留する。
-  65件のpayloadでは最初の要求だけを保留し、解放後は残りの`AppendEntries`送信をOpenRaftに任せる。
+  65、129、257件のpayloadでは最初の要求だけを保留し、解放後は残りの`AppendEntries`送信をOpenRaftに任せる。
   要求の保留中はentry数が上限内に収まり、対象nodeのlogは直前の境界を越えず、その要求で保留したtailのrecordも適用されない。
   すべての要求を解放すると、全nodeが収束し、各recordが一度だけ適用される。
   24通りで網羅するのは、この4要求の解放順序だけである。
-  65件を超えるpayload、追加のterm推移、ほかのpartition条件を変えたRPC遅延と順序変更は未検証である。
+  257件を超えるpayload、追加のterm推移、ほかのpartition条件を変えたRPC遅延と順序変更は未検証である。
   詳細は[Raftコンセンサス設計](raft.md)を参照する。
 
 固定termとRaftの両モードで、公開カタログlistenerに任意のTLSを設定できます。
@@ -134,7 +134,7 @@ frontendはHTTP/1.1をtokenで保護したloopback backendへストリーム転�
 - カタログルートをまたぐ参照は未対応である。
 - XBF出力とtxBASEロックを無視する読み手に対する、厳密な複数ファイル読み取りアトミック性。
 - R2以外のプロバイダー統合、R2の本番接続検証、プロバイダー管理の保持方針、永続的な再試行キュー。
-- 固定した4要求の24通りの解放順序、同一peerへの連続2要求、隔離voterの2件catch-upで2件目を遅延させるケース、RAFT-016で32件までの各境界を保留する検査と65件payloadで最初の要求を保留した後の収束確認を超えるRaft障害テスト。65件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証である。適用index tokenを超えるフォロワー読み取りの鮮度保証、分散パーティショニング。
+- 固定した4要求の24通りの解放順序、同一peerへの連続2要求、隔離voterの2件catch-upで2件目を遅延させるケース、RAFT-016で32件までの各境界を保留する検査と65、129、257件のpayloadで最初の要求を保留した後の収束確認を超えるRaft障害テスト。257件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証である。適用index tokenを超えるフォロワー読み取りの鮮度保証、分散パーティショニング。
 
 ## 3. フェーズ 1：小さなローカル DBMS を完成させる
 
@@ -575,19 +575,19 @@ proxyはcommit後の最初の成功応答を破棄します。
 同一peerへの連続した非空`AppendEntries`要求2件も遅延させ、順に解放します。
 同じ5 node実行で1台のvoterを隔離したまま残る4 nodeが2件のcommandをcommitし、1件目の適用後まで2件目の`AppendEntries`要求を保留します。
 解放後に、両方のrecordが各nodeで一度だけ適用されることを検査します。
-別の3 node CIテストでは`max_payload_entries`を16に設定し、同じcluster内で各回1台のvoterを隔離して、2、4、8、16、17、32、65件のpayloadによるcatch-upを検査します。
+別の3 node CIテストでは`max_payload_entries`を16に設定し、同じcluster内で各回1台のvoterを隔離して、2、4、8、16、17、32、65、129、257件のpayloadによるcatch-upを検査します。
 32件以下のpayloadでは、該当する16件ごとの各境界で要求を保留します。
-65件のpayloadでは最初の要求だけを保留します。解放後は残りの送信をOpenRaftに任せます。
+65、129、257件のpayloadでは最初の要求だけを保留します。解放後は残りの送信をOpenRaftに任せます。
 要求の保留中はentry数が上限内に収まり、対象nodeのlogは直前の境界を越えず、その要求で保留したtailのrecordも適用されません。
 すべての要求を解放すると、全nodeが収束し、各recordが一度だけ適用されます。
 この24通りで網羅するのは、同じ4要求の解放順序です。
-65件を超えるpayload、追加のterm推移、ほかのpartition条件を変えた遅延・順序変更は未検証です。
+257件を超えるpayload、追加のterm推移、ほかのpartition条件を変えた遅延・順序変更は未検証です。
 
 ### 候補範囲
 
 - テーブル間または分散環境の長寿命スナップショットトランザクション。
 - 現在のテーブル、カタログ、`TXRP`、`TXRG`サイドカーを超える永続WAL履歴。
-- 固定した4要求の24通りの解放順序、同一peerへの連続2要求、隔離voterの2件catch-upで2件目を遅延させるケース、65件までのcatch-up payloadを検査した範囲を超える遅延・順序変更の決定的なテストを追加する。65件を超えるpayload、追加のterm推移、ほかのpartition条件を変える。詳細は[Raftコンセンサス設計](raft.md)に記載する。
+- 固定した4要求の24通りの解放順序、同一peerへの連続2要求、隔離voterの2件catch-upで2件目を遅延させるケース、257件までのcatch-up payloadを検査した範囲を超える遅延・順序変更の決定的なテストを追加する。257件を超えるpayload、追加のterm推移、ほかのpartition条件を変える。詳細は[Raftコンセンサス設計](raft.md)に記載する。
 - 永続的な再試行キュー、バックプレッシャー、authorityの検出。
 - 最新のquorum commit状態を保証するfollower読み取り。適用index tokenが保証するのはセッション内の読み取り単調性だけである。
 - 分散パーティショニング。
