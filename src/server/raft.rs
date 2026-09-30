@@ -52,6 +52,25 @@ impl RaftRuntime {
         config: CatalogRaftConfig,
         token: Option<String>,
     ) -> Result<Self, String> {
+        Self::start_with_payload_entry_limit(catalog_root, config, token, 1)
+    }
+
+    #[cfg(test)]
+    pub(super) fn start_with_max_payload_entries(
+        catalog_root: &Path,
+        config: CatalogRaftConfig,
+        token: Option<String>,
+        max_payload_entries: u64,
+    ) -> Result<Self, String> {
+        Self::start_with_payload_entry_limit(catalog_root, config, token, max_payload_entries)
+    }
+
+    fn start_with_payload_entry_limit(
+        catalog_root: &Path,
+        config: CatalogRaftConfig,
+        token: Option<String>,
+        max_payload_entries: u64,
+    ) -> Result<Self, String> {
         let token =
             token.ok_or_else(|| "Raft peer RPC requires TXBASE_REPLICATION_TOKEN".to_owned())?;
         let peer_tls = config::validate_config(catalog_root, &config, &token)?;
@@ -101,7 +120,7 @@ impl RaftRuntime {
         let join_log_store = log_store.clone();
         let raft_config = openraft::Config {
             cluster_name: config.cluster_id.clone(),
-            max_payload_entries: 1,
+            max_payload_entries,
             ..openraft::Config::default()
         };
         let raft_config = Arc::new(

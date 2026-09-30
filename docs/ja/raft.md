@@ -29,7 +29,11 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 同じ5 nodeテストの後半では、1台のvoterを隔離したまま、残るquorumで2件のcommandをcommitします。
 1件目のcommandがvoterに適用された後で、2件目のlog indexを含む`AppendEntries`要求を遅延させて解放します。
 配送後に両方のrecordが1回だけ適用されることを検査します。
-固定4要求の解放順序、同一peerへの逐次要求、2件のcommandでvoterをcatch-upさせるシナリオ以外の要求batch、term、partition条件は未検証です。
+別の3 node CIテストでは`max_payload_entries`を2に設定します。
+1台のvoterを隔離した状態で残るquorumが2件をcommitし、2件を含む1回のcatch-up `AppendEntries`要求を保留します。
+対象voterが解放まで変更前のtransaction IDとrecord数を維持し、解放後に各commandを1回だけ適用することを検査します。
+固定4要求の解放順序に対する24通りの順列はそのシナリオだけを対象にします。
+2件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
 `--raft-*`を指定しない`serve-catalog`は、従来の固定termレプリケーションを使います。
 
 この文書では、現在のRaft実装境界と、権威、復旧、運用に残る作業を記録します。
@@ -65,7 +69,7 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 
 ### 未実装
 
-- 固定4要求の解放順序、同一peerへの逐次2要求、2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケースを超えるスケジュール。異なるtermとpartition条件の組み合わせも未検証である。
+- 固定4要求の解放順序、同一peerへの逐次2要求、2件のcommandを使うvoter catch-upで2件目の要求を遅延させるケース、1回に2件を送るcatch-up payloadを超えるスケジュール。より大きなpayload、追加のterm推移、ほかのpartition条件は未検証である。
 - 最新のquorum commit状態を保証するfollower読み取り。読み取りtokenが保証するのはセッション内の読み取り単調性だけである。
 
 コマンドはASCIIのclient IDを128 byteまで受け付けます。
@@ -333,12 +337,15 @@ OpenRaft 0.9.25はtargetごとに複製taskを1つ実行し、各`append_entries
 同じ5 node実行で1台のvoterを隔離したまま、残る4 nodeが2件のcommandをcommitするシナリオも検査します。
 1件目のcommandがvoterへ適用された後で、2件目の`AppendEntries`要求を保留します。
 全nodeで各recordを1回だけ適用し、transaction 7へ収束します。
-固定4要求の解放順序、同一peerへの逐次要求、2件のcommandでvoterをcatch-upさせるシナリオ以外の要求batch、term、partition条件は未検証です。
+別の3 node CIテストでは、`max_payload_entries = 2`を設定して、2件を含む1回のcatch-up要求を保留します。
+対象voterが解放まで変更前の状態を維持し、全nodeが2件のrecordを1回ずつ適用することを検査します。
+2件を超えるpayload、追加のterm推移、ほかのpartition条件は未検証です。
 
 ## 一次資料と適用範囲
 
 - [In Search of an Understandable Consensus Algorithm（Raft）](https://raft.github.io/raft.pdf)は、コンセンサスプロトコルとjoint-consensusによるmembership変更を定義する。
 - [OpenRaft 0.9.25の文書](https://docs.rs/openraft/0.9.25/openraft/)は、選択した実装とversion 1.0前のAPI状態を説明する。
+- [OpenRaft `Config::max_payload_entries`](https://docs.rs/openraft/0.9.25/openraft/struct.Config.html#structfield.max_payload_entries)は、複製payloadに含めるentry数の上限を定める。
 - [OpenRaftのfeature flags](https://docs.rs/openraft/0.9.25/openraft/docs/feature_flags/)は、標準Raft modeと一時的な`storage-v2` APIを説明する。
 - [OpenRaft `RaftLogStorage`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftLogStorage.html)は、永続ログstorageの契約を定義する。
 - [OpenRaft `RaftStateMachine`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftStateMachine.html)は、適用済み状態、エントリの適用、snapshotの契約を定義する。

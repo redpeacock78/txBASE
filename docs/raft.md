@@ -17,7 +17,8 @@ The test restores the original voter set after every node catches up.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so this covers successive requests rather than overlapping calls from the same leader to that peer ([threading model](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/docs/internal/threading.md); [replication implementation](https://github.com/databendlabs/openraft/blob/v0.9.25/openraft/%73rc/replication/mod.rs)).
 In a later phase of the same five-node test, one voter is isolated while the remaining quorum commits two commands.
 It delays the request for the second missing log index after verifying that the first command has reached the voter, then checks that each record is applied once after release.
-The 24 orders exhaust release order only for the fixed four-request scenario; other request batches, terms, and partition conditions remain untested.
+A separate three-node CI test sets `max_payload_entries` to 2, isolates one voter, commits two commands on the remaining quorum, and verifies that one held catch-up `AppendEntries` request contains both entries and applies each command once after release.
+The 24 orders exhaust release order only for the fixed four-request scenario; payloads larger than two entries, additional term histories, and other partition conditions remain untested.
 Without `--raft-*` options, `serve-catalog` keeps using the fixed-term replication path.
 
 This document records the implemented Raft boundary and the remaining authority, recovery, and operations work.
@@ -52,7 +53,7 @@ This document records the implemented Raft boundary and the remaining authority,
 
 ### Not implemented
 
-- Broader deterministic coverage for delayed or reordered RPC schedules beyond the fixed four-request release permutations, the sequential same-peer pair, and one two-command voter catch-up with its second request delayed; varied terms and partition conditions remain untested.
+- Broader deterministic coverage for delayed or reordered RPC schedules beyond the fixed four-request release permutations, the sequential same-peer pair, the two-command voter catch-up with its second request delayed, and one two-entry catch-up payload; larger payloads, additional term histories, and other partition conditions remain untested.
 - Follower reads that guarantee the latest quorum-committed state; read tokens provide session monotonicity only.
 
 Commands allow client IDs of up to 128 ASCII bytes, require a positive sequence and a non-empty catalog tag, and accept 1–1,000 transaction steps with at least one mutation.
@@ -227,12 +228,15 @@ After all nodes catch up, it restores the original voter set.
 OpenRaft 0.9.25 runs one replication task per target and awaits each `append_entries` future, so the test does not claim to hold overlapping calls from the same leader to that peer.
 The same five-node run then isolates one voter while the other four commit two commands.
 It holds the second command's `AppendEntries` request after the first command has applied at that voter; every node must apply both records once and converge at transaction 7.
-These cases do not cover larger catch-up batches, differing terms, or other partition conditions.
+A separate three-node CI test sets `max_payload_entries` to 2 and holds one catch-up request containing two committed entries while a voter is isolated.
+It verifies that the target remains unchanged until release and that every node applies both records once.
+These cases do not cover payloads larger than two entries, additional term histories, or other partition conditions.
 
 ## Primary references and scope
 
 - [In Search of an Understandable Consensus Algorithm (Raft)](https://raft.github.io/raft.pdf) defines the consensus protocol and joint-consensus membership change.
 - [OpenRaft 0.9.25 documentation](https://docs.rs/openraft/0.9.25/openraft/) documents the selected implementation and its pre-1.0 API status.
+- [OpenRaft `Config::max_payload_entries`](https://docs.rs/openraft/0.9.25/openraft/struct.Config.html#structfield.max_payload_entries) bounds the number of entries in each replication payload.
 - [OpenRaft feature flags](https://docs.rs/openraft/0.9.25/openraft/docs/feature_flags/) documents standard Raft mode and the temporary `storage-v2` API.
 - [OpenRaft `RaftLogStorage`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftLogStorage.html) defines durable log-store behavior.
 - [OpenRaft `RaftStateMachine`](https://docs.rs/openraft/0.9.25/openraft/storage/trait.RaftStateMachine.html) defines applied-state, entry application, and snapshot behavior.

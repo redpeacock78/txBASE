@@ -1,3 +1,4 @@
+mod batch_catchup;
 mod crash_recovery;
 mod failover;
 mod follower_reads;
