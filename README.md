@@ -29,7 +29,8 @@ txBASE reads and writes selected dBASE and Visual FoxPro fields while keeping th
 - A deterministic XBF object-store manifest boundary with generation CAS and recovery, backed by memory or a durable filesystem store.
 - Explicit CJK codec selection without changing legacy DBF bytes.
 - A host-independent DBF WASM core with the shared bounded query and single-operation or atomic-batch mutation contracts.
-- A runtime-neutral asynchronous object-store and manifest contract for future worker and WASI hosts.
+- A runtime-neutral asynchronous object-store contract with Worker Fetch and Cloudflare R2 adapters, plus a WASI local-filesystem adapter.
+- Worker-compatible Web Streams and WASI 0.3 CLI query adapters that emit NDJSON.
 - An executor-neutral asynchronous query-stream polling contract for in-memory stream adapters.
 - A native threaded asynchronous query-stream adapter with bounded backpressure and drop cancellation.
 - A committed single-table change-data-capture sidecar with WAL recovery and an inspection CLI.
@@ -290,7 +291,8 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 - [Multi-table catalog](docs/catalog.md)
 - [Secondary-index sidecar](docs/indexes.md)
 - [Query model](docs/query-model.md)
-- [CLI command design](docs/cli.md)
+- [CLI command reference](docs/cli.md)
+- [CLI command architecture](docs/cli-design.md)
 - [Asynchronous query streaming](docs/async-streaming.md)
 - [Aggregation model](docs/aggregation.md)
 - [Join model](docs/joins.md)
@@ -309,7 +311,12 @@ Files are split when ownership, failure behavior, fixtures, or change cadence di
 - [Research index and source policy](docs/research.md)
 - [Edge storage and object-store commits](docs/edge-storage.md)
 - [WASM and worker host boundary](docs/wasm.md)
+- [WASI query-stream component](docs/wasi-query-stream.md)
+- [Worker Fetch object-store adapter](docs/worker-object-store.md)
+- [Cloudflare R2 object-store adapter](docs/r2-object-store.md)
+- [Worker query stream adapter](docs/worker-query-stream.md)
 - [Distributed evolution](docs/distributed-evolution.md)
+- [Raft consensus design](docs/raft.md)
 
 ## Current boundary and roadmap
 
@@ -319,15 +326,15 @@ It also includes fixed-term replication and optional static-membership Raft mode
 
 The roadmap still leaves the following areas as future work:
 
-- Worker/WASI-specific `AsyncQueryStream` timeout, transport, cancellation, and asynchronous-storage behavior.
+- Deployed Worker integration and host-specific query-stream lifecycle guarantees.
 - Filesystem- and cache-aware merge planning, streaming join execution.
 - Broader aggregation.
 - Predicate-level locking and distributed serializable coordination.
 - Locale-aware CJK collation.
 - Broader upstream CJK fixtures.
 - Strict multi-file reader atomicity for XBF export.
-- Cloud object-storage adapters and retention policy.
-- Worker/WASI runtime adapters and asynchronous WASM storage.
+- Live R2 service validation, provider-managed retention and orphan cleanup, and adapters beyond R2.
+- Provider-backed WASI storage and non-blocking filesystem I/O.
 - Dynamic Raft membership, broader failure-injection coverage, built-in client-certificate support for replication catch-up, and distributed partitioning.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance conditions and [docs/research.md](docs/research.md) for the source and fixture policy.

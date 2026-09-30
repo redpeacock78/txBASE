@@ -20,7 +20,8 @@ txBASEは、元のDBF表現を保ったまま、dBASEとVisual FoxProの一部�
 - 世代CASと復旧を備え、メモリまたは永続ファイルシステムストアを使える決定的なXBFオブジェクトストレージマニフェスト境界。
 - 既存のDBFバイト列を変更しない明示的なCJK codec選択。
 - 共有する有界クエリと単独または原子的なバッチ更新の契約を持つホスト非依存DBF WASMコア。
-- 将来のワーカーとWASIホスト向けに、ランタイムから独立した非同期オブジェクトストレージとマニフェストの契約。
+- Worker FetchとCloudflare R2のアダプター、およびWASIのローカルfilesystemアダプターを備えた、ランタイム非依存の非同期オブジェクトストレージ契約。
+- NDJSONを出力するWorker互換Web StreamsとWASI 0.3 CLIのクエリアダプター。
 - メモリ内ストリームアダプター向けに、executorから独立した非同期クエリストリームのポーリング契約。
 - 有界バックプレッシャーと破棄時キャンセルを備えた、ネイティブスレッド非同期クエリストリームアダプター。
 - WAL復旧と検査CLIを備えた、単一テーブルのコミット済み変更データ取得サイドカー。
@@ -289,7 +290,8 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - [複数テーブルのcatalog](docs/ja/catalog.md)
 - [セカンダリインデックスのサイドカー](docs/ja/indexes.md)
 - [クエリモデル](docs/ja/query-model.md)
-- [CLIコマンド設計](docs/ja/cli.md)
+- [CLIコマンドリファレンス](docs/ja/cli.md)
+- [CLIコマンド体系の設計](docs/ja/cli-design.md)
 - [非同期クエリストリーム](docs/ja/async-streaming.md)
 - [集約モデル](docs/ja/aggregation.md)
 - [結合モデル](docs/ja/joins.md)
@@ -308,7 +310,12 @@ crateの分割は、実際のbuildまたはownershipの境界が必要になる�
 - [調査インデックスと出典ポリシー](docs/ja/research.md)
 - [エッジストレージとオブジェクトストレージのコミット](docs/ja/edge-storage.md)
 - [WASMとワーカーのホスト境界](docs/ja/wasm.md)
+- [WASIクエリストリームコンポーネント](docs/ja/wasi-query-stream.md)
+- [Worker Fetchオブジェクトストレージアダプター](docs/ja/worker-object-store.md)
+- [Cloudflare R2オブジェクトストレージアダプター](docs/ja/r2-object-store.md)
+- [Workerクエリストリームアダプター](docs/ja/worker-query-stream.md)
 - [分散化の進化](docs/ja/distributed-evolution.md)
+- [Raftコンセンサス設計](docs/ja/raft.md)
 
 ## 現在の境界とロードマップ
 
@@ -320,15 +327,15 @@ Raft方式はquorum書き込み、linearizable read barrier、認証付きpeer R
 
 次の領域は引き続き将来の作業です。
 
-- ワーカーまたはWASI固有の`AsyncQueryStream`タイムアウト、転送、キャンセル、非同期ストレージの動作。
+- デプロイ済みWorkerとの統合と、クエリストリームのホスト固有のライフサイクル保証。
 - ファイルシステムとキャッシュを考慮したmerge計画、ストリーミング結合の実行。
 - より広い集約。
 - 述語単位のロックと分散serializable調整。
 - locale-awareなCJK collation。
 - 追加のupstream CJK fixture。
 - XBF exportにおける厳密な複数ファイルreader atomicity。
-- クラウドオブジェクトストレージアダプターと保持方針。
-- ワーカーまたはWASIのランタイムアダプターと非同期WASMストレージ。
+- R2本番サービスへの接続検証、プロバイダー管理の保持と孤立オブジェクト削除、R2以外のアダプター。
+- WASIのプロバイダー接続型ストレージと、ノンブロッキングなfilesystem I/O。
 - Raftのdynamic membership、より広い故障注入テスト、組み込みcatch-up clientのクライアント証明書対応、分散パーティショニング。
 
 受け入れ条件は[docs/ja/roadmap.md](docs/ja/roadmap.md)に、出典とfixtureの方針は[docs/ja/research.md](docs/ja/research.md)に記載しています。
