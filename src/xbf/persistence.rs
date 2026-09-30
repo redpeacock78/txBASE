@@ -1,5 +1,6 @@
 use super::{XbfError, XbfLimits, XbfTable, decode_with_limits, encode_with_limits};
 use crate::dbf::TableLock;
+use crate::file_ops::replace_file;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -53,30 +54,13 @@ pub(super) fn write_encoded_path(path: &Path, bytes: &[u8]) -> Result<(), XbfErr
     let mut file = fs::File::create(&temporary_path)?;
     file.write_all(bytes)?;
     file.sync_all()?;
-    replace_snapshot(&temporary_path, path)?;
+    replace_file(&temporary_path, path)?;
     sync_parent_directory(path)?;
     Ok(())
 }
 
 fn temporary_path(path: &Path) -> PathBuf {
     path.with_extension("txbase.xbf.tmp")
-}
-
-#[cfg(windows)]
-fn replace_snapshot(temporary_path: &Path, path: &Path) -> Result<(), XbfError> {
-    match fs::remove_file(path) {
-        Ok(()) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error.into()),
-    }
-    fs::rename(temporary_path, path)?;
-    Ok(())
-}
-
-#[cfg(not(windows))]
-fn replace_snapshot(temporary_path: &Path, path: &Path) -> Result<(), XbfError> {
-    fs::rename(temporary_path, path)?;
-    Ok(())
 }
 
 #[cfg(unix)]

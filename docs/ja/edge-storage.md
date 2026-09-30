@@ -24,6 +24,8 @@ R2バインディング固有の条件とページネーションは、[Cloudfla
 
 `FilesystemObjectStore`は、同じ契約を1つのディレクトリに永続化します。
 親ディレクトリを作成し、排他的な作成で変更後に内容を変えないオブジェクトを公開し、ロックファイルでストア操作を直列化し、同期済み一時ファイルでマニフェストを置き換えます。
+マニフェストの置換では`std::fs::rename`を1回呼び、以前のマニフェストを先に削除しません。
+親ディレクトリの同期はUnixだけで行うため、プラットフォームをまたいだ同一のディレクトリ永続性は保証しません。
 ファイルシステムバックエンドはローカルの永続アダプターであり、クラウドプロバイダーの整合性を保証しません。
 
 `AsyncObjectStore`は、5つの基本操作をランタイムから独立したfuture境界として定義します。
@@ -244,11 +246,14 @@ Worker Web Streamsアダプターは需要を制御し、シグナル対応WASM�
 
 ## 一次資料と適用範囲
 
+- [Rustの`std::fs::rename`](https://doc.rust-lang.org/std/fs/fn.rename.html)
+- [Windowsの`MoveFileExW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
 - [POSIXの`rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)
 - [POSIXの`fsync()`](https://pubs.opengroup.org/onlinepubs/009695399/functions/fsync.html)
 - [XBF v1形式草案](xbf.md)
 
-POSIXの`rename()`と`fsync()`は、ローカルバックエンドの一時ファイル置換と同期経路に関係するファイルシステム資料です。
+RustとWindowsの資料は、プラットフォームごとの置換境界を説明します。
+POSIXの`rename()`と`fsync()`はUnixの一時ファイル置換と同期経路を説明するものであり、Windowsのディレクトリ永続性は保証しません。
 マニフェスト、世代、compare-and-swap、復旧、保持の規則はtxBASE固有の契約であり、クラウドプロバイダーの動作を主張するものではありません。
 
 ローカルのマニフェストと世代の規則はtxBASE固有の契約です。

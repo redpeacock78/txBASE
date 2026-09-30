@@ -22,6 +22,10 @@ for the XBF path.
 `write_path` also recovers a pending `.xwl` before replacing the snapshot, while
 `save_with_wal` holds the same lock across recovery, WAL publication, snapshot
 replacement, and WAL cleanup.
+Snapshot replacement writes and syncs a temporary file, then uses one
+`std::fs::rename` call without unlinking the old snapshot first.
+The operation returns a replacement error instead of creating a delete-then-rename gap.
+Parent-directory synchronization is Unix-only; this does not claim identical power-loss durability across platforms.
 The bounded `to_dbf` helper exports representable tables to an in-memory DBF
 table; it does not claim full DBF schema or type compatibility.
 `to_dbf_with_schema` additionally returns a `txbase-schema` JSON value that

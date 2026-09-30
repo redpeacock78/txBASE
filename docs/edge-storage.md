@@ -22,6 +22,8 @@ Version-1 manifests that point to whole `.xbf` snapshots remain readable.
 
 `FilesystemObjectStore` persists the same contract below one directory.
 It creates parent directories, publishes immutable objects with exclusive creation, serializes store operations with a lock file, and replaces manifests through a synced temporary file.
+Manifest replacement uses one `std::fs::rename` call and does not unlink the previous manifest first.
+Parent-directory synchronization is Unix-only, so the filesystem backend does not claim identical directory-durability guarantees across platforms.
 The filesystem backend is a local durable adapter and does not claim cloud-provider consistency.
 
 `AsyncObjectStore` defines the same five primitive operations as a runtime-neutral future boundary.
@@ -230,11 +232,14 @@ Those features can reuse the manifest and generation contract after their host-s
 
 ## Primary references and scope
 
+- [Rust `std::fs::rename`](https://doc.rust-lang.org/std/fs/fn.rename.html)
+- [Windows `MoveFileExW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
 - [POSIX `rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)
 - [POSIX `fsync()`](https://pubs.opengroup.org/onlinepubs/009695399/functions/fsync.html)
 - [XBF v1 format draft](xbf.md)
 
-POSIX `rename()` and `fsync()` are the relevant filesystem references for the local backend's temporary-file replacement and synchronization path.
+The Rust and Windows references describe the platform-specific replacement boundary.
+POSIX `rename()` and `fsync()` describe the Unix temporary-file replacement and synchronization path; they do not establish Windows directory-durability guarantees.
 The manifest, generation, compare-and-swap, recovery, and retention rules are txBASE-owned contracts, not claims about any cloud provider.
 
 The local manifest and generation rules remain txBASE-owned contracts.

@@ -6,6 +6,7 @@ use super::{
     ACTIVE_RECORD, DbfError, DbfTable, EOF_MARKER, decode_field_with_encoding, encode_memo_pointer,
     find_memo_path, is_sidecar_field, memo_index, sync_parent_directory, write_record_count,
 };
+use crate::file_ops::replace_file;
 use crate::index::{IndexFile, sidecar_path};
 use serde_json::{Map, Value};
 use std::collections::BTreeSet;
@@ -381,14 +382,6 @@ fn temporary_path(path: &Path, kind: &str) -> PathBuf {
     let mut value = path.as_os_str().to_os_string();
     value.push(format!(".txbase-{kind}-{}.tmp", std::process::id()));
     PathBuf::from(value)
-}
-
-fn replace_file(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
-    #[cfg(windows)]
-    if destination.exists() {
-        fs::remove_file(destination)?;
-    }
-    fs::rename(source, destination)
 }
 
 fn remove_other_memo_sidecars(

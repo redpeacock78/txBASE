@@ -18,6 +18,7 @@ pub mod xbase;
 pub mod xbf;
 
 mod collation;
+mod file_ops;
 mod json_order;
 mod query_path;
 #[cfg(test)]

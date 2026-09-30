@@ -2,6 +2,7 @@ use super::lock::TableLock;
 use super::persistence::{next_transaction_id, read_transaction_state, transaction_state_bytes};
 use super::schema_metadata::{SchemaMetadata, schema_metadata_path};
 use super::{DbfError, DbfTable, sync_parent_directory};
+use crate::file_ops::replace_file;
 use crate::transaction::{FileWal, Wal};
 use std::fs::{self, File};
 use std::io::Write;
@@ -309,14 +310,6 @@ fn write_bytes_atomically(path: &Path, bytes: &[u8], index: usize) -> Result<(),
         let _ = fs::remove_file(&temporary);
     }
     result
-}
-
-fn replace_file(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
-    #[cfg(windows)]
-    if destination.exists() {
-        fs::remove_file(destination)?;
-    }
-    fs::rename(source, destination)
 }
 
 fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, DbfError> {

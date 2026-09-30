@@ -46,7 +46,7 @@ Implementation behavior is checked against the current source and tests before i
 
 Design notes are labeled future when they are not implemented.
 
-The research pass for this index was refreshed on 2026-09-30.
+The research pass for this index was refreshed on 2026-10-01.
 
 The README organization follows the section shape of [texenv's README](https://github.com/redpeacock78/texenv/blob/master/README.md), while the content is specific to txBASE.
 
@@ -67,7 +67,7 @@ The following audit separates normative sources from product documentation, impl
 | Git command-line interface documentation | Official project documentation used as a CLI design reference. | It informs txBASE's explicit subcommand and option shape only. txBASE does not copy Git's command set, repository model, or option semantics. | Keep the design decision in [CLI command architecture](cli-design.md), and keep the command contract in [CLI command reference](cli.md), not in MVCC or storage contracts. |
 | RFC 9110, RFC 5789, RFC 10008, and RFC 6750 | IETF standards-track specifications. | HTTP method safety, PATCH meaning, QUERY safety/idempotency, and the Bearer authorization header inform the HTTP contract. txBASE still defines its own supported media types, response shapes, range limits, route bounds, and optional environment-based token boundary. | Normative HTTP semantics belong in [HTTP semantics](http-semantics.md); txBASE-specific restrictions belong beside the implementation contract. |
 | `tiny_http`, Rustls, `tokio-rustls`, Hyper, `hyper-util`, and `rustls-pemfile` APIs | Official, versioned Rust crate API documentation; RFC 9110 remains the normative intermediary specification. | The public catalog listener terminates optional TLS and validates optional client certificates before forwarding HTTP/1.1 to a token-protected loopback backend. The catch-up and Raft membership clients can present configured client identities, and the Raft peer listener can require mTLS. The proxy streams bodies, removes hop-by-hop fields, and adds `Via`. | Keep configuration, trust boundaries, proxy behavior, and client identity options in [Public catalog listener transport security](catalog-listener-security.md) and [Raft consensus design](raft.md); keep the RFC-derived intermediary requirements in [HTTP semantics](http-semantics.md). |
-| POSIX `rename()` and `fsync()` | The Open Group specifications. | Unix code uses rename-based replacement and `sync_all`; Windows has a separate replacement path and must not be described as having identical POSIX directory-durability guarantees. | Keep filesystem durability assumptions in persistence and XBF documents, with the Unix-only qualification. |
+| Rust `std::fs::rename`, Windows `MoveFileExW`, and POSIX `rename()`/`fsync()` | Official [Rust standard-library](https://doc.rust-lang.org/std/fs/fn.rename.html) and [Microsoft Win32](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw) documentation, plus The Open Group specifications. | The shared replacement helper uses one `std::fs::rename` call and does not unlink the destination first. Windows replacement behavior depends on the standard library and filesystem; CI exercises the Windows path. Parent-directory synchronization is Unix-only, so txBASE does not claim identical directory-durability guarantees across platforms. | Keep replacement failure and durability boundaries in [DBF compatibility](dbf-compatibility.md), [XBF](xbf.md), and [edge storage](edge-storage.md). This index records the source classification and platform boundary. |
 | WebAssembly, WASI, and the Component Model | Standards-track or standards-community specifications; host pages are vendor implementation references. | The repository has a versioned host-independent DBF core, a generated `wasm-bindgen` Node.js wrapper, JavaScript Promise-backed asynchronous XBF object-table and runtime-neutral query-stream adapters, and a WASI 0.3 CLI query-stream component that reads current or retained XBF snapshots through a writable single-writer filesystem adapter using descriptor and stream operations and recovers pending WAL records. It also has generic Worker-compatible Fetch and Cloudflare R2 binding object-store adapters, plus a Worker-compatible Web Streams query adapter. CI checks those adapters against deterministic local fixtures, including streamed WASI writes and recovery. Deployed Worker and live R2 support, provider-backed WASI storage, and host-specific lifecycle guarantees remain future. | Keep the core ABI and host boundaries in [WASM](wasm.md), [WASI query streaming](wasi-query-stream.md), [Worker query stream adapter](worker-query-stream.md), [Worker Fetch object-store adapter](worker-object-store.md), and [Cloudflare R2 object-store adapter](r2-object-store.md). Keep provider-specific guarantees in the corresponding adapter document. |
 | WHATWG Streams, DOM, and Cloudflare Workers stream documentation | WHATWG specifications are Web platform sources; Cloudflare Workers documentation is an official host implementation reference. | The Worker query adapter uses a pull-based `ReadableStream`, a positive high-water mark, UTF-8 NDJSON chunks, reader cancellation, and `AbortSignal` cancellation around the WASM snapshot stream. The repository tests the generic Web API shape in Node.js but does not claim a deployed Cloudflare Worker or production WASI-host compatibility. | Keep queueing, pull, cancellation, and chunk framing in [Worker query stream adapter](worker-query-stream.md); keep the shared query controls in [query model](query-model.md). |
 | Fetch, DOM, and Cloudflare Workers host documentation | Fetch and DOM are Web platform specifications; Cloudflare Workers documentation is an official host implementation reference. | The Worker object-store adapter uses `fetch`, `URL`, `Headers`, `AbortController`, Web Crypto, conditional HTTP requests, and request-context timers. The repository tests the generic Web API shape in Node.js but does not claim a deployed Cloudflare Worker or provider service. | Keep the object transport contract and error mapping in [Worker Fetch object-store adapter](worker-object-store.md); keep host deployment and provider behavior outside the generic txBASE contract. |
@@ -81,7 +81,7 @@ The audit found two documentation corrections that are now reflected in the topi
 
 First, `txbase schema apply` is a metadata-only edit command with active-record validation and atomic sidecar replacement; DBF layout migration remains future work.
 
-Second, POSIX durability language is limited to the Unix path; cross-platform replacement behavior is tested separately and is not advertised as identical to POSIX directory durability.
+Second, replacement uses one rename call without deleting the destination first. POSIX directory-durability language is limited to the Unix path, and no cross-platform multi-file atomicity is claimed.
 
 ## Primary source groups
 
@@ -205,9 +205,14 @@ The tests use the strings to check comparator laws, not to claim locale-conforma
 
 ### File-system commit primitives
 
+- [Rust `std::fs::rename`](https://doc.rust-lang.org/std/fs/fn.rename.html)
+- [Windows `MoveFileExW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
 - [POSIX `rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)
 - [POSIX `fsync()`](https://pubs.opengroup.org/onlinepubs/009695399/functions/fsync.html)
 - [POSIX file-system cache and directory durability rationale](https://pubs.opengroup.org/onlinepubs/9799919799/xrat/V4_xbd_chap01.html)
+
+Use the Rust and Microsoft references for platform-specific replacement behavior.
+Use the POSIX references for the Unix rename and synchronization path; they do not establish Windows directory-durability guarantees.
 
 ### WebAssembly and host boundaries
 

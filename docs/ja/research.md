@@ -46,7 +46,7 @@
 
 実装していない設計メモはFutureとしてラベル付けします。
 
-このインデックスの調査は2026-09-30に更新しました。
+このインデックスの調査は2026-10-01に更新しました。
 
 READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blob/master/README.md)の節構造に従いますが、内容はtxBASE固有です。
 
@@ -67,7 +67,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 | Gitのコマンドラインインターフェース文書 | CLI設計の参照に使う公式プロジェクト文書です。 | txBASEの明示的なサブコマンドとオプションの形だけに影響します。Gitのコマンド群、リポジトリモデル、オプションの意味はコピーしません。 | 設計判断は[CLIコマンド体系の設計](cli-design.md)に置き、コマンド契約は[CLIコマンドリファレンス](cli.md)に置きます。MVCCやストレージの契約には置きません。 |
 | RFC 9110、RFC 5789、RFC 10008、RFC 6750 | IETFの標準化過程にある仕様です。 | HTTPメソッドの安全性、PATCHの意味、QUERYの安全性と冪等性、Bearer認証ヘッダーをHTTP契約へ反映します。txBASEは対応メディアタイプ、応答形状、範囲上限、ルート上限、環境変数で選択するトークン境界を別に定義します。 | 規範的なHTTP意味論は[HTTPの意味](http-semantics.md)に置き、txBASE固有の制約は実装契約のそばに置きます。 |
 | `tiny_http`、Rustls、`tokio-rustls`、Hyper、`hyper-util`、`rustls-pemfile`のAPI | バージョンを固定した公式Rust crate API文書です。intermediaryの規範はRFC 9110です。 | 公開カタログlistenerは任意のTLSを終端し、任意のクライアント証明書を検証してから、tokenで保護したloopback backendへHTTP/1.1を転送します。catch-up clientとRaft membership clientは設定したclient identityを提示できます。Raft peer listenerもmTLSを要求できます。proxyは本文をストリーム転送し、hop-by-hopフィールドを除去して`Via`を追加します。 | 設定、信頼境界、転送動作、client identityの指定方法は[公開カタログlistenerの通信保護](catalog-listener-security.md)と[Raftコンセンサス設計](raft.md)に置き、RFC由来のintermediary要件は[HTTPの意味](http-semantics.md)に置きます。 |
-| POSIXの`rename()`と`fsync()` | The Open Groupの仕様です。 | Unixコードはrenameによる置換と`sync_all`を使います。Windowsには別の置換経路があるため、POSIXのディレクトリ永続性保証と同一とは記述しません。 | ファイルシステムの永続性の前提は永続化とXBFの文書に置き、Unix限定であることを明記します。 |
+| Rustの`std::fs::rename`、Windowsの`MoveFileExW`、POSIXの`rename()`と`fsync()` | [Rust標準ライブラリ](https://doc.rust-lang.org/std/fs/fn.rename.html)、[Microsoft Win32](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)、The Open Groupの公式資料です。 | 共有置換ヘルパーは`std::fs::rename`を1回呼び、先に置換先を削除しません。Windowsでの置換動作は標準ライブラリとファイルシステムに依存し、CIでWindows経路を検査します。親ディレクトリの同期はUnixだけで行うため、OSをまたいで同じディレクトリ永続性を保証しません。 | 置換失敗と永続性の境界は[DBF互換性](dbf-compatibility.md)、[XBF](xbf.md)、[エッジストレージ](edge-storage.md)に記載します。このインデックスでは出典の位置付けとプラットフォーム境界を記録します。 |
 | WebAssembly、WASI、Component Model | 標準仕様または標準化中の仕様です。ホスト資料は実装参照です。 | リポジトリにはバージョン付きホスト非依存DBFコア、生成した`wasm-bindgen` Node.jsラッパー、Promiseベースの非同期XBFオブジェクトテーブルとランタイム非依存クエリストリームアダプター、descriptorとstream操作を使って現在・保持中のXBFを読み込み、保留中WALを復旧する単一writer用WASI 0.3 CLIクエリストリームコンポーネント、汎用Worker互換FetchとCloudflare R2バインディングのオブジェクトストレージアダプター、Worker互換Web Streamsクエリアダプターがあります。CIは各アダプターを決定的なローカルフィクスチャで検査し、WASIのstream書き込みと復旧も検査します。デプロイ済みWorkerとR2サービスへの接続、プロバイダー接続型WASIストレージ、ホスト固有のライフサイクル保証は今後の作業です。 | コアABIとホスト境界は[WASM](wasm.md)、[WASIクエリストリーム](wasi-query-stream.md)、[Workerクエリストリームアダプター](worker-query-stream.md)、[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)、[Cloudflare R2オブジェクトストレージアダプター](r2-object-store.md)に置きます。プロバイダー固有の保証は対応するアダプター文書に置きます。 |
 | WHATWG Streams、DOM、Cloudflare Workersのストリーム文書 | WHATWG仕様はWebプラットフォーム資料であり、Cloudflare Workersの文書は公式ホスト実装の参照です。 | WorkerクエリアダプターはWASMのスナップショットストリームに対してpull型`ReadableStream`、正のハイウォーターマーク、UTF-8のNDJSONチャンク、readerキャンセル、`AbortSignal`キャンセルを使います。リポジトリはNode.jsで汎用Web APIの形を検査しますが、デプロイ済みCloudflare Workerや本番WASIホストとの互換性は主張しません。 | キュー、pull、キャンセル、チャンク形式は[Workerクエリストリームアダプター](worker-query-stream.md)に置き、共有クエリ制御は[クエリモデル](query-model.md)に置きます。 |
 | Fetch、DOM、Cloudflare Workersのホスト文書 | FetchとDOMはWebプラットフォーム仕様であり、Cloudflare Workersの文書は公式ホスト実装の参照です。 | Workerオブジェクトストレージアダプターは`fetch`、`URL`、`Headers`、`AbortController`、Web Crypto、条件付きHTTPリクエスト、リクエストコンテキストのタイマーを使います。リポジトリはNode.jsで汎用Web APIの形を検査しますが、デプロイ済みCloudflare Workerやプロバイダーサービスは主張しません。 | オブジェクト転送契約とエラー対応付けは[Worker Fetchオブジェクトストレージアダプター](worker-object-store.md)に置き、ホストのデプロイとプロバイダー動作は汎用txBASE契約の外側に置きます。 |
@@ -81,7 +81,7 @@ READMEの構成は[texenv の README](https://github.com/redpeacock78/texenv/blo
 
 1つ目は、`txbase schema apply`がアクティブレコードを検証し、サイドカーを原子的に置換するメタデータ専用編集コマンドであり、DBFレイアウト移行は今後の作業であることです。
 
-2つ目は、POSIXの永続性に関する記述をUnix経路に限定し、クロスプラットフォームの置換動作は別に検査し、POSIXのディレクトリ永続性と同一とは宣伝しないことです。
+2つ目は、置換を1回のrename呼び出しで行い、先に置換先を削除しないことです。POSIXのディレクトリ永続性に関する記述はUnix経路に限定し、OSをまたぐ複数ファイルの原子性は主張しません。
 
 ## 主な資料群
 
@@ -205,9 +205,14 @@ ICU4Xはこれらのリストをベンチマーク入力として扱い、計測
 
 ### ファイルシステムのコミットプリミティブ
 
-- [POSIX `rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)
+- [Rustの`std::fs::rename`](https://doc.rust-lang.org/std/fs/fn.rename.html)
+- [Windowsの`MoveFileExW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
+- [POSIXの`rename()`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html)
 - [POSIX `fsync()`](https://pubs.opengroup.org/onlinepubs/009695399/functions/fsync.html)
 - [POSIX file-system cache and directory durability rationale](https://pubs.opengroup.org/onlinepubs/9799919799/xrat/V4_xbd_chap01.html)
+
+プラットフォームごとの置換動作にはRustとMicrosoftの資料を使います。
+POSIX資料はUnixのrenameと同期経路を説明するものであり、Windowsのディレクトリ永続性は保証しません。
 
 ### WebAssemblyとホスト境界
 

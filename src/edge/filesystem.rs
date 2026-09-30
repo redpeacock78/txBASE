@@ -1,4 +1,5 @@
 use super::store::{ObjectStore, ObjectStoreError, validate_key};
+use crate::file_ops::replace_file;
 use fs2::FileExt;
 #[cfg(unix)]
 use std::fs::File;
@@ -233,29 +234,12 @@ fn replace_atomically(path: &Path, bytes: &[u8]) -> Result<(), ObjectStoreError>
         std::process::id()
     ));
     write_new(&temporary, bytes)?;
-    let rename_result = replace_path(&temporary, path);
+    let rename_result = replace_file(&temporary, path);
     if let Err(error) = rename_result {
         let _ = fs::remove_file(&temporary);
         return Err(io_error("replace object", path, error));
     }
     sync_directory(parent)
-}
-
-#[cfg(not(windows))]
-fn replace_path(temporary: &Path, target: &Path) -> std::io::Result<()> {
-    fs::rename(temporary, target)
-}
-
-#[cfg(windows)]
-fn replace_path(temporary: &Path, target: &Path) -> std::io::Result<()> {
-    match fs::rename(temporary, target) {
-        Ok(()) => Ok(()),
-        Err(error) if target.exists() => {
-            fs::remove_file(target)?;
-            fs::rename(temporary, target).map_err(|_| error)
-        }
-        Err(error) => Err(error),
-    }
 }
 
 #[cfg(unix)]
