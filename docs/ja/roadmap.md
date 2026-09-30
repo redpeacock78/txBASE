@@ -306,7 +306,7 @@ Rustの`Catalog::begin_serializable`は、同じカタログjournal経路を使�
 
 その後に、終端`$count`または`$distinct`を1つ許可します。
 
-`$group`と`$bucket`は、[集約アキュムレータ](aggregation-accumulators.md)に記載した同じアキュムレータ形式を使います。
+`$group`と`$bucket`は、[集約モデル](aggregation.md)と[集約アキュムレータ](aggregation-accumulators.md)に記載した同じアキュムレータ形式を使います。
 グループ出力には有界な`$match`、`$project`、最後のsort、skip、limitを置けます。
 
 `$bucketAuto`は、共有する有界なスカラー式を入力レコードごとに評価し、有限な数値結果をソートして、指定した正のバケット数以下の異なる値の範囲へ分割します。
