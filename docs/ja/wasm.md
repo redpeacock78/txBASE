@@ -13,9 +13,12 @@
 
 境界のバージョンは`ABI_VERSION = 1`です。
 
-- `open_dbf`と`snapshot`はDBFバイト列とインメモリ状態を相互に変換する。
+- `WasmCore::open_dbf`はDBFバイト列をインメモリ状態へ変換する。JavaScriptラッパーでは`new WasmDatabase(dbf)`がこの初期化を行う。
+  `snapshot`は現在の状態をDBFバイト列として返す。
 - `query_json`は有界なクエリ文書を実行する。
-- `query_stream_json`は対応するfilter、projection、skip、limit制御を受け付け、pullごとにJSONの行を1件返す。
+- `query_stream_json`は、filter、projection、skip、limit制御を受け付ける`WasmQueryStream`を返す。
+- `WasmQueryStream.next_json()`は、呼び出すたびにJSON化した行を文字列で返し、ストリームの終端ではJavaScriptの`null`を返す。
+- `WasmQueryStream.cancel()`を呼び出すと、その後の`next_json()`はキャンセルエラーを同期的に投げる。
 - `apply_operation_json`は`POST`、`PUT`、`PATCH`、`DELETE`のいずれかの操作を適用する。
 - `apply_operations_json`は空のバッチを拒否し、`{"operations":[...]}`バッチを非公開コピーへ適用して、全操作が成功した場合だけスナップショットを返す。
 
@@ -79,8 +82,10 @@ CIは`wasm32-unknown-unknown`向けラッパーをビルドし、Node.jsで生�
 
 - [`wasm-bindgen`ガイド：JavaScriptへエクスポートするRust型](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/exported-rust-types.html)
 - [wasm-bindgen：PromiseとFuture](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html)
+- [wasm-bindgen：`Result<T, E>`](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/result.html)
 
 `wasm-bindgen`ガイドは、エクスポートしたRust型がJavaScriptのクラスへ対応する規則と、async exportがPromiseへ変換される規則を説明します。
+エクスポートした関数が返す`Result::Err`をJavaScript例外へ変換する規則も定めています。
 
 txBASEのABIと入力上限は実装とテストで定めます。
 ホスト互換性はアダプターとCIで検証した範囲に限ります。

@@ -13,9 +13,11 @@ The shared `DbfTable::apply_operation` implementation also serves DBF transactio
 
 The boundary uses `ABI_VERSION = 1`.
 
-- `open_dbf` and `snapshot` convert between DBF bytes and in-memory state.
+- `WasmCore::open_dbf` parses DBF bytes into in-memory state; the JavaScript wrapper performs this step in `new WasmDatabase(dbf)`. `snapshot` returns the current state as DBF bytes.
 - `query_json` runs the bounded query document.
-- `query_stream_json` returns one JSON row per pull for the supported filter, projection, skip, and limit controls.
+- `query_stream_json` returns a `WasmQueryStream` for the supported filter, projection, skip, and limit controls.
+- Each `WasmQueryStream.next_json()` call returns one JSON-encoded row string or JavaScript `null` at end-of-stream.
+- After `WasmQueryStream.cancel()`, the next `next_json()` call throws a cancellation error synchronously.
 - `apply_operation_json` applies one `POST`, `PUT`, `PATCH`, or `DELETE` operation.
 - `apply_operations_json` rejects an empty batch, applies an `{"operations":[...]}` batch to a private copy, and returns a snapshot only after every operation succeeds.
 
@@ -79,8 +81,10 @@ Browser storage, Node.js WASI, Deno, and Bun are not compatibility commitments.
 
 - [wasm-bindgen: Exported Rust Types](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/exported-rust-types.html)
 - [wasm-bindgen: Promises and Futures](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html)
+- [wasm-bindgen: `Result<T, E>`](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/result.html)
 
 The wasm-bindgen guide describes how exported Rust types map to JavaScript classes and how async exports map to Promises.
+It also specifies that an exported `Result::Err` becomes a JavaScript exception.
 
 The txBASE ABI and input limits come from its implementation and tests; host compatibility comes from its adapters and CI evidence.
 WASI-specific references belong in [WASI query streaming](wasi-query-stream.md), which documents that adapter's target and runtime boundaries.
