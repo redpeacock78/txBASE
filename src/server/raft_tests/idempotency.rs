@@ -8,7 +8,7 @@ use tiny_http::{Server, StatusCode};
 #[test]
 fn transaction_retry_after_lost_response_returns_the_committed_result_once() {
     let root = temporary_cluster();
-    let addresses = (0..3).map(|_| free_address()).collect::<Vec<_>>();
+    let addresses = free_addresses(3);
     let members = addresses
         .iter()
         .enumerate()

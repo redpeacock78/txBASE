@@ -8,7 +8,7 @@ use tiny_http::Server;
 #[test]
 fn follower_read_token_waits_for_its_index_and_can_be_chained() {
     let root = temporary_cluster();
-    let addresses = (0..3).map(|_| free_address()).collect::<Vec<_>>();
+    let addresses = free_addresses(3);
     let members = addresses
         .iter()
         .enumerate()

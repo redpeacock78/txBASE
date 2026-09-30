@@ -22,7 +22,7 @@ fn crash_boundaries_recover_without_duplicate_transactions() {
         for node_id in 1..=3 {
             prepare_catalog(&root.join(format!("catalog-{node_id}")));
         }
-        let addresses = (0..3).map(|_| free_address()).collect::<Vec<_>>();
+        let addresses = free_addresses(3);
         let output = Command::new(std::env::current_exe().unwrap())
             .arg("crash_boundary_child")
             .arg("--nocapture")

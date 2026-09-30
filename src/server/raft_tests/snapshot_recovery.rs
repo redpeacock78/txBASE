@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn lagging_voter_catches_up_from_snapshot_after_leader_purges_log() {
     let root = temporary_cluster();
-    let addresses = (0..3).map(|_| free_address()).collect::<Vec<_>>();
+    let addresses = free_addresses(3);
     let members = addresses
         .iter()
         .enumerate()

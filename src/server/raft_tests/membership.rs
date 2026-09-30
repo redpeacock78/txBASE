@@ -7,7 +7,7 @@ use crate::replication::raft::{
 #[test]
 fn empty_catalog_joins_an_empty_genesis_cluster() {
     let root = temporary_cluster();
-    let addresses = (0..2).map(|_| free_address()).collect::<Vec<_>>();
+    let addresses = free_addresses(2);
     let leader_url = format!("http://{}", addresses[0]);
     let learner_url = format!("http://{}", addresses[1]);
     let mut nodes = Vec::new();
@@ -76,7 +76,7 @@ fn empty_catalog_joins_an_empty_genesis_cluster() {
 #[test]
 fn three_nodes_commit_and_change_authenticated_membership_over_peer_rpc() {
     let root = temporary_cluster();
-    let addresses = (0..3).map(|_| free_address()).collect::<Vec<_>>();
+    let addresses = free_addresses(3);
     let members = addresses
         .iter()
         .enumerate()

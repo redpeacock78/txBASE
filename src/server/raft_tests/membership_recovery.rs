@@ -41,7 +41,7 @@ fn wait_for_joint_membership(
 #[test]
 fn interrupted_joint_membership_resumes_after_leader_restart() {
     let root = temporary_cluster();
-    let addresses = (0..3).map(|_| free_address()).collect::<Vec<_>>();
+    let addresses = free_addresses(3);
     let members = addresses
         .iter()
         .enumerate()

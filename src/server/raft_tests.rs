@@ -35,11 +35,23 @@ pub(super) fn temporary_cluster() -> std::path::PathBuf {
 }
 
 pub(super) fn free_address() -> String {
-    TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .to_string()
+    free_addresses(1).pop().unwrap()
+}
+
+pub(super) fn free_addresses(count: usize) -> Vec<String> {
+    let listeners = (0..count)
+        .map(|_| TcpListener::bind("127.0.0.1:0").unwrap())
+        .collect::<Vec<_>>();
+    listeners
+        .iter()
+        .map(|listener| listener.local_addr().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn free_addresses_are_distinct() {
+    let addresses = free_addresses(3);
+    assert_eq!(addresses.iter().collect::<BTreeSet<_>>().len(), 3);
 }
 
 pub(super) fn peer_request(
