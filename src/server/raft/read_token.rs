@@ -15,10 +15,11 @@ pub(super) fn parse(value: &str, cluster_id: &str) -> Result<u64, Error> {
     let Some((token_cluster, index)) = value.rsplit_once('.') else {
         return Err(Error::Invalid);
     };
+    let index = index.parse().map_err(|_| Error::Invalid)?;
     if token_cluster != cluster_id {
         return Err(Error::ClusterMismatch);
     }
-    index.parse().map_err(|_| Error::Invalid)
+    Ok(index)
 }
 
 #[cfg(test)]
