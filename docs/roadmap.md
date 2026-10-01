@@ -24,7 +24,7 @@ This summary shows the current boundary and the next open gate for each roadmap 
 | Phase | Current boundary | Open gate |
 | --- | --- | --- |
 | Local database | The declared Phase 1 scope is implemented. | Continue correctness work through the quality matrix and topic contracts. |
-| Query model | Bounded query and aggregation contracts are implemented, including shared `$map`, `$filter`, `$reduce`, and `$let` expressions. | Further expression/operator families, filesystem-aware planning, and cost models that account for cache and page reuse. |
+| Query model | Bounded query and aggregation contracts are implemented, including shared `$map`, `$filter`, `$reduce`, and `$let` expressions. Merge costing estimates distinct DBF pages and ordered-page locality. | Further expression/operator families, filesystem-aware planning, and merge costs calibrated for bounded cache capacity and runtime I/O. |
 | Legacy international compatibility | Declared and explicit codecs, upstream fixtures, and versioned locale collations are implemented. | A full locale-specific expected-order corpus. |
 | Native XBF | The bounded codec, conversion, snapshot WAL, and schema-preserving export are implemented against a draft. | Strict multi-file atomicity for readers that ignore txBASE locks. |
 | Edge storage | Local object stores and deterministic Worker, R2, and WASI fixtures are implemented. | Live host/provider validation and production lifecycle policy. |
@@ -50,12 +50,13 @@ The query model, aggregation stages, join planner, and stream adapters are docum
 
 The repository supports bounded JSON predicates and shared boolean/scalar expressions, including lexical variables and `$map`, `$filter`, and `$reduce`; it also supports `$exists`, ordered aggregation pipelines, local equality joins, explain output, table-local indexes, and pull-based or backpressured query streams.
 Those contracts do not imply MongoDB compatibility.
+The merge planner derives DBF data-page access from ordered record numbers and models each distinct page once per merge; it does not observe operating-system cache residency or filesystem latency.
 
 ### Remaining work
 
 1. Add aggregation stages and accumulator expressions beyond the current bounded contracts.
 2. Extend boolean and scalar expression support beyond the operator set documented in [the expression model](expressions.md).
-3. Add filesystem-, cache-, and page-reuse-aware merge costing.
+3. Calibrate merge costs for bounded cache capacity and runtime filesystem I/O beyond the deterministic distinct-page estimate.
 4. Define null and missing behavior for each additional operator family before implementation.
 
 See [query model](query-model.md), [expression model](expressions.md), [aggregation](aggregation.md), [aggregation accumulators](aggregation-accumulators.md), [joins](joins.md), [query planning](query-planning.md), and [asynchronous query streaming](async-streaming.md).

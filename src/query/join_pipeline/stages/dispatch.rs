@@ -60,6 +60,14 @@ pub(in crate::query::join_pipeline) fn plan(
             .as_deref()
             .and_then(|fields| join_index::ordered_from_index(index, fields))
     });
+    cost_input.merge_input_page_access = right_ordered.as_ref().and_then(|ordered| {
+        let layout = cost_input.merge_inner_record_layout?;
+        let mut access = join_strategy::ordered_record_page_access(layout, &ordered.records)?;
+        access.sequential_page_reads = access
+            .sequential_page_reads
+            .saturating_add(cost_input.outer_page_reads);
+        Some(access)
+    });
     cost_input.merge_sort_work = right_ordered
         .as_ref()
         .map(|_| join_strategy::ordered_merge_sort_work(left_count, local_fields.len()))

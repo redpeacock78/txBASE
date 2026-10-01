@@ -1,4 +1,7 @@
-use super::super::join::{JoinError, JoinSource, JoinType};
+use super::super::{
+    join::{JoinError, JoinSource, JoinType},
+    join_strategy,
+};
 use super::{encoded_key, qualified_values};
 use crate::index::IndexFile;
 use serde_json::{Map, Value};
@@ -9,6 +12,7 @@ pub(super) struct LoadedRows {
     pub(super) numbers: Vec<usize>,
     pub(super) page_reads: usize,
     pub(super) index: Option<IndexFile>,
+    pub(super) record_page_layout: join_strategy::RecordPageLayout,
 }
 
 pub(super) fn load_rows(
@@ -37,6 +41,7 @@ pub(super) fn load_rows(
         .byte_len()
         .div_ceil(crate::index::COST_PAGE_SIZE)
         .max(1);
+    let record_page_layout = join_strategy::record_page_layout(&table);
     let mut values = Vec::new();
     let mut numbers = Vec::new();
     for record in table.active_records() {
@@ -48,6 +53,7 @@ pub(super) fn load_rows(
         numbers,
         page_reads,
         index,
+        record_page_layout,
     })
 }
 

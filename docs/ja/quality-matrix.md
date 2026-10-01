@@ -192,12 +192,14 @@ node tests/wasm_query_stream_smoke.mjs target/wasm-bindgen
 | QRY-015 | `$map`、`$filter`、`$reduce`は入力順に処理し、要素・累積値・添字を束縛します。入力、上限、評価量の規則は[式](expressions.md)を参照してください。 | `src/query/expression.rs`; `src/query/expression/array.rs`; `src/query/expression/scope.rs`; `src/query/expression/tests.rs`; `src/query/aggregation_tests/expression_tests.rs`; `docs/ja/expressions.md`; `docs/ja/aggregation.md` | `maps_filters_and_reduces_with_item_and_index_bindings`; `array_inputs_follow_null_empty_and_type_boundaries`; `array_evaluation_budgets_reject_work_and_output_past_the_limit`; `array_and_let_expressions_are_shared_by_set_and_group_stages` | Boundary |
 | QRY-016 | `$let`は同時束縛に対応し、`in`内だけで有効です。ネスト内では変数をシャドウできます。ROOT/CURRENT/IDXとN値のグループキー制約は[式](expressions.md)を参照してください。 | `src/query/expression.rs`; `src/query/expression/scope.rs`; `src/query/expression/provenance.rs`; `src/query/aggregation_plan/group.rs`; `src/query/aggregation/n_values.rs`; `src/query/expression/tests.rs`; `docs/ja/expressions.md`; `docs/ja/aggregation-accumulators.md` | `let_bindings_are_simultaneous_and_confined_to_the_in_expression`; `group_key_provenance_tracks_scoped_array_and_let_variables` | Boundary |
 
+| QRY-017 | マージプランナーは順序付きレコード番号とDBFのヘッダー長・レコード長から論理データページを求めます。入力ごとに異なるページを1回ずつ数え、初回参照のページが直前に初回参照したページの直後にあれば逐次読み取り、それ以外はランダム読み取りとして扱います。ランダム読み取りのコストは逐次読み取りの4倍です。多段結合ではマテリアライズした外側のページを逐次読み取りとして数えます。この決定的な推定は結合内のページ再利用をモデル化し、実際のファイルシステムレイテンシー、OSキャッシュの常駐状態、ページの退避は観測しません。 | `src/query/join_strategy.rs`; `src/query/join_pipeline/cost.rs`; `src/query/join_pipeline.rs`; `src/query/join_pipeline/stages/dispatch.rs`; `src/query/join/execute/direct.rs`; `docs/ja/joins.md` | `merge_page_cost_accounts_for_order_and_reuse`; `merge_prefers_clustered_pages_over_random_page_order` | Boundary |
+
 ## 明示的に残るギャップ
 
 次の話題には文書または設計メモがありますが、マトリクスで現在の実装とは主張していません。
 
 - runtime-neutral adapterを超えるホスト固有の非同期storage lifecycle意味論。R2以外のcloud object-store adapter。
-- ファイルシステムおよびキャッシュを考慮したマージ結合戦略。
+- 決定的な異なるページ数の推定を超えるファイルシステムレイテンシーおよび有界キャッシュを考慮したマージコスト。
 - [集約モデル](aggregation.md)と[集約アキュムレータ](aggregation-accumulators.md)で定めた有界な契約を超える集約ステージおよびアキュムレータ。
 - 述語単位のロックと分散serializable調整。
 - 現行の演算子・式の語彙に含まれない演算子群や式形式における、missing/nullの動作。

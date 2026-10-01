@@ -73,7 +73,9 @@ For larger equality stages, it compares bounded costs for the available strategi
 
 `IndexNestedLoop` costs the outer-row count multiplied by the inner-side logarithmic probe estimate plus its average equality fanout, then adds the outer logical DBF pages, a one-time logical page estimate for the index sidecar, and a conservative logical DBF record-page estimate for each probe.
 
-`Merge` costs one pass over both inputs, the logical DBF pages needed for those inputs, and the logical page estimates for the two ordered index sidecars when compatible ordered indexes are fresh on both sides.
+`Merge` costs the ordered index sidecar pages and the DBF data pages reached in index order.
+It derives the pages occupied by each record from the DBF header and record lengths, counts each distinct data page once per merge, and classifies a first or nonadjacent page as random and an immediately following page as sequential.
+Random pages cost four times as much as sequential pages.
 
 Each direct or chained candidate also includes deterministic materialization work based on the estimated pre-filter join-candidate rows and the materialized row width.
 
@@ -113,12 +115,14 @@ Table names cannot repeat, and the total stage count is capped at eight.
 Every intermediate result is capped at 100,000 rows.
 
 This is a bounded row-work, logical-page, pre-filter-cardinality, and output-materialization cost model with a compatible-index merge path.
+For merge costing, repeated references to a DBF data page model query-local page reuse; the ordered index sidecar pages are treated as sequential reads.
 
 Chained stages propagate their estimated cardinality, materialized row width, and logical page inputs into the hash or index-probe choice for the next stage.
 
-The model does not measure filesystem latency, cache state, or page reuse.
+The model does not measure filesystem latency, observed operating-system cache residency, or page eviction.
+Its page-reuse estimate is deterministic and assumes that a DBF page reached earlier in the same merge can be reused.
 
-Filesystem- and cache-aware merge planning remains future work.
+Calibrating filesystem latency and bounded cache-capacity effects remains future work.
 
 The single-table HTTP server does not expose joins.
 
@@ -141,7 +145,8 @@ The table inputs and selected index metadata remain in memory; the route avoids 
 For chained joins, stages before the final stage remain materialized under the existing 100,000-row cap, while the final stage emits incrementally.
 
 The streaming equality path uses the cost-based planner for its final stage; earlier chained stages continue to use the materialized pipeline planner.
-The planner still uses deterministic logical-page and in-memory-work estimates, not filesystem latency, cache state, or page reuse.
+The planner still uses deterministic logical-page and in-memory-work estimates, not observed filesystem latency or operating-system cache state.
+Merge costing accounts for ordered DBF page locality and query-local page reuse.
 
 Direct result limits remain after filtering, while a chained final-stage limit applies before its final filter.
 

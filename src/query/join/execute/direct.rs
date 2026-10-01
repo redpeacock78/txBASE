@@ -46,14 +46,14 @@ pub(super) fn execute<S: JoinSource>(
         &request.join.kind,
     )?;
     let output_columns = request.projection.len().max(1);
-    let left_cost_input = join_strategy::JoinCostInput {
+    let mut left_cost_input = join_strategy::JoinCostInput {
         outer_page_reads: left_page_reads,
         inner_page_reads: right_page_reads,
         output_rows: estimated_output_rows,
         output_columns,
         ..join_strategy::JoinCostInput::default()
     };
-    let right_cost_input = join_strategy::JoinCostInput {
+    let mut right_cost_input = join_strategy::JoinCostInput {
         outer_page_reads: right_page_reads,
         inner_page_reads: left_page_reads,
         output_rows: estimated_output_rows,
@@ -88,6 +88,28 @@ pub(super) fn execute<S: JoinSource>(
     } else {
         None
     };
+    let merge_input_page_access = left_ordered.as_ref().zip(right_ordered.as_ref()).and_then(
+        |(left_ordered, right_ordered)| {
+            let left_access = join_strategy::ordered_record_page_access(
+                join_strategy::record_page_layout(&left),
+                &left_ordered.records,
+            )?;
+            let right_access = join_strategy::ordered_record_page_access(
+                join_strategy::record_page_layout(&right),
+                &right_ordered.records,
+            )?;
+            Some(join_strategy::PageAccessEstimate {
+                sequential_page_reads: left_access
+                    .sequential_page_reads
+                    .saturating_add(right_access.sequential_page_reads),
+                random_page_reads: left_access
+                    .random_page_reads
+                    .saturating_add(right_access.random_page_reads),
+            })
+        },
+    );
+    left_cost_input.merge_input_page_access = merge_input_page_access;
+    right_cost_input.merge_input_page_access = merge_input_page_access;
     let merge_page_reads = left_ordered
         .as_ref()
         .zip(right_ordered.as_ref())

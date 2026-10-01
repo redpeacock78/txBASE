@@ -100,6 +100,7 @@ fn stage_cost_input(
             &spec.kind,
         )?,
         output_columns: output_columns(left, &right.values, &spec.kind),
+        merge_inner_record_layout: Some(right.record_page_layout),
         ..JoinCostInput::default()
     })
 }
