@@ -67,9 +67,10 @@ Versioned ICU4X Japanese, Chinese, and Korean collations are also available.
 
 ### Remaining work
 
-Resolve the known CLDR 48 and ICU4X 2.1.1 mismatches, then expand locale-specific expected-order coverage beyond starred single-character rules.
-CLDR 48 orders U+319B1 (𱚱) before 阿 and 𥥩 before 锕, while the pinned ICU4X 2.1.1 collator reverses both relations; a dedicated test records them instead of treating them as conformant.
-The fixtures cover starred single-character sequences in the Japanese and Korean standard rules and Chinese default Pinyin long rules, while preserving reset boundaries and isolating the mismatches.
+Resolve the 15,169 Chinese Pinyin-long ordering mismatches between CLDR 48 and ICU4X 2.1.1, then expand locale-specific expected-order coverage beyond starred single-character rules.
+The Chinese source chain contains 44,469 adjacent relations, and ICU4X 2.1.1 fails the required strict order for 15,169 of them.
+A CI baseline test pins this count; a separate test asserts the reverse ordering for U+319B1/阿 and 𥥩/锕.
+The fixtures preserve Japanese and Korean reset boundaries and the complete Chinese source chain.
 They do not cover every collation rule form or arbitrary strings, so they are not a full locale-conformance suite.
 Benchmark inputs continue to check comparator laws; they do not establish locale conformance.
 

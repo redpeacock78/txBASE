@@ -63,6 +63,7 @@ The ICU4X identifiers select the Japanese, Chinese, or Korean locale with ICU4X 
 
 Curated Japanese and Chinese expectations follow the collation tests included in ICU4X 2.1.1's [published crate source](https://docs.rs/crate/icu_collator/2.1.1/source/); Korean Hangul/Hanja expectations follow [CLDR 48's standard Korean collation](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml).
 These fixtures cover selected locale behavior, not the full upstream conformance corpus.
+On the CLDR 48 default Pinyin-long chain, ICU4X 2.1.1 fails the required strict order for 15,169 of 44,469 adjacent relations; [research.md](research.md) records this runtime baseline, not a conformance result.
 
 Unicode lowercase modes store normalized string keys; ICU4X modes retain the original strings and order them through the locale collator instead of persisting ICU sort keys.
 

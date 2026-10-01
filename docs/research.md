@@ -92,10 +92,11 @@ ICU4X documents these lists as benchmark inputs and describes shuffling them bef
 The tests use the strings to check comparator laws, not to claim locale-conformance coverage.
 
 The expected-order corpora come from the [CLDR 48 Japanese](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ja.xml), [Chinese](https://github.com/unicode-org/cldr/blob/release-48/common/collation/zh.xml), and [Korean](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml) rules.
-They cover the starred single-character sequences in the Japanese and Korean standard collations and the Chinese default Pinyin long rules; blank fixture lines preserve independent resets and isolate the known U+319B1/阿 and 𥥩/锕 mismatches.
+They cover the starred single-character sequences in the Japanese and Korean standard collations and the Chinese default Pinyin long rules; blank fixture lines preserve independent resets, while the Chinese fixture keeps its source chain intact.
 [LDML collation rules](https://www.unicode.org/reports/tr35/tr35-collation.html) define the starred form as separate relations for the following single characters.
-CLDR 48 orders U+319B1 (𱚱) before 阿 and 𥥩 before 锕, but the pinned ICU4X 2.1.1 collator reverses both relations.
-A dedicated test records these source/runtime mismatches; neither is counted as a conformance pass.
+The Chinese default Pinyin long chain contains 44,469 adjacent relations; pinned ICU4X 2.1.1 fails the required strict order for 15,169 of them.
+A CI baseline test pins this mismatch count, and a separate test asserts two representative reversals.
+The baseline is not a locale-conformance pass.
 The [ICU4X 2.1 release changelog](https://github.com/unicode-org/icu4x/blob/icu%402.1.0/CHANGELOG.md) records the provider data update to CLDR 48.
 This corpus does not cover every rule form or arbitrary strings and therefore does not establish full locale conformance.
 

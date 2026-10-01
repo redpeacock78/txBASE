@@ -58,6 +58,9 @@ cannot silently cross a later collation contract.
 
 The ICU4X modes provide the selected locale's collation, but do not claim full
 language-specific search or dictionary compatibility beyond those sort rules.
+For Chinese, ICU4X 2.1.1 fails the required strict order for 15,169 of 44,469
+adjacent relations in CLDR 48's default Pinyin-long chain; [research.md](research.md)
+records this runtime baseline, not a conformance result.
 
 Omitting it keeps the existing Unicode codepoint ordering.
 

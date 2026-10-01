@@ -93,11 +93,12 @@ ICU4Xはこれらのリストをベンチマーク入力として扱い、計測
 
 期待順序コーパスは、[CLDR 48の日本語](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ja.xml)、[中国語](https://github.com/unicode-org/cldr/blob/release-48/common/collation/zh.xml)、[韓国語](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml)の規則から作成しています。
 日本語と韓国語の標準照合規則、および中国語の既定ピンイン長形式にあるアスタリスク付き単一文字列を検査します。
-フィクスチャの空行は、独立したリセットを保ち、既知の不一致箇所を分離します。
+フィクスチャの空行は独立したリセットを保ち、中国語のピンイン長列は元の規則列を保ちます。
 [LDML照合規則](https://www.unicode.org/reports/tr35/tr35-collation.html)では、アスタリスク付き形式は後続する各単一文字を個別の関係として扱います。
-CLDR 48ではU+319B1（𱚱）が阿より前に、𥥩が锕より前に並びます。
-固定したICU4X 2.1.1では、この2関係がどちらも逆になります。
-専用テストでこのソースと実装の不一致を記録し、適合した結果としては扱いません。
+中国語のピンイン長列には44,469件の隣接関係があります。
+固定したICU4X 2.1.1では15,169件がCLDR 48の要求する順序を満たしません。
+CIテストでこの件数を固定し、別のテストでU+319B1と阿、𥥩と锕の逆転を個別に確認します。
+このベースラインはロケール適合性を示しません。
 [ICU4X 2.1のリリース履歴](https://github.com/unicode-org/icu4x/blob/icu%402.1.0/CHANGELOG.md)には、データプロバイダーをCLDR 48へ更新したことが記載されています。
 このコーパスは照合規則の全形式や任意の文字列を網羅せず、ロケール適合性の検証には不十分です。
 
