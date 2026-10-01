@@ -85,6 +85,10 @@ assert.throws(
   /positive safe integer/,
 );
 assert.throws(
+  () => createWorkerQueryStream({ database, queueSize: Number.POSITIVE_INFINITY }),
+  /positive safe integer/,
+);
+assert.throws(
   () => createWorkerQueryStream({ database, query: { sort: { ID: 1 } } }),
   /streaming query supports/,
 );
