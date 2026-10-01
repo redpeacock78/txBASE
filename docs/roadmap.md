@@ -54,7 +54,7 @@ Those contracts do not imply MongoDB compatibility.
 ### Remaining work
 
 1. Add aggregation stages and accumulator expressions beyond the current bounded contracts.
-2. Extend expression evaluation beyond the current bounded boolean/scalar subset, including `$let`, `$map`, `$filter`, and `$reduce`.
+2. Extend boolean and scalar expression support beyond the operator set documented in [the expression model](expressions.md).
 3. Add filesystem-, cache-, and page-reuse-aware merge costing.
 4. Define null and missing behavior for each additional operator family before implementation.
 
