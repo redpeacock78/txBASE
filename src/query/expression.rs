@@ -168,11 +168,13 @@ pub(super) fn parse_scalar_operand(
                 Ok(ScalarExpression::ToUpper(Box::new(operand)))
             }
         }
-        "$abs" | "$add" | "$subtract" | "$multiply" | "$divide" | "$mod" => Ok(
-            ScalarExpression::Numeric(parse_numeric_operand(operand, path)?),
-        ),
+        "$abs" | "$ceil" | "$floor" | "$add" | "$subtract" | "$multiply" | "$divide" | "$mod" => {
+            Ok(ScalarExpression::Numeric(parse_numeric_operand(
+                operand, path,
+            )?))
+        }
         _ => Err(QueryError::Invalid(format!(
-            "{path} supports only $literal, $ifNull, $concat, $toLower, $toUpper, $abs, $add, $subtract, $multiply, $divide, and $mod"
+            "{path} supports only $literal, $ifNull, $concat, $toLower, $toUpper, $abs, $ceil, $floor, $add, $subtract, $multiply, $divide, and $mod"
         ))),
     }
 }
@@ -333,7 +335,9 @@ fn numeric_uses_only_group_key_fields(expression: &NumericExpression) -> bool {
     match expression {
         NumericExpression::Field(field) => is_group_key_field(field),
         NumericExpression::Literal(_) => true,
-        NumericExpression::Absolute(expression) => numeric_uses_only_group_key_fields(expression),
+        NumericExpression::Absolute(expression)
+        | NumericExpression::Ceiling(expression)
+        | NumericExpression::Floor(expression) => numeric_uses_only_group_key_fields(expression),
         NumericExpression::Binary { left, right, .. } => {
             numeric_uses_only_group_key_fields(left) && numeric_uses_only_group_key_fields(right)
         }

@@ -7,6 +7,8 @@ pub enum NumericExpression {
     Field(String),
     Literal(serde_json::Number),
     Absolute(Box<NumericExpression>),
+    Ceiling(Box<NumericExpression>),
+    Floor(Box<NumericExpression>),
     Binary {
         operator: NumericOperator,
         left: Box<NumericExpression>,
@@ -57,13 +59,20 @@ pub fn parse_numeric_operand(operand: &Value, path: &str) -> Result<NumericExpre
     };
     if expression.len() != 1 {
         return Err(QueryError::Invalid(format!(
-            "{path} supports only $abs, $add, $subtract, $multiply, $divide, and $mod"
+            "{path} supports only $abs, $ceil, $floor, $add, $subtract, $multiply, $divide, and $mod"
         )));
     }
-    if operator == "$abs" {
-        return Ok(NumericExpression::Absolute(Box::new(
-            parse_numeric_operand(operands, &format!("{path}.$abs"))?,
-        )));
+    if matches!(operator.as_str(), "$abs" | "$ceil" | "$floor") {
+        let expression = Box::new(parse_numeric_operand(
+            operands,
+            &format!("{path}.{operator}"),
+        )?);
+        return Ok(match operator.as_str() {
+            "$abs" => NumericExpression::Absolute(expression),
+            "$ceil" => NumericExpression::Ceiling(expression),
+            "$floor" => NumericExpression::Floor(expression),
+            _ => unreachable!("matched unary numeric expression"),
+        });
     }
     let operator = match operator.as_str() {
         "$add" => NumericOperator::Add,
@@ -73,7 +82,7 @@ pub fn parse_numeric_operand(operand: &Value, path: &str) -> Result<NumericExpre
         "$mod" => NumericOperator::Modulo,
         _ => {
             return Err(QueryError::Invalid(format!(
-                "{path} supports only $abs, $add, $subtract, $multiply, $divide, and $mod"
+                "{path} supports only $abs, $ceil, $floor, $add, $subtract, $multiply, $divide, and $mod"
             )));
         }
     };
@@ -112,6 +121,20 @@ pub fn evaluate_numeric(
                 return Ok(None);
             };
             apply_absolute_expression(&value, &format!("{path}.$abs"))
+        }
+        NumericExpression::Ceiling(operand) => {
+            let expression_path = format!("{path}.$ceil");
+            let Some(value) = evaluate_numeric(values, operand, &expression_path)? else {
+                return Ok(None);
+            };
+            apply_rounding_expression(&value, &expression_path, f64::ceil)
+        }
+        NumericExpression::Floor(operand) => {
+            let expression_path = format!("{path}.$floor");
+            let Some(value) = evaluate_numeric(values, operand, &expression_path)? else {
+                return Ok(None);
+            };
+            apply_rounding_expression(&value, &expression_path, f64::floor)
         }
         NumericExpression::Binary {
             operator,
@@ -203,6 +226,28 @@ fn apply_absolute_expression(value: &Value, path: &str) -> Result<Option<Value>,
     }
 }
 
+fn apply_rounding_expression(
+    value: &Value,
+    path: &str,
+    round: fn(f64) -> f64,
+) -> Result<Option<Value>, QueryError> {
+    match as_numeric(value) {
+        Some(NumericValue::Integer(_)) => Ok(Some(value.clone())),
+        Some(NumericValue::Float(value)) => integer_valued_json_number(path, round(value)),
+        None => Ok(None),
+    }
+}
+
+fn integer_valued_json_number(path: &str, value: f64) -> Result<Option<Value>, QueryError> {
+    if value >= 0.0 && value < u64::MAX as f64 {
+        return Ok(Some(Value::Number(serde_json::Number::from(value as u64))));
+    }
+    if value >= i64::MIN as f64 && value < i64::MAX as f64 {
+        return Ok(Some(Value::Number(serde_json::Number::from(value as i64))));
+    }
+    finite_json_number(path, value)
+}
+
 fn finite_json_number(path: &str, value: f64) -> Result<Option<Value>, QueryError> {
     if !value.is_finite() {
         return Err(QueryError::Invalid(format!(
@@ -245,5 +290,35 @@ fn number_from_i128(value: i128, path: &str) -> Result<serde_json::Number, Query
         i64::try_from(value)
             .map(serde_json::Number::from)
             .map_err(|_| QueryError::Invalid(format!("{path} numeric result does not fit JSON")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{Map, json};
+
+    #[test]
+    fn rounding_literals_keep_integer_json() {
+        let values = Map::new();
+        for (definition, expected) in [
+            (json!({"$ceil": 2.8}), json!(3)),
+            (json!({"$ceil": -2.8}), json!(-2)),
+            (json!({"$floor": 2.8}), json!(2)),
+            (json!({"$floor": -2.8}), json!(-3)),
+        ] {
+            let expression = parse_numeric_operand(&definition, "test").unwrap();
+            assert_eq!(
+                evaluate_numeric(&values, &expression, "test").unwrap(),
+                Some(expected)
+            );
+        }
+
+        let large = integer_valued_json_number("test", f64::MAX)
+            .unwrap()
+            .unwrap();
+        assert!(large.as_i64().is_none());
+        assert!(large.as_u64().is_none());
+        assert!(large.as_f64().is_some());
     }
 }

@@ -203,7 +203,7 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 | 配列 | `$all`、`$elemMatch`、`$size` | 配列の内容、1つの配列要素の条件、または配列の正確な長さを照合する |
 | 存在 | `$exists` | 解決したフィールドパスの有無を調べる。明示的な`null`は存在する値として扱う |
 | 論理 | `$and`、`$or`、`$not` | 述語文書を合成または反転する |
-| 式 | `$expr` | 同じレコードのスカラーリテラル、フィールド参照、配列構築子、`$literal`、2オペランドの`$ifNull`、条件式`$cond`、有界な文字列`$concat` / `$toLower` / `$toUpper`、または有界な数値`$abs` / `$add` / `$subtract` / `$multiply` / `$divide` / `$mod`式を比較する |
+| 式 | `$expr` | 同じレコードのスカラーリテラル、フィールド参照、配列構築子、`$literal`、2オペランドの`$ifNull`、条件式`$cond`、有界な文字列`$concat` / `$toLower` / `$toUpper`、または有界な数値`$abs` / `$ceil` / `$floor` / `$add` / `$subtract` / `$multiply` / `$divide` / `$mod`式を比較する |
 
 ### 欠損パスと明示的なnull
 
@@ -253,6 +253,9 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 この契約は、独立したスカラー述語マトリクス、ドット区切りパスの存在確認、配列述語テストで検査します。
 
 `$abs`は、数値リテラル、フィールド参照、またはネストした数値式を1つだけ受け付けます。
+
+`$ceil`と`$floor`は同じオペランド形式を受け付け、それぞれ数学的な切り上げと切り下げを返します。
+結果が`i64`または`u64`の範囲に収まる場合はJSON整数で表し、それを超える場合は有限なJSON数値で表します。
 
 `$add`、`$subtract`、`$multiply`、`$divide`、`$mod`は、数値リテラル、フィールド参照、またはネストした数値式を2つだけ受け付けます。
 

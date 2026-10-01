@@ -43,11 +43,14 @@ Input `$skip` and `$limit` discard or truncate records before the terminal stage
 
 `$set` and `$addFields` are aliases for one bounded input stage that preserves existing fields and computes named top-level fields before later stages.
 
-Each computed field accepts a scalar literal, a field reference including a dotted path, an array of supported expressions, `$literal`, `$ifNull` with exactly two operands, `$cond`, `$concat` with at least two string expressions, `$toLower`, `$toUpper`, or the bounded numeric `$abs`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions.
+Each computed field accepts a scalar literal, a field reference including a dotted path, an array of supported expressions, `$literal`, `$ifNull` with exactly two operands, `$cond`, `$concat` with at least two string expressions, `$toLower`, `$toUpper`, or the bounded numeric `$abs`, `$ceil`, `$floor`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions.
 
 All expressions in one stage read the record as it entered that stage, so one computed field cannot depend on another field computed in the same stage.
 
 Missing field references, missing or nonnumeric numeric results, and missing, null, or non-string string results become `null`; `$ifNull` treats missing and explicit `null` as null and evaluates its fallback in that case.
+
+`$ceil` and `$floor` return the mathematical ceiling and floor of a numeric result.
+Integral results use a JSON integer when they fit `i64` or `u64`; larger results remain finite JSON numbers.
 
 `$cond` accepts the three-expression array form or an object with exactly `if`, `then`, and `else`.
 
@@ -267,4 +270,6 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 - [MongoDB `$concat` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/concat/)
 - [MongoDB `$toLower` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/tolower/)
 - [MongoDB `$toUpper` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/toupper/)
+- [MongoDB `$ceil` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ceil/)
+- [MongoDB `$floor` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/floor/)
 - [MongoDB `$unwind` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

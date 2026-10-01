@@ -5,11 +5,14 @@
 ## Numeric accumulators
 
 - `$count: {}` counts each record in the group.
-- `$sum` accepts a field reference, numeric literal, `$abs`, or binary `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions. Missing, `null`, and nonnumeric results contribute zero. Integral inputs retain an integer JSON result; any fractional input produces a finite floating-point result.
+- `$sum` accepts a field reference, numeric literal, `$abs`, `$ceil`, `$floor`, or binary `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions. Missing, `null`, and nonnumeric results contribute zero. Integral inputs retain an integer JSON result; any fractional input produces a finite floating-point result.
 - `$avg` accepts the same expressions. Missing, `null`, and nonnumeric results are ignored; a group with no numeric inputs returns `null`.
 - `$stdDevPop` and `$stdDevSamp` accept the same expressions and use constant memory per group. They ignore missing, `null`, and nonnumeric results. `$stdDevPop` returns zero for one numeric input; `$stdDevSamp` returns `null` until two inputs exist.
 
 Non-finite intermediate or result values are rejected. The numeric expression evaluator is shared with `$expr`.
+
+`$ceil` and `$floor` return the mathematical ceiling and floor of their numeric result.
+Their integral results use a JSON integer when they fit `i64` or `u64`.
 
 ## Extrema and N-value selection
 
@@ -64,6 +67,8 @@ The combined retained-value limit for `$push`, `$addToSet`, `$minN`, `$maxN`, `$
 - [MongoDB `$avg` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
 - [MongoDB `$stdDevPop` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevpop/)
 - [MongoDB `$stdDevSamp` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
+- [MongoDB `$ceil` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ceil/)
+- [MongoDB `$floor` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/floor/)
 - [MongoDB `$minN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/minn/)
 - [MongoDB `$maxN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/maxn/)
 - [MongoDB `$firstN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/firstn/)

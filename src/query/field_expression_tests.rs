@@ -81,6 +81,50 @@ fn compares_absolute_expression_results() {
 }
 
 #[test]
+fn rounds_numeric_expression_results() {
+    let values = json!({
+        "POSITIVE": 7.8,
+        "NEGATIVE": -2.8,
+        "INTEGER": 4,
+        "CEILING_POSITIVE": 8,
+        "CEILING_NEGATIVE": -2,
+        "FLOOR_POSITIVE": 7,
+        "FLOOR_NEGATIVE": -3,
+    });
+    let filter = json!({
+        "$expr": {"$and": [
+            {"$eq": [{"$ceil": "$POSITIVE"}, "$CEILING_POSITIVE"]},
+            {"$eq": [{"$ceil": "$NEGATIVE"}, "$CEILING_NEGATIVE"]},
+            {"$eq": [{"$ceil": "$INTEGER"}, "$INTEGER"]},
+            {"$eq": [{"$floor": "$POSITIVE"}, "$FLOOR_POSITIVE"]},
+            {"$eq": [{"$floor": "$NEGATIVE"}, "$FLOOR_NEGATIVE"]},
+            {"$eq": [{"$floor": {"$ceil": "$NEGATIVE"}}, "$CEILING_NEGATIVE"]}
+        ]}
+    });
+
+    assert!(matches_filter(values.as_object().unwrap(), filter.as_object().unwrap()).unwrap());
+}
+
+#[test]
+fn missing_or_non_numeric_rounding_does_not_match() {
+    let values = json!({"TEXT": "not numeric"});
+    let missing = json!({
+        "$expr": {"$eq": [{"$ceil": "$MISSING"}, 0]}
+    });
+    let non_numeric = json!({
+        "$expr": {"$eq": [{"$floor": "$TEXT"}, 0]}
+    });
+
+    assert!(!matches_filter(values.as_object().unwrap(), missing.as_object().unwrap()).unwrap());
+    let matches = matches_filter(
+        values.as_object().unwrap(),
+        non_numeric.as_object().unwrap(),
+    )
+    .unwrap();
+    assert!(!matches);
+}
+
+#[test]
 fn compares_string_scalar_expression_results() {
     let values = json!({
         "FIRST": "Alice",

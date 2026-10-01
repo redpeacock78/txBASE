@@ -128,6 +128,91 @@ fn evaluates_bounded_numeric_accumulator_expressions() {
 }
 
 #[test]
+fn accumulates_rounded_numeric_values() {
+    let positive = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"VALUE": 2.8}).as_object().unwrap().clone(),
+    };
+    let negative = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"VALUE": -2.8}).as_object().unwrap().clone(),
+    };
+    let non_numeric = DbfRecord {
+        number: 3,
+        deleted: false,
+        values: json!({"VALUE": "ignored"}).as_object().unwrap().clone(),
+    };
+    let records = [&positive, &negative, &non_numeric];
+    let stages = vec![
+        json!({
+            "$group": {
+                "_id": null,
+                "ceiling_total": {"$sum": {"$ceil": "$VALUE"}},
+                "floor_total": {"$sum": {"$floor": "$VALUE"}}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({"_id": null, "ceiling_total": 1, "floor_total": -1})]
+    );
+}
+
+#[test]
+fn n_value_limit_uses_rounded_group_id() {
+    let first = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"GROUP": 1.2, "VALUE": "first"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let second = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"GROUP": 1.2, "VALUE": "second"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let third = DbfRecord {
+        number: 3,
+        deleted: false,
+        values: json!({"GROUP": 1.2, "VALUE": "third"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let records = [&first, &second, &third];
+    let stages = vec![
+        json!({
+            "$group": {
+                "_id": "$GROUP",
+                "first_two": {"$firstN": {
+                    "input": "$VALUE",
+                    "n": {"$ceil": "$_id"}
+                }}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({"_id": 1.2, "first_two": ["first", "second"]})]
+    );
+}
+
+#[test]
 fn counts_filtered_records_with_a_count_stage() {
     let table = table_with_two_active_records();
     let request = crate::query::parse(

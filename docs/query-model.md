@@ -209,7 +209,7 @@ The complete boundary is documented in [asynchronous query streaming](async-stre
 | Array | `$all`, `$elemMatch`, `$size` | Match array contents, one array element's conditions, or exact array length |
 | Presence | `$exists` | Test whether the resolved field path is present; explicit `null` counts as present |
 | Logical | `$and`, `$or`, `$not` | Compose or invert predicate documents |
-| Expression | `$expr` | Compare scalar literals, field references, array constructors, `$literal`, two-operand `$ifNull`, conditional `$cond`, bounded string `$concat`/`$toLower`/`$toUpper`, or bounded numeric `$abs`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` expressions from the same record |
+| Expression | `$expr` | Compare scalar literals, field references, array constructors, `$literal`, two-operand `$ifNull`, conditional `$cond`, bounded string `$concat`/`$toLower`/`$toUpper`, or bounded numeric `$abs`/`$ceil`/`$floor`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` expressions from the same record |
 
 ### Missing paths and explicit null
 
@@ -259,6 +259,9 @@ These array predicates use a bounded table scan and are not index candidates.
 These choices are tested by the independent scalar-predicate matrix, dotted-path presence cases, and array-predicate tests.
 
 `$abs` accepts exactly one numeric literal, field reference, or nested numeric expression.
+
+`$ceil` and `$floor` accept the same operand shape and return the mathematical ceiling or floor.
+Fractional results use a JSON integer when they fit `i64` or `u64`; larger results remain finite JSON numbers.
 
 `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` accept exactly two numeric literals, field references, or nested numeric expressions.
 

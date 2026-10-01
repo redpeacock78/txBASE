@@ -181,6 +181,56 @@ fn sets_computed_fields_before_matching_and_grouping() {
 }
 
 #[test]
+fn sets_rounded_fields_and_nulls_non_numeric_values() {
+    let positive = DbfRecord {
+        number: 1,
+        deleted: false,
+        values: json!({"VALUE": 2.8}).as_object().unwrap().clone(),
+    };
+    let negative = DbfRecord {
+        number: 2,
+        deleted: false,
+        values: json!({"VALUE": -2.8}).as_object().unwrap().clone(),
+    };
+    let non_numeric = DbfRecord {
+        number: 3,
+        deleted: false,
+        values: json!({"VALUE": "ignored"}).as_object().unwrap().clone(),
+    };
+    let records = [&positive, &negative, &non_numeric];
+    let stages = vec![
+        json!({
+            "$set": {
+                "CEILING": {"$ceil": "$VALUE"},
+                "FLOOR": {"$floor": "$VALUE"}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+        json!({
+            "$group": {
+                "_id": null,
+                "ceilings": {"$push": "$CEILING"},
+                "floors": {"$push": "$FLOOR"}
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    ];
+
+    assert_eq!(
+        crate::query::aggregation::execute(&records, &stages).unwrap(),
+        vec![json!({
+            "_id": null,
+            "ceilings": [3, -2, null],
+            "floors": [2, -3, null]
+        })]
+    );
+}
+
+#[test]
 fn evaluates_conditional_expressions_in_input_fields_and_group_keys() {
     let adult = DbfRecord {
         number: 1,

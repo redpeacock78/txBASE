@@ -111,6 +111,8 @@ ICU4Xはこれらのリストをベンチマーク入力として扱い、計測
 - [Find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [`$expr` field expressions](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)
 - [MongoDB `$cond` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/cond/)
+- [MongoDB `$ceil` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ceil/)
+- [MongoDB `$floor` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/floor/)
 - [Query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)
 - [Explain and execution statistics](https://www.mongodb.com/docs/manual/reference/method/db.collection.explain/)
 - [MongoDB compound indexes](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/)

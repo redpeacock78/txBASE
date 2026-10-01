@@ -5,11 +5,14 @@
 ## 数値アキュムレータ
 
 - `$count: {}`はグループ内の各レコードを数える。
-- `$sum`はフィールド参照、数値リテラル、`$abs`、二項の`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`式を受け付ける。欠損、`null`、数値以外の結果は加算対象外とする。入力がすべて整数ならJSONの整数を返し、小数を含む場合は有限な浮動小数点数を返す。
+- `$sum`はフィールド参照、数値リテラル、`$abs`、`$ceil`、`$floor`、二項の`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`式を受け付ける。欠損、`null`、数値以外の結果は加算対象外とする。入力がすべて整数ならJSONの整数を返し、小数を含む場合は有限な浮動小数点数を返す。
 - `$avg`は`$sum`と同じ式を受け付ける。欠損、`null`、数値以外の結果を無視し、数値入力がないグループでは`null`を返す。
 - `$stdDevPop`と`$stdDevSamp`は`$sum`と同じ式を受け付け、グループごとに一定量のメモリを使う。欠損、`null`、数値以外の結果を無視する。数値入力が1つの場合、`$stdDevPop`は0を返し、`$stdDevSamp`は2つ目の入力があるまで`null`を返す。
 
 有限でない中間値または結果は拒否します。数値式評価器は`$expr`と共有します。
+
+`$ceil`と`$floor`は、それぞれ数値式の数学的な切り上げと切り下げを返します。
+結果が`i64`または`u64`の範囲に収まる場合はJSON整数で表します。
 
 ## 極値とN件選択
 
@@ -65,6 +68,8 @@ txBASEは`$minN`を昇順、`$maxN`を降順で返し、同値は入力順に並
 - [MongoDBの`$avg`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/avg/)
 - [MongoDBの`$stdDevPop`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevpop/)
 - [MongoDBの`$stdDevSamp`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/stddevsamp/)
+- [MongoDBの`$ceil`式演算子](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ceil/)
+- [MongoDBの`$floor`式演算子](https://www.mongodb.com/docs/manual/reference/operator/aggregation/floor/)
 - [MongoDBの`$minN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/minn/)
 - [MongoDBの`$maxN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/maxn/)
 - [MongoDBの`$firstN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/firstn/)
