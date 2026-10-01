@@ -61,7 +61,9 @@ The comparison follows MongoDB's BSON type order for JSON values: `null`, number
 
 txBASE supports `$mergeObjects` only as an accumulator in `$group`, `$bucket`, and `$bucketAuto`; the expression form is outside this contract.
 
-The combined retained-value limit for `$push`, `$addToSet`, `$minN`, `$maxN`, `$firstN`, and `$lastN` is 10,000 values per aggregation result. `$mergeObjects` shares that limit across newly retained field names in all groups. Each `n` therefore cannot exceed 10,000.
+The combined retained-value limit for `$push`, `$addToSet`, `$minN`, `$maxN`, `$firstN`, and `$lastN` is 10,000 values per `$group`, `$bucket`, or `$bucketAuto` stage execution, shared across that stage's groups and accumulators.
+`$mergeObjects` counts each field added to a group's merged document against the same limit; overwriting a field already present in that group does not count again.
+Each `n` has an individual maximum of 10,000, although a stage can reach the shared limit first.
 
 ## Primary references
 
@@ -76,5 +78,5 @@ The combined retained-value limit for `$push`, `$addToSet`, `$minN`, `$maxN`, `$
 - [MongoDB `$maxN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/maxn/)
 - [MongoDB `$firstN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/firstn/)
 - [MongoDB `$lastN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/lastn/)
-- [MongoDB `$mergeObjects` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/mergeObjects/)
+- [MongoDB 8.0 `$mergeObjects` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/mergeObjects/)
 - [MongoDB BSON comparison order](https://www.mongodb.com/docs/v8.0/reference/bson-type-comparison-order/)

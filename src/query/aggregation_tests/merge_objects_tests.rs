@@ -1,5 +1,5 @@
 use crate::dbf::DbfRecord;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 fn record(number: usize, values: Value) -> DbfRecord {
     DbfRecord {
@@ -92,5 +92,65 @@ fn merge_objects_rejects_non_document_values_and_bounds_retained_fields() {
     }
     let oversized = [record(2, json!({"OBJECT": Value::Object(object)}))];
     let error = execute(&oversized, stage).unwrap_err();
+    assert!(error.to_string().contains("collected value count"));
+}
+
+#[test]
+fn merge_objects_shares_retained_field_budget_across_groups() {
+    let records = (0..=crate::query::aggregation::MAX_COLLECTED_VALUES)
+        .map(|field| {
+            let mut object = Map::new();
+            object.insert(field.to_string(), json!(field));
+            record(field + 1, json!({"KEY": field % 2, "OBJECT": object}))
+        })
+        .collect::<Vec<_>>();
+    let stage = json!({
+        "$group": {
+            "_id": "$KEY",
+            "merged": {"$mergeObjects": "$OBJECT"}
+        }
+    });
+
+    let error = execute(&records, stage).unwrap_err();
+    assert!(error.to_string().contains("collected value count"));
+}
+
+#[test]
+fn merge_objects_overwrite_does_not_consume_another_retained_value() {
+    let mut initial = Map::new();
+    for field in 0..crate::query::aggregation::MAX_COLLECTED_VALUES {
+        initial.insert(field.to_string(), json!(field));
+    }
+    let records = [
+        record(1, json!({"KEY": 1, "OBJECT": initial})),
+        record(2, json!({"KEY": 1, "OBJECT": {"0": "replacement"}})),
+    ];
+    let stage = json!({
+        "$group": {
+            "_id": "$KEY",
+            "merged": {"$mergeObjects": "$OBJECT"}
+        }
+    });
+
+    let output = execute(&records, stage).unwrap();
+    assert_eq!(output[0]["merged"]["0"], "replacement");
+}
+
+#[test]
+fn merge_objects_shares_budget_with_value_accumulators() {
+    let mut object = Map::new();
+    for field in 0..crate::query::aggregation::MAX_COLLECTED_VALUES {
+        object.insert(field.to_string(), json!(field));
+    }
+    let records = [record(1, json!({"OBJECT": object, "VALUE": 1}))];
+    let stage = json!({
+        "$group": {
+            "_id": null,
+            "merged": {"$mergeObjects": "$OBJECT"},
+            "values": {"$push": "$VALUE"}
+        }
+    });
+
+    let error = execute(&records, stage).unwrap_err();
     assert!(error.to_string().contains("collected value count"));
 }

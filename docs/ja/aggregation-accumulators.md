@@ -62,7 +62,9 @@ txBASEは`$minN`を昇順、`$maxN`を降順で返し、同値は入力順に並
 
 txBASEは`$mergeObjects`を`$group`、`$bucket`、`$bucketAuto`のアキュムレータ形式だけでサポートし、式形式は対象外とします。
 
-`$push`、`$addToSet`、`$minN`、`$maxN`、`$firstN`、`$lastN`が保持する値の合計は、集約結果ごとに10,000件までです。`$mergeObjects`では、全グループで新たに保持するフィールド名もこの上限に含めます。そのため`n`も10,000を超えられません。
+`$push`、`$addToSet`、`$minN`、`$maxN`、`$firstN`、`$lastN`が保持する値の合計は、各`$group`、`$bucket`、`$bucketAuto`ステージの実行につき10,000件までです。この上限は、そのステージの全グループと全アキュムレータで共有します。
+`$mergeObjects`では、グループの結果に追加したフィールドごとに同じ上限へ数えます。そのグループですでに存在するフィールドを上書きしても再計上しません。
+各`n`にも個別に10,000の上限を適用しますが、ステージ共通の上限に先に達することがあります。
 
 ## 主な参照先
 
@@ -77,5 +79,5 @@ txBASEは`$mergeObjects`を`$group`、`$bucket`、`$bucketAuto`のアキュム�
 - [MongoDBの`$maxN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/maxn/)
 - [MongoDBの`$firstN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/firstn/)
 - [MongoDBの`$lastN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/lastn/)
-- [MongoDBの`$mergeObjects`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/mergeObjects/)
+- [MongoDB 8.0の`$mergeObjects`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/mergeObjects/)
 - [MongoDBのBSON比較順](https://www.mongodb.com/docs/v8.0/reference/bson-type-comparison-order/)
