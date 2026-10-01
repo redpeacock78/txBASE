@@ -82,8 +82,12 @@ fn string_uses_only_group_key_fields(
         } => {
             valid(input)
                 && valid(search)
-                && start.as_ref().is_none_or(&valid)
-                && end.as_ref().is_none_or(&valid)
+                && start.as_ref().is_none_or(|expression| {
+                    scalar_uses_only_group_key_fields(expression, variables)
+                })
+                && end.as_ref().is_none_or(|expression| {
+                    scalar_uses_only_group_key_fields(expression, variables)
+                })
         }
         StringExpression::Replace {
             input,
