@@ -43,24 +43,14 @@ Input `$skip` and `$limit` discard or truncate records before the terminal stage
 
 `$set` and `$addFields` are aliases for one bounded input stage that preserves existing fields and computes named top-level fields before later stages.
 
-Each computed field accepts a scalar literal, a field reference including a dotted path, an array of supported expressions, `$literal`, `$ifNull` with exactly two operands, `$cond`, `$concat` with at least two string expressions, `$toLower`, `$toUpper`, or the bounded numeric `$abs`, `$ceil`, `$floor`, `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions.
+Each computed field uses the shared scalar-expression subset in [Expression model](expressions.md).
 
 All expressions in one stage read the record as it entered that stage, so one computed field cannot depend on another field computed in the same stage.
 
 Missing field references, missing or nonnumeric numeric results, and missing, null, or non-string string results become `null`; `$ifNull` treats missing and explicit `null` as null and evaluates its fallback in that case.
 
-`$ceil` and `$floor` return the mathematical ceiling and floor of a numeric result.
-Integral results use a JSON integer when they fit `i64` or `u64`; larger results remain finite JSON numbers.
-
-`$cond` accepts the three-expression array form or an object with exactly `if`, `then`, and `else`.
-
-Its `if` value must use the boolean expression grammar from `$expr`, and evaluation computes only the selected branch.
-
-Each branch uses the shared scalar-expression subset.
-
-`$concat` preserves operand order and returns `null` when any operand is missing, `null`, or not a string. `$toLower` and `$toUpper` use locale-independent Unicode case conversion.
-
-The shared scalar-expression evaluator is used by `$set`/`$addFields` and `$expr`. Computed string results are capped at 1 MiB.
+Operator shapes, variable scope, and expression evaluation limits are defined in [Expression model](expressions.md).
+Computed string results are capped at 1 MiB.
 
 An existing top-level field is overwritten, while dotted output field names remain unsupported.
 
@@ -145,7 +135,7 @@ The stage materializes at most 10,000 numeric input values, does not spill to di
 }
 ```
 
-The expression can be a field reference, scalar literal, array of supported expressions, `$literal`, `$ifNull`, `$cond`, `$concat`, `$toLower`, `$toUpper`, or the bounded numeric expression subset used by `$expr` and `$set`.
+The expression uses the shared scalar-expression subset documented in [Expression model](expressions.md).
 
 It is evaluated for each input record.
 Missing or null expression results form the `null` group.
@@ -159,8 +149,6 @@ For example, this groups case variants together:
 ```
 
 Unsupported expression operators remain rejected.
-
-`$literal` follows the shared expression semantics and can carry a JSON value without interpreting it as an operator.
 
 Missing and explicit `null` field values share one group.
 
@@ -179,7 +167,7 @@ The stage supports at most 10,000 ranges and does not spill to disk.
 
 Group, bucket, bucket-auto, or `$sortByCount` output may have zero or more `$match` stages, followed by one optional `$project`, at most one final `$sort`, at most one `$skip`, and at most one final `$limit` stage.
 
-`_id` is either `null` or one expression from the shared bounded scalar-expression subset.
+`_id` is either `null` or one expression from the shared bounded scalar-expression subset in [Expression model](expressions.md).
 
 The expression is evaluated once per input record; a missing or null result is grouped as `null`.
 
@@ -235,9 +223,9 @@ Additional grouping, bucket, bucket-auto, sort-by-count, count, or distinct stag
 
 After `$group`, `$bucket`, `$bucketAuto`, or `$sortByCount`, stages after the group-output `$limit` remain unsupported.
 
-`$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp` operands remain numeric-only. `$expr` also accepts the shared scalar `$literal`, `$ifNull`, `$cond`, `$concat`, `$toLower`, and `$toUpper` forms described in the query model.
+`$sum`, `$avg`, `$stdDevPop`, and `$stdDevSamp` operands remain numeric-only; their accepted numeric expression forms are defined in [Expression model](expressions.md).
 
-Broader expression evaluation remains unsupported.
+Other MongoDB expression operators and computed multi-field objects remain unsupported.
 
 MongoDB documents `$group` as a blocking stage and specifies accumulator behavior such as `$count` and `$sum` in its [aggregation-stage reference](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/).
 
@@ -250,6 +238,7 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 ## Related documents
 
 - [Query model](query-model.md)
+- [Expression model](expressions.md)
 - [Aggregation accumulators](aggregation-accumulators.md)
 - [Query planning and external vocabulary](query-planning.md)
 - [Quality contract matrix](quality-matrix.md)
@@ -264,12 +253,4 @@ Its separate [`$count` stage](https://www.mongodb.com/docs/manual/reference/oper
 - [MongoDB `$project` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/project/)
 - [MongoDB `$set` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/set/)
 - [MongoDB `$addFields` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addfields/)
-- [MongoDB `$ifNull` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ifnull/)
-- [MongoDB `$cond` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/cond/)
-- [MongoDB `$literal` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/literal/)
-- [MongoDB `$concat` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/concat/)
-- [MongoDB `$toLower` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/tolower/)
-- [MongoDB `$toUpper` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/toupper/)
-- [MongoDB `$ceil` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ceil/)
-- [MongoDB `$floor` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/floor/)
 - [MongoDB `$unwind` aggregation stage](https://www.mongodb.com/docs/manual/reference/operator/aggregation/unwind/)

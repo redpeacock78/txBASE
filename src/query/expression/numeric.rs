@@ -1,10 +1,9 @@
-use super::super::QueryError;
-use crate::query_path::field_value;
+use super::{EvaluationContext, ExpressionReference, QueryError, parse_reference};
 use serde_json::{Map, Value};
 
 #[derive(Debug, Clone)]
 pub enum NumericExpression {
-    Field(String),
+    Reference(ExpressionReference),
     Literal(serde_json::Number),
     Absolute(Box<NumericExpression>),
     Ceiling(Box<NumericExpression>),
@@ -38,13 +37,10 @@ impl NumericOperator {
 }
 
 pub fn parse_numeric_operand(operand: &Value, path: &str) -> Result<NumericExpression, QueryError> {
-    if let Some(reference) = operand.as_str().and_then(|value| value.strip_prefix('$')) {
-        if reference.is_empty() {
-            return Err(QueryError::Invalid(format!(
-                "{path} has an empty field reference"
-            )));
-        }
-        return Ok(NumericExpression::Field(reference.to_owned()));
+    if let Some(reference) = operand.as_str().filter(|value| value.starts_with('$')) {
+        return Ok(NumericExpression::Reference(parse_reference(
+            reference, path,
+        )?));
     }
     if let Some(number) = operand.as_number() {
         return Ok(NumericExpression::Literal(number.clone()));
@@ -113,25 +109,38 @@ pub fn evaluate_numeric(
     expression: &NumericExpression,
     path: &str,
 ) -> Result<Option<Value>, QueryError> {
+    let mut context = EvaluationContext::new(values);
+    evaluate_numeric_in_context(&mut context, expression, path)
+}
+
+pub(super) fn evaluate_numeric_in_context(
+    context: &mut EvaluationContext<'_>,
+    expression: &NumericExpression,
+    path: &str,
+) -> Result<Option<Value>, QueryError> {
     match expression {
-        NumericExpression::Field(field) => Ok(field_value(values, field)),
+        NumericExpression::Reference(reference) => context.resolve(reference, path),
         NumericExpression::Literal(number) => Ok(Some(Value::Number(number.clone()))),
         NumericExpression::Absolute(operand) => {
-            let Some(value) = evaluate_numeric(values, operand, &format!("{path}.$abs"))? else {
+            let Some(value) =
+                evaluate_numeric_in_context(context, operand, &format!("{path}.$abs"))?
+            else {
                 return Ok(None);
             };
             apply_absolute_expression(&value, &format!("{path}.$abs"))
         }
         NumericExpression::Ceiling(operand) => {
             let expression_path = format!("{path}.$ceil");
-            let Some(value) = evaluate_numeric(values, operand, &expression_path)? else {
+            let Some(value) = evaluate_numeric_in_context(context, operand, &expression_path)?
+            else {
                 return Ok(None);
             };
             apply_rounding_expression(&value, &expression_path, f64::ceil)
         }
         NumericExpression::Floor(operand) => {
             let expression_path = format!("{path}.$floor");
-            let Some(value) = evaluate_numeric(values, operand, &expression_path)? else {
+            let Some(value) = evaluate_numeric_in_context(context, operand, &expression_path)?
+            else {
                 return Ok(None);
             };
             apply_rounding_expression(&value, &expression_path, f64::floor)
@@ -144,8 +153,8 @@ pub fn evaluate_numeric(
             let operator_name = operator.as_str();
             let expression_path = format!("{path}.{operator_name}");
             let (Some(left), Some(right)) = (
-                evaluate_numeric(values, left, &format!("{expression_path}[0]"))?,
-                evaluate_numeric(values, right, &format!("{expression_path}[1]"))?,
+                evaluate_numeric_in_context(context, left, &format!("{expression_path}[0]"))?,
+                evaluate_numeric_in_context(context, right, &format!("{expression_path}[1]"))?,
             ) else {
                 return Ok(None);
             };

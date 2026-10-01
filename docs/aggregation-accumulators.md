@@ -5,11 +5,11 @@
 ## Numeric accumulators
 
 - `$count: {}` counts each record in the group.
-- `$sum` accepts a field reference, numeric literal, `$abs`, `$ceil`, `$floor`, or binary `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` expressions. Missing, `null`, and nonnumeric results contribute zero. Integral inputs retain an integer JSON result; any fractional input produces a finite floating-point result.
-- `$avg` accepts the same expressions. Missing, `null`, and nonnumeric results are ignored; a group with no numeric inputs returns `null`.
-- `$stdDevPop` and `$stdDevSamp` accept the same expressions and use constant memory per group. They ignore missing, `null`, and nonnumeric results. `$stdDevPop` returns zero for one numeric input; `$stdDevSamp` returns `null` until two inputs exist.
+- `$sum` accepts the bounded numeric expressions in [Expressions](expressions.md). Missing, `null`, and nonnumeric results contribute zero. Integral inputs retain an integer JSON result; any fractional input produces a finite floating-point result.
+- `$avg` accepts the same numeric expressions. Missing, `null`, and nonnumeric results are ignored; a group with no numeric inputs returns `null`.
+- `$stdDevPop` and `$stdDevSamp` accept the same numeric expressions and use constant memory per group. They ignore missing, `null`, and nonnumeric results. `$stdDevPop` returns zero for one numeric input; `$stdDevSamp` returns `null` until two inputs exist.
 
-Non-finite intermediate or result values are rejected. The numeric expression evaluator is shared with `$expr`.
+Non-finite intermediate or result values are rejected. The supported numeric-expression grammar and its evaluation rules are documented in [Expressions](expressions.md).
 
 `$ceil` and `$floor` return the mathematical ceiling and floor of their numeric result.
 Their integral results use a JSON integer when they fit `i64` or `u64`.

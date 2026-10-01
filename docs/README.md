@@ -20,6 +20,7 @@ Research and future work do not imply an implemented feature.
 ## Query and protocol contracts
 
 - [Query model](query-model.md)
+- [Expression model](expressions.md)
 - [Asynchronous query streaming](async-streaming.md)
 - [Aggregation model](aggregation.md)
 - [Aggregation accumulators](aggregation-accumulators.md)

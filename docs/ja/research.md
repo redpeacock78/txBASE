@@ -16,6 +16,7 @@
 | --- | --- | --- |
 | dBASE と Visual FoxPro のファイル構造 | [DBF 互換性](dbf-compatibility.md) | 現在の対応と将来のエンコーディング作業 |
 | クエリ文書、述語、カーソル、ストリーム | [クエリモデル](query-model.md) | 現在のサブセット |
+| 共有スカラー式と論理式 | [式モデル](expressions.md) | 現在の有界なサブセット。MongoDBの演算子資料は形式の一部を参照するもので、互換性を示さない |
 | ランタイム非依存の非同期クエリストリーム | [非同期クエリストリーム](async-streaming.md)、[Workerクエリストリームアダプター](worker-query-stream.md)、[WASIクエリストリーム](wasi-query-stream.md) | 現在のポーリング境界、ネイティブスレッドアダプター、Worker互換Web Streamsアダプター、現在または保持中のXBF世代向けランタイム非依存非同期ストレージアダプター、WASI filesystemのstream操作を使ってDBFと現在または保持中のXBFを扱うWASI 0.3 CLIクエリストリームコンポーネントを実装済みです。WASIストレージは書き込み可能な単一writer境界です。プロバイダー接続型ストレージと本番ホストのライフサイクルは今後の作業です。 |
 | 有界集約契約 | [集約モデル](aggregation.md) | 現在のサブセット |
 | 有界な集約アキュムレータ | [集約アキュムレータ](aggregation-accumulators.md) | 現在のサブセットとMongoDB参照資料 |
@@ -129,6 +130,11 @@ CIテストでこの件数を固定し、別のテストでU+319B1と阿、𥥩�
 - [Find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [`$expr` field expressions](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)
 - [MongoDB `$cond` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/cond/)
+- [MongoDB aggregation variables](https://www.mongodb.com/docs/manual/reference/aggregation-variables/)
+- [MongoDB `$let` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/let/)
+- [MongoDB `$map` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/map/)
+- [MongoDB `$filter` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/filter/)
+- [MongoDB `$reduce` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/reduce/)
 - [MongoDB `$ceil` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ceil/)
 - [MongoDB `$floor` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/floor/)
 - [Query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)

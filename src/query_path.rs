@@ -45,6 +45,17 @@ pub(crate) fn field_value(values: &Map<String, Value>, path: &str) -> Option<Val
     let value = values.get(first)?;
     let mut matches = Vec::new();
     collect_path_values(value, &segments[1..], &mut matches);
+    one_or_many(matches)
+}
+
+pub(crate) fn field_value_from_value(value: &Value, path: &str) -> Option<Value> {
+    let segments = path.split('.').collect::<Vec<_>>();
+    let mut matches = Vec::new();
+    collect_path_values(value, &segments, &mut matches);
+    one_or_many(matches)
+}
+
+fn one_or_many(mut matches: Vec<Value>) -> Option<Value> {
     match matches.len() {
         0 => None,
         1 => matches.pop(),

@@ -205,7 +205,7 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 | 配列 | `$all`、`$elemMatch`、`$size` | 配列の内容、1つの配列要素の条件、または配列の正確な長さを照合する |
 | 存在 | `$exists` | 解決したフィールドパスの有無を調べる。明示的な`null`は存在する値として扱う |
 | 論理 | `$and`、`$or`、`$not` | 述語文書を合成または反転する |
-| 式 | `$expr` | 同じレコードのスカラーリテラル、フィールド参照、配列構築子、`$literal`、2オペランドの`$ifNull`、条件式`$cond`、有界な文字列`$concat` / `$toLower` / `$toUpper`、または有界な数値`$abs` / `$ceil` / `$floor` / `$add` / `$subtract` / `$multiply` / `$divide` / `$mod`式を比較する |
+| 式 | `$expr` | 共有スカラー式に対する有界な論理式を評価する。詳細は[式モデル](expressions.md)を参照 |
 
 ### 欠損パスと明示的なnull
 
@@ -254,53 +254,8 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 
 この契約は、独立したスカラー述語マトリクス、ドット区切りパスの存在確認、配列述語テストで検査します。
 
-`$abs`は、数値リテラル、フィールド参照、またはネストした数値式を1つだけ受け付けます。
-
-`$ceil`と`$floor`は同じオペランド形式を受け付け、それぞれ数学的な切り上げと切り下げを返します。
-結果が`i64`または`u64`の範囲に収まる場合はJSON整数で表し、それを超える場合は有限なJSON数値で表します。
-
-`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`は、数値リテラル、フィールド参照、またはネストした数値式を2つだけ受け付けます。
-
-`$literal`は、`$`で始まる文字列をフィールド参照として扱わずに、そのオペランドを返します。
-
-配列構築子は要素にスカラー式を受け付け、欠損した要素の結果を`null`に置き換えます。
-
-`$ifNull`はスカラー式を2つだけ受け付け、最初の値が欠損または明示的な`null`の場合に2番目を評価します。
-
-`$cond`は式をちょうど3つ持つ配列形式、または`if`、`then`、`else`だけを持つオブジェクト形式を受け付けます。
-
-`if`には`$expr`が受け付ける論理式または比較式を指定します。
-
-条件の結果に応じて一方の枝だけを評価し、もう一方は評価しません。
-
-各枝には、ネストした`$cond`を含む共有スカラー式サブセットを指定できます。
-
-真偽値を含む裸の値や未対応のMongoDB式演算子は拒否します。
-この境界はMongoDB式との互換性を主張しません。
-
-`$concat`はスカラー式を2つ以上受け付けます。解決した各オペランドは文字列でなければならず、欠損、`null`、文字列以外のオペランドは比較不一致になります。
-
-`$toLower`と`$toUpper`は、文字列へ解決されるスカラー式を1つ受け付け、ロケールに依存しないUnicodeの大文字と小文字の変換を適用します。
-
-共有スカラー式評価器を`$expr`と集計の`$set`/`$addFields`で使うため、フィールド、リテラル、配列構築子、nullフォールバック、条件分岐、文字列、数値式の意味論は両方の表面で同じです。
-
-計算した文字列の結果は1 MiBまでです。上限を超える場合は、無制限の割り当てを避けてクエリエラーにします。
-
-結果が収まる整数演算はJSONの整数を維持します。
-
-混在型または小数の結果は有限なJSON数値でなければなりません。
-
-割り切れる整数除算は整数を維持し、割り切れない除算は有限なJSON数値を生成します。
-
-0による除算は拒否します。
-
-0による剰余は拒否します。
-
-選択した式が別の型を要求する場合、欠損、`null`、文字列以外、または非数値のフィールドオペランドは比較不一致になります。
-
-整数オーバーフローと有限でない結果は拒否します。
-
-これらはtxBASEの動作であり、MongoDB互換性として説明してはいけません。
+`$expr`は[式モデル](expressions.md)で定義する共有の論理式とスカラー式を使います。
+対応演算子、変数スコープ、欠損値と`null`の結果、数値エラー、評価上限、MongoDBとの違いも同文書に記載します。
 
 ## 3. パス、配列、プロジェクション
 
@@ -319,6 +274,7 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 ## 関連文書
 
 - [クエリ計画と外部語彙](query-planning.md)
+- [式モデル](expressions.md)
 - [集約モデル](aggregation.md)
 - [結合モデル](joins.md)
 - [更新モデル](mutation-model.md)
@@ -336,7 +292,6 @@ catalog serverは`QUERY /{table}/records/stream`を公開します。
 - [MongoDB `$all` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/all/)
 - [MongoDB `$elemMatch` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/elemmatch/)
 - [MongoDB `$size` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/size/)
-- [MongoDB `$cond` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/cond/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
 - [Unicode Standard Annex #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/)

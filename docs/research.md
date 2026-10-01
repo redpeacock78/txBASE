@@ -16,6 +16,7 @@ This repository does not claim compatibility merely because it uses a familiar n
 | --- | --- | --- |
 | dBASE and Visual FoxPro file structure | [DBF compatibility](dbf-compatibility.md) | Current plus future encoding work |
 | Query document, predicates, cursors, and streams | [Query model](query-model.md) | Current subset |
+| Shared scalar and boolean expressions | [Expression model](expressions.md) | Current bounded subset; MongoDB operator references inform selected shapes, not compatibility |
 | Runtime-neutral asynchronous query streaming | [Asynchronous query streaming](async-streaming.md), [Worker query stream adapter](worker-query-stream.md), and [WASI query streaming](wasi-query-stream.md) | Current polling boundary, native threaded adapter, Worker-compatible Web Streams adapter, runtime-neutral asynchronous-storage adapter for current or retained XBF generations, and WASI 0.3 CLI query-stream component for DBF and current or retained XBF snapshots through a writable single-writer adapter using WASI filesystem streams; provider-backed WASI storage and production host lifecycle remain future |
 | Bounded aggregation contract | [Aggregation model](aggregation.md) | Current subset |
 | Bounded aggregation accumulators | [Aggregation accumulators](aggregation-accumulators.md) | Current subset and MongoDB references |
@@ -127,6 +128,11 @@ The mismatch baseline and existing collation identifiers remain unchanged until 
 - [Find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [`$expr` field expressions](https://www.mongodb.com/docs/manual/reference/operator/query/expr/)
 - [MongoDB `$cond` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/cond/)
+- [MongoDB aggregation variables](https://www.mongodb.com/docs/manual/reference/aggregation-variables/)
+- [MongoDB `$let` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/let/)
+- [MongoDB `$map` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/map/)
+- [MongoDB `$filter` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/filter/)
+- [MongoDB `$reduce` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/reduce/)
 - [MongoDB `$ceil` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ceil/)
 - [MongoDB `$floor` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/floor/)
 - [Query optimization](https://www.mongodb.com/docs/manual/core/query-optimization/)

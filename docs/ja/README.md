@@ -18,6 +18,7 @@
 ## クエリとプロトコルの契約
 
 - [クエリモデル](query-model.md)
+- [式モデル](expressions.md)
 - [非同期クエリストリーム](async-streaming.md)
 - [集約モデル](aggregation.md)
 - [集約アキュムレータ](aggregation-accumulators.md)

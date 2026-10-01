@@ -212,7 +212,7 @@ The complete boundary is documented in [asynchronous query streaming](async-stre
 | Array | `$all`, `$elemMatch`, `$size` | Match array contents, one array element's conditions, or exact array length |
 | Presence | `$exists` | Test whether the resolved field path is present; explicit `null` counts as present |
 | Logical | `$and`, `$or`, `$not` | Compose or invert predicate documents |
-| Expression | `$expr` | Compare scalar literals, field references, array constructors, `$literal`, two-operand `$ifNull`, conditional `$cond`, bounded string `$concat`/`$toLower`/`$toUpper`, or bounded numeric `$abs`/`$ceil`/`$floor`/`$add`/`$subtract`/`$multiply`/`$divide`/`$mod` expressions from the same record |
+| Expression | `$expr` | Evaluate the bounded boolean grammar over shared scalar expressions; see [Expression model](expressions.md) |
 
 ### Missing paths and explicit null
 
@@ -261,50 +261,8 @@ These array predicates use a bounded table scan and are not index candidates.
 
 These choices are tested by the independent scalar-predicate matrix, dotted-path presence cases, and array-predicate tests.
 
-`$abs` accepts exactly one numeric literal, field reference, or nested numeric expression.
-
-`$ceil` and `$floor` accept the same operand shape and return the mathematical ceiling or floor.
-Fractional results use a JSON integer when they fit `i64` or `u64`; larger results remain finite JSON numbers.
-
-`$add`, `$subtract`, `$multiply`, `$divide`, and `$mod` accept exactly two numeric literals, field references, or nested numeric expressions.
-
-`$literal` returns its operand without treating a string beginning with `$` as a field reference.
-
-An array constructor accepts scalar expressions as elements and replaces a missing element result with `null`.
-
-`$ifNull` accepts exactly two scalar expressions and evaluates the second when the first is missing or explicitly `null`.
-
-`$cond` accepts either an array of exactly three expressions or an object containing exactly `if`, `then`, and `else`.
-
-The `if` value must use the boolean expression grammar supported by `$expr`; the selected branch is evaluated and the other branch is skipped.
-
-Each branch accepts the shared scalar-expression subset, including nested `$cond` expressions.
-
-Bare values, including booleans, and unsupported MongoDB expression operators are rejected, so this boundary does not claim MongoDB expression compatibility.
-
-`$concat` accepts at least two scalar expressions. Every resolved operand must be a string; a missing, `null`, or non-string operand makes the comparison not match.
-
-`$toLower` and `$toUpper` accept one scalar expression that resolves to a string and apply locale-independent Unicode case conversion.
-
-The shared scalar-expression evaluator is used by `$expr` and aggregation `$set`/`$addFields`, so both surfaces have the same field, literal, array-constructor, null-fallback, conditional, string, and numeric-expression semantics.
-
-Computed string results are limited to 1 MiB. Exceeding that limit is a query error rather than an unbounded allocation.
-
-Integer results remain JSON integers when they fit.
-
-Mixed or fractional results must be finite JSON numbers.
-
-Exact integer division remains an integer; non-exact division produces a finite JSON number.
-
-Division by zero is rejected.
-
-Modulo by zero is rejected.
-
-Missing, `null`, non-string, or nonnumeric field operands make the comparison not match when the selected expression requires another type.
-
-Integer overflow and non-finite results are rejected.
-
-They are txBASE behavior and must not be described as MongoDB compatibility.
+`$expr` uses the shared boolean and scalar-expression grammar documented in [Expression model](expressions.md).
+That document owns supported operators, variable scope, missing and `null` results, numeric errors, evaluation limits, and differences from MongoDB.
 
 ## 3. Paths, arrays, and projection
 
@@ -323,6 +281,7 @@ The current implementation does not promise every MongoDB projection rule, posit
 ## Related documents
 
 - [Query planning and external vocabulary](query-planning.md)
+- [Expression model](expressions.md)
 - [Aggregation model](aggregation.md)
 - [Join model](joins.md)
 - [Mutation model](mutation-model.md)
@@ -340,7 +299,6 @@ The current implementation does not promise every MongoDB projection rule, posit
 - [MongoDB `$all` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/all/)
 - [MongoDB `$elemMatch` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/elemmatch/)
 - [MongoDB `$size` query predicate](https://www.mongodb.com/docs/manual/reference/operator/query/size/)
-- [MongoDB `$cond` expression operator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/cond/)
 - [MongoDB find command](https://www.mongodb.com/docs/manual/reference/command/find/)
 - [Firestore query cursors](https://firebase.google.com/docs/firestore/query-data/query-cursors)
 - [Unicode Standard Annex #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/)
