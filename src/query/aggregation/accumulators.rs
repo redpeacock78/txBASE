@@ -2,7 +2,7 @@ use super::super::{QueryError, aggregation_plan};
 use super::standard_deviation;
 use crate::dbf::DbfRecord;
 use crate::query_path::field_value;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 #[derive(Debug)]
 enum AccumulatorState {
@@ -22,6 +22,7 @@ enum AccumulatorState {
     First(Option<Value>),
     Last(Option<Value>),
     Values(Vec<Value>),
+    MergeObjects(Map<String, Value>),
 }
 
 #[derive(Debug)]
@@ -92,6 +93,9 @@ pub(super) fn new_group(
                 aggregation_plan::AccumulatorKind::Push(_)
                 | aggregation_plan::AccumulatorKind::AddToSet(_) => {
                     AccumulatorState::Values(Vec::new())
+                }
+                aggregation_plan::AccumulatorKind::MergeObjects(_) => {
+                    AccumulatorState::MergeObjects(Map::new())
                 }
             })
         })
@@ -252,6 +256,28 @@ pub(super) fn accumulate_record(
                     collected_values,
                 )?;
             }
+            (
+                AccumulatorState::MergeObjects(merged),
+                aggregation_plan::AccumulatorKind::MergeObjects(expression),
+            ) => {
+                let path = format!("{path_prefix}.{}.$mergeObjects", accumulator.name);
+                let Some(value) =
+                    crate::query::expression::evaluate_scalar(&record.values, expression, &path)?
+                else {
+                    continue;
+                };
+                match value {
+                    Value::Null => {}
+                    Value::Object(fields) => {
+                        merge_object_fields(merged, fields, collected_values)?;
+                    }
+                    _ => {
+                        return Err(QueryError::Invalid(format!(
+                            "{path} requires an object or null"
+                        )));
+                    }
+                }
+            }
             _ => unreachable!("validated accumulator state and specification differ"),
         }
     }
@@ -315,6 +341,7 @@ pub(super) fn finish_group(
             | AccumulatorState::Last(value) => value.unwrap_or(Value::Null),
             AccumulatorState::NValues(values) => values.finish(),
             AccumulatorState::Values(values) => Value::Array(values),
+            AccumulatorState::MergeObjects(values) => Value::Object(values),
         };
         output.insert(accumulator.name.clone(), value);
     }
@@ -339,6 +366,26 @@ fn append_collected_value(
     }
     values.push(value);
     *collected_values += 1;
+    Ok(())
+}
+
+fn merge_object_fields(
+    merged: &mut Map<String, Value>,
+    fields: Map<String, Value>,
+    collected_values: &mut usize,
+) -> Result<(), QueryError> {
+    for (field, value) in fields {
+        if !merged.contains_key(&field) {
+            if *collected_values >= super::MAX_COLLECTED_VALUES {
+                return Err(QueryError::Invalid(format!(
+                    "aggregate collected value count exceeds {}",
+                    super::MAX_COLLECTED_VALUES
+                )));
+            }
+            *collected_values += 1;
+        }
+        merged.insert(field, value);
+    }
     Ok(())
 }
 

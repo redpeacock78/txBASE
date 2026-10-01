@@ -57,8 +57,11 @@ The comparison follows MongoDB's BSON type order for JSON values: `null`, number
 
 - `$first` and `$last` use group input order, which follows physical-record order unless an input `$sort` establishes another order. They return the selected field value, including explicit `null`; a missing field becomes `null`.
 - `$push` returns all field values in group input order. `$addToSet` returns each structurally equal JSON value once, in first-seen order. Both append missing fields as `null`.
+- `$mergeObjects` accepts a supported scalar expression that resolves to a document. It ignores missing and `null` results, merges fields in group input order, and lets later documents overwrite earlier values for the same field. A non-null non-document result is an error. If every result is missing or `null`, it returns `{}`. Merging is shallow.
 
-The combined retained-value limit for `$push`, `$addToSet`, `$minN`, `$maxN`, `$firstN`, and `$lastN` is 10,000 values per aggregation result. Each `n` therefore cannot exceed 10,000.
+txBASE supports `$mergeObjects` only as an accumulator in `$group`, `$bucket`, and `$bucketAuto`; the expression form is outside this contract.
+
+The combined retained-value limit for `$push`, `$addToSet`, `$minN`, `$maxN`, `$firstN`, and `$lastN` is 10,000 values per aggregation result. `$mergeObjects` shares that limit across newly retained field names in all groups. Each `n` therefore cannot exceed 10,000.
 
 ## Primary references
 
@@ -73,4 +76,5 @@ The combined retained-value limit for `$push`, `$addToSet`, `$minN`, `$maxN`, `$
 - [MongoDB `$maxN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/maxn/)
 - [MongoDB `$firstN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/firstn/)
 - [MongoDB `$lastN` accumulator](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/lastn/)
+- [MongoDB `$mergeObjects` accumulator](https://www.mongodb.com/docs/manual/reference/operator/aggregation/mergeObjects/)
 - [MongoDB BSON comparison order](https://www.mongodb.com/docs/v8.0/reference/bson-type-comparison-order/)

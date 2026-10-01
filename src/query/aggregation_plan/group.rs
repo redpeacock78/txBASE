@@ -54,6 +54,7 @@ pub(super) fn parse_accumulators(
             "$stdDevPop" => AccumulatorKind::StdDevPop(parse_numeric_operand(operand, &path)?),
             "$stdDevSamp" => AccumulatorKind::StdDevSamp(parse_numeric_operand(operand, &path)?),
             "$sum" => AccumulatorKind::Sum(parse_numeric_operand(operand, &path)?),
+            "$mergeObjects" => AccumulatorKind::MergeObjects(parse_scalar_operand(operand, &path)?),
             "$minN" | "$maxN" | "$firstN" | "$lastN" => {
                 let definition = operand.as_object().ok_or_else(|| {
                     QueryError::Invalid(format!(

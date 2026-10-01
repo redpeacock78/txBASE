@@ -58,8 +58,11 @@ txBASEは`$minN`を昇順、`$maxN`を降順で返し、同値は入力順に並
 
 - `$first`と`$last`はグループの入力順を使い、前段に入力`$sort`がなければ物理レコード順、あればその順序になる。選択したフィールド値を返し、明示的な`null`を保持する。欠損フィールドは`null`になる。
 - `$push`はグループの入力順ですべてのフィールド値を返す。`$addToSet`は構造的に等しいJSON値を1つにまとめ、最初に現れた順を保つ。どちらも欠損フィールドを`null`として追加する。
+- `$mergeObjects`は、ドキュメントに評価される対応済みのスカラー式を受け付ける。欠損と`null`の結果を無視し、グループの入力順にフィールドをマージする。同じフィールド名は後のドキュメントの値で上書きする。`null`以外の非ドキュメント値はエラーにする。結果がすべて欠損または`null`なら`{}`を返す。ネストしたオブジェクトは再帰的にマージしない。
 
-`$push`、`$addToSet`、`$minN`、`$maxN`、`$firstN`、`$lastN`が保持する値の合計は、集約結果ごとに10,000件までです。そのため`n`も10,000を超えられません。
+txBASEは`$mergeObjects`を`$group`、`$bucket`、`$bucketAuto`のアキュムレータ形式だけでサポートし、式形式は対象外とします。
+
+`$push`、`$addToSet`、`$minN`、`$maxN`、`$firstN`、`$lastN`が保持する値の合計は、集約結果ごとに10,000件までです。`$mergeObjects`では、全グループで新たに保持するフィールド名もこの上限に含めます。そのため`n`も10,000を超えられません。
 
 ## 主な参照先
 
@@ -74,4 +77,5 @@ txBASEは`$minN`を昇順、`$maxN`を降順で返し、同値は入力順に並
 - [MongoDBの`$maxN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/maxn/)
 - [MongoDBの`$firstN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/firstn/)
 - [MongoDBの`$lastN`アキュムレータ](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/lastn/)
+- [MongoDBの`$mergeObjects`アキュムレータ](https://www.mongodb.com/docs/manual/reference/operator/aggregation/mergeObjects/)
 - [MongoDBのBSON比較順](https://www.mongodb.com/docs/v8.0/reference/bson-type-comparison-order/)

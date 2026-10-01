@@ -96,4 +96,5 @@ pub enum AccumulatorKind {
     Last(String),
     Push(String),
     AddToSet(String),
+    MergeObjects(ScalarExpression),
 }
