@@ -224,9 +224,9 @@ impl JoinProbeCost {
 #[cfg(test)]
 mod tests {
     use super::{
-        JoinCostInput, JoinProbeCost, JoinStrategy, NESTED_LOOP_PAIR_LIMIT, choose,
-        choose_with_costs, choose_with_probe_cost, estimated_cached_record_page_reads,
-        ordered_merge_sort_work, page_io_work,
+        JoinCost, JoinCostInput, JoinProbeCost, JoinStrategy, NESTED_LOOP_PAIR_LIMIT, choose,
+        choose_with_costs, choose_with_probe_cost, estimated_cached_record_page_reads, hash_cost,
+        index_nested_loop_cost, merge_cost, ordered_merge_sort_work, page_io_work,
     };
 
     #[test]
@@ -339,6 +339,108 @@ mod tests {
     fn weights_random_pages_four_times_more_than_sequential_pages() {
         assert_eq!(page_io_work(1, 0), 1);
         assert_eq!(page_io_work(0, 1), 4);
+    }
+
+    #[test]
+    fn join_costs_expose_strategy_io_and_materialization_work() {
+        let input = JoinCostInput {
+            outer_page_reads: 2,
+            inner_page_reads: 3,
+            output_rows: 5,
+            output_columns: 4,
+            merge_sort_work: 13,
+        };
+        assert_eq!(
+            hash_cost(5, 7, input),
+            JoinCost {
+                strategy_work: 19,
+                page_io_work: 5,
+                materialization_work: 20,
+            }
+        );
+        assert_eq!(
+            merge_cost(5, 7, 11, input),
+            JoinCost {
+                strategy_work: 25,
+                page_io_work: 16,
+                materialization_work: 20,
+            }
+        );
+        assert_eq!(
+            index_nested_loop_cost(
+                5,
+                JoinProbeCost {
+                    per_probe: 2,
+                    index_page_reads: 3,
+                    record_page_reads_per_probe: 2,
+                },
+                input,
+            ),
+            JoinCost {
+                strategy_work: 10,
+                page_io_work: 17,
+                materialization_work: 20,
+            }
+        );
+        assert_eq!(
+            hash_cost(
+                0,
+                0,
+                JoinCostInput {
+                    output_rows: 3,
+                    output_columns: 0,
+                    ..JoinCostInput::default()
+                },
+            ),
+            JoinCost {
+                strategy_work: 0,
+                page_io_work: 0,
+                materialization_work: 3,
+            }
+        );
+        assert_eq!(
+            JoinCost {
+                strategy_work: 10,
+                page_io_work: 20,
+                materialization_work: 30,
+            }
+            .total(),
+            60
+        );
+    }
+
+    #[test]
+    fn join_cost_components_saturate_at_usize_max() {
+        let input = JoinCostInput {
+            outer_page_reads: usize::MAX,
+            inner_page_reads: usize::MAX,
+            output_rows: usize::MAX,
+            output_columns: usize::MAX,
+            merge_sort_work: usize::MAX,
+        };
+        let expected = JoinCost {
+            strategy_work: usize::MAX,
+            page_io_work: usize::MAX,
+            materialization_work: usize::MAX,
+        };
+        assert_eq!(hash_cost(usize::MAX, usize::MAX, input), expected);
+        assert_eq!(
+            merge_cost(usize::MAX, usize::MAX, usize::MAX, input),
+            expected
+        );
+        assert_eq!(
+            index_nested_loop_cost(
+                usize::MAX,
+                JoinProbeCost {
+                    per_probe: usize::MAX,
+                    index_page_reads: usize::MAX,
+                    record_page_reads_per_probe: usize::MAX,
+                },
+                input,
+            ),
+            expected
+        );
+        assert_eq!(expected.total(), usize::MAX);
     }
 
     #[test]
