@@ -67,8 +67,10 @@ Versioned ICU4X Japanese, Chinese, and Korean collations are also available.
 
 ### Remaining work
 
-Build a full locale-specific expected-order corpus.
-Current sentinels cover selected CLDR rule sequences, while benchmark inputs check comparator laws and do not establish locale conformance.
+Expand locale-specific expected-order coverage beyond the current explicit-rule corpus.
+The fixtures now check every starred single-character relation in the CLDR 48 standard Japanese and Korean rules and the default Chinese Pinyin long rules, with independent reset sequences kept separate.
+They do not cover every collation rule form or arbitrary strings, so they are not a full locale-conformance suite.
+Benchmark inputs continue to check comparator laws; they do not establish locale conformance.
 
 See [DBF compatibility](dbf-compatibility.md), [query model](query-model.md), and the [research index](research.md) for the source and fixture boundaries.
 

@@ -91,6 +91,11 @@ The four benchmark input lists are pinned to [this ICU4X source snapshot](https:
 ICU4X documents these lists as benchmark inputs and describes shuffling them before measurement; they provide no expected locale sort order.
 The tests use the strings to check comparator laws, not to claim locale-conformance coverage.
 
+The expected-order corpora come from the [CLDR 48 Japanese](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ja.xml), [Chinese](https://github.com/unicode-org/cldr/blob/release-48/common/collation/zh.xml), and [Korean](https://github.com/unicode-org/cldr/blob/release-48/common/collation/ko.xml) rules.
+They cover every explicit starred single-character relation in the Japanese and Korean standard collations and the Chinese default Pinyin long rules; blank fixture lines keep independent reset sequences separate.
+[LDML collation rules](https://www.unicode.org/reports/tr35/tr35-collation.html) define the starred form as separate relations for the following single characters.
+This corpus does not cover every rule form or arbitrary strings and therefore does not establish full locale conformance.
+
 ### dBASE and Visual FoxPro
 
 - [dBASE Level 7 file format](https://www.dbase.com/Knowledgebase/INT/db7_file_fmt.htm)
