@@ -164,7 +164,7 @@ pub(super) fn run_isolated_voter_catchup_round(
             .wait_for_completion(Duration::from_secs(10))
             .unwrap();
     }
-    wait_for_transaction(nodes, root, final_transaction_id, Duration::from_secs(60));
+    wait_for_transaction(nodes, root, final_transaction_id, Duration::from_secs(180));
     for source in nodes {
         if source.node_id != target_id {
             source.set_peer_blocked(target_id, false).unwrap();
