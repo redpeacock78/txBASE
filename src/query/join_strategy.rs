@@ -25,20 +25,20 @@ pub(super) struct JoinCostInput {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct JoinCost {
     strategy_work: usize,
-    index_page_reads: usize,
-    record_page_reads: usize,
+    page_io_work: usize,
     materialization_work: usize,
 }
 
 impl JoinCost {
     fn total(self) -> usize {
         self.strategy_work
-            .saturating_add(self.index_page_reads)
-            .saturating_add(self.record_page_reads)
+            .saturating_add(self.page_io_work)
             .saturating_add(self.materialization_work)
     }
 }
 
+const SEQUENTIAL_PAGE_COST: usize = 1;
+const RANDOM_PAGE_COST: usize = 4;
 pub(super) const NESTED_LOOP_PAIR_LIMIT: usize = 64;
 
 pub(super) fn choose(left_count: usize, right_count: usize, index_available: bool) -> JoinStrategy {
@@ -117,10 +117,12 @@ fn choose_better(
 fn hash_cost(left_count: usize, right_count: usize, input: JoinCostInput) -> JoinCost {
     JoinCost {
         strategy_work: left_count.saturating_add(right_count.saturating_mul(2)),
-        index_page_reads: 0,
-        record_page_reads: input
-            .outer_page_reads
-            .saturating_add(input.inner_page_reads),
+        page_io_work: page_io_work(
+            input
+                .outer_page_reads
+                .saturating_add(input.inner_page_reads),
+            0,
+        ),
         materialization_work: materialization_work(input),
     }
 }
@@ -135,10 +137,13 @@ fn merge_cost(
         strategy_work: left_count
             .saturating_add(right_count)
             .saturating_add(input.merge_sort_work),
-        index_page_reads,
-        record_page_reads: input
-            .outer_page_reads
-            .saturating_add(input.inner_page_reads),
+        page_io_work: page_io_work(
+            input
+                .outer_page_reads
+                .saturating_add(input.inner_page_reads)
+                .saturating_add(index_page_reads),
+            0,
+        ),
         materialization_work: materialization_work(input),
     }
 }
@@ -150,12 +155,35 @@ fn index_nested_loop_cost(
 ) -> JoinCost {
     JoinCost {
         strategy_work: outer_count.saturating_mul(probe.per_probe),
-        index_page_reads: probe.index_page_reads,
-        record_page_reads: input
-            .outer_page_reads
-            .saturating_add(outer_count.saturating_mul(probe.record_page_reads_per_probe)),
+        page_io_work: page_io_work(
+            input
+                .outer_page_reads
+                .saturating_add(probe.index_page_reads),
+            estimated_cached_record_page_reads(
+                outer_count,
+                probe.record_page_reads_per_probe,
+                input.inner_page_reads,
+            ),
+        ),
         materialization_work: materialization_work(input),
     }
+}
+
+fn page_io_work(sequential_pages: usize, random_pages: usize) -> usize {
+    sequential_pages
+        .saturating_mul(SEQUENTIAL_PAGE_COST)
+        .saturating_add(random_pages.saturating_mul(RANDOM_PAGE_COST))
+}
+
+fn estimated_cached_record_page_reads(
+    outer_count: usize,
+    record_page_reads_per_probe: usize,
+    inner_page_capacity: usize,
+) -> usize {
+    // ponytail: cap reuse at the fully materialized inner table; page-level eviction needs a streaming executor.
+    outer_count
+        .saturating_mul(record_page_reads_per_probe)
+        .min(inner_page_capacity)
 }
 
 fn materialization_work(input: JoinCostInput) -> usize {
@@ -197,7 +225,8 @@ impl JoinProbeCost {
 mod tests {
     use super::{
         JoinCostInput, JoinProbeCost, JoinStrategy, NESTED_LOOP_PAIR_LIMIT, choose,
-        choose_with_costs, choose_with_probe_cost, ordered_merge_sort_work,
+        choose_with_costs, choose_with_probe_cost, estimated_cached_record_page_reads,
+        ordered_merge_sort_work, page_io_work,
     };
 
     #[test]
@@ -264,7 +293,7 @@ mod tests {
     #[test]
     fn accounts_for_probe_page_reads() {
         assert_eq!(
-            choose_with_probe_cost(
+            choose_with_costs(
                 8,
                 1_000,
                 Some(JoinProbeCost {
@@ -272,11 +301,16 @@ mod tests {
                     index_page_reads: 2,
                     record_page_reads_per_probe: 1,
                 }),
+                None,
+                JoinCostInput {
+                    inner_page_reads: 1_000,
+                    ..JoinCostInput::default()
+                },
             ),
             JoinStrategy::IndexNestedLoop
         );
         assert_eq!(
-            choose_with_probe_cost(
+            choose_with_costs(
                 100,
                 1_000,
                 Some(JoinProbeCost {
@@ -284,9 +318,27 @@ mod tests {
                     index_page_reads: 1_000,
                     record_page_reads_per_probe: 20,
                 }),
+                None,
+                JoinCostInput {
+                    inner_page_reads: 1_000,
+                    ..JoinCostInput::default()
+                },
             ),
             JoinStrategy::Hash
         );
+    }
+
+    #[test]
+    fn caps_probe_page_reads_at_the_materialized_inner_capacity() {
+        assert_eq!(estimated_cached_record_page_reads(10, 3, 5), 5);
+        assert_eq!(estimated_cached_record_page_reads(2, 3, 5), 5);
+        assert_eq!(estimated_cached_record_page_reads(2, 0, 5), 0);
+    }
+
+    #[test]
+    fn weights_random_pages_four_times_more_than_sequential_pages() {
+        assert_eq!(page_io_work(1, 0), 1);
+        assert_eq!(page_io_work(0, 1), 4);
     }
 
     #[test]

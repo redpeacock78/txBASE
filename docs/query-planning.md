@@ -203,12 +203,17 @@ Chained join stages propagate estimated cardinality, materialized row width, and
 
 Eligible chained non-`full` equality stages may also compare an ordered-merge path that sorts the materialized intermediate rows, consumes the loaded new-table rows through a fresh exact ordered index, and includes the bounded sort work in its estimate.
 
-The join model remains logical-page and in-memory-work based; filesystem latency, cache state, and page reuse remain outside the contract.
+The join planner uses deterministic relative page-I/O weights of 1 for sequential pages and 4 for random pages.
+The ratio follows PostgreSQL's documented default as a starting point; it is not a compatibility claim or runtime calibration.
+Hash and merge paths count table pages as sequential; merge also counts ordered-index pages.
+Index nested-loop paths count the outer table and loaded sidecar pages as sequential, then count inner record pages as random.
+The random-page estimate is capped at the inner relation's logical page count, which is the model's estimated cache capacity for reuse across probes.
+This bound does not model page distribution or eviction.
 
 PostgreSQL's [planner cost constants](https://www.postgresql.org/docs/18/runtime-config-query.html#RUNTIME-CONFIG-QUERY-CONSTANTS) treat sequential and random page costs as relative estimates and `effective_cache_size` as an assumption, not a measurement of the host cache.
 SQLite's [query-planning guide](https://www.sqlite.org/queryplanner.html) describes how adjacent index entries can reuse the same database page.
-These are design references for a future txBASE cost model, not txBASE contracts.
-The current executor loads DBF tables and materializes rows before choosing a join strategy, so it cannot observe live filesystem or cache behavior during that choice.
+These references inform txBASE's fixed relative weights and bounded reuse estimate; they do not imply PostgreSQL or SQLite planner compatibility.
+The current executor loads DBF tables and materializes rows before choosing a join strategy, so these costs are estimates rather than measurements of filesystem latency, host memory, or operating-system cache state.
 
 The roadmap keeps index design separate from query syntax so a query document does not imply an implementation strategy.
 
@@ -218,7 +223,7 @@ The following require separate public contracts:
 
 1. Full expression evaluation and more precise cost-based index choice with explicit missing, null, collation, and compound-range selectivity rules.
 2. Additional aggregation stages and accumulators beyond the current bounded aggregation contract, including extensions to `$group`, `$bucket`, and `$sortByCount`, and bounded-memory handling for their numeric expressions.
-3. Define sequential and random page-cost assumptions, estimated cache capacity, and page-reuse estimates for merge planning without presenting them as live host-cache measurements; keep broader join semantics separate.
+3. Define broader join semantics in a separate contract.
 4. Host-specific scheduling, backpressure, timeout, cancellation, and transport implementations for `AsyncQueryStream`.
 Until those contracts exist, the record scan remains the simpler reference execution model.
 
