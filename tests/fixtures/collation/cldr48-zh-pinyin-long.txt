@@ -1,13 +1,15 @@
 # CLDR 48 default Chinese Pinyin long starred single-character relations.
 # Source: https://github.com/unicode-org/cldr/blob/release-48/common/collation/zh.xml
 # This is the default Pinyin long block, not the alternate Pinyin short collation.
-# The blank boundary isolates the known U+319B1/阿 mismatch with ICU4X 2.1.1.
+# Blank boundaries isolate known CLDR 48 ordering mismatches with ICU4X 2.1.1.
 # Trailing comments identify readings; other groups follow the CLDR rule chain.
 # Copyright © 1991-2014 Unicode, Inc.; terms: https://www.unicode.org/copyright.html
 
 吖𱚱 # ā
 
-阿𥥩锕𠼞𨉚錒 # ā
+阿𥥩 # ā
+
+锕𠼞𨉚錒 # ā
 啊 # a
 𡉓哎哀唉𠳳埃娭挨㶼𡟓𢰇溾𤸖銰锿噯鎄 # āi
 𰛥𠊎𮲔𫘤啀捱皑凒溰䠹嘊敱敳㱯𬺃𤸳皚𦩴癌𧪚騃𩪂𩮖䶣 # ái

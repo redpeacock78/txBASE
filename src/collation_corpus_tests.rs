@@ -62,6 +62,8 @@ fn assert_expected_order(name: &str, collation: Collation, input: &str) -> (usiz
     let mut count = 0;
     let mut sequences = 0;
     let mut in_sequence = false;
+    let mut mismatch_count = 0;
+    let mut mismatch_examples = Vec::new();
 
     for line in input.lines() {
         let sequence = line.split('#').next().unwrap_or("").trim();
@@ -81,13 +83,14 @@ fn assert_expected_order(name: &str, collation: Collation, input: &str) -> (usiz
             }
             let current = &sequence[start..start + character.len_utf8()];
             if let Some(previous) = previous {
-                assert_eq!(
-                    collation.compare(previous, current),
-                    Ordering::Less,
-                    "{name}: {:?} must sort before {:?}",
-                    previous,
-                    current
-                );
+                let actual = collation.compare(previous, current);
+                if actual != Ordering::Less {
+                    mismatch_count += 1;
+                    if mismatch_examples.len() < 20 {
+                        mismatch_examples
+                            .push(format!("{previous:?} before {current:?}: {actual:?}"));
+                    }
+                }
             }
             previous = Some(current);
             count += 1;
@@ -95,6 +98,13 @@ fn assert_expected_order(name: &str, collation: Collation, input: &str) -> (usiz
     }
 
     assert!(count > 1, "{name}: expected-order fixture is too small");
+    assert_eq!(
+        mismatch_count,
+        0,
+        "{name}: {mismatch_count} ordering mismatch(es); first {}: {}",
+        mismatch_examples.len(),
+        mismatch_examples.join("; ")
+    );
     (count, sequences)
 }
 
@@ -162,7 +172,7 @@ fn cjk_locale_collators_follow_cldr_48_starred_ordered_relations() {
             "Chinese",
             Collation::Icu4x211Zh,
             include_str!("../tests/fixtures/collation/cldr48-zh-pinyin-long.txt"),
-            (44_470, 2),
+            (44_470, 3),
         ),
         (
             "Korean",
@@ -180,11 +190,12 @@ fn cjk_locale_collators_follow_cldr_48_starred_ordered_relations() {
 }
 
 #[test]
-fn icu4x_211_chinese_collation_records_cldr48_pinyin_divergence() {
-    let actual = Collation::Icu4x211Zh.compare("𱚱", "阿");
-    assert_eq!(
-        actual,
-        Ordering::Greater,
-        "CLDR 48 orders U+319B1 before 阿, but ICU4X 2.1.1 orders it after"
-    );
+fn icu4x_211_chinese_collation_records_cldr48_pinyin_divergences() {
+    for (before, after) in [("𱚱", "阿"), ("𥥩", "锕")] {
+        assert_eq!(
+            Collation::Icu4x211Zh.compare(before, after),
+            Ordering::Greater,
+            "CLDR 48 orders {before:?} before {after:?}, but ICU4X 2.1.1 reverses the relation"
+        );
+    }
 }
