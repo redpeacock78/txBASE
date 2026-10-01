@@ -1,5 +1,6 @@
 use super::{
     ArrayExpression, BooleanExpression, ExpressionReference, NumericExpression, ScalarExpression,
+    string::StringExpression,
 };
 use std::collections::BTreeMap;
 
@@ -38,6 +39,9 @@ fn scalar_uses_only_group_key_fields(
         ScalarExpression::ToLower(expression) | ScalarExpression::ToUpper(expression) => {
             scalar_uses_only_group_key_fields(expression, variables)
         }
+        ScalarExpression::String(expression) => {
+            string_uses_only_group_key_fields(expression, variables)
+        }
         ScalarExpression::ArrayOperation(expression) => {
             array_uses_only_group_key_fields(expression, variables)
         }
@@ -54,6 +58,39 @@ fn scalar_uses_only_group_key_fields(
             bindings_are_valid
                 && scalar_uses_only_group_key_fields(in_expression, &scoped_variables)
         }
+    }
+}
+
+fn string_uses_only_group_key_fields(
+    expression: &StringExpression,
+    variables: &BTreeMap<String, bool>,
+) -> bool {
+    let valid = |expression| scalar_uses_only_group_key_fields(expression, variables);
+    match expression {
+        StringExpression::Length(input) => valid(input),
+        StringExpression::Substring {
+            input,
+            start,
+            count,
+        } => valid(input) && valid(start) && valid(count),
+        StringExpression::Split { input, delimiter } => valid(input) && valid(delimiter),
+        StringExpression::IndexOf {
+            input,
+            search,
+            start,
+            end,
+        } => {
+            valid(input)
+                && valid(search)
+                && start.as_ref().is_none_or(&valid)
+                && end.as_ref().is_none_or(&valid)
+        }
+        StringExpression::Replace {
+            input,
+            find,
+            replacement,
+            ..
+        } => valid(input) && valid(find) && valid(replacement),
     }
 }
 

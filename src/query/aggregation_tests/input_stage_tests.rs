@@ -351,7 +351,17 @@ fn sets_string_scalar_expressions_before_matching_and_grouping() {
                     {"$toUpper": "$FIRST"},
                     " ",
                     {"$ifNull": ["$LAST", {"$literal": "UNKNOWN"}]}
-                ]}
+                ]},
+                "FIRST_LENGTH": {"$strLenCP": "$FIRST"},
+                "FIRST_PREFIX": {"$substrCP": ["$FIRST", 0, 2]},
+                "FIRST_PARTS": {"$split": ["$FIRST", "i"]},
+                "FIRST_INDEX": {"$indexOfCP": ["$FIRST", "i"]},
+                "FIRST_ONCE": {"$replaceOne": {
+                    "input": "$FIRST", "find": "i", "replacement": "!"
+                }},
+                "FIRST_ALL": {"$replaceAll": {
+                    "input": "$FIRST", "find": "i", "replacement": "!"
+                }}
             }
         })
         .as_object()
@@ -359,7 +369,13 @@ fn sets_string_scalar_expressions_before_matching_and_grouping() {
         .clone(),
         json!({"$group": {
             "_id": null,
-            "display": {"$push": "$DISPLAY"}
+            "display": {"$push": "$DISPLAY"},
+            "length": {"$push": "$FIRST_LENGTH"},
+            "prefix": {"$push": "$FIRST_PREFIX"},
+            "parts": {"$push": "$FIRST_PARTS"},
+            "index": {"$push": "$FIRST_INDEX"},
+            "once": {"$push": "$FIRST_ONCE"},
+            "all": {"$push": "$FIRST_ALL"}
         }})
         .as_object()
         .unwrap()
@@ -368,7 +384,16 @@ fn sets_string_scalar_expressions_before_matching_and_grouping() {
 
     assert_eq!(
         crate::query::aggregation::execute(&records, &stages).unwrap(),
-        vec![json!({"_id": null, "display": ["ALICE Smith", "BOB UNKNOWN"]})]
+        vec![json!({
+            "_id": null,
+            "display": ["ALICE Smith", "BOB UNKNOWN"],
+            "length": [5, 3],
+            "prefix": ["Al", "Bo"],
+            "parts": [["Al", "ce"], ["Bob"]],
+            "index": [2, -1],
+            "once": ["Al!ce", "Bob"],
+            "all": ["Al!ce", "Bob"]
+        })]
     );
 }
 

@@ -36,9 +36,40 @@ The shared scalar evaluator supports:
 - `$ifNull` with exactly two operands.
 - `$cond` as either a three-element array or an object with exactly `if`, `then`, and `else`.
 - `$concat` with at least two string expressions, and unary `$toLower` and `$toUpper`.
+- Unicode code-point operators `$strLenCP`, `$substrCP`, and `$indexOfCP`.
+- String splitting with `$split`, and literal replacement with `$replaceOne` and `$replaceAll`.
 - Unary numeric `$abs`, `$ceil`, and `$floor`.
 - Binary numeric `$add`, `$subtract`, `$multiply`, `$divide`, and `$mod`.
 - `$let`, `$map`, `$filter`, and `$reduce`, defined below.
+
+### String operator behavior
+
+`$strLenCP` counts Unicode code points and errors when its input is missing, `null`, or not a string.
+
+`$substrCP` accepts `[input, start, count]` and uses zero-based code-point offsets.
+It returns an empty string for a missing or `null` input; otherwise, `start` and `count` must resolve to non-negative integers representable as `u64`.
+Integer-valued JSON numbers such as `2.0` are accepted.
+
+`$split` requires string input and delimiter expressions.
+txBASE rejects an empty delimiter; leading, repeated, and trailing delimiters produce empty array elements.
+If the delimiter does not occur, the result contains the input as its only element.
+Regular-expression delimiters are unsupported, and the materialized result uses the 1 MiB array limit below.
+
+`$indexOfCP` accepts `[input, search, start?, end?]` and returns a zero-based code-point index.
+The search range includes `start` and excludes `end`.
+`start` and `end` must be non-negative integers representable as `u64`; a missing or `null` input returns `null`, while a missing or non-string search value is an error.
+It returns `-1` under any of these conditions:
+
+- No match exists.
+- `start` exceeds the input length.
+- `start` is greater than `end`.
+
+An `end` beyond the input is clamped to its length.
+
+`$replaceOne` and `$replaceAll` require an object with exactly `input`, `find`, and `replacement` string expressions.
+If any operand is missing or `null`, the result is `null`; other non-string values are errors.
+Matching is literal and case-sensitive, does not normalize Unicode, and replaces the first or all non-overlapping matches, respectively.
+txBASE rejects an empty `find` value, and regular-expression patterns are unsupported.
 
 Numeric operators accept numeric literals, field or variable references, and nested numeric expressions.
 Integer results remain JSON integers when representable; other results must be finite JSON numbers.
@@ -139,6 +170,17 @@ The JSON model, missing-value rules, and type ordering differ from MongoDB; the 
 - [MongoDB `$concat` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/concat/)
 - [MongoDB `$toLower` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/tolower/)
 - [MongoDB `$toUpper` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/toupper/)
+- [MongoDB `$strLenCP` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/strlencp/)
+- [MongoDB `$substrCP` expression](https://www.mongodb.com/docs/v8.3/reference/operator/aggregation/substrcp/)
+- [MongoDB `$split` expression](https://www.mongodb.com/docs/v8.2/reference/operator/aggregation/split/)
+- [MongoDB `$indexOfCP` expression](https://www.mongodb.com/docs/v8.3/reference/operator/aggregation/indexofcp/)
+- [MongoDB `$replaceOne` expression](https://www.mongodb.com/docs/v7.0/reference/operator/aggregation/replaceone/)
+- [MongoDB `$replaceAll` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/replaceall/)
 - [MongoDB `$abs` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/abs/)
 - [MongoDB `$ceil` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ceil/)
 - [MongoDB `$floor` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/floor/)
+- [MongoDB `$add` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/add/)
+- [MongoDB `$subtract` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/subtract/)
+- [MongoDB `$multiply` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/multiply/)
+- [MongoDB `$divide` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/divide/)
+- [MongoDB `$mod` expression](https://www.mongodb.com/docs/manual/reference/operator/aggregation/mod/)

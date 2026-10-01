@@ -224,6 +224,19 @@ fn group_key_provenance_tracks_scoped_array_and_let_variables() {
             "as": "part",
             "cond": {"$gt": ["$$IDX", 0]}
         }}),
+        json!({"$let": {
+            "vars": {"name": "$_id.name"},
+            "in": {"$strLenCP": "$$name"}
+        }}),
+        json!({"$substrCP": ["$_id.name", 0, 2]}),
+        json!({"$split": ["$_id.name", "/"]}),
+        json!({"$indexOfCP": ["$_id.name", "x", 0, 2]}),
+        json!({"$replaceOne": {
+            "input": "$_id.name", "find": "x", "replacement": "y"
+        }}),
+        json!({"$replaceAll": {
+            "input": "$_id.name", "find": "x", "replacement": "y"
+        }}),
     ] {
         let expression = parse_scalar_operand(&expression, "test.expression").unwrap();
         assert!(uses_only_group_key_fields(&expression));
@@ -233,6 +246,15 @@ fn group_key_provenance_tracks_scoped_array_and_let_variables() {
         json!({"$let": {"vars": {"key": "$$ROOT._id"}, "in": "$$key"}}),
         json!({"$map": {"input": "$OTHER.parts", "as": "part", "in": "$$part"}}),
         json!({"$map": {"input": "$_id.parts", "in": "$$ROOT._id"}}),
+        json!({"$strLenCP": "$OTHER.name"}),
+        json!({"$substrCP": ["$_id.name", "$OTHER.start", 2]}),
+        json!({"$split": ["$_id.name", "$OTHER.delimiter"]}),
+        json!({"$indexOfCP": ["$_id.name", "$OTHER.search", 0, 2]}),
+        json!({"$indexOfCP": ["$_id.name", "x", "$OTHER.start", 2]}),
+        json!({"$indexOfCP": ["$_id.name", "x", 0, "$OTHER.end"]}),
+        json!({"$replaceAll": {
+            "input": "$_id.name", "find": "x", "replacement": "$OTHER.text"
+        }}),
     ] {
         let expression = parse_scalar_operand(&expression, "test.expression").unwrap();
         assert!(!uses_only_group_key_fields(&expression));

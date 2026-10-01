@@ -6,6 +6,7 @@ mod boolean;
 mod numeric;
 mod provenance;
 mod scope;
+mod string;
 
 use array::ArrayExpression;
 use boolean::{BooleanExpression, evaluate_boolean, parse_boolean_expression};
@@ -13,6 +14,7 @@ use numeric::evaluate_numeric_in_context;
 pub(super) use numeric::{NumericExpression, evaluate_numeric, parse_numeric_operand};
 pub(super) use provenance::uses_only_group_key_fields;
 use scope::{EvaluationContext, VariableReference, parse_reference, validate_variable_name};
+use string::StringExpression;
 
 const MAX_STRING_EXPRESSION_BYTES: usize = crate::MAX_JSON_INPUT_BYTES;
 
@@ -31,6 +33,7 @@ pub enum ScalarExpression {
     Concat(Vec<ScalarExpression>),
     ToLower(Box<ScalarExpression>),
     ToUpper(Box<ScalarExpression>),
+    String(Box<StringExpression>),
     ArrayOperation(Box<ArrayExpression>),
     Let {
         bindings: Vec<(String, ScalarExpression)>,
@@ -139,6 +142,9 @@ pub(super) fn parse_scalar_operand(
                 Ok(ScalarExpression::ToUpper(Box::new(operand)))
             }
         }
+        "$strLenCP" | "$substrCP" | "$split" | "$indexOfCP" | "$replaceOne" | "$replaceAll" => Ok(
+            ScalarExpression::String(Box::new(string::parse(operator, value, path)?)),
+        ),
         "$abs" | "$ceil" | "$floor" | "$add" | "$subtract" | "$multiply" | "$divide" | "$mod" => {
             Ok(ScalarExpression::Numeric(parse_numeric_operand(
                 operand, path,
@@ -149,7 +155,7 @@ pub(super) fn parse_scalar_operand(
         ))),
         "$let" => parse_let(value, path),
         _ => Err(QueryError::Invalid(format!(
-            "{path} supports only $literal, $ifNull, $cond, $concat, $toLower, $toUpper, bounded numeric operators, $map, $filter, $reduce, and $let"
+            "{path} supports only $literal, $ifNull, $cond, string and bounded numeric operators, $map, $filter, $reduce, and $let"
         ))),
     }
 }
@@ -320,6 +326,7 @@ fn evaluate_scalar_in_context(
         ScalarExpression::ToUpper(expression) => {
             evaluate_case_expression(context, expression, path, true)
         }
+        ScalarExpression::String(expression) => string::evaluate(context, expression, path),
         ScalarExpression::ArrayOperation(expression) => array::evaluate(context, expression, path),
         ScalarExpression::Let {
             bindings,

@@ -36,9 +36,41 @@
 - オペランドを2つ持つ`$ifNull`。
 - 3要素の配列形式、または`if`、`then`、`else`を持つオブジェクト形式の`$cond`。
 - 2つ以上の文字列式を受け取る`$concat`、単項演算子の`$toLower`と`$toUpper`。
+- Unicodeコードポイントを扱う`$strLenCP`、`$substrCP`、`$indexOfCP`。
+- 文字列分割の`$split`と、文字列置換の`$replaceOne`、`$replaceAll`。
 - 単項の数値演算子`$abs`、`$ceil`、`$floor`。
 - 二項の数値演算子`$add`、`$subtract`、`$multiply`、`$divide`、`$mod`。
 - 後述する`$let`、`$map`、`$filter`、`$reduce`。
+
+### 文字列演算子の動作
+
+`$strLenCP`はUnicodeコードポイント数を返します。
+入力が欠損、`null`、または文字列以外ならエラーです。
+
+`$substrCP`は`[input, start, count]`を受け取り、0始まりのコードポイント位置で部分文字列を切り出します。
+入力が欠損または`null`なら空文字列を返します。それ以外では、`start`と`count`に`u64`で表現できる0以上の整数を指定します。
+`2.0`のような整数値のJSON数値も受け付けます。
+
+`$split`の入力式と区切り文字式は、どちらも文字列でなければなりません。
+txBASEは空の区切り文字を拒否します。先頭、連続、末尾にある区切り文字は、空の配列要素として結果に残ります。
+区切り文字が入力にない場合は、入力全体を1要素にした配列を返します。
+正規表現の区切り文字は未対応です。結果の配列には、後述する1 MiBの上限を適用します。
+
+`$indexOfCP`は`[input, search, start?, end?]`を受け取り、0始まりのコードポイント位置を返します。
+検索範囲は`start`を含み、`end`を含みません。
+`start`と`end`は`u64`で表現できる0以上の整数でなければなりません。入力が欠損または`null`なら`null`を返し、検索文字列が欠損、`null`、文字列以外ならエラーです。
+`$indexOfCP`は次の場合に`-1`を返します。
+
+- 一致する部分文字列がない。
+- `start`が入力長を超える。
+- `start`が`end`より大きい。
+
+入力長を超える`end`は入力長に切り詰めます。
+
+`$replaceOne`と`$replaceAll`は、`input`、`find`、`replacement`だけを持つオブジェクトを受け取ります。
+いずれかのオペランドが欠損または`null`なら`null`を返します。それ以外の文字列以外の値はエラーです。
+置換は文字列を完全一致かつ大文字と小文字を区別して照合します。Unicode正規化は行わず、最初の一致または重ならないすべての一致を置換します。
+txBASEは空の`find`を拒否します。正規表現は未対応です。
 
 数値演算子は、数値リテラル、フィールド参照、変数参照、ネストした数値式を受け付けます。
 表現可能な整数の結果はJSON整数のまま返します。それ以外の結果は有限なJSON数値でなければなりません。
@@ -140,6 +172,17 @@ JSONモデル、欠損値の規則、型順序はMongoDBと異なります。下
 - [MongoDBの`$concat`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/concat/)
 - [MongoDBの`$toLower`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/tolower/)
 - [MongoDBの`$toUpper`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/toupper/)
+- [MongoDBの`$strLenCP`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/strlencp/)
+- [MongoDBの`$substrCP`式](https://www.mongodb.com/docs/v8.3/reference/operator/aggregation/substrcp/)
+- [MongoDBの`$split`式](https://www.mongodb.com/docs/v8.2/reference/operator/aggregation/split/)
+- [MongoDBの`$indexOfCP`式](https://www.mongodb.com/docs/v8.3/reference/operator/aggregation/indexofcp/)
+- [MongoDBの`$replaceOne`式](https://www.mongodb.com/docs/v7.0/reference/operator/aggregation/replaceone/)
+- [MongoDBの`$replaceAll`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/replaceall/)
 - [MongoDBの`$abs`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/abs/)
 - [MongoDBの`$ceil`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/ceil/)
 - [MongoDBの`$floor`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/floor/)
+- [MongoDBの`$add`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/add/)
+- [MongoDBの`$subtract`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/subtract/)
+- [MongoDBの`$multiply`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/multiply/)
+- [MongoDBの`$divide`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/divide/)
+- [MongoDBの`$mod`式](https://www.mongodb.com/docs/manual/reference/operator/aggregation/mod/)

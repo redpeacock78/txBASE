@@ -48,7 +48,7 @@ The query model, aggregation stages, join planner, and stream adapters are docum
 
 ### Implemented boundary
 
-The repository supports bounded JSON predicates and shared boolean/scalar expressions, including lexical variables and `$map`, `$filter`, and `$reduce`; it also supports `$exists`, ordered aggregation pipelines, local equality joins, explain output, table-local indexes, and pull-based or backpressured query streams.
+The repository supports bounded JSON predicates and shared boolean/scalar expressions, including Unicode code-point string operations, lexical variables, and `$map`, `$filter`, and `$reduce`; it also supports `$exists`, ordered aggregation pipelines, local equality joins, explain output, table-local indexes, and pull-based or backpressured query streams.
 Those contracts do not imply MongoDB compatibility.
 The merge planner derives DBF data-page access from ordered record numbers and models each distinct page once per merge; it does not observe operating-system cache residency or filesystem latency.
 
@@ -57,7 +57,7 @@ The merge planner derives DBF data-page access from ordered record numbers and m
 1. Add aggregation stages and accumulator expressions beyond the current bounded contracts.
 2. Extend boolean and scalar expression support beyond the operator set documented in [the expression model](expressions.md).
 3. Calibrate merge costs for bounded cache capacity and runtime filesystem I/O beyond the deterministic distinct-page estimate.
-4. Define null and missing behavior for each additional operator family before implementation.
+4. Define null and missing behavior for each future operator family before implementation.
 
 See [query model](query-model.md), [expression model](expressions.md), [aggregation](aggregation.md), [aggregation accumulators](aggregation-accumulators.md), [joins](joins.md), [query planning](query-planning.md), and [asynchronous query streaming](async-streaming.md).
 

@@ -149,7 +149,9 @@ fn compares_string_scalar_expression_results() {
                     {"$toLower": "$LAST"}
                 ]},
                 "$LOWER_DISPLAY"
-            ]}
+            ]},
+            {"$eq": [{"$strLenCP": "$FIRST"}, 5]},
+            {"$eq": [{"$substrCP": ["$FIRST", 1, 2]}, "li"]}
         ]}
     });
 
