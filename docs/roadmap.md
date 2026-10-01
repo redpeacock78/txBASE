@@ -67,8 +67,9 @@ Versioned ICU4X Japanese, Chinese, and Korean collations are also available.
 
 ### Remaining work
 
-Expand locale-specific expected-order coverage beyond the current explicit-rule corpus.
-The fixtures now check every starred single-character relation in the CLDR 48 standard Japanese and Korean rules and the default Chinese Pinyin long rules, with independent reset sequences kept separate.
+Resolve the known CLDR 48 and ICU4X 2.1.1 mismatch, then expand locale-specific expected-order coverage beyond starred single-character rules.
+CLDR 48 orders U+319B1 (𱚱) before 阿, while the pinned ICU4X 2.1.1 collator returns the reverse; a dedicated test records this mismatch instead of treating that relation as conformant.
+The fixtures cover starred single-character sequences in the Japanese and Korean standard rules and Chinese default Pinyin long rules, while preserving reset boundaries and isolating the mismatch.
 They do not cover every collation rule form or arbitrary strings, so they are not a full locale-conformance suite.
 Benchmark inputs continue to check comparator laws; they do not establish locale conformance.
 

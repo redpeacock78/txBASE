@@ -162,7 +162,7 @@ fn cjk_locale_collators_follow_cldr_48_starred_ordered_relations() {
             "Chinese",
             Collation::Icu4x211Zh,
             include_str!("../tests/fixtures/collation/cldr48-zh-pinyin-long.txt"),
-            (44_470, 1),
+            (44_470, 2),
         ),
         (
             "Korean",
@@ -177,4 +177,14 @@ fn cjk_locale_collators_follow_cldr_48_starred_ordered_relations() {
             "{name}: unexpected CLDR 48 corpus size or reset boundaries"
         );
     }
+}
+
+#[test]
+fn icu4x_211_chinese_collation_records_cldr48_pinyin_divergence() {
+    let actual = Collation::Icu4x211Zh.compare("𱚱", "阿");
+    assert_eq!(
+        actual,
+        Ordering::Greater,
+        "CLDR 48 orders U+319B1 before 阿, but ICU4X 2.1.1 orders it after"
+    );
 }
