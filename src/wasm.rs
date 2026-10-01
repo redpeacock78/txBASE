@@ -250,6 +250,22 @@ mod tests {
     }
 
     #[test]
+    fn wasm_core_applies_typed_operation_ir() {
+        let mut core = WasmCore::open_dbf(&fixture()).unwrap();
+        let operation = serde_json::from_value::<crate::xbase::OperationIr>(json!({
+            "method": "PATCH",
+            "path": "/records/1",
+            "body": {"NAME": "rust"}
+        }))
+        .unwrap();
+
+        core.apply_operation(operation).unwrap();
+
+        let rows: Vec<Value> = serde_json::from_slice(&core.query_json(b"{}").unwrap()).unwrap();
+        assert_eq!(rows[0]["NAME"], "rust");
+    }
+
+    #[test]
     fn wasm_core_query_stream_keeps_a_snapshot_and_emits_one_json_record() {
         let mut core = WasmCore::open_dbf(&fixture()).unwrap();
         let query = serde_json::to_vec(&json!({"projection": {"NAME": 1}})).unwrap();

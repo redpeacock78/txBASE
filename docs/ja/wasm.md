@@ -20,6 +20,8 @@
 - `WasmQueryStream.next_json()`は、呼び出すたびにJSON化した行を文字列で返し、ストリームの終端ではJavaScriptの`null`を返す。
 - `WasmQueryStream.cancel()`を呼び出すと、その後の`next_json()`はキャンセルエラーを同期的に投げる。
 - `apply_operation_json`は`POST`、`PUT`、`PATCH`、`DELETE`のいずれかの操作を適用する。
+- `WasmCore::apply_operation`はRustから使う型付きメソッドであり、`OperationIr`を1件適用する。
+  生成する`WasmDatabase`ラッパーはこのメソッドを公開せず、JSON形式のメソッドを公開する。
 - `apply_operations_json`は空のバッチを拒否し、`{"operations":[...]}`バッチを非公開コピーへ適用して、全操作が成功した場合だけスナップショットを返す。
 
 公開JSONメソッドは、デシリアライズ前に共有上限の1 MiBを超える`MAX_JSON_INPUT_BYTES`入力を拒否します。

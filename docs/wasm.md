@@ -19,6 +19,7 @@ The boundary uses `ABI_VERSION = 1`.
 - Each `WasmQueryStream.next_json()` call returns one JSON-encoded row string or JavaScript `null` at end-of-stream.
 - After `WasmQueryStream.cancel()`, the next `next_json()` call throws a cancellation error synchronously.
 - `apply_operation_json` applies one `POST`, `PUT`, `PATCH`, or `DELETE` operation.
+- `WasmCore::apply_operation` is a Rust-only typed method that applies one `OperationIr`; the generated `WasmDatabase` wrapper exposes the JSON method instead.
 - `apply_operations_json` rejects an empty batch, applies an `{"operations":[...]}` batch to a private copy, and returns a snapshot only after every operation succeeds.
 
 Public JSON methods reject inputs above the shared 1 MiB `MAX_JSON_INPUT_BYTES` limit before deserialization.
