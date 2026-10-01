@@ -136,6 +136,8 @@ Descriptor order is also payload order. Extension payloads begin immediately aft
 
 The reader validates descriptor ordering, section bounds, checksums, and configured size limits before decoding the table. The extension directory and each payload are subject to `max_section_size`; the complete file is subject to `max_file_size`. It rejects zero or duplicate section types, unsupported flag bits, required section types it does not recognize, arithmetic overflow, gaps, overlaps, and out-of-file ranges. The current codec defines no extension section types, so every extension it reads must be marked optional.
 
+For valid limits, a size or count equal to its configured maximum is accepted; values above the maximum are rejected.
+
 Unknown optional sections are checksum-validated and then skipped. They must not change the meaning of v1 core sections, whose semantics remain unchanged across minor versions. `XbfTable` has no extension field, so re-encoding a decoded table drops skipped sections.
 
 The reader rejects an unknown major version and never silently downgrades an unknown version. A higher minor number alone does not establish layout compatibility. The explicit version and unknown-extension rules follow the design guidance in informational [RFC 6709 §4.1](https://www.rfc-editor.org/rfc/rfc6709.html#section-4.1) and [§4.7](https://www.rfc-editor.org/rfc/rfc6709.html#section-4.7).

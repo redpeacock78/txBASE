@@ -245,6 +245,58 @@ fn enforces_explicit_size_limits_for_encoding_and_decoding() {
 }
 
 #[test]
+fn accepts_xbf_data_at_exact_configured_limits() {
+    let table = fixture();
+    let bytes = encode(&table).unwrap();
+    let directory_offset = usize::try_from(get_u64(&bytes, 36)).unwrap();
+    let directory_length = usize::try_from(get_u64(&bytes, 44)).unwrap();
+    let entry_size = directory_length / table.records.len();
+    let mut max_record_size = 0;
+    let mut max_value_size = 0;
+
+    for index in 0..table.records.len() {
+        let entry_offset = directory_offset + index * entry_size;
+        let record_offset = usize::try_from(get_u64(&bytes, entry_offset)).unwrap();
+        let record_size = usize::try_from(get_u64(&bytes, entry_offset + 8)).unwrap();
+        let record_end = record_offset + record_size;
+        max_record_size = max_record_size.max(record_size);
+
+        let mut cursor = record_offset;
+        while cursor < record_end {
+            cursor += 1;
+            let value_size =
+                u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
+            cursor += 4;
+            max_value_size = max_value_size.max(value_size);
+            cursor += value_size;
+        }
+        assert_eq!(cursor, record_end);
+    }
+
+    let limits = XbfLimits {
+        max_file_size: bytes.len(),
+        max_section_size: [24, 44, 64]
+            .into_iter()
+            .map(|offset| usize::try_from(get_u64(&bytes, offset)).unwrap())
+            .max()
+            .unwrap(),
+        max_record_size,
+        max_value_size,
+        max_field_name: table
+            .fields
+            .iter()
+            .map(|field| field.name.len())
+            .max()
+            .unwrap(),
+        max_fields: table.fields.len(),
+        max_records: table.records.len(),
+    };
+
+    assert_eq!(decode_with_limits(&bytes, &limits).unwrap(), table);
+    assert_eq!(encode_with_limits(&table, &limits).unwrap(), bytes);
+}
+
+#[test]
 fn rejects_file_and_section_limits_while_building_record_data() {
     let mut table = fixture();
     table.records = vec![table.records[0].clone(); 64];
