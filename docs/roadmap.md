@@ -39,7 +39,7 @@ It established local storage and recovery boundaries before edge or distributed 
 - Indexes are table-local; the catalog does not define a cross-table index registry or persistent join-result index.
 - Single-table and catalog transactions, MVCC snapshots, sidecar-aware maintenance, verification, backup, restore, and read-only WAL inspection have documented contracts.
 
-See [DBF compatibility](dbf-compatibility.md), [catalog](catalog.md), [indexes](indexes.md), [transactions](transactions.md), [MVCC](mvcc.md), and the [CLI reference](cli.md).
+See [DBF compatibility](dbf-compatibility.md), [catalog](catalog.md), [indexes](indexes.md), [transactions](transactions.md), [MVCC](mvcc.md), [CLI command architecture](cli-design.md), and the [CLI reference](cli.md).
 
 ## 4. Phase 2: expand the query model
 

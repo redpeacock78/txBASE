@@ -39,7 +39,7 @@ HTTP、JSON、MCP、WASMは、これらの形式にアクセスするための�
 - テーブル単位の索引。テーブル横断の索引レジストリと結合結果の永続索引は対象外。
 - 単一テーブルとカタログのトランザクション、MVCCスナップショット、サイドカーを考慮する保守処理、検証、バックアップ、復元、読み取り専用のWAL検査。それぞれを個別の契約で定義。
 
-[DBF互換性](dbf-compatibility.md)、[カタログ](catalog.md)、[索引](indexes.md)、[トランザクション](transactions.md)、[MVCC](mvcc.md)、[CLIリファレンス](cli.md)を参照してください。
+[DBF互換性](dbf-compatibility.md)、[カタログ](catalog.md)、[索引](indexes.md)、[トランザクション](transactions.md)、[MVCC](mvcc.md)、[CLIコマンド体系の設計](cli-design.md)、[CLIリファレンス](cli.md)を参照してください。
 
 ## 4. フェーズ2：クエリモデルを拡張する
 

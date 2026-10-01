@@ -72,9 +72,10 @@ The [quality matrix](quality-matrix.md) lists the assertions and their test name
 ## 5. Unsupported host guarantees
 
 The repository does not claim production Worker deployment or live R2 service validation.
+Deterministic Worker fixtures cover query cancellation through `AbortSignal`, including cancellation of an in-flight snapshot `Fetch`; they do not establish deployed-host behavior.
 
 Provider-backed WASI storage remains unimplemented.
-Host-side scheduling, cancellation, lifecycle, and production-runtime guarantees remain unverified.
+WASI host scheduling, host-I/O cancellation, and lifecycle guarantees remain unverified.
 
 Browser storage, Node.js WASI, Deno, and Bun are not compatibility commitments.
 
