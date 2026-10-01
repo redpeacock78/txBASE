@@ -205,6 +205,11 @@ Eligible chained non-`full` equality stages may also compare an ordered-merge pa
 
 The join model remains logical-page and in-memory-work based; filesystem latency, cache state, and page reuse remain outside the contract.
 
+PostgreSQL's [planner cost constants](https://www.postgresql.org/docs/18/runtime-config-query.html#RUNTIME-CONFIG-QUERY-CONSTANTS) treat sequential and random page costs as relative estimates and `effective_cache_size` as an assumption, not a measurement of the host cache.
+SQLite's [query-planning guide](https://www.sqlite.org/queryplanner.html) describes how adjacent index entries can reuse the same database page.
+These are design references for a future txBASE cost model, not txBASE contracts.
+The current executor loads DBF tables and materializes rows before choosing a join strategy, so it cannot observe live filesystem or cache behavior during that choice.
+
 The roadmap keeps index design separate from query syntax so a query document does not imply an implementation strategy.
 
 ## 3. Future query work
@@ -213,7 +218,7 @@ The following require separate public contracts:
 
 1. Full expression evaluation and more precise cost-based index choice with explicit missing, null, collation, and compound-range selectivity rules.
 2. Additional aggregation stages and accumulators beyond the current bounded aggregation contract, including extensions to `$group`, `$bucket`, and `$sortByCount`, and bounded-memory handling for their numeric expressions.
-3. Filesystem- and cache-aware merge planning and broader join semantics.
+3. Define sequential and random page-cost assumptions, estimated cache capacity, and page-reuse estimates for merge planning without presenting them as live host-cache measurements; keep broader join semantics separate.
 4. Host-specific scheduling, backpressure, timeout, cancellation, and transport implementations for `AsyncQueryStream`.
 Until those contracts exist, the record scan remains the simpler reference execution model.
 
@@ -234,4 +239,6 @@ Until those contracts exist, the record scan remains the simpler reference execu
 - [MongoDB `$gt` type bracketing](https://www.mongodb.com/docs/manual/reference/operator/query/gt/)
 - [MongoDB compound-index sort order](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
 - [MongoDB equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
+- [PostgreSQL 18 planner cost constants](https://www.postgresql.org/docs/18/runtime-config-query.html#RUNTIME-CONFIG-QUERY-CONSTANTS)
+- [PostgreSQL 18 `EXPLAIN`](https://www.postgresql.org/docs/18/using-explain.html)
 - [SQLite query planning](https://www.sqlite.org/queryplanner.html)

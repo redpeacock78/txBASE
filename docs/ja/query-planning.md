@@ -214,6 +214,11 @@ txBASEは現在、アクティブレコード数、等値用の一様な異な�
 
 結合モデルは論理ページとメモリ内作業に基づくため、ファイルシステムのレイテンシー、キャッシュ状態、ページ再利用は契約外です。
 
+PostgreSQLの[プランナーコスト定数](https://www.postgresql.org/docs/18/runtime-config-query.html#RUNTIME-CONFIG-QUERY-CONSTANTS)は、`seq_page_cost`と`random_page_cost`を相対的な推定値として扱い、`effective_cache_size`をホストのキャッシュ状態を表す値ではなく、プランナーが用いる仮定として扱います。
+SQLiteの[クエリプランニング資料](https://www.sqlite.org/queryplanner.html)は、隣接するインデックスエントリーが同じデータベースページを再利用する場合があると説明しています。
+これらは将来のtxBASEコストモデルを設計するための参考資料であり、txBASEの契約ではありません。
+現在の実行器は結合戦略を選ぶ前にDBFテーブルを読み込み、行をマテリアライズするため、その選択時に実際のファイルシステムやキャッシュの動作を観測できません。
+
 ロードマップでは、クエリ文書が実装戦略を暗黙に指定しないよう、インデックス設計をクエリ構文から分離しています。
 
 ## 3. 今後のクエリ作業
@@ -222,7 +227,9 @@ txBASEは現在、アクティブレコード数、等値用の一様な異な�
 
 1. 欠損、null、照合、複合範囲の選択性規則を明示した完全な式評価と、より精密なコストベースのインデックス選択。
 2. 現在の有界な集約契約を超える追加の集約ステージとアキュムレータであり、`$group`、`$bucket`、`$sortByCount`の拡張や、それらの数値式に対する有界なメモリ動作を含む。
-3. ファイルシステムとキャッシュを考慮したmerge計画と、より広い結合意味論。
+3. merge計画のコストモデル（逐次ページコスト、ランダムページコスト、キャッシュ容量、ページ再利用）の定義。
+   キャッシュ容量はOSから取得する値ではなく、プランナーが使う推定値とする。
+   より広い結合意味論は別の契約とする。
 4. `AsyncQueryStream`に対するホスト固有のスケジューリング、バックプレッシャー、タイムアウト、キャンセル、転送の実装。
 これらの契約ができるまでは、レコードスキャンを単純な参照実行モデルとして保ちます。
 
@@ -243,4 +250,6 @@ txBASEは現在、アクティブレコード数、等値用の一様な異な�
 - [MongoDB `$gt` type bracketing](https://www.mongodb.com/docs/manual/reference/operator/query/gt/)
 - [MongoDB compound-index sort order](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/sort-order/)
 - [MongoDB equality-sort-range guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
+- [PostgreSQL 18 planner cost constants](https://www.postgresql.org/docs/18/runtime-config-query.html#RUNTIME-CONFIG-QUERY-CONSTANTS)
+- [PostgreSQL 18 `EXPLAIN`](https://www.postgresql.org/docs/18/using-explain.html)
 - [SQLite query planning](https://www.sqlite.org/queryplanner.html)
