@@ -27,6 +27,46 @@ The shared `MAX_OPERATION_BATCH` limit is 1,000 operations.
 
 The generated `wasm-bindgen` `WasmDatabase` wrapper exposes the core API on `wasm32-unknown-unknown`.
 
+### JavaScript bindings
+
+`wasm-bindgen` maps `u16`, `u32`, and `usize` to JavaScript `number`, `u64` to `bigint`, and byte slices or vectors to `Uint8Array`.
+Synchronous errors become JavaScript exceptions, while asynchronous methods return Promises that reject on error.
+
+`WasmDatabase` exposes the core methods with these JavaScript signatures:
+
+| Member | JavaScript result |
+| --- | --- |
+| `new(dbf: Uint8Array)` | `WasmDatabase` |
+| `abi_version()` | `number` (static method) |
+| `snapshot()` | `Uint8Array` containing a DBF snapshot |
+| `query_json(body: Uint8Array)` | `Uint8Array` containing JSON bytes |
+| `query_stream_json(body: Uint8Array)` | `WasmQueryStream` |
+| `apply_operation_json(body: Uint8Array)` | `Uint8Array` containing the updated DBF snapshot |
+| `apply_operations_json(body: Uint8Array)` | `Uint8Array` containing the updated DBF snapshot |
+| `WasmQueryStream.next_json()` | JSON row string or `null` |
+| `WasmQueryStream.cancel()` | `undefined` |
+
+`WasmObjectTable` accepts a host object with Promise-returning `get`, `putIfAbsent`, `compareAndSwap`, `delete`, and `list` methods.
+Their storage contract is described in [edge storage](edge-storage.md), and the Worker and R2 adapters document concrete host implementations.
+
+| Member | JavaScript result |
+| --- | --- |
+| `new(host, namespace: string)` | `WasmObjectTable` |
+| `manifest_key()` | `string` |
+| `manifest_json()` | `Promise<string \| null>` (JSON text, or `null` when absent) |
+| `read_xbf()` | `Promise<Uint8Array \| null>` |
+| `read_xbf_at(generation: bigint)` | `Promise<Uint8Array \| null>` |
+| `query_stream_json(body: Uint8Array)` | `Promise<WasmObjectQueryStream>` |
+| `query_stream_json_at(generation: bigint, body: Uint8Array)` | `Promise<WasmObjectQueryStream>` |
+| `query_stream_json_with_signal(body: Uint8Array, signal: AbortSignal)` | `Promise<WasmObjectQueryStream>` |
+| `query_stream_json_at_with_signal(generation: bigint, body: Uint8Array, signal: AbortSignal)` | `Promise<WasmObjectQueryStream>` |
+| `commit_xbf(bytes: Uint8Array)` | `Promise<string>` containing JSON with `status` (`committed` or `already_committed`) and `generation` |
+| `recover()` | `Promise<number>` containing the recovered commit count |
+| `retain_generations(keep_last: number)` | `Promise<string>` containing a JSON array of removed keys |
+| `cleanup_orphans()` | `Promise<string>` containing a JSON array of removed keys |
+| `WasmObjectQueryStream.next_json()` | JSON row string or `null` |
+| `WasmObjectQueryStream.cancel()` | `undefined` |
+
 ## 2. Core and host responsibilities
 
 `WasmCore` reads and updates in-memory DBF state but does not access host files, make network requests, schedule tasks, or persist a transaction.
@@ -84,9 +124,12 @@ Browser storage, Node.js WASI, Deno, and Bun are not compatibility commitments.
 - [wasm-bindgen: Exported Rust Types](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/exported-rust-types.html)
 - [wasm-bindgen: Promises and Futures](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html)
 - [wasm-bindgen: `Result<T, E>`](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/result.html)
+- [wasm-bindgen: Numeric Types](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/numbers.html)
+- [wasm-bindgen: Number Slices](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/number-slices.html)
+- [wasm-bindgen: Boxed Number Slices](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/boxed-number-slices.html)
 
 The wasm-bindgen guide describes how exported Rust types map to JavaScript classes and how async exports map to Promises.
-It also specifies that an exported `Result::Err` becomes a JavaScript exception.
+It also specifies that an exported `Result::Err` becomes a JavaScript exception, and its numeric and slice references define the JavaScript representations used above.
 
 The txBASE ABI and input limits come from its implementation and tests; host compatibility comes from its adapters and CI evidence.
 WASI-specific references belong in [WASI query streaming](wasi-query-stream.md), which documents that adapter's target and runtime boundaries.

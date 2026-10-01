@@ -28,6 +28,47 @@
 
 生成する`wasm-bindgen`の`WasmDatabase`ラッパーは、`wasm32-unknown-unknown`でコアAPIを公開します。
 
+### JavaScriptバインディング
+
+`wasm-bindgen`は、`u16`、`u32`、`usize`をJavaScriptの`number`に、`u64`を`bigint`に変換します。
+バイトスライスとバイトベクターは`Uint8Array`として受け渡します。
+同期メソッドでエラーが起きるとJavaScript例外になり、非同期メソッドでエラーが起きると返された`Promise`がrejectされます。
+
+`WasmDatabase`は、次のJavaScriptメソッドを公開します。
+
+| メンバー | JavaScriptでの戻り値 |
+| --- | --- |
+| `new(dbf: Uint8Array)` | `WasmDatabase` |
+| `abi_version()` | `number`（静的メソッド） |
+| `snapshot()` | DBFスナップショットを格納した`Uint8Array` |
+| `query_json(body: Uint8Array)` | JSONバイト列を格納した`Uint8Array` |
+| `query_stream_json(body: Uint8Array)` | `WasmQueryStream` |
+| `apply_operation_json(body: Uint8Array)` | 更新後のDBFスナップショットを格納した`Uint8Array` |
+| `apply_operations_json(body: Uint8Array)` | 更新後のDBFスナップショットを格納した`Uint8Array` |
+| `WasmQueryStream.next_json()` | JSON形式の行を表す文字列、または`null` |
+| `WasmQueryStream.cancel()` | `undefined` |
+
+`WasmObjectTable`には、`get`、`putIfAbsent`、`compareAndSwap`、`delete`、`list`の各メソッドが`Promise`を返すホストオブジェクトを渡します。
+ストレージ契約は[エッジストレージ](edge-storage.md)に、WorkerとR2の具体的なホスト実装は各アダプターの文書に記載します。
+
+| メンバー | JavaScriptでの戻り値 |
+| --- | --- |
+| `new(host, namespace: string)` | `WasmObjectTable` |
+| `manifest_key()` | `string` |
+| `manifest_json()` | `Promise<string \| null>`（JSON文字列。未作成なら`null`） |
+| `read_xbf()` | `Promise<Uint8Array \| null>` |
+| `read_xbf_at(generation: bigint)` | `Promise<Uint8Array \| null>` |
+| `query_stream_json(body: Uint8Array)` | `Promise<WasmObjectQueryStream>` |
+| `query_stream_json_at(generation: bigint, body: Uint8Array)` | `Promise<WasmObjectQueryStream>` |
+| `query_stream_json_with_signal(body: Uint8Array, signal: AbortSignal)` | `Promise<WasmObjectQueryStream>` |
+| `query_stream_json_at_with_signal(generation: bigint, body: Uint8Array, signal: AbortSignal)` | `Promise<WasmObjectQueryStream>` |
+| `commit_xbf(bytes: Uint8Array)` | `status`（`committed`または`already_committed`）と`generation`を含むJSON文字列を解決値とする`Promise<string>` |
+| `recover()` | 復旧したコミット数を解決値とする`Promise<number>` |
+| `retain_generations(keep_last: number)` | 削除したキーのJSON配列を含む`Promise<string>` |
+| `cleanup_orphans()` | 削除したキーのJSON配列を含む`Promise<string>` |
+| `WasmObjectQueryStream.next_json()` | JSON形式の行を表す文字列、または`null` |
+| `WasmObjectQueryStream.cancel()` | `undefined` |
+
 ## 2. コアとホストの責務
 
 `WasmCore`はインメモリのDBF状態を読み書きしますが、ホストのファイルアクセス、ネットワークリクエスト、タスクのスケジューリング、トランザクションの永続化は行いません。
@@ -86,9 +127,13 @@ WASIホストのスケジューリング、ホストI/Oのキャンセル、ラ�
 - [`wasm-bindgen`ガイド：JavaScriptへエクスポートするRust型](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/exported-rust-types.html)
 - [wasm-bindgen：PromiseとFuture](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html)
 - [wasm-bindgen：`Result<T, E>`](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/result.html)
+- [wasm-bindgen：数値型](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/numbers.html)
+- [wasm-bindgen：数値スライス](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/number-slices.html)
+- [wasm-bindgen：所有権を持つ数値スライス](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/boxed-number-slices.html)
 
 `wasm-bindgen`ガイドは、エクスポートしたRust型がJavaScriptのクラスへ対応する規則と、async exportがPromiseへ変換される規則を説明します。
 エクスポートした関数が返す`Result::Err`をJavaScript例外へ変換する規則も定めています。
+数値型とスライス型の資料は、上記APIで使うJavaScript表現を定めています。
 
 txBASEのABIと入力上限は実装とテストで定めます。
 ホスト互換性はアダプターとCIで検証した範囲に限ります。
