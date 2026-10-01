@@ -74,6 +74,10 @@ The fixtures preserve Japanese and Korean reset boundaries and the complete Chin
 They do not cover every collation rule form or arbitrary strings, so they are not a full locale-conformance suite.
 Benchmark inputs continue to check comparator laws; they do not establish locale conformance.
 
+The upstream review found no stable ICU4X data release based on CLDR 49; the published ICU4X 2.3.0 collation data uses CLDR 48.2.1, while CLDR 49 remains in beta.
+This work remains open; existing identifiers continue to represent ICU4X 2.1.1 until a stable candidate orders the complete Chinese corpus with zero mismatches in CI.
+See the [CJK collation source audit](research.md) for release details.
+
 See [DBF compatibility](dbf-compatibility.md), [query model](query-model.md), and the [research index](research.md) for the source and fixture boundaries.
 
 ## 6. Phase 4: native XBF

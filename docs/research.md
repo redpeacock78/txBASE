@@ -97,8 +97,15 @@ They cover the starred single-character sequences in the Japanese and Korean sta
 The Chinese default Pinyin long chain contains 44,469 adjacent relations; pinned ICU4X 2.1.1 fails the required strict order for 15,169 of them.
 A CI baseline test pins this mismatch count, and a separate test asserts two representative reversals.
 The baseline is not a locale-conformance pass.
-The [ICU4X 2.1 release changelog](https://github.com/unicode-org/icu4x/blob/icu%402.1.0/CHANGELOG.md) records the provider data update to CLDR 48.
 This corpus does not cover every rule form or arbitrary strings and therefore does not establish full locale conformance.
+
+The upstream release review on 2026-10-01 found no stable ICU4X collation data based on CLDR 49.
+The [ICU4X 2.1.x changelog](https://github.com/unicode-org/icu4x/blob/main/CHANGELOG.md#L748-L769) lists a collator panic fix in 2.1.2, while its CLDR 48.1 data update names locale, datetime, and experimental data crates, not collation data.
+The published [`icu_collator_data` 2.3.0 package](https://crates.io/crates/icu_collator_data/2.3.0) identifies CLDR 48.2.1 as its data source, and the [CLDR 48 release notes](https://cldr.unicode.org/downloads/cldr-48) list no collation-data changes for 48.2.1.
+[`icu_collator` 2.3.1](https://crates.io/crates/icu_collator/2.3.1) requires Rust 1.88, above txBASE's Rust 1.85 MSRV.
+The [CLDR 49 release notes](https://cldr.unicode.org/downloads/cldr-49) still identify the release as beta and describe a planned collation update for the Unicode 18 changes to UTS #10.
+That makes CLDR 49 a future candidate, not a verified fix for these relations.
+The mismatch baseline and existing collation identifiers remain unchanged until a stable candidate orders the complete Chinese corpus with zero mismatches in CI.
 
 ### dBASE and Visual FoxPro
 

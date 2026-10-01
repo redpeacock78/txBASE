@@ -99,8 +99,15 @@ ICU4Xはこれらのリストをベンチマーク入力として扱い、計測
 固定したICU4X 2.1.1では15,169件がCLDR 48の要求する順序を満たしません。
 CIテストでこの件数を固定し、別のテストでU+319B1と阿、𥥩と锕の逆転を個別に確認します。
 このベースラインはロケール適合性を示しません。
-[ICU4X 2.1のリリース履歴](https://github.com/unicode-org/icu4x/blob/icu%402.1.0/CHANGELOG.md)には、データプロバイダーをCLDR 48へ更新したことが記載されています。
-このコーパスは照合規則の全形式や任意の文字列を網羅せず、ロケール適合性の検証には不十分です。
+このコーパスは並べ替え規則の全形式や任意の文字列を網羅せず、ロケール全体の順序への適合性は確認できません。
+
+2026-10-01に上流のリリース状況を確認しましたが、CLDR 49に基づく安定版ICU4X照合データは見つかりませんでした。
+[ICU4X 2.1.xのリリース履歴](https://github.com/unicode-org/icu4x/blob/main/CHANGELOG.md#L748-L769)には、2.1.2の照合器のpanic修正と、CLDR 48.1への更新対象としてロケール、日時、実験機能のデータクレートが記載されています。照合データの更新は記載されていません。
+公開済みの[`icu_collator_data` 2.3.0](https://crates.io/crates/icu_collator_data/2.3.0)はCLDR 48.2.1をデータ源とし、[CLDR 48のリリースノート](https://cldr.unicode.org/downloads/cldr-48)には48.2.1の照合データ変更がありません。
+[`icu_collator` 2.3.1](https://crates.io/crates/icu_collator/2.3.1)はRust 1.88を要求します。txBASEのMSRVはRust 1.85です。
+[CLDR 49のリリースノート](https://cldr.unicode.org/downloads/cldr-49)は、同リリースをベータ版とし、Unicode 18に伴うUTS #10の変更を反映する照合更新を予定しています。
+この情報はCLDR 49が将来の候補であることを示しますが、対象の順序不一致が解消する証拠ではありません。
+安定版候補がCIで中国語コーパス全体を不一致0件で並べ替えるまで、不一致のベースラインと既存の照合識別子は変更しません。
 
 ### dBASE と Visual FoxPro
 
